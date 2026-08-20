@@ -1,0 +1,354 @@
+import { CONFIG, fileHeight } from './theme'
+import { folderOfFile, folderParent } from './layout'
+import type {
+  CodebaseGraph,
+  FileNode,
+  PatchImportAddition,
+  PatchSymbolAddition,
+  UserCreatedBlock,
+  UserCreatedIsland,
+  WorldLayout,
+} from './types'
+
+export function languageOfName(name: string) {
+  const ext = name.split('.').pop()?.toLowerCase()
+  return ext && ext !== name ? ext : 'txt'
+}
+
+export function toCreatedFile(block: UserCreatedBlock): FileNode {
+  const name = block.naming && !block.name ? 'New file' : block.name
+  return {
+    id: block.id,
+    name,
+    path: block.path || block.id,
+    folder: block.folder,
+    lines: 12,
+    language: languageOfName(name),
+    symbols: [],
+    imports: [],
+    userCreated: true,
+  }
+}
+
+export function namedCreatedBlocks(blocks: UserCreatedBlock[]) {
+  return blocks.filter((block) => !block.naming && Boolean(block.name))
+}
+
+export function namedCreatedIslands(islands: UserCreatedIsland[]) {
+  return islands.filter((island) => !island.naming && Boolean(island.name))
+}
+
+export function parseUserCreatedBlocks(value: unknown): UserCreatedBlock[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    const block = item as Partial<UserCreatedBlock>
+    if (
+      typeof block.id !== 'string' ||
+      typeof block.name !== 'string' ||
+      typeof block.path !== 'string' ||
+      typeof block.folder !== 'string' ||
+      typeof block.x !== 'number' ||
+      typeof block.z !== 'number'
+    ) {
+      return []
+    }
+    return [
+      {
+        id: block.id,
+        name: block.name,
+        path: block.path,
+        folder: block.folder,
+        x: block.x,
+        z: block.z,
+      },
+    ]
+  })
+}
+
+export function parseUserCreatedIslands(value: unknown): UserCreatedIsland[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    const island = item as Partial<UserCreatedIsland>
+    if (
+      typeof island.id !== 'string' ||
+      typeof island.name !== 'string' ||
+      typeof island.path !== 'string' ||
+      typeof island.parent !== 'string'
+    ) {
+      return []
+    }
+    return [
+      {
+        id: island.id,
+        name: island.name,
+        path: island.path,
+        parent: island.parent,
+      },
+    ]
+  })
+}
+
+export function resolveCreatedFile(rawName: string, folder: string) {
+  const trimmed = rawName.trim().replaceAll('\\', '/').replace(/^\.\//, '')
+  if (!trimmed) return null
+  const path = trimmed.includes('/')
+    ? trimmed.replace(/^\/+/, '').replace(/\/+/g, '/')
+    : folder === '.'
+      ? trimmed
+      : `${folder}/${trimmed}`
+  const name = path.split('/').pop() ?? path
+  if (!name) return null
+  return {
+    id: path,
+    name,
+    path,
+    folder: folderOfFile(path),
+  }
+}
+
+export function resolveCreatedIsland(rawName: string, parent: string) {
+  const trimmed = rawName
+    .trim()
+    .replaceAll('\\', '/')
+    .replace(/^\.\//, '')
+    .replace(/\/+$/, '')
+  if (!trimmed) return null
+  const path = trimmed.includes('/')
+    ? trimmed.replace(/^\/+/, '').replace(/\/+/g, '/')
+    : parent === '.'
+      ? trimmed
+      : `${parent}/${trimmed}`
+  const name = path.split('/').pop() ?? path
+  if (!name) return null
+  return {
+    id: path,
+    name,
+    path,
+    parent: folderParent(path) ?? '.',
+  }
+}
+
+function islandKey(island: UserCreatedIsland) {
+  return island.path || island.id
+}
+
+function islandWidth() {
+  const fileOffset = CONFIG.aisleWidth / 2 + CONFIG.fileWidth / 2 + 0.7
+  const fileOuter = fileOffset + CONFIG.fileWidth / 2
+  return (fileOuter + 1.1) * 2
+}
+
+function islandDepth() {
+  return CONFIG.areaPadding * 2 + CONFIG.fileSpacing
+}
+
+export function withUserCreatedGraph(
+  graph: CodebaseGraph,
+  blocks: UserCreatedBlock[],
+  islands: UserCreatedIsland[] = [],
+): CodebaseGraph {
+  if (blocks.length === 0 && islands.length === 0) return graph
+  const files = new Map(graph.files.map((file) => [file.id, file]))
+  const folders = new Map(
+    graph.folders.map((folder) => [
+      folder.path,
+      { ...folder, files: [...folder.files], children: [...folder.children] },
+    ]),
+  )
+
+  for (const island of islands) {
+    const path = islandKey(island)
+    if (folders.has(path)) continue
+    const parent = island.parent || folderParent(path)
+    folders.set(path, {
+      path,
+      name: island.naming && !island.name ? 'New folder' : island.name,
+      parent,
+      files: [],
+      children: [],
+      userCreated: true,
+    })
+    if (parent) {
+      const parentFolder = folders.get(parent)
+      if (parentFolder && !parentFolder.children.includes(path)) {
+        parentFolder.children.push(path)
+      }
+    }
+  }
+
+  for (const block of blocks) {
+    if (files.has(block.id)) continue
+    const file = toCreatedFile(block)
+    files.set(file.id, file)
+    const folder = folders.get(file.folder)
+    if (folder && !folder.files.includes(file.id)) folder.files.push(file.id)
+  }
+
+  return {
+    ...graph,
+    files: [...files.values()],
+    folders: [...folders.values()],
+  }
+}
+
+function overlayIslands(
+  layout: WorldLayout,
+  islands: UserCreatedIsland[],
+): WorldLayout {
+  if (islands.length === 0) return layout
+  const folders = { ...layout.folders }
+  const bridges = [...layout.bridges]
+  const width = islandWidth()
+  const depth = islandDepth()
+
+  for (const island of islands) {
+    const id = islandKey(island)
+    if (layout.folders[id]) {
+      folders[id] = { ...folders[id], added: true, name: island.name || folders[id].name }
+      continue
+    }
+    const parentPath = island.parent
+    const parent = folders[parentPath]
+    if (!parent) continue
+    const siblings = Object.values(folders).filter((folder) => {
+      if (folder.path === id) return false
+      const placedIsland = islands.find((item) => islandKey(item) === folder.path)
+      const folderParentPath = placedIsland?.parent ?? folderParent(folder.path)
+      return folderParentPath === parentPath
+    })
+    const x =
+      siblings.length === 0
+        ? parent.x
+        : Math.max(...siblings.map((folder) => folder.x + folder.width / 2)) +
+          CONFIG.siblingGap +
+          width / 2
+    const z = parent.z + parent.depth + CONFIG.bridgeLength
+    folders[id] = {
+      path: id,
+      name: island.naming && !island.name ? 'New folder' : island.name,
+      x,
+      z,
+      width,
+      depth,
+      added: true,
+    }
+    bridges.push({
+      id: `${parentPath}→${id}`,
+      label: folders[id].name,
+      fromLabel: parent.name,
+      points: [
+        [x, parent.z + parent.depth - CONFIG.bridgeOverlap],
+        [x, z + CONFIG.bridgeOverlap],
+      ],
+    })
+  }
+
+  return { ...layout, folders, bridges }
+}
+
+export function withUserCreatedLayout(
+  layout: WorldLayout,
+  blocks: UserCreatedBlock[],
+  islands: UserCreatedIsland[] = [],
+): WorldLayout {
+  const withIslands = overlayIslands(layout, islands)
+  if (blocks.length === 0) return withIslands
+  const files = { ...withIslands.files }
+  const height = fileHeight(12)
+  for (const block of blocks) {
+    const folder = withIslands.folders[block.folder]
+    files[block.id] = {
+      id: block.id,
+      position: [block.x, height / 2, block.z],
+      size: [CONFIG.fileWidth, height, CONFIG.fileDepth],
+      aisleFace: folder && block.x >= folder.x ? -1 : 1,
+    }
+  }
+  return { ...withIslands, files }
+}
+
+export function defaultBlockSpot(
+  layout: WorldLayout,
+  folderPath: string,
+  fileIndex: number,
+): { x: number; z: number; folder: string } | null {
+  const folder = layout.folders[folderPath]
+  if (!folder) return null
+  const side: 1 | -1 = fileIndex % 2 === 0 ? -1 : 1
+  const row = Math.floor(fileIndex / 2)
+  return {
+    x: folder.x + side * (CONFIG.aisleWidth / 2 + CONFIG.fileWidth / 2 + 0.7),
+    z: folder.z + CONFIG.areaPadding + row * CONFIG.fileSpacing,
+    folder: folderPath,
+  }
+}
+
+export function isBlueprintSymbolName(value: string) {
+  return /^[A-Za-z_$][\w$]*$/.test(value.trim())
+}
+
+export function parseBlueprintImport(
+  raw: string,
+  file: string,
+  knownFileIds: Iterable<string> = [],
+): PatchImportAddition | null {
+  const trimmed = raw.trim().replaceAll('\\', '/')
+  if (!trimmed || !file) return null
+  const match = trimmed.match(/^(.+?)\s+from\s+(.+)$/i)
+  const name = (match?.[1] ?? trimmed).trim()
+  const specifier = (match?.[2] ?? trimmed).trim()
+  if (!name || !specifier) return null
+  const known = new Set(knownFileIds)
+  const from =
+    known.has(specifier)
+      ? specifier
+      : ([...known].find(
+          (id) => id === specifier || id.endsWith(`/${specifier}`),
+        ) ?? specifier)
+  return { name, from, file }
+}
+
+export function withBlueprintIntent(
+  graph: CodebaseGraph,
+  functions: PatchSymbolAddition[] = [],
+  variables: PatchSymbolAddition[] = [],
+  imports: PatchImportAddition[] = [],
+): CodebaseGraph {
+  if (functions.length === 0 && variables.length === 0 && imports.length === 0) {
+    return graph
+  }
+  const files = graph.files.map((file) => ({
+    ...file,
+    symbols: [...file.symbols],
+    imports: [...file.imports],
+  }))
+  const byId = new Map(files.map((file) => [file.id, file]))
+  const known = new Set(byId.keys())
+
+  for (const item of functions) {
+    const file = byId.get(item.file)
+    if (!file) continue
+    if (file.symbols.some((symbol) => symbol.kind === 'function' && symbol.name === item.name)) {
+      continue
+    }
+    file.symbols.push({ name: item.name, kind: 'function', intended: true })
+  }
+  for (const item of variables) {
+    const file = byId.get(item.file)
+    if (!file) continue
+    if (file.symbols.some((symbol) => symbol.kind === 'variable' && symbol.name === item.name)) {
+      continue
+    }
+    file.symbols.push({ name: item.name, kind: 'variable', intended: true })
+  }
+  for (const item of imports) {
+    const file = byId.get(item.file)
+    if (!file || !known.has(item.from) || file.imports.includes(item.from)) continue
+    file.imports.push(item.from)
+  }
+
+  return { ...graph, files }
+}
+

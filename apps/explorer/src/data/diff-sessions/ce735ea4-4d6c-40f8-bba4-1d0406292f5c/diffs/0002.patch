@@ -1,0 +1,19 @@
+--- a/src/pages/Home.tsx
++++ b/src/pages/Home.tsx
+@@ -1,5 +1,6 @@
+ import { Clock } from '../components/Clock'
+ import { Counter } from '../components/Counter'
+ import { Card } from '../components/Card'
++import { Calculator } from '../components/Calculator'
+ 
+ export function Home() {
+   return (
+@@ -13,6 +14,7 @@
+         </p>
+       </Card>
+       <Clock />
+       <Counter />
++      <Calculator />
+     </div>
+   )
+ }

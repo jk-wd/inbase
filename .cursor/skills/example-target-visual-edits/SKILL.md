@@ -1,0 +1,172 @@
+---
+name: example-target-visual-edits
+description: >-
+  Grounds example-target code changes in the Visual Coder map. List every step
+  of the feature, then work only via patch files. The visualizer reads each
+  patch, showcases added and changed components, and the user Run step
+  or sends an instruction in the UI. Use only in this repo when changing files
+  under apps/example-target. Do not use for explorer, Vite, Three.js, or other
+  non-target changes. Never modify or add example-target files except by a
+  patch the user applied in the visualizer.
+---
+
+# Example-target visual edits
+
+Apply this skill **only** when the work is file changes in `apps/example-target`.
+Skip it for explorer, layout, lighting, or other Visual Coder app work.
+
+The LLM uses a plan-first loop. It reports the complete plan before writing a
+patch, waits for the user to invoke the highlighted step, publishes only that
+step's diff, then waits for **Run step** on the following step or an alternative instruction. Always
+work via patch files. Do not Write, StrReplace, or Delete files under
+`apps/example-target`.
+
+Every Cursor chat has an explicit session ID. Pass that same ID to every script
+invocation. The visualizer stores immutable diffs under
+`apps/explorer/src/data/diff-sessions/<session-id>/diffs/`.
+
+## Required sequence
+
+1. As soon as this skill applies, start the visual session so the explorer can
+   offer a blueprint handshake. Do this before reading context or listing steps:
+
+```bash
+node .cursor/skills/example-target-visual-edits/scripts/start-session.mjs \
+  --session "<current-cursor-chat-id>"
+```
+
+2. **Stop and wait for the blueprint handshake**. Do not report a plan and do
+   not write a patch until this prints `VISUAL_CODER_BLUEPRINT_READY`:
+
+```bash
+node .cursor/skills/example-target-visual-edits/scripts/wait-for-blueprint.mjs \
+  --session "<current-cursor-chat-id>"
+```
+
+   The explorer asks **Setup blueprint: Yes vs No**.
+   - **No**: skip placement; continue without user-placed files or islands.
+   - **Yes**: the user places files (`Space`) and islands (`B`), then clicks
+     **Send blueprint**.
+3. Read the handshake output between `VISUAL_CODER_BLUEPRINT_START` and
+   `VISUAL_CODER_BLUEPRINT_END`, or read
+   `apps/explorer/src/data/diff-sessions/<session-id>/blueprint.json`.
+   If `enabled` is true, always create `userCreatedBlocks` and
+   `userCreatedIslands` at the given path/folder. Those files and folders do
+   not exist on disk yet. They belong to this chat only.
+   Also honor `addedFunctions`, `addedVariables`, and `addedImports`: add those
+   symbols and imports to the named files. They are blueprint intentions, not
+   files that already exist on disk.
+4. Read `apps/explorer/src/data/user-context.json` for viewpoint only.
+5. Use the user's viewpoint only when `followLook` is true:
+   - `island` is where they are standing
+   - `lookingAt` / `lookingAtFiles` are the blocks they are looking at
+   - `selected` is the block they clicked
+   - `filesOnIsland` is the rest of that folder
+   Prefer those files while `followLook` is true, unless the request clearly
+   needs something else. If `followLook` is false or missing, ignore viewpoint
+   and choose files from the request itself. Still include this session's
+   blueprint files and islands when `enabled` is true.
+6. List **all** steps needed to finish the feature. Keep steps small enough that
+   one patch is one landscape change (usually one new file, or a few related
+   edits).
+7. Report the plan before making a diff:
+
+```bash
+node .cursor/skills/example-target-visual-edits/scripts/report-plan.mjs \
+  --session "<current-cursor-chat-id>" \
+  --feature "short feature name" \
+  --steps "Add Clock component" \
+  --steps "Show Clock on Home"
+```
+
+8. **Stop and wait for invocation**:
+
+```bash
+node .cursor/skills/example-target-visual-edits/scripts/wait-for-approval.mjs \
+  --session "<current-cursor-chat-id>"
+```
+
+   Do not write a patch until this prints `VISUAL_CODER_EXECUTE`.
+9. Implement only the invoked step as a unified diff. Paths are relative to
+   `apps/example-target/` (same ids as `codebase.json`):
+
+```diff
+--- /dev/null
++++ b/src/components/Clock.tsx
+@@ -0,0 +1,5 @@
++export function Clock() {
++  return <time>00:00</time>
++}
+```
+
+```diff
+--- a/src/pages/Home.tsx
++++ b/src/pages/Home.tsx
+@@ -1,3 +1,4 @@
++import { Clock } from '../components/Clock'
+ import { Counter } from '../components/Counter'
+```
+
+   Write that diff to a new `.patch` file, then publish it:
+
+```bash
+node .cursor/skills/example-target-visual-edits/scripts/propose-patch.mjs \
+  --session "<current-cursor-chat-id>" \
+  /tmp/step.patch
+```
+
+   The patch path or stdin is required. Never write or replace a patch already
+   stored in the session folder.
+
+10. **Stop.** Do not apply the patch and do not edit `apps/example-target`.
+11. Wait until the user clicks **Run step** on the next step, sends an alternative instruction,
+   or stops the workflow:
+
+```bash
+node .cursor/skills/example-target-visual-edits/scripts/wait-for-approval.mjs \
+  --session "<current-cursor-chat-id>"
+```
+
+12. Read the wait script output:
+
+   - Exit `0` (`VISUAL_CODER_EXECUTE`): the highlighted step was invoked. Build
+     only that step, publish its diff, then wait again.
+   - Exit `5` (`VISUAL_CODER_FINISHED`): that was the last step. The visualizer
+     already applied the final patch and removed stored session diffs and
+     blueprint drafts. Optionally run `--clear` if anything remains, tell the
+     user the feature is done, and **stop**. Do not propose another patch.
+   - Exit `4` (`VISUAL_CODER_REPLAN`): do **not** apply files and do not rewrite
+     an earlier diff. Follow the text between
+     `VISUAL_CODER_INSTRUCTION_START` and `VISUAL_CODER_INSTRUCTION_END`, read
+     this session's `blueprint.json` when it is enabled (files, islands,
+     `addedFunctions`, `addedVariables`, `addedImports`), read
+     `user-context.json` (follow the viewpoint only if `followLook` is true),
+     replace the plan from the current step onward using `report-plan.mjs`, then
+     wait for the user to invoke the first revised step.
+   - Exit `2` (`VISUAL_CODER_STOPPED`) or `3` (timeout): make no further
+     example-target changes.
+
+13. After a finished handshake, the explorer already removed stored session
+    diffs and blueprint drafts. Optionally run:
+
+```bash
+node .cursor/skills/example-target-visual-edits/scripts/propose-patch.mjs \
+  --session "<current-cursor-chat-id>" \
+  --clear
+```
+
+## Do not
+
+- Skip `start-session.mjs` once this skill applies
+- Skip `wait-for-blueprint.mjs` or report a plan before `VISUAL_CODER_BLUEPRINT_READY`
+- Skip this session's `blueprint.json` `userCreatedBlocks` or `userCreatedIslands` when `enabled` is true
+- Skip `addedFunctions`, `addedVariables`, or `addedImports` from that blueprint when `enabled` is true
+- Read global `user-context.json` for placed files; those live on the session blueprint
+- Follow the user's look when `followLook` is false
+- Write, edit, create, or delete `apps/example-target` files directly
+- Announce file lists instead of a patch
+- Write a patch before its plan step is invoked
+- Propose the next step before the user clicks **Run step**
+- Propose another patch after `VISUAL_CODER_FINISHED`
+- Reuse, overwrite, or expand an existing session diff
+- Use this flow for explorer or other non-target work

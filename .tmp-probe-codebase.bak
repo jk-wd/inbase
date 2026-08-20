@@ -1,0 +1,127 @@
+{
+  "root": ".",
+  "targetName": "example-target",
+  "files": [
+    {
+      "id": "index.html",
+      "name": "index.html",
+      "path": "index.html",
+      "folder": ".",
+      "lines": 13,
+      "language": "html",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": "package.json",
+      "name": "package.json",
+      "path": "package.json",
+      "folder": ".",
+      "lines": 23,
+      "language": "json",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": "src/App.tsx",
+      "name": "App.tsx",
+      "path": "src/App.tsx",
+      "folder": "src",
+      "lines": 10,
+      "language": "tsx",
+      "symbols": [
+        {
+          "name": "App",
+          "kind": "function"
+        }
+      ],
+      "imports": []
+    },
+    {
+      "id": "src/index.css",
+      "name": "index.css",
+      "path": "src/index.css",
+      "folder": "src",
+      "lines": 26,
+      "language": "css",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": "src/main.tsx",
+      "name": "main.tsx",
+      "path": "src/main.tsx",
+      "folder": "src",
+      "lines": 17,
+      "language": "tsx",
+      "symbols": [
+        {
+          "name": "rootElement",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "src/App.tsx",
+        "src/index.css"
+      ]
+    },
+    {
+      "id": "src/vite-env.d.ts",
+      "name": "vite-env.d.ts",
+      "path": "src/vite-env.d.ts",
+      "folder": "src",
+      "lines": 2,
+      "language": "ts",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": "tsconfig.json",
+      "name": "tsconfig.json",
+      "path": "tsconfig.json",
+      "folder": ".",
+      "lines": 22,
+      "language": "json",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": "vite.config.ts",
+      "name": "vite.config.ts",
+      "path": "vite.config.ts",
+      "folder": ".",
+      "lines": 7,
+      "language": "ts",
+      "symbols": [],
+      "imports": []
+    }
+  ],
+  "folders": [
+    {
+      "path": ".",
+      "name": "example-target",
+      "parent": null,
+      "files": [
+        "index.html",
+        "package.json",
+        "tsconfig.json",
+        "vite.config.ts"
+      ],
+      "children": [
+        "src"
+      ]
+    },
+    {
+      "path": "src",
+      "name": "src",
+      "parent": ".",
+      "files": [
+        "src/App.tsx",
+        "src/index.css",
+        "src/main.tsx",
+        "src/vite-env.d.ts"
+      ],
+      "children": []
+    }
+  ]
+}

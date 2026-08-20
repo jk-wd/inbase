@@ -1,0 +1,19 @@
+--- /dev/null
++++ b/src/pages/Gaming.tsx
+@@ -0,0 +1,16 @@
++import { Card } from '../components/Card'
++import { Tetris } from '../components/Tetris'
++
++export function Gaming() {
++  return (
++    <div className="page-stack">
++      <Card title="arcade">
++        <p>
++          A small Tetris board with keyboard controls. Arrow keys move and
++          rotate, space drops a piece, and P pauses the game.
++        </p>
++      </Card>
++      <Tetris />
++    </div>
++  )
++}

@@ -1,0 +1,73 @@
+{
+  "version": 2,
+  "sessionId": "ce735ea4-4d6c-40f8-bba4-1d0406292f5c",
+  "feature": "homepage calculator",
+  "steps": [
+    {
+      "index": 1,
+      "title": "Add Calculator component"
+    },
+    {
+      "index": 2,
+      "title": "Shrink Calculator component"
+    },
+    {
+      "index": 3,
+      "title": "Show Calculator on Home"
+    }
+  ],
+  "status": "finished",
+  "phase": "finished",
+  "currentStep": 3,
+  "activeDiffId": "0004",
+  "pendingInstruction": null,
+  "workStartedAt": null,
+  "createdAt": "2026-08-19T17:34:25.900Z",
+  "updatedAt": "2026-08-19T17:46:46.225Z",
+  "diffs": [
+    {
+      "id": "0001",
+      "file": "diffs/0001.patch",
+      "parentId": null,
+      "step": 1,
+      "title": "Add Calculator component",
+      "status": "applied",
+      "instruction": null,
+      "createdAt": "2026-08-19T17:35:23.101Z",
+      "decidedAt": "2026-08-19T17:35:56.127Z"
+    },
+    {
+      "id": "0002",
+      "file": "diffs/0002.patch",
+      "parentId": "0001",
+      "step": 2,
+      "title": "Show Calculator on Home",
+      "status": "applied",
+      "instruction": "I find the calculator coponent to big",
+      "createdAt": "2026-08-19T17:36:32.048Z",
+      "decidedAt": "2026-08-19T17:45:42.000Z"
+    },
+    {
+      "id": "0003",
+      "file": "diffs/0003.patch",
+      "parentId": "0002",
+      "step": 2,
+      "title": "Shrink Calculator component",
+      "status": "applied",
+      "instruction": null,
+      "createdAt": "2026-08-19T17:43:02.425Z",
+      "decidedAt": "2026-08-19T17:45:42.000Z"
+    },
+    {
+      "id": "0004",
+      "file": "diffs/0004.patch",
+      "parentId": "0003",
+      "step": 3,
+      "title": "Show Calculator on Home",
+      "status": "applied",
+      "instruction": null,
+      "createdAt": "2026-08-19T17:46:05.088Z",
+      "decidedAt": "2026-08-19T17:46:46.225Z"
+    }
+  ]
+}

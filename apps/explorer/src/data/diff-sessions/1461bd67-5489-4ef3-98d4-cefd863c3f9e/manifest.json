@@ -1,0 +1,62 @@
+{
+  "version": 2,
+  "sessionId": "1461bd67-5489-4ef3-98d4-cefd863c3f9e",
+  "feature": "Homepage visitors graph",
+  "steps": [
+    {
+      "index": 1,
+      "title": "Add mocked weekly visitors data"
+    },
+    {
+      "index": 2,
+      "title": "Add WeeklyVisitors graph in components/graphs"
+    },
+    {
+      "index": 3,
+      "title": "Show the graph on Home"
+    }
+  ],
+  "status": "finished",
+  "phase": "finished",
+  "currentStep": 3,
+  "activeDiffId": "0003",
+  "pendingInstruction": null,
+  "workStartedAt": null,
+  "createdAt": "2026-08-19T18:57:47.357Z",
+  "updatedAt": "2026-08-19T19:01:12.802Z",
+  "diffs": [
+    {
+      "id": "0001",
+      "file": "diffs/0001.patch",
+      "parentId": null,
+      "step": 1,
+      "title": "Add mocked weekly visitors data",
+      "status": "applied",
+      "instruction": null,
+      "createdAt": "2026-08-19T18:58:32.237Z",
+      "decidedAt": "2026-08-19T18:59:10.563Z"
+    },
+    {
+      "id": "0002",
+      "file": "diffs/0002.patch",
+      "parentId": "0001",
+      "step": 2,
+      "title": "Add WeeklyVisitors graph in components/graphs",
+      "status": "applied",
+      "instruction": null,
+      "createdAt": "2026-08-19T18:59:55.422Z",
+      "decidedAt": "2026-08-19T19:00:43.442Z"
+    },
+    {
+      "id": "0003",
+      "file": "diffs/0003.patch",
+      "parentId": "0002",
+      "step": 3,
+      "title": "Show the graph on Home",
+      "status": "applied",
+      "instruction": null,
+      "createdAt": "2026-08-19T19:00:56.750Z",
+      "decidedAt": "2026-08-19T19:01:12.802Z"
+    }
+  ]
+}

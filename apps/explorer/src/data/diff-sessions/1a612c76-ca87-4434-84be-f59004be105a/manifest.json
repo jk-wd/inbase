@@ -1,0 +1,103 @@
+{
+  "version": 2,
+  "sessionId": "1a612c76-ca87-4434-84be-f59004be105a",
+  "feature": "Tetris gaming page",
+  "steps": [
+    {
+      "index": 1,
+      "title": "Add Tetris game component"
+    },
+    {
+      "index": 2,
+      "title": "Add Gaming page"
+    },
+    {
+      "index": 3,
+      "title": "Shrink Tetris component"
+    },
+    {
+      "index": 4,
+      "title": "Wire Gaming into App and Header"
+    },
+    {
+      "index": 5,
+      "title": "Style Tetris board"
+    }
+  ],
+  "status": "finished",
+  "phase": "finished",
+  "currentStep": 5,
+  "activeDiffId": "0006",
+  "pendingInstruction": null,
+  "workStartedAt": null,
+  "createdAt": "2026-08-19T18:05:49.581Z",
+  "updatedAt": "2026-08-19T18:20:56.960Z",
+  "diffs": [
+    {
+      "id": "0001",
+      "file": "diffs/0001.patch",
+      "parentId": null,
+      "step": 1,
+      "title": "Add Tetris game component",
+      "status": "applied",
+      "instruction": null,
+      "createdAt": "2026-08-19T18:07:37.288Z",
+      "decidedAt": "2026-08-19T18:08:51.601Z"
+    },
+    {
+      "id": "0002",
+      "file": "diffs/0002.patch",
+      "parentId": "0001",
+      "step": 2,
+      "title": "Add Gaming page",
+      "status": "applied",
+      "instruction": null,
+      "createdAt": "2026-08-19T18:09:02.810Z",
+      "decidedAt": "2026-08-19T18:11:50.510Z"
+    },
+    {
+      "id": "0003",
+      "file": "diffs/0003.patch",
+      "parentId": "0002",
+      "step": 3,
+      "title": "Wire Gaming into App and Header",
+      "status": "applied",
+      "instruction": "I find the tetris coponent to be very big",
+      "createdAt": "2026-08-19T18:12:31.839Z",
+      "decidedAt": "2026-08-19T18:15:42.873Z"
+    },
+    {
+      "id": "0004",
+      "file": "diffs/0004.patch",
+      "parentId": "0003",
+      "step": 3,
+      "title": "Shrink Tetris component",
+      "status": "applied",
+      "instruction": null,
+      "createdAt": "2026-08-19T18:15:20.345Z",
+      "decidedAt": "2026-08-19T18:15:42.873Z"
+    },
+    {
+      "id": "0005",
+      "file": "diffs/0005.patch",
+      "parentId": "0004",
+      "step": 4,
+      "title": "Wire Gaming into App and Header",
+      "status": "applied",
+      "instruction": null,
+      "createdAt": "2026-08-19T18:17:15.627Z",
+      "decidedAt": "2026-08-19T18:19:10.891Z"
+    },
+    {
+      "id": "0006",
+      "file": "diffs/0006.patch",
+      "parentId": "0005",
+      "step": 5,
+      "title": "Style Tetris board",
+      "status": "applied",
+      "instruction": null,
+      "createdAt": "2026-08-19T18:19:49.022Z",
+      "decidedAt": "2026-08-19T18:20:56.960Z"
+    }
+  ]
+}

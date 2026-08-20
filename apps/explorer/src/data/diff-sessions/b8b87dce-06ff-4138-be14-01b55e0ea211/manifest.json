@@ -1,0 +1,92 @@
+{
+  "version": 2,
+  "sessionId": "b8b87dce-06ff-4138-be14-01b55e0ea211",
+  "feature": "Reset to barebone React app",
+  "steps": [
+    {
+      "index": 1,
+      "title": "Replace App with a Hello World shell"
+    },
+    {
+      "index": 2,
+      "title": "Reset styles to a simple stylesheet"
+    },
+    {
+      "index": 3,
+      "title": "Remove pages"
+    },
+    {
+      "index": 4,
+      "title": "Remove components"
+    },
+    {
+      "index": 5,
+      "title": "Remove hooks, utils, and mocked APIs"
+    }
+  ],
+  "status": "finished",
+  "phase": "finished",
+  "currentStep": 5,
+  "activeDiffId": "0005",
+  "pendingInstruction": null,
+  "workStartedAt": null,
+  "createdAt": "2026-08-20T05:35:48.828Z",
+  "updatedAt": "2026-08-20T05:48:22.790Z",
+  "diffs": [
+    {
+      "id": "0001",
+      "file": "diffs/0001.patch",
+      "parentId": null,
+      "step": 1,
+      "title": "Replace App with a Hello World shell",
+      "status": "applied",
+      "instruction": null,
+      "createdAt": "2026-08-20T05:37:46.462Z",
+      "decidedAt": "2026-08-20T05:39:03.186Z"
+    },
+    {
+      "id": "0002",
+      "file": "diffs/0002.patch",
+      "parentId": "0001",
+      "step": 2,
+      "title": "Reset styles to a simple stylesheet",
+      "status": "applied",
+      "instruction": null,
+      "createdAt": "2026-08-20T05:39:47.654Z",
+      "decidedAt": "2026-08-20T05:40:08.468Z"
+    },
+    {
+      "id": "0003",
+      "file": "diffs/0003.patch",
+      "parentId": "0002",
+      "step": 3,
+      "title": "Remove pages",
+      "status": "applied",
+      "instruction": null,
+      "createdAt": "2026-08-20T05:40:22.481Z",
+      "decidedAt": "2026-08-20T05:42:50.489Z"
+    },
+    {
+      "id": "0004",
+      "file": "diffs/0004.patch",
+      "parentId": "0003",
+      "step": 4,
+      "title": "Remove components",
+      "status": "applied",
+      "instruction": null,
+      "createdAt": "2026-08-20T05:43:04.911Z",
+      "decidedAt": "2026-08-20T05:47:47.584Z"
+    },
+    {
+      "id": "0005",
+      "file": "diffs/0005.patch",
+      "parentId": "0004",
+      "step": 5,
+      "title": "Remove hooks, utils, and mocked APIs",
+      "status": "applied",
+      "instruction": null,
+      "createdAt": "2026-08-20T05:47:57.670Z",
+      "decidedAt": "2026-08-20T05:48:22.790Z"
+    }
+  ]
+}

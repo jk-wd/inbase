@@ -1,0 +1,13 @@
+{
+  "name": "visual-coder",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @visual-coder/explorer",
+    "dev:target": "npm run dev -w @visual-coder/example-target",
+    "build": "npm run build -w @visual-coder/explorer",
+    "scan": "npm run scan -w @visual-coder/explorer"
+  }
+}

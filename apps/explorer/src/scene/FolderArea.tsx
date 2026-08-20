@@ -1,0 +1,96 @@
+import { Suspense } from 'react'
+import { Text } from '@react-three/drei'
+import { CHANGE_HIGHLIGHT, folderFloorColor, MAP_SELECTION, type ChangeKind } from '../theme'
+import type { PlacedFolder } from '../types'
+import { MapSelectBorder } from './MapSelectBorder'
+
+type FolderAreaProps = {
+  folder: PlacedFolder
+  naming?: boolean
+  selected?: boolean
+  highlightKind?: ChangeKind | null
+}
+
+export function FolderArea({
+  folder,
+  naming = false,
+  selected = false,
+  highlightKind = null,
+}: FolderAreaProps) {
+  const added = Boolean(folder.added)
+  const highlight = highlightKind ? CHANGE_HIGHLIGHT[highlightKind] : null
+  const addedOnly = added && !highlight
+  const outline = highlight ? highlight.color : addedOnly ? '#7ec8e8' : null
+  const color = highlight
+    ? highlight.floor
+    : addedOnly
+      ? '#16323f'
+      : folderFloorColor(folder.path)
+  const label =
+    highlightKind === 'remove'
+      ? `- ${folder.name}`
+      : highlightKind === 'add' || added
+        ? `+ ${folder.name}`
+        : folder.name
+
+  return (
+    <group position={[folder.x, 0, folder.z + folder.depth / 2]}>
+      {outline && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]}>
+          <planeGeometry args={[folder.width + 0.9, folder.depth + 0.9]} />
+          <meshBasicMaterial
+            color={outline}
+            toneMapped={false}
+          />
+        </mesh>
+      )}
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[folder.width, folder.depth]} />
+        <meshBasicMaterial color={color} />
+      </mesh>
+      {selected && (
+        <MapSelectBorder
+          width={folder.width}
+          depth={folder.depth}
+          y={0.06}
+          stroke={MAP_SELECTION.islandPad}
+        />
+      )}
+      <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[2.2, folder.depth - 1.5]} />
+        <meshBasicMaterial
+          color={highlight ? highlight.aisle : addedOnly ? '#23485a' : '#2a3340'}
+        />
+      </mesh>
+      {folder.width > 28 && (
+        <mesh
+          position={[0, 0.02, folder.depth / 2 - 1.3]}
+          rotation={[-Math.PI / 2, 0, 0]}
+        >
+          <planeGeometry args={[folder.width - 2.4, 2.4]} />
+          <meshBasicMaterial
+            color={
+              highlight ? highlight.aisle : addedOnly ? '#23485a' : '#2a3340'
+            }
+          />
+        </mesh>
+      )}
+      <Suspense fallback={null}>
+        {!naming && (
+          <Text
+            position={[0, 0.05, -folder.depth / 2 + 1.6]}
+            rotation={[-Math.PI / 2, 0, 0]}
+            fontSize={0.55}
+            color={
+              highlight ? highlight.color : addedOnly ? '#9ad8ff' : '#8b95a5'
+            }
+            anchorX="center"
+            anchorY="middle"
+          >
+            {label}
+          </Text>
+        )}
+      </Suspense>
+    </group>
+  )
+}

@@ -1,0 +1,230 @@
+--- a/src/index.css
++++ b/src/index.css
+@@ -1,32 +1,25 @@
+-@import './styles/ui.css';
+-
+ :root {
+-  color: #e8eaed;
+-  background: #101218;
+-  font-family: Inter, system-ui, sans-serif;
++  font-family: system-ui, sans-serif;
+   line-height: 1.5;
+   font-weight: 400;
+-  font-synthesis: none;
+-  text-rendering: optimizeLegibility;
+-  -webkit-font-smoothing: antialiased;
++  color: #213547;
++  background-color: #ffffff;
+ }
+ 
+-* {
+-  box-sizing: border-box;
++body {
++  margin: 0;
++  min-width: 320px;
++  min-height: 100vh;
+ }
+ 
+-html,
+-body,
+ #root {
+-  margin: 0;
+-  min-height: 100%;
++  max-width: 1280px;
++  margin: 0 auto;
++  padding: 2rem;
++  text-align: center;
+ }
+ 
+-body {
+-  min-width: 320px;
++h1 {
++  font-size: 3.2em;
++  line-height: 1.1;
+ }
+-
+-button,
+-a {
+-  font-family: inherit;
+-}
+--- a/src/App.css
++++ /dev/null
+@@ -1,21 +0,0 @@
+-.app {
+-  min-height: 100vh;
+-  display: flex;
+-  flex-direction: column;
+-}
+-
+-.app-main {
+-  flex: 1;
+-  width: min(960px, calc(100% - 32px));
+-  margin: 0 auto;
+-  padding: 24px 0 48px;
+-}
+-
+-.app[data-theme='light'] {
+-  color: #1b1d22;
+-  background: #f4f5f7;
+-}
+-
+-.app[data-theme='light'] .app-main {
+-  color: #1b1d22;
+-}
+--- a/src/styles/ui.css
++++ /dev/null
+@@ -1,154 +0,0 @@
+-.ui-header,
+-.ui-footer {
+-  display: flex;
+-  align-items: center;
+-  justify-content: space-between;
+-  gap: 16px;
+-  padding: 16px 24px;
+-  background: #171a22;
+-}
+-
+-.ui-row {
+-  display: flex;
+-  flex-wrap: wrap;
+-  gap: 8px;
+-}
+-
+-.ui-button {
+-  border: 0;
+-  border-radius: 8px;
+-  padding: 8px 12px;
+-  cursor: pointer;
+-}
+-
+-.ui-button-primary {
+-  color: #101218;
+-  background: #8ec8ff;
+-}
+-
+-.ui-button-ghost {
+-  color: inherit;
+-  background: transparent;
+-  outline: 1px solid #3a4150;
+-}
+-
+-.ui-card {
+-  padding: 20px;
+-  border-radius: 12px;
+-  background: #1c212c;
+-}
+-
+-.ui-card-body {
+-  display: grid;
+-  gap: 12px;
+-}
+-
+-.ui-footer {
+-  color: #9aa3b5;
+-  font-size: 14px;
+-}
+-
+-.page-stack {
+-  display: grid;
+-  gap: 16px;
+-}
+-
+-.app[data-theme='light'] .ui-header,
+-.app[data-theme='light'] .ui-footer,
+-.app[data-theme='light'] .ui-card {
+-  background: #ffffff;
+-}
+-
+-.tetris {
+-  display: flex;
+-  flex-wrap: wrap;
+-  align-items: start;
+-  gap: 20px;
+-}
+-
+-.tetris-board {
+-  display: grid;
+-  grid-template-columns: repeat(10, 18px);
+-  gap: 2px;
+-  padding: 6px;
+-  width: fit-content;
+-  border-radius: 8px;
+-  background: #0b0d12;
+-}
+-
+-.tetris-cell {
+-  width: 18px;
+-  height: 18px;
+-  border-radius: 3px;
+-  background: #171a22;
+-}
+-
+-.tetris-meta {
+-  display: grid;
+-  align-content: start;
+-  gap: 8px;
+-  min-width: 180px;
+-}
+-
+-.tetris-meta p {
+-  margin: 0;
+-}
+-
+-.tetris-status {
+-  color: #8ec8ff;
+-  font-weight: 600;
+-}
+-
+-.tetris-hint {
+-  color: #9aa3b5;
+-  font-size: 14px;
+-}
+-
+-.app[data-theme='light'] .tetris-board {
+-  background: #d9dde6;
+-}
+-
+-.app[data-theme='light'] .tetris-cell {
+-  background: #ffffff;
+-}
+-
+-.app[data-theme='light'] .tetris-hint {
+-  color: #5c6370;
+-}
+-
+-.graph-chart {
+-  display: flex;
+-  align-items: flex-end;
+-  gap: 12px;
+-  height: 180px;
+-  padding: 8px 4px 0;
+-}
+-
+-.graph-bar-wrap {
+-  display: grid;
+-  justify-items: center;
+-  align-content: end;
+-  gap: 6px;
+-  flex: 1;
+-  min-height: 0;
+-  height: 100%;
+-}
+-
+-.graph-bar {
+-  width: 100%;
+-  max-width: 36px;
+-  min-height: 4px;
+-  border-radius: 6px 6px 2px 2px;
+-  background: #8ec8ff;
+-}
+-
+-.graph-bar-value,
+-.graph-bar-label {
+-  font-size: 12px;
+-  color: #9aa3b5;
+-}
+-
+-.app[data-theme='light'] .graph-bar-value,
+-.app[data-theme='light'] .graph-bar-label {
+-  color: #5c6370;
+-}

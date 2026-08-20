@@ -1,0 +1,100 @@
+--- /dev/null	2026-08-19 20:59:55
++++ b/src/components/graphs/WeeklyVisitors.tsx	2026-08-19 20:59:55
+@@ -0,0 +1,53 @@
++import { useEffect, useState } from 'react'
++import { Card } from '../Card'
++import {
++  fetchWeeklyVisitors,
++  type WeeklyVisitorPoint,
++} from '../../mocked-api/weeklyVisitors'
++
++export function WeeklyVisitors() {
++  const [points, setPoints] = useState<WeeklyVisitorPoint[]>([])
++  const [loading, setLoading] = useState(true)
++
++  useEffect(() => {
++    let cancelled = false
++
++    fetchWeeklyVisitors().then((nextPoints) => {
++      if (cancelled) return
++      setPoints(nextPoints)
++      setLoading(false)
++    })
++
++    return () => {
++      cancelled = true
++    }
++  }, [])
++
++  const maxVisitors = Math.max(...points.map((point) => point.visitors), 1)
++
++  return (
++    <Card title="weekly visitors">
++      <p>Mocked traffic for the past week.</p>
++      {loading ? (
++        <p>Loading visitors…</p>
++      ) : (
++        <div
++          className="graph-chart"
++          role="img"
++          aria-label="Weekly visitors bar chart"
++        >
++          {points.map((point) => (
++            <div key={point.day} className="graph-bar-wrap">
++              <span className="graph-bar-value">{point.visitors}</span>
++              <div
++                className="graph-bar"
++                style={{ height: `${(point.visitors / maxVisitors) * 100}%` }}
++              />
++              <span className="graph-bar-label">{point.day}</span>
++            </div>
++          ))}
++        </div>
++      )}
++    </Card>
++  )
++}
+
+--- a/src/styles/ui.css
++++ b/src/styles/ui.css
+@@ -115,3 +115,40 @@
+ .app[data-theme='light'] .tetris-hint {
+   color: #5c6370;
+ }
++
++.graph-chart {
++  display: flex;
++  align-items: flex-end;
++  gap: 12px;
++  height: 180px;
++  padding: 8px 4px 0;
++}
++
++.graph-bar-wrap {
++  display: grid;
++  justify-items: center;
++  align-content: end;
++  gap: 6px;
++  flex: 1;
++  min-height: 0;
++  height: 100%;
++}
++
++.graph-bar {
++  width: 100%;
++  max-width: 36px;
++  min-height: 4px;
++  border-radius: 6px 6px 2px 2px;
++  background: #8ec8ff;
++}
++
++.graph-bar-value,
++.graph-bar-label {
++  font-size: 12px;
++  color: #9aa3b5;
++}
++
++.app[data-theme='light'] .graph-bar-value,
++.app[data-theme='light'] .graph-bar-label {
++  color: #5c6370;
++}

@@ -1,0 +1,33 @@
+--- /dev/null
++++ b/src/components/Clock.tsx
+@@ -0,0 +1,30 @@
++import { useEffect, useState } from 'react'
++import { Card } from './Card'
++
++function formatTime(date: Date) {
++  return date.toLocaleTimeString([], {
++    hour: '2-digit',
++    minute: '2-digit',
++    second: '2-digit',
++  })
++}
++
++export function Clock() {
++  const [now, setNow] = useState(() => new Date())
++
++  useEffect(() => {
++    const timer = window.setInterval(() => {
++      setNow(new Date())
++    }, 1000)
++
++    return () => window.clearInterval(timer)
++  }, [])
++
++  return (
++    <Card title="clock">
++      <p>
++        <time dateTime={now.toISOString()}>{formatTime(now)}</time>
++      </p>
++    </Card>
++  )
++}

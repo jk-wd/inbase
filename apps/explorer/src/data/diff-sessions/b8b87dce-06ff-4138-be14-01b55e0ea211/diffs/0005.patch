@@ -1,0 +1,316 @@
+--- a/src/hooks/useCounter.ts
++++ /dev/null
+@@ -1,23 +0,0 @@
+-import { useState } from 'react'
+-import { clamp } from '../utils/math'
+-
+-const MIN_COUNT = -20
+-const MAX_COUNT = 20
+-
+-export function useCounter(initialValue = 0) {
+-  const [count, setCount] = useState(() => clamp(initialValue, MIN_COUNT, MAX_COUNT))
+-
+-  const increment = () => {
+-    setCount((value) => clamp(value + 1, MIN_COUNT, MAX_COUNT))
+-  }
+-
+-  const decrement = () => {
+-    setCount((value) => clamp(value - 1, MIN_COUNT, MAX_COUNT))
+-  }
+-
+-  const reset = () => {
+-    setCount(clamp(initialValue, MIN_COUNT, MAX_COUNT))
+-  }
+-
+-  return { count, increment, decrement, reset }
+-}
+--- a/src/hooks/useTheme.ts
++++ /dev/null
+@@ -1,13 +0,0 @@
+-import { useState } from 'react'
+-
+-export type ThemeName = 'dark' | 'light'
+-
+-export function useTheme(initialTheme: ThemeName = 'dark') {
+-  const [theme, setTheme] = useState<ThemeName>(initialTheme)
+-
+-  const toggleTheme = () => {
+-    setTheme((current) => (current === 'dark' ? 'light' : 'dark'))
+-  }
+-
+-  return { theme, toggleTheme }
+-}
+--- a/src/hooks/useTetris.ts
++++ /dev/null
+@@ -1,186 +0,0 @@
+-import { useCallback, useEffect, useRef, useState } from 'react'
+-
+-export const COLS = 10
+-export const ROWS = 16
+-export const COLORS = ['#6de3ff', '#ffe066', '#c084fc', '#7dff9a', '#ff7d8a', '#7da6ff', '#ffb347']
+-
+-const SHAPES: number[][][] = [
+-  [[1, 1, 1, 1]],
+-  [[1, 1], [1, 1]],
+-  [[0, 1, 0], [1, 1, 1]],
+-  [[0, 1, 1], [1, 1, 0]],
+-  [[1, 1, 0], [0, 1, 1]],
+-  [[1, 0, 0], [1, 1, 1]],
+-  [[0, 0, 1], [1, 1, 1]],
+-]
+-
+-type Cell = number | null
+-type Piece = { shape: number[][]; row: number; col: number; color: number }
+-
+-function emptyBoard(): Cell[][] {
+-  return Array.from({ length: ROWS }, () => Array<Cell>(COLS).fill(null))
+-}
+-
+-function rotateShape(shape: number[][]) {
+-  const height = shape.length
+-  const width = shape[0].length
+-  const next = Array.from({ length: width }, () => Array(height).fill(0))
+-  for (let row = 0; row < height; row += 1) {
+-    for (let col = 0; col < width; col += 1) {
+-      next[col][height - 1 - row] = shape[row][col]
+-    }
+-  }
+-  return next
+-}
+-
+-function collides(board: Cell[][], piece: Piece) {
+-  return piece.shape.some((row, rowIndex) =>
+-    row.some((filled, colIndex) => {
+-      if (!filled) return false
+-      const y = piece.row + rowIndex
+-      const x = piece.col + colIndex
+-      return y >= ROWS || x < 0 || x >= COLS || (y >= 0 && board[y][x] !== null)
+-    }),
+-  )
+-}
+-
+-function randomPiece(): Piece {
+-  const color = Math.floor(Math.random() * SHAPES.length)
+-  const shape = SHAPES[color]
+-  return {
+-    shape,
+-    color,
+-    row: 0,
+-    col: Math.floor((COLS - shape[0].length) / 2),
+-  }
+-}
+-
+-function merge(board: Cell[][], piece: Piece) {
+-  const next = board.map((row) => row.slice())
+-  piece.shape.forEach((row, rowIndex) => {
+-    row.forEach((filled, colIndex) => {
+-      if (!filled) return
+-      const y = piece.row + rowIndex
+-      const x = piece.col + colIndex
+-      if (y >= 0) next[y][x] = piece.color
+-    })
+-  })
+-  return next
+-}
+-
+-function clearLines(board: Cell[][]) {
+-  const kept = board.filter((row) => row.some((cell) => cell === null))
+-  const cleared = ROWS - kept.length
+-  while (kept.length < ROWS) kept.unshift(Array<Cell>(COLS).fill(null))
+-  return { board: kept, cleared }
+-}
+-
+-export function useTetris() {
+-  const [board, setBoard] = useState(emptyBoard)
+-  const [piece, setPiece] = useState<Piece>(randomPiece)
+-  const [score, setScore] = useState(0)
+-  const [lines, setLines] = useState(0)
+-  const [paused, setPaused] = useState(false)
+-  const [over, setOver] = useState(false)
+-  const stateRef = useRef({ board, piece, paused, over })
+-  stateRef.current = { board, piece, paused, over }
+-
+-  const lockPiece = useCallback((current: Piece) => {
+-    const merged = merge(stateRef.current.board, current)
+-    const { board: clearedBoard, cleared } = clearLines(merged)
+-    const next = randomPiece()
+-    setBoard(clearedBoard)
+-    setScore((value) => value + 10 + cleared * 100)
+-    setLines((value) => value + cleared)
+-    if (collides(clearedBoard, next)) {
+-      setOver(true)
+-      return
+-    }
+-    setPiece(next)
+-  }, [])
+-
+-  const tryMove = useCallback((row: number, col: number, shape?: number[][]) => {
+-    const { board: currentBoard, piece: current, paused: isPaused, over: isOver } =
+-      stateRef.current
+-    if (isPaused || isOver) return false
+-    const next = {
+-      ...current,
+-      row: current.row + row,
+-      col: current.col + col,
+-      shape: shape ?? current.shape,
+-    }
+-    if (collides(currentBoard, next)) return false
+-    setPiece(next)
+-    return true
+-  }, [])
+-
+-  const drop = useCallback(() => {
+-    if (!tryMove(1, 0)) lockPiece(stateRef.current.piece)
+-  }, [lockPiece, tryMove])
+-
+-  const hardDrop = useCallback(() => {
+-    const { board: currentBoard, piece: current, paused: isPaused, over: isOver } =
+-      stateRef.current
+-    if (isPaused || isOver) return
+-    let falling = current
+-    while (!collides(currentBoard, { ...falling, row: falling.row + 1 })) {
+-      falling = { ...falling, row: falling.row + 1 }
+-    }
+-    lockPiece(falling)
+-  }, [lockPiece])
+-
+-  const restart = useCallback(() => {
+-    setBoard(emptyBoard())
+-    setPiece(randomPiece())
+-    setScore(0)
+-    setLines(0)
+-    setPaused(false)
+-    setOver(false)
+-  }, [])
+-
+-  useEffect(() => {
+-    const speed = Math.max(180, 700 - lines * 24)
+-    const timer = window.setInterval(() => {
+-      if (!stateRef.current.paused && !stateRef.current.over) drop()
+-    }, speed)
+-    return () => window.clearInterval(timer)
+-  }, [drop, lines])
+-
+-  useEffect(() => {
+-    function onKey(event: KeyboardEvent) {
+-      if (event.key === 'p' || event.key === 'P') {
+-        setPaused((value) => !value)
+-        return
+-      }
+-      if (event.key === 'ArrowLeft') tryMove(0, -1)
+-      if (event.key === 'ArrowRight') tryMove(0, 1)
+-      if (event.key === 'ArrowDown') {
+-        event.preventDefault()
+-        drop()
+-      }
+-      if (event.key === 'ArrowUp') {
+-        event.preventDefault()
+-        const rotated = rotateShape(stateRef.current.piece.shape)
+-        for (const shift of [0, -1, 1, -2, 2]) {
+-          if (tryMove(0, shift, rotated)) break
+-        }
+-      }
+-      if (event.key === ' ') {
+-        event.preventDefault()
+-        hardDrop()
+-      }
+-    }
+-    window.addEventListener('keydown', onKey)
+-    return () => window.removeEventListener('keydown', onKey)
+-  }, [drop, hardDrop, tryMove])
+-
+-  return {
+-    cells: merge(board, piece).flat(),
+-    score,
+-    lines,
+-    paused,
+-    over,
+-    togglePause: () => setPaused((value) => !value),
+-    restart,
+-  }
+-}
+--- a/src/utils/format.ts
++++ /dev/null
+@@ -1,9 +0,0 @@
+-export function formatLabel(value: string) {
+-  if (!value) return ''
+-  return value.charAt(0).toUpperCase() + value.slice(1)
+-}
+-
+-export function formatCount(value: number) {
+-  const sign = value > 0 ? '+' : ''
+-  return `${sign}${value}`
+-}
+--- a/src/utils/math.ts
++++ /dev/null
+@@ -1,7 +0,0 @@
+-export function clamp(value: number, min: number, max: number) {
+-  return Math.min(max, Math.max(min, value))
+-}
+-
+-export function lerp(start: number, end: number, amount: number) {
+-  return start + (end - start) * amount
+-}
+--- a/src/mocked-api/users.ts
++++ /dev/null
+@@ -1,35 +0,0 @@
+-export type User = {
+-  id: string
+-  name: string
+-  email: string
+-  role: string
+-}
+-
+-const USERS: User[] = [
+-  {
+-    id: '1',
+-    name: 'Ada Lovelace',
+-    email: 'ada@example.com',
+-    role: 'engineer',
+-  },
+-  {
+-    id: '2',
+-    name: 'Alan Turing',
+-    email: 'alan@example.com',
+-    role: 'researcher',
+-  },
+-  {
+-    id: '3',
+-    name: 'Grace Hopper',
+-    email: 'grace@example.com',
+-    role: 'architect',
+-  },
+-]
+-
+-export function fetchUsers(): Promise<User[]> {
+-  return new Promise((resolve) => {
+-    window.setTimeout(() => {
+-      resolve(USERS)
+-    }, 240)
+-  })
+-}
+--- a/src/mocked-api/weeklyVisitors.ts
++++ /dev/null
+@@ -1,22 +0,0 @@
+-export type WeeklyVisitorPoint = {
+-  day: string
+-  visitors: number
+-}
+-
+-const WEEKLY_VISITORS: WeeklyVisitorPoint[] = [
+-  { day: 'Mon', visitors: 1240 },
+-  { day: 'Tue', visitors: 1580 },
+-  { day: 'Wed', visitors: 1420 },
+-  { day: 'Thu', visitors: 1890 },
+-  { day: 'Fri', visitors: 2110 },
+-  { day: 'Sat', visitors: 980 },
+-  { day: 'Sun', visitors: 760 },
+-]
+-
+-export function fetchWeeklyVisitors(): Promise<WeeklyVisitorPoint[]> {
+-  return new Promise((resolve) => {
+-    window.setTimeout(() => {
+-      resolve(WEEKLY_VISITORS)
+-    }, 240)
+-  })
+-}
