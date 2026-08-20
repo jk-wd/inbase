@@ -25,9 +25,9 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          PUBLISHED=$(npm view inbase version 2>/dev/null || true)
+          PUBLISHED=$(npm view @jkwd/inbase version 2>/dev/null || true)
           if [ "$PUBLISHED" = "$VERSION" ]; then
-            echo "inbase@$VERSION is already on npm, skipping publish"
+            echo "@jkwd/inbase@$VERSION is already on npm, skipping publish"
             exit 0
           fi
           npm publish --access public --provenance

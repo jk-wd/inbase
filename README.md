@@ -4,10 +4,12 @@ A first-person 3D map of a JavaScript or TypeScript codebase. Files become block
 
 Install the package in a project, run `inbase init`, then `inbase run`. Cursor uses the installed skill so code changes go through the visual map.
 
+The npm package is `@jkwd/inbase` (npm blocks the unscoped name `inbase`). The command is still `inbase`.
+
 ## Use in a project
 
 ```bash
-npm install -D inbase
+npm install -D @jkwd/inbase
 npx inbase init
 npx inbase run
 ```
@@ -15,7 +17,7 @@ npx inbase run
 Or install globally:
 
 ```bash
-npm install -g inbase
+npm install -g @jkwd/inbase
 inbase init
 inbase run
 ```
