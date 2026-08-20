@@ -7,6 +7,11 @@
 
 A first-person 3D map of a JavaScript or TypeScript codebase. Files become blocks, folders become walkable areas, and imports become lines in the air.
 
+<p align="center">
+  <img src="docs/inbase-1.png" alt="First-person walk view of the codebase map" width="49%" />
+  <img src="docs/inbase-2.png" alt="Map view with 3D overlay" width="49%" />
+</p>
+
 Install the package in a project, run `inbase init`, then `inbase run`. Cursor uses the installed skill so code changes go through the visual map.
 
 The npm package is `@jkwd/inbase` (npm blocks the unscoped name `inbase`). The command is still `inbase`.

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
-import { useThree } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { Html, MapControls, OrthographicCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import { folderAt, worldBounds } from '../layout'
@@ -323,12 +323,41 @@ function folderKindLabel(
 }
 
 function LandMarker({ marker }: { marker: [number, number] }) {
+  const camera = useThree((state) => state.camera)
+  const ring = useRef<THREE.Group>(null)
+
+  useFrame(() => {
+    if (!(camera instanceof THREE.OrthographicCamera) || !ring.current) return
+    const size = THREE.MathUtils.clamp(16 / Math.max(camera.zoom, 0.04), 2.4, 22)
+    ring.current.scale.setScalar(size)
+  })
+
   return (
-    <group position={[marker[0], 0.2, marker[1]]}>
-      <mesh rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.55, 0.85, 24]} />
-        <meshBasicMaterial color="#e8c36a" side={THREE.DoubleSide} />
-      </mesh>
+    <group position={[marker[0], 0.35, marker[1]]}>
+      <group ref={ring}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[0.62, 32]} />
+          <meshBasicMaterial color="#e8c36a" transparent opacity={0.28} />
+        </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+          <ringGeometry args={[0.5, 0.72, 32]} />
+          <meshBasicMaterial color="#e8c36a" side={THREE.DoubleSide} />
+        </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
+          <circleGeometry args={[0.18, 20]} />
+          <meshBasicMaterial color="#fff6d4" />
+        </mesh>
+      </group>
+      <Html
+        center
+        zIndexRange={[40, 30]}
+        style={{ pointerEvents: 'none' }}
+        position={[0, 2.8, 0]}
+      >
+        <div className="map-you-are-here" role="img" aria-label="You are here">
+          <span className="map-you-are-here-pin" aria-hidden="true" />
+        </div>
+      </Html>
     </group>
   )
 }

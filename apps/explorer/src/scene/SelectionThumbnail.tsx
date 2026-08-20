@@ -24,10 +24,12 @@ type SelectionThumbnailProps = {
   landAt: [number, number]
   importedBy?: boolean
   minimized?: boolean
+  maximized?: boolean
   plannedIds?: string[]
   createdIds?: string[]
   deletedIds?: string[]
   onMinimize?: () => void
+  onMaximize?: () => void
   onHide: () => void
 }
 
@@ -524,10 +526,12 @@ export function SelectionThumbnail({
   landAt,
   importedBy = false,
   minimized = false,
+  maximized = false,
   plannedIds = [],
   createdIds = [],
   deletedIds = [],
   onMinimize,
+  onMaximize,
   onHide,
 }: SelectionThumbnailProps) {
   const stageRef = useRef<HTMLDivElement>(null)
@@ -789,14 +793,29 @@ export function SelectionThumbnail({
     }
   }, [minimized, target])
 
+  useEffect(() => {
+    if (!maximized) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      onMaximize?.()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [maximized, onMaximize])
+
   if (!target) return null
 
   return (
-    <div className="hud-thumbnail" data-minimized={minimized}>
+    <div
+      className="hud-thumbnail"
+      data-minimized={minimized}
+      data-maximized={maximized}
+    >
       <div className="hud-thumbnail-bar">
         <span>3D view</span>
         <div className="hud-panel-controls">
-          {onMinimize && (
+          {onMinimize && !maximized && (
             <button
               className="hud-button hud-icon-button hud-panel-control"
               type="button"
@@ -804,6 +823,16 @@ export function SelectionThumbnail({
               onClick={onMinimize}
             >
               {minimized ? '+' : '−'}
+            </button>
+          )}
+          {onMaximize && (
+            <button
+              className="hud-button hud-icon-button hud-panel-control"
+              type="button"
+              aria-label={maximized ? 'Minimize 3D view' : 'Maximize 3D view'}
+              onClick={onMaximize}
+            >
+              {maximized ? '−' : '□'}
             </button>
           )}
           <button

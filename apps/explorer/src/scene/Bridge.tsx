@@ -183,18 +183,63 @@ function segmentDir(from: [number, number], to: [number, number]): [number, numb
   return [dx / length, dz / length]
 }
 
+function signFontSize(label: string, lintelW: number) {
+  return Math.min(0.42, (lintelW - 0.55) / Math.max(label.length * 0.62, 3))
+}
+
+function GateSign({
+  z,
+  rotY,
+  signY,
+  lintelW,
+  label,
+}: {
+  z: number
+  rotY: number
+  signY: number
+  lintelW: number
+  label: string
+}) {
+  return (
+    <group>
+      <mesh position={[0, signY, z]}>
+        <boxGeometry args={[lintelW - 0.18, SIGN_H, SIGN_D]} />
+        <meshLambertMaterial color={SIGN_COLOR} />
+      </mesh>
+      <Suspense fallback={null}>
+        <Text
+          position={[0, signY, z + Math.sign(z) * (SIGN_D / 2 + 0.01)]}
+          rotation={[0, rotY, 0]}
+          fontSize={signFontSize(label, lintelW)}
+          color="#e7ebf2"
+          anchorX="center"
+          anchorY="middle"
+          maxWidth={lintelW - 0.4}
+          overflowWrap="break-word"
+          outlineWidth={0.02}
+          outlineColor="#07080b"
+        >
+          {label}
+        </Text>
+      </Suspense>
+    </group>
+  )
+}
+
 function Gate({
   x,
   z,
   faceX,
   faceZ,
   label,
+  backLabel,
 }: {
   x: number
   z: number
   faceX: number
   faceZ: number
   label: string
+  backLabel: string
 }) {
   const rotationY = Math.atan2(faceX, faceZ)
   const postX = CONFIG.bridgeWidth / 2 + POST_W / 2
@@ -204,7 +249,6 @@ function Gate({
   const capY = POST_H + LINTEL_H + CAP_H / 2
   const signY = POST_H + LINTEL_H / 2
   const signZ = POST_D / 2 + SIGN_D / 2 + 0.01
-  const fontSize = Math.min(0.42, (lintelW - 0.55) / Math.max(label.length * 0.62, 3))
 
   return (
     <group position={[x, 0, z]} rotation={[0, rotationY, 0]}>
@@ -224,25 +268,16 @@ function Gate({
         <boxGeometry args={[capW, CAP_H, POST_D + 0.08]} />
         <meshLambertMaterial color={CAP_COLOR} />
       </mesh>
-      <mesh position={[0, signY, signZ]}>
-        <boxGeometry args={[lintelW - 0.18, SIGN_H, SIGN_D]} />
-        <meshLambertMaterial color={SIGN_COLOR} />
-      </mesh>
-      <Suspense fallback={null}>
-        <Text
-          position={[0, signY, signZ + SIGN_D / 2 + 0.01]}
-          fontSize={fontSize}
-          color="#e7ebf2"
-          anchorX="center"
-          anchorY="middle"
-          maxWidth={lintelW - 0.4}
-          overflowWrap="break-word"
-          outlineWidth={0.02}
-          outlineColor="#07080b"
-        >
-          {label}
-        </Text>
-      </Suspense>
+      <GateSign z={signZ} rotY={0} signY={signY} lintelW={lintelW} label={label} />
+      {backLabel ? (
+        <GateSign
+          z={-signZ}
+          rotY={Math.PI}
+          signY={signY}
+          lintelW={lintelW}
+          label={backLabel}
+        />
+      ) : null}
     </group>
   )
 }
@@ -292,6 +327,7 @@ export function Bridge({ bridge, folders }: BridgeProps) {
           faceX={-startDir[0]}
           faceZ={-startDir[1]}
           label={bridge.label}
+          backLabel={bridge.fromLabel}
         />
       )}
       {end && endDir && (
@@ -301,6 +337,7 @@ export function Bridge({ bridge, folders }: BridgeProps) {
           faceX={endDir[0]}
           faceZ={endDir[1]}
           label={bridge.fromLabel}
+          backLabel={bridge.label}
         />
       )}
     </group>

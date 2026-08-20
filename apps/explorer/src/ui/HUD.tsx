@@ -825,6 +825,7 @@ export function HUD({
   const [infoMinimized, setInfoMinimized] = useState(false)
   const [thumbnailVisible, setThumbnailVisible] = useState(true)
   const [thumbnailMinimized, setThumbnailMinimized] = useState(false)
+  const [thumbnailMaximized, setThumbnailMaximized] = useState(false)
   const infoPanelRef = useRef<HTMLDivElement>(null)
   const creatingBlueprint = sessions.some(
     (item) => item.creationMode || item.status === 'blueprint',
@@ -1000,7 +1001,12 @@ export function HUD({
       }
       event.preventDefault()
       setThumbnailVisible((visible) => {
-        if (!visible) setThumbnailMinimized(false)
+        if (!visible) {
+          setThumbnailMinimized(false)
+          setThumbnailMaximized(false)
+        } else {
+          setThumbnailMaximized(false)
+        }
         return !visible
       })
     }
@@ -1460,13 +1466,22 @@ export function HUD({
           landAt={landAt}
           importedBy={importedBy}
           minimized={thumbnailMinimized}
+          maximized={thumbnailMaximized}
           plannedIds={plannedIds}
           createdIds={createdIds}
           deletedIds={deletedIds}
-          onMinimize={() => setThumbnailMinimized((current) => !current)}
+          onMinimize={() => {
+            setThumbnailMaximized(false)
+            setThumbnailMinimized((current) => !current)
+          }}
+          onMaximize={() => {
+            setThumbnailMinimized(false)
+            setThumbnailMaximized((current) => !current)
+          }}
           onHide={() => {
             setThumbnailVisible(false)
             setThumbnailMinimized(false)
+            setThumbnailMaximized(false)
           }}
         />
       )}
@@ -1488,6 +1503,7 @@ export function HUD({
               )}
               <span>Click a line to fly there</span>
               <span>Ctrl-click an island to walk</span>
+              <span>Gold pin is your walk position</span>
               {hasChangeSet && (
                 <span>
                   {changePathsOnly
@@ -1600,7 +1616,12 @@ export function HUD({
               type="button"
               onClick={() => {
                 setThumbnailVisible((visible) => {
-                  if (!visible) setThumbnailMinimized(false)
+                  if (!visible) {
+                    setThumbnailMinimized(false)
+                    setThumbnailMaximized(false)
+                  } else {
+                    setThumbnailMaximized(false)
+                  }
                   return !visible
                 })
               }}
