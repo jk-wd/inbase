@@ -29,6 +29,8 @@
     "apps/explorer/src/scene",
     "apps/explorer/src/ui",
     "apps/explorer/scripts/js-source.mjs",
+    "apps/explorer/scripts/open-editor.d.ts",
+    "apps/explorer/scripts/open-editor.mjs",
     "apps/explorer/scripts/patch-lib.d.ts",
     "apps/explorer/scripts/patch-lib.mjs",
     "apps/explorer/scripts/scan-target.mjs",

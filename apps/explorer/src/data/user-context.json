@@ -1,42 +1,17 @@
 {
-  "updatedAt": "2026-08-20T08:13:33.670Z",
+  "updatedAt": "2026-08-20T11:19:57.138Z",
   "mode": "map",
   "island": {
-    "path": "src",
-    "name": "src"
+    "path": null,
+    "name": "open ground"
   },
   "lookingAt": null,
   "lookingAtFiles": [],
   "selected": null,
-  "filesOnIsland": [
-    {
-      "id": "src/App.tsx",
-      "name": "App.tsx",
-      "path": "src/App.tsx",
-      "folder": "src"
-    },
-    {
-      "id": "src/index.css",
-      "name": "index.css",
-      "path": "src/index.css",
-      "folder": "src"
-    },
-    {
-      "id": "src/main.tsx",
-      "name": "main.tsx",
-      "path": "src/main.tsx",
-      "folder": "src"
-    },
-    {
-      "id": "src/vite-env.d.ts",
-      "name": "vite-env.d.ts",
-      "path": "src/vite-env.d.ts",
-      "folder": "src"
-    }
-  ],
+  "filesOnIsland": [],
   "position": {
     "x": 0,
-    "z": 33
+    "z": 46.15
   },
   "followLook": false
 }

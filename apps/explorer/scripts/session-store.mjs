@@ -44,7 +44,26 @@ export function sessionPaths(dataDir, sessionId) {
     diffs: path.join(root, 'diffs'),
     manifest: path.join(root, 'manifest.json'),
     blueprint: path.join(root, 'blueprint.json'),
+    baseline: path.join(root, 'baseline.json'),
+    baselineFiles: path.join(root, 'baseline'),
   }
+}
+
+export function resolveTargetFile(targetRoot, fileId) {
+  if (typeof fileId !== 'string' || fileId.trim() === '') {
+    throw new Error('fileId is required')
+  }
+  const normalized = fileId.trim().replaceAll('\\', '/').replace(/^\/+/, '')
+  if (!normalized || normalized === '.' || normalized.includes('..')) {
+    throw new Error(`Invalid file id ${fileId}`)
+  }
+  const root = path.resolve(targetRoot)
+  const absolute = path.resolve(root, normalized)
+  const prefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`
+  if (absolute !== root && !absolute.startsWith(prefix)) {
+    throw new Error(`Invalid file id ${fileId}`)
+  }
+  return { id: normalized, absolute }
 }
 
 export function readActiveSession(dataDir) {
@@ -305,10 +324,105 @@ export function sessionIntent(dataDir, sessionId, knownFileIds = [], selectedDif
   }
 }
 
-function withVirtualTarget(targetRoot, patches, action) {
+function emptyBaseline() {
+  return { files: {} }
+}
+
+function readBaseline(dataDir, sessionId) {
+  const { baseline } = sessionPaths(dataDir, sessionId)
+  const value = readJson(baseline, emptyBaseline())
+  return {
+    files:
+      value?.files && typeof value.files === 'object' && !Array.isArray(value.files)
+        ? value.files
+        : {},
+  }
+}
+
+function writeBaseline(dataDir, sessionId, baseline) {
+  const { baseline: file } = sessionPaths(dataDir, sessionId)
+  atomicWrite(file, `${JSON.stringify({ files: baseline.files ?? {} }, null, 2)}\n`)
+}
+
+function pruneEmptyDirs(targetRoot, filePath) {
+  const root = path.resolve(targetRoot)
+  let current = path.dirname(filePath)
+  while (current.startsWith(`${root}${path.sep}`)) {
+    if (!fs.existsSync(current)) {
+      current = path.dirname(current)
+      continue
+    }
+    if (fs.readdirSync(current).length > 0) break
+    fs.rmdirSync(current)
+    current = path.dirname(current)
+  }
+}
+
+export function captureBaseline(dataDir, sessionId, targetRoot, fileIds = []) {
+  const paths = sessionPaths(dataDir, sessionId)
+  const baseline = readBaseline(dataDir, sessionId)
+  let changed = false
+  for (const fileId of fileIds) {
+    const { id, absolute } = resolveTargetFile(targetRoot, fileId)
+    if (baseline.files[id]) continue
+    const existed = fs.existsSync(absolute) && fs.statSync(absolute).isFile()
+    baseline.files[id] = { existed }
+    if (existed) {
+      const stored = resolveTargetFile(paths.baselineFiles, id).absolute
+      fs.mkdirSync(path.dirname(stored), { recursive: true })
+      fs.copyFileSync(absolute, stored)
+    }
+    changed = true
+  }
+  if (changed) writeBaseline(dataDir, sessionId, baseline)
+  return baseline
+}
+
+export function restoreBaseline(dataDir, sessionId, targetRoot) {
+  const paths = sessionPaths(dataDir, sessionId)
+  const baseline = readBaseline(dataDir, sessionId)
+  for (const [fileId, info] of Object.entries(baseline.files)) {
+    const { absolute } = resolveTargetFile(targetRoot, fileId)
+    if (!info?.existed) {
+      fs.rmSync(absolute, { force: true })
+      pruneEmptyDirs(targetRoot, absolute)
+      continue
+    }
+    const stored = resolveTargetFile(paths.baselineFiles, fileId).absolute
+    fs.mkdirSync(path.dirname(absolute), { recursive: true })
+    fs.copyFileSync(stored, absolute)
+  }
+}
+
+function replayPatches(dataDir, sessionId, targetRoot, entries) {
+  for (const entry of entries) {
+    applyUnifiedPatch(readDiff(dataDir, sessionId, entry), targetRoot)
+  }
+}
+
+function acceptedEntries(manifest) {
+  return manifest.diffs.filter((entry) => entry.status === 'applied')
+}
+
+function liveEntries(manifest, diffId) {
+  return chainThrough(manifest, diffId).filter((entry) => entry.status !== 'rejected')
+}
+
+export function materializeDiff(dataDir, targetRoot, sessionId, diffId) {
+  const manifest = readManifest(dataDir, assertSessionId(sessionId))
+  if (!manifest) throw new Error(`Unknown session ${sessionId}`)
+  const through = diffId || manifest.activeDiffId
+  if (!through) return manifest
+  restoreBaseline(dataDir, sessionId, targetRoot)
+  replayPatches(dataDir, sessionId, targetRoot, liveEntries(manifest, through))
+  return manifest
+}
+
+function withSessionReplay(dataDir, sessionId, targetRoot, patches, action) {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'visual-coder-chain-'))
   try {
     fs.cpSync(targetRoot, temporary, { recursive: true })
+    restoreBaseline(dataDir, sessionId, temporary)
     for (const patchText of patches) applyUnifiedPatch(patchText, temporary)
     return action(temporary)
   } finally {
@@ -317,10 +431,28 @@ function withVirtualTarget(targetRoot, patches, action) {
 }
 
 export function validateContinuation(dataDir, manifest, targetRoot, patchText) {
-  const prior = unresolvedEntries(manifest).map((entry) =>
-    readDiff(dataDir, manifest.sessionId, entry),
+  const prior = manifest.diffs
+    .filter((entry) => entry.status !== 'rejected')
+    .map((entry) => readDiff(dataDir, manifest.sessionId, entry))
+  withSessionReplay(dataDir, manifest.sessionId, targetRoot, [...prior, patchText], () =>
+    undefined,
   )
-  withVirtualTarget(targetRoot, [...prior, patchText], () => undefined)
+}
+
+export function inspectTargetFile(
+  dataDir,
+  targetRoot,
+  { sessionId, diffId, fileId } = {},
+) {
+  if (sessionId && readManifest(dataDir, sessionId)) {
+    materializeDiff(dataDir, targetRoot, sessionId, diffId)
+  }
+  if (!fileId) return null
+  const { absolute } = resolveTargetFile(targetRoot, fileId)
+  if (!fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) {
+    throw new Error(`File ${fileId} is not on disk`)
+  }
+  return absolute
 }
 
 function planSteps(titles, startAt = 1) {
@@ -555,6 +687,12 @@ export function appendDiff(dataDir, targetRoot, input) {
   }
 
   validateContinuation(dataDir, manifest, targetRoot, input.patchText)
+  captureBaseline(
+    dataDir,
+    sessionId,
+    targetRoot,
+    parseUnifiedPatch(input.patchText).entries.map((entry) => entry.id),
+  )
   if (parent?.status === 'extend') parent.status = 'extended'
 
   const id = String(manifest.diffs.length + 1).padStart(4, '0')
@@ -581,6 +719,7 @@ export function appendDiff(dataDir, targetRoot, input) {
   manifest.workStartedAt = null
   manifest.diffs.push(entry)
   writeManifest(dataDir, manifest)
+  materializeDiff(dataDir, targetRoot, sessionId, id)
   focusSession(dataDir, sessionId)
   return { manifest, entry }
 }
@@ -601,25 +740,7 @@ function pendingActive(manifest, diffId) {
 
 function applyUnresolved(dataDir, targetRoot, manifest, diffId) {
   const unresolved = unresolvedEntries(manifest, diffId)
-  const patches = unresolved.map((entry) =>
-    readDiff(dataDir, manifest.sessionId, entry),
-  )
-  const touched = new Set()
-  for (const patch of patches) {
-    for (const entry of parseUnifiedPatch(patch).entries) touched.add(entry.id)
-  }
-  withVirtualTarget(targetRoot, patches, (virtualRoot) => {
-    for (const id of touched) {
-      const source = path.join(virtualRoot, id)
-      const destination = path.join(targetRoot, id)
-      if (!fs.existsSync(source)) {
-        fs.rmSync(destination, { recursive: true, force: true })
-        continue
-      }
-      fs.mkdirSync(path.dirname(destination), { recursive: true })
-      fs.copyFileSync(source, destination)
-    }
-  })
+  materializeDiff(dataDir, targetRoot, manifest.sessionId, diffId)
   for (const entry of unresolved) {
     entry.status = 'applied'
     entry.decidedAt = new Date().toISOString()
@@ -663,8 +784,14 @@ export function requestReplan(dataDir, sessionId, diffId, instruction) {
   return manifest
 }
 
-export function stopSession(dataDir, sessionId, _diffId) {
-  finalizeFinishedSession(dataDir, sessionId)
+export function stopSession(dataDir, sessionId, targetRoot = null) {
+  const safeId = assertSessionId(sessionId)
+  const manifest = readManifest(dataDir, safeId)
+  if (manifest && targetRoot) {
+    restoreBaseline(dataDir, safeId, targetRoot)
+    replayPatches(dataDir, safeId, targetRoot, acceptedEntries(manifest))
+  }
+  finalizeFinishedSession(dataDir, safeId)
   return null
 }
 
@@ -682,7 +809,7 @@ export function decideDiff(
   if (decision === 'extend') {
     return requestReplan(dataDir, sessionId, diffId, instruction)
   }
-  return stopSession(dataDir, sessionId, diffId)
+  return stopSession(dataDir, sessionId, targetRoot)
 }
 
 export function closeSession(dataDir, sessionId) {

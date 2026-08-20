@@ -128,6 +128,7 @@ type HUDProps = {
   mode: ViewMode
   locked: boolean
   selectedId: string | null
+  selectedTick?: number
   selectedFolder?: string | null
   aimedRelation: AimedRelation | null
   currentFolder: string
@@ -162,6 +163,7 @@ type HUDProps = {
   ) => void
   onMapAddFile?: (folderPath: string) => void
   onMapAddFolder?: (folderPath: string) => void
+  onInspectFile?: (fileId: string) => void
 }
 
 export function HUD({
@@ -169,6 +171,7 @@ export function HUD({
   mode,
   locked,
   selectedId,
+  selectedTick = 0,
   selectedFolder = null,
   aimedRelation,
   currentFolder,
@@ -196,6 +199,7 @@ export function HUD({
   onRemoveBlueprintImport,
   onMapAddFile,
   onMapAddFolder,
+  onInspectFile,
 }: HUDProps) {
   const selected = graph.files.find((file) => file.id === selectedId)
   const selectedFolderNode = graph.folders.find(
@@ -299,6 +303,11 @@ export function HUD({
   const canRunNext =
     Boolean(nextStep) && (planReady || pending) && !working
   const canComplete = pending && lastStep
+  const canInspectFile = (fileId: string, userCreated = false) =>
+    Boolean(onInspectFile) &&
+    !fileId.startsWith('draft:') &&
+    !(previewing && (intent.deletes ?? []).includes(fileId)) &&
+    (!userCreated || (intent.creates ?? []).includes(fileId))
   const panelDone =
     intent.status === 'finished' ||
     intent.status === 'approved' ||
@@ -332,8 +341,8 @@ export function HUD({
   }, [selectedId, selectedFolder])
 
   useEffect(() => {
-    if (sessionMode && selectedId) setInfoVisible(true)
-  }, [selectedId, sessionMode])
+    if (selectedId) setInfoVisible(true)
+  }, [selectedId, selectedTick])
 
   useEffect(() => {
     if (selectedFolder) setInfoVisible(true)
@@ -402,7 +411,7 @@ export function HUD({
                   , <kbd>Space</kbd> place a file, <kbd>B</kbd> place an island
                 </>
               ) : null}
-              , click a block for imports.
+              , click a block for info.
             </p>
           </div>
         </div>
@@ -757,6 +766,15 @@ export function HUD({
           <p>
             {selected.lines} lines · {selected.language}
           </p>
+          {canInspectFile(selected.id, selected.userCreated) && (
+            <button
+              className="hud-button hud-inspect"
+              type="button"
+              onClick={() => onInspectFile?.(selected.id)}
+            >
+              Inspect file
+            </button>
+          )}
           {selectedClasses.length > 0 && (
             <>
               <div className="hud-section-title">Classes</div>
@@ -955,7 +973,18 @@ export function HUD({
           ) : (
             <ul>
               {folderFiles.map((file) => (
-                <li key={file.id}>{file.path || file.id}</li>
+                <li key={file.id}>
+                  <span>{file.path || file.id}</span>
+                  {canInspectFile(file.id, file.userCreated) && (
+                    <button
+                      className="hud-item-inspect"
+                      type="button"
+                      onClick={() => onInspectFile?.(file.id)}
+                    >
+                      Inspect
+                    </button>
+                  )}
+                </li>
               ))}
             </ul>
           )}
@@ -988,11 +1017,7 @@ export function HUD({
             <>
               <span>Scroll zoom</span>
               <span>Drag pan</span>
-              <span>
-                {sessionMode
-                  ? 'Click a block for info'
-                  : 'Click a block for relations'}
-              </span>
+              <span>Click a block for info</span>
               <span>Click an island for its files</span>
               {creatingBlueprint && (
                 <>
@@ -1001,19 +1026,11 @@ export function HUD({
                 </>
               )}
               <span>Click a line to fly there</span>
-              <span>Shift-click ground to walk</span>
+              <span>Ctrl-click an island to walk</span>
               {selected?.userCreated && creatingBlueprint && (
                 <span>Backspace delete</span>
               )}
-              <span>
-                {sessionMode
-                  ? infoVisible
-                    ? 'I hide info'
-                    : 'Click a block for info'
-                  : infoVisible
-                    ? 'I hide info'
-                    : 'I show info'}
-              </span>
+              <span>{infoVisible ? 'I hide info' : 'I show info'}</span>
               {infoVisible && <span>↑↓ scroll info</span>}
               <span>
                 {importedBy ? 'K show imports' : 'K show imported by'}
@@ -1034,21 +1051,9 @@ export function HUD({
               {selected?.userCreated && creatingBlueprint && (
                 <span>Backspace delete</span>
               )}
-              <span>
-                {sessionMode
-                  ? 'Click a block for info'
-                  : 'Click block for relations'}
-              </span>
+              <span>Click a block for info</span>
               <span>Aim a line to fly</span>
-              <span>
-                {sessionMode
-                  ? infoVisible
-                    ? 'I hide info'
-                    : 'Click a block for info'
-                  : infoVisible
-                    ? 'I hide info'
-                    : 'I show info'}
-              </span>
+              <span>{infoVisible ? 'I hide info' : 'I show info'}</span>
               {infoVisible && <span>↑↓ scroll info</span>}
               <span>
                 {importedBy ? 'K show imports' : 'K show imported by'}

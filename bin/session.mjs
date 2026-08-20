@@ -201,7 +201,7 @@ export async function proposePatch(args) {
 
   if (clear) {
     if (!sessionId) usage('propose-patch', '--session <cursor-chat-id> --clear')
-    store.stopSession(config.dataDir, sessionId)
+    store.stopSession(config.dataDir, sessionId, config.targetRoot)
     console.log(
       `Cleared session ${sessionId}; stored diffs and blueprint drafts were removed.`,
     )

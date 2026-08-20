@@ -180,3 +180,24 @@ export function persistSessionBlueprint(
     // Keep local drafts if the session handshake is no longer open.
   })
 }
+
+export async function inspectTargetFile(payload: {
+  sessionId?: string | null
+  diffId?: string | null
+  fileId?: string
+}) {
+  const response = await fetch('/api/inspect-file', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const detail = await response.text()
+    throw new Error(detail || 'Could not inspect file')
+  }
+  return (await response.json()) as {
+    path: string | null
+    uri: string | null
+    opened: boolean
+  }
+}

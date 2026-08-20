@@ -8,7 +8,9 @@ import {
   answerBlueprint,
   assertSessionId,
   continueDiff,
+  inspectTargetFile,
   invokeStep,
+  materializeDiff,
   readActiveSession,
   readBlueprint,
   readBlueprintSession,
@@ -234,6 +236,10 @@ test('invokes, reviews, continues, and waits to run the next step', () => {
     })
     assert.equal(first.entry.step, 1)
     assert.equal(first.manifest.phase, 'review')
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
 
     invokeStep(env.dataDir, 'happy-chat', 2, env.targetRoot)
     const continued = readManifest(env.dataDir, 'happy-chat')
@@ -409,7 +415,7 @@ test('rejects stale actions and invalid virtual continuations', () => {
           '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 9\n',
       }),
     )
-    stopSession(env.dataDir, 'guard-chat')
+    stopSession(env.dataDir, 'guard-chat', env.targetRoot)
     assert.equal(readManifest(env.dataDir, 'guard-chat'), null)
     assert.equal(
       fs.existsSync(path.join(env.dataDir, 'diff-sessions', 'guard-chat')),
@@ -525,7 +531,7 @@ test('stop deletes the session plan, patches, and active pointer', () => {
       fs.existsSync(path.join(env.dataDir, 'diff-sessions', 'stop-chat', 'diffs', '0001.patch')),
     )
 
-    assert.equal(stopSession(env.dataDir, 'stop-chat', '0001'), null)
+    assert.equal(stopSession(env.dataDir, 'stop-chat', env.targetRoot), null)
     assert.equal(readManifest(env.dataDir, 'stop-chat'), null)
     assert.equal(sessionIntent(env.dataDir, 'stop-chat', ['src/a.ts']), null)
     assert.equal(readActiveSession(env.dataDir), null)
@@ -533,7 +539,94 @@ test('stop deletes the session plan, patches, and active pointer', () => {
       fs.existsSync(path.join(env.dataDir, 'diff-sessions', 'stop-chat')),
       false,
     )
-    assert.equal(stopSession(env.dataDir, 'stop-chat'), null)
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 1\n',
+    )
+    assert.equal(stopSession(env.dataDir, 'stop-chat', env.targetRoot), null)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('stop keeps accepted diffs and reverts the pending preview', () => {
+  const env = fixture()
+  const addB =
+    '--- /dev/null\n+++ b/src/b.ts\n@@ -0,0 +1,1 @@\n+export const extra = 1\n'
+  try {
+    reportPlan(env.dataDir, {
+      sessionId: 'keep-chat',
+      feature: 'Keep accepted',
+      stepTitles: ['Change value', 'Add extra'],
+    })
+    invokeStep(env.dataDir, 'keep-chat', 1)
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'keep-chat',
+      patchText: oneToTwo,
+    })
+    continueDiff(env.dataDir, env.targetRoot, 'keep-chat', '0001')
+    invokeStep(env.dataDir, 'keep-chat', 2)
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'keep-chat',
+      patchText: addB,
+    })
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/b.ts'), 'utf8'),
+      'export const extra = 1\n',
+    )
+
+    stopSession(env.dataDir, 'keep-chat', env.targetRoot)
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
+    assert.equal(fs.existsSync(path.join(env.targetRoot, 'src/b.ts')), false)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('inspecting a file materializes the selected diff into the editor path', () => {
+  const env = fixture()
+  try {
+    reportPlan(env.dataDir, {
+      sessionId: 'inspect-chat',
+      feature: 'Inspect',
+      stepTitles: ['Change value', 'Change again'],
+    })
+    invokeStep(env.dataDir, 'inspect-chat', 1)
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'inspect-chat',
+      patchText: oneToTwo,
+    })
+    continueDiff(env.dataDir, env.targetRoot, 'inspect-chat', '0001')
+    invokeStep(env.dataDir, 'inspect-chat', 2)
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'inspect-chat',
+      patchText: twoToThree,
+    })
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 3\n',
+    )
+
+    materializeDiff(env.dataDir, env.targetRoot, 'inspect-chat', '0001')
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
+
+    const inspected = inspectTargetFile(env.dataDir, env.targetRoot, {
+      sessionId: 'inspect-chat',
+      diffId: '0002',
+      fileId: 'src/a.ts',
+    })
+    assert.equal(inspected, path.join(env.targetRoot, 'src/a.ts'))
+    assert.equal(fs.readFileSync(inspected, 'utf8'), 'export const value = 3\n')
   } finally {
     env.cleanup()
   }

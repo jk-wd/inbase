@@ -25,6 +25,9 @@ export const EDITOR_GREY = {
   surface: '#272c36',
 }
 
+/** Infinite map/walk backdrop. Keep distinct from chrome HUD greys. */
+export const WORLD_VOID = '#000000'
+
 export type ChangeKind = 'add' | 'edit' | 'remove'
 
 export const CHANGE_HIGHLIGHT: Record<

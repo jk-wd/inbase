@@ -7,9 +7,11 @@ import { fileURLToPath } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { emptyIntent } from './scripts/patch-lib.mjs'
 import { dataDir, targetRoot } from './scripts/target-config.mjs'
+import { editorFileUri, openInEditor } from './scripts/open-editor.mjs'
 import {
   answerBlueprint,
   continueDiff,
+  inspectTargetFile,
   invokeStep,
   readActiveSession,
   requestReplan,
@@ -105,7 +107,43 @@ function jsonFilePlugin(): Plugin {
 
         next()
       })
+
+      server.middlewares.use('/api/inspect-file', (req, res, next) => {
+        if (req.method === 'POST') {
+          void inspectFile(req, res)
+          return
+        }
+        next()
+      })
     },
+  }
+}
+
+async function inspectFile(req: IncomingMessage, res: ServerResponse) {
+  try {
+    const body = JSON.parse(await readBody(req)) as {
+      sessionId?: string
+      diffId?: string
+      fileId?: string
+    }
+    const filePath = inspectTargetFile(dataDir, targetRoot, {
+      sessionId: body.sessionId,
+      diffId: body.diffId,
+      fileId: body.fileId,
+    })
+    if (!filePath) {
+      sendJson(res, 200, { path: null, uri: null, opened: false })
+      return
+    }
+    const opened = openInEditor(filePath)
+    sendJson(res, 200, {
+      path: filePath,
+      uri: editorFileUri(filePath),
+      opened,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'invalid request'
+    sendJson(res, 400, { error: message })
   }
 }
 
@@ -209,7 +247,7 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
         addedImports: body.addedImports,
       })
     } else {
-      stopSession(dataDir, body.sessionId, body.diffId)
+      stopSession(dataDir, body.sessionId, targetRoot)
     }
     const next = sessionIntent(dataDir, body.sessionId, knownFileIds())
     sendJson(res, 200, next ?? { ...emptyIntent })

@@ -66,8 +66,14 @@ export function MapView({
     const element = gl.domElement
     element.style.cursor = 'grab'
 
+    const isWalkClick = (event: PointerEvent | MouseEvent) =>
+      event.shiftKey || event.ctrlKey || event.metaKey
+
+    const isWalkButton = (event: PointerEvent) =>
+      event.button === 0 || (event.ctrlKey && event.button === 2)
+
     const onDown = (event: PointerEvent) => {
-      if (event.button !== 0) return
+      if (!isWalkButton(event)) return
       drag.current = { x: event.clientX, y: event.clientY, moved: false, active: true }
       element.style.cursor = 'grabbing'
     }
@@ -93,20 +99,31 @@ export function MapView({
       return { raycaster, relationHit, fileHit }
     }
 
-    const landAtPointer = (clientX: number, clientY: number) => {
-      const pick = pickAt(clientX, clientY)
-      if (!pick) return false
-      const { raycaster, relationHit, fileHit } = pick
-      if (relationHit || fileHit) return false
-
-      const hit = new THREE.Vector3()
-      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
-      if (!raycaster.ray.intersectPlane(plane, hit)) return false
+    const landAt = (x: number, z: number) => {
       const lock = element.requestPointerLock()
       if (lock && typeof lock.catch === 'function') {
         void lock.catch(() => {})
       }
-      onLand(hit.x, hit.z)
+      onLand(x, z)
+    }
+
+    const landAtPointer = (clientX: number, clientY: number, allowIsland: boolean) => {
+      const pick = pickAt(clientX, clientY)
+      if (!pick) return false
+      const { raycaster, relationHit, fileHit } = pick
+
+      const hit = new THREE.Vector3()
+      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+      if (!raycaster.ray.intersectPlane(plane, hit)) return false
+
+      const folder = folderAt(hit.x, hit.z, layout)
+      if (allowIsland && folder) {
+        landAt(hit.x, hit.z)
+        return true
+      }
+      if (relationHit || fileHit) return false
+
+      landAt(hit.x, hit.z)
       return true
     }
 
@@ -114,9 +131,11 @@ export function MapView({
       element.style.cursor = 'grab'
       const startedOnCanvas = drag.current.active
       drag.current.active = false
-      if (!startedOnCanvas || event.button !== 0 || drag.current.moved) return
+      if (!startedOnCanvas || !isWalkButton(event) || drag.current.moved) return
 
-      if (event.shiftKey && landAtPointer(event.clientX, event.clientY)) return
+      if (isWalkClick(event) && landAtPointer(event.clientX, event.clientY, true)) {
+        return
+      }
 
       const pick = pickAt(event.clientX, event.clientY)
       if (!pick) return
@@ -149,14 +168,20 @@ export function MapView({
       onSelectFolder(null)
     }
 
+    const onContextMenu = (event: MouseEvent) => {
+      if (event.ctrlKey) event.preventDefault()
+    }
+
     element.addEventListener('pointerdown', onDown)
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
+    element.addEventListener('contextmenu', onContextMenu)
     return () => {
       element.style.cursor = ''
       element.removeEventListener('pointerdown', onDown)
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
+      element.removeEventListener('contextmenu', onContextMenu)
     }
   }, [
     camera,

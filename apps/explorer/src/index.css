@@ -22,6 +22,7 @@ body,
   position: absolute;
   inset: 0;
   z-index: 0;
+  background: #000;
 }
 
 * {
@@ -566,6 +567,11 @@ button {
   word-break: break-all;
 }
 
+.hud-inspect {
+  margin: 10px 0 0;
+  width: 100%;
+}
+
 .hud-panel ul {
   margin: 8px 0 0;
   padding-left: 18px;
@@ -597,6 +603,21 @@ button {
 .hud-item-remove:focus-visible {
   color: #ff5a72;
   border-color: #8a4a4a;
+}
+
+.hud-item-inspect {
+  flex: none;
+  padding: 2px 6px;
+  color: #d7eef8;
+  background: transparent;
+  border: 1px solid #3a4250;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.hud-item-inspect:hover,
+.hud-item-inspect:focus-visible {
+  border-color: #9ad8ff;
 }
 
 .hud-add-row {

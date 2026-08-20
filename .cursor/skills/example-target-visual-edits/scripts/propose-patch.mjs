@@ -44,7 +44,7 @@ if (clear) {
     console.error('Usage: propose-patch.mjs --session <cursor-chat-id> --clear')
     process.exit(1)
   }
-  stopSession(dataDir, sessionId)
+  stopSession(dataDir, sessionId, targetRoot)
   console.log(`Cleared session ${sessionId}; stored diffs and blueprint drafts were removed.`)
   process.exit(0)
 }

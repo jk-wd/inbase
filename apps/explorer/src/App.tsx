@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { emptyIntent, fetchAgentIntent, performAgentAction, persistSessionBlueprint } from './agentIntent'
+import { emptyIntent, fetchAgentIntent, inspectTargetFile, performAgentAction, persistSessionBlueprint } from './agentIntent'
 import { fetchCodebase } from './codebase'
 import {
   layoutWorld,
@@ -163,6 +163,7 @@ function Explorer({
   ])
   const walkPos = useRef<[number, number]>([layout.spawn[0], layout.spawn[2]])
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedTick, setSelectedTick] = useState(0)
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null)
   const [aimedRelation, setAimedRelation] = useState<AimedRelation | null>(null)
   const [flyTo, setFlyTo] = useState<FlyTo | null>(null)
@@ -274,7 +275,7 @@ function Explorer({
         browsingHistory.current = false
         lastIntentSig.current = intentSignature(next)
         applyIntent(next)
-        if (action === 'invoke' || action === 'continue') {
+        if (action === 'invoke' || action === 'continue' || action === 'stop') {
           await onRefreshGraph()
         }
       } catch {
@@ -300,6 +301,16 @@ function Explorer({
       try {
         const latest = intent.chain.at(-1)?.id
         browsingHistory.current = diffId !== latest
+        if (intent.sessionId) {
+          try {
+            await inspectTargetFile({
+              sessionId: intent.sessionId,
+              diffId,
+            })
+          } catch {
+            // Still show the historical preview if disk replay failed.
+          }
+        }
         const next = await fetchAgentIntent(diffId)
         lastIntentSig.current = intentSignature(next)
         applyIntent(next)
@@ -307,7 +318,22 @@ function Explorer({
         // Keep the current chain position if navigation failed.
       }
     },
-    [applyIntent, intent.chain],
+    [applyIntent, intent.chain, intent.sessionId],
+  )
+
+  const inspectFile = useCallback(
+    async (fileId: string) => {
+      try {
+        await inspectTargetFile({
+          sessionId: intent.sessionId,
+          diffId: intent.diffId,
+          fileId,
+        })
+      } catch {
+        // Keep the current view if the editor could not open the file.
+      }
+    },
+    [intent.diffId, intent.sessionId],
   )
 
   useEffect(() => {
@@ -566,7 +592,10 @@ function Explorer({
   const selectFile = useCallback(
     (fileId: string | null) => {
       setSelectedId(fileId)
-      if (fileId) setSelectedFolder(null)
+      if (fileId) {
+        setSelectedFolder(null)
+        setSelectedTick((tick) => tick + 1)
+      }
       if (fileId && intent.creationMode) document.exitPointerLock()
     },
     [intent.creationMode],
@@ -904,6 +933,7 @@ function Explorer({
         mode={mode}
         locked={locked}
         selectedId={selectedId}
+        selectedTick={selectedTick}
         selectedFolder={selectedFolder}
         aimedRelation={aimedRelation}
         currentFolder={currentFolder}
@@ -935,6 +965,7 @@ function Explorer({
         onRemoveBlueprintImport={removeBlueprintImport}
         onMapAddFile={placeBlockOnFolder}
         onMapAddFolder={placeIslandOnFolder}
+        onInspectFile={inspectFile}
       />
     </>
   )

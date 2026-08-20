@@ -119,6 +119,36 @@ export function sessionIntent(
   knownFileIds?: string[],
   selectedDiffId?: string,
 ): Record<string, unknown> | null
+export function resolveTargetFile(
+  targetRoot: string,
+  fileId: string,
+): { id: string; absolute: string }
+export function captureBaseline(
+  dataDir: string,
+  sessionId: string,
+  targetRoot: string,
+  fileIds?: string[],
+): { files: Record<string, { existed: boolean }> }
+export function restoreBaseline(
+  dataDir: string,
+  sessionId: string,
+  targetRoot: string,
+): void
+export function materializeDiff(
+  dataDir: string,
+  targetRoot: string,
+  sessionId: string,
+  diffId?: string | null,
+): DiffManifest
+export function inspectTargetFile(
+  dataDir: string,
+  targetRoot: string,
+  input?: {
+    sessionId?: string | null
+    diffId?: string | null
+    fileId?: string | null
+  },
+): string | null
 export function appendDiff(
   dataDir: string,
   targetRoot: string,
@@ -142,7 +172,7 @@ export function requestReplan(
 export function stopSession(
   dataDir: string,
   sessionId: string,
-  diffId?: string,
+  targetRoot?: string | null,
 ): null
 export function decideDiff(
   dataDir: string,
