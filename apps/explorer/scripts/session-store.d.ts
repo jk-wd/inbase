@@ -62,6 +62,10 @@ export function discardInactiveDiffSessions(
   targetRoot?: string | null,
   waiterIds?: Iterable<string>,
 ): string[]
+export function clearDiffSessions(
+  dataDir: string,
+  targetRoot?: string | null,
+): void
 export function listSessionIntents(
   dataDir: string,
   knownFileIds?: string[],

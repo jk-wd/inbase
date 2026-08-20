@@ -280,7 +280,7 @@ export function MapView({
             key={folder.path}
             position={[folder.x, 14, folder.z + 1.35]}
             center
-            zIndexRange={[1, 0]}
+            zIndexRange={[80, 50]}
             style={{ pointerEvents: 'none' }}
           >
             <div
@@ -307,7 +307,7 @@ export function MapView({
             </div>
           </Html>
         ))}
-      {marker && <LandMarker marker={marker} />}
+      {enabled && marker && <LandMarker marker={marker} />}
     </>
   )
 }
@@ -350,7 +350,7 @@ function LandMarker({ marker }: { marker: [number, number] }) {
       </group>
       <Html
         center
-        zIndexRange={[40, 30]}
+        zIndexRange={[20, 10]}
         style={{ pointerEvents: 'none' }}
         position={[0, 2.8, 0]}
       >

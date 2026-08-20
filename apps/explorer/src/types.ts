@@ -69,6 +69,7 @@ export type ViewMode = 'map' | 'walk'
 
 export type FlyTo = {
   nonce: number
+  from: [number, number]
   lookAt: [number, number, number]
 }
 

@@ -1154,6 +1154,22 @@ export function discardInactiveDiffSessions(
   return liveIds
 }
 
+export function clearDiffSessions(dataDir, targetRoot = null) {
+  for (const sessionId of listStoredSessionIds(dataDir)) {
+    discardStoredSession(dataDir, sessionId, targetRoot)
+  }
+  writeActiveSession(dataDir, null)
+  writeBlueprintSession(dataDir, null)
+
+  const root = diffSessionsRoot(dataDir)
+  fs.mkdirSync(root, { recursive: true })
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    if (entry.name === '.gitkeep') continue
+    fs.rmSync(path.join(root, entry.name), { recursive: true, force: true })
+  }
+  unstageDiffSessionArtifacts(dataDir, targetRoot)
+}
+
 export function stopSession(dataDir, sessionId, targetRoot = null) {
   const safeId = assertSessionId(sessionId)
   writeStoppedMarker(dataDir, safeId)

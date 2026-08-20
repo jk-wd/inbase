@@ -15,6 +15,7 @@ import { FolderArea } from './FolderArea'
 import { RelationLines } from './RelationLines'
 
 type Vec3 = [number, number, number]
+type Orbit = { yaw: number; pitch: number }
 
 type SelectionThumbnailProps = {
   graph: CodebaseGraph
@@ -161,7 +162,10 @@ function resolveTarget(
 
 const MIN_ZOOM = 0.45
 const MAX_ZOOM = 6
+const MIN_ORBIT_PITCH = 0.08
+const MAX_ORBIT_PITCH = Math.PI / 2 - 0.06
 const ZERO_PAN: Vec3 = [0, 0, 0]
+const ZERO_ORBIT: Orbit = { yaw: 0, pitch: 0 }
 const WORLD_UP: Vec3 = [0, 1, 0]
 const LABEL_PROJECT = new THREE.Vector3()
 const GROUND_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
@@ -214,14 +218,61 @@ function cameraOffset(position: Vec3, lookAt: Vec3, zoom: number): Vec3 {
   return vecScale(vecSub(position, lookAt), 1 / zoom)
 }
 
+function sphericalFromOffset(offset: Vec3) {
+  const radius = vecLength(offset)
+  return {
+    radius,
+    yaw: Math.atan2(offset[0], offset[2]),
+    pitch: Math.asin(
+      Math.min(1, Math.max(-1, offset[1] / Math.max(radius, 1e-6))),
+    ),
+  }
+}
+
+function offsetFromSpherical(radius: number, yaw: number, pitch: number): Vec3 {
+  const cosPitch = Math.cos(pitch)
+  return [
+    radius * Math.sin(yaw) * cosPitch,
+    radius * Math.sin(pitch),
+    radius * Math.cos(yaw) * cosPitch,
+  ]
+}
+
+function clampOrbitPitch(basePitch: number, orbitPitch: number) {
+  return Math.min(
+    MAX_ORBIT_PITCH - basePitch,
+    Math.max(MIN_ORBIT_PITCH - basePitch, orbitPitch),
+  )
+}
+
+function orbitedOffset(
+  position: Vec3,
+  lookAt: Vec3,
+  zoom: number,
+  orbit: Orbit,
+): Vec3 {
+  const base = cameraOffset(position, lookAt, zoom)
+  if (orbit.yaw === 0 && orbit.pitch === 0) return base
+  const spherical = sphericalFromOffset(base)
+  return offsetFromSpherical(
+    spherical.radius,
+    spherical.yaw + orbit.yaw,
+    Math.min(
+      MAX_ORBIT_PITCH,
+      Math.max(MIN_ORBIT_PITCH, spherical.pitch + orbit.pitch),
+    ),
+  )
+}
+
 function applyThumbnailCamera(
   camera: THREE.Camera,
   position: Vec3,
   lookAt: Vec3,
   zoom: number,
   pan: Vec3,
+  orbit: Orbit,
 ) {
-  const offset = cameraOffset(position, lookAt, zoom)
+  const offset = orbitedOffset(position, lookAt, zoom, orbit)
   camera.up.set(0, 1, 0)
   camera.position.set(
     lookAt[0] + pan[0] + offset[0],
@@ -249,8 +300,13 @@ function worldUnderCursor(
   return Boolean(CURSOR_RAY.ray.intersectPlane(GROUND_PLANE, target))
 }
 
-function cameraPanBasis(position: Vec3, lookAt: Vec3, zoom: number) {
-  const offset = cameraOffset(position, lookAt, zoom)
+function cameraPanBasis(
+  position: Vec3,
+  lookAt: Vec3,
+  zoom: number,
+  orbit: Orbit,
+) {
+  const offset = orbitedOffset(position, lookAt, zoom, orbit)
   const forward = vecNormalize(vecScale(offset, -1))
   const right = vecNormalize(vecCross(forward, WORLD_UP))
   const up = vecNormalize(vecCross(right, forward))
@@ -330,12 +386,14 @@ function CameraRig({
   lookAt,
   zoomRef,
   panRef,
+  orbitRef,
   cameraRef,
 }: {
   position: Vec3
   lookAt: Vec3
   zoomRef: { current: number }
   panRef: { current: Vec3 }
+  orbitRef: { current: Orbit }
   cameraRef: { current: THREE.Camera | null }
 }) {
   const { camera } = useThree()
@@ -347,10 +405,19 @@ function CameraRig({
       lookAt,
       zoomRef.current,
       panRef.current,
+      orbitRef.current,
     )
   }
 
-  useLayoutEffect(aim, [camera, cameraRef, lookAt, panRef, position, zoomRef])
+  useLayoutEffect(aim, [
+    camera,
+    cameraRef,
+    lookAt,
+    orbitRef,
+    panRef,
+    position,
+    zoomRef,
+  ])
   useFrame(aim)
   return null
 }
@@ -395,6 +462,7 @@ function ThumbnailScene({
   zoom,
   zoomRef,
   panRef,
+  orbitRef,
   cameraRef,
   visibleLabelIds,
   onVisibleLabels,
@@ -410,6 +478,7 @@ function ThumbnailScene({
   zoom: number
   zoomRef: { current: number }
   panRef: { current: Vec3 }
+  orbitRef: { current: Orbit }
   cameraRef: { current: THREE.Camera | null }
   visibleLabelIds: Set<string>
   onVisibleLabels: (ids: Set<string>) => void
@@ -466,6 +535,7 @@ function ThumbnailScene({
         lookAt={target.camera.lookAt}
         zoomRef={zoomRef}
         panRef={panRef}
+        orbitRef={orbitRef}
         cameraRef={cameraRef}
       />
       <ThumbnailLabelFilter
@@ -538,6 +608,7 @@ export function SelectionThumbnail({
   const cameraRef = useRef<THREE.Camera | null>(null)
   const zoomRef = useRef(1)
   const panRef = useRef<Vec3>(ZERO_PAN)
+  const orbitRef = useRef<Orbit>(ZERO_ORBIT)
   const pinchRef = useRef({ start: 0, zoom: 1 })
   const zoomAtCursorRef = useRef(
     (_clientX: number, _clientY: number, _dollyScale: number) => {},
@@ -547,9 +618,12 @@ export function SelectionThumbnail({
     x: 0,
     y: 0,
     pan: ZERO_PAN,
+    orbit: ZERO_ORBIT,
+    rotate: false,
   })
   const [zoom, setZoom] = useState(1)
   const [panning, setPanning] = useState(false)
+  const [orbiting, setOrbiting] = useState(false)
   const [visibleLabelIds, setVisibleLabelIds] = useState<Set<string>>(
     () => new Set(),
   )
@@ -578,9 +652,11 @@ export function SelectionThumbnail({
   useEffect(() => {
     zoomRef.current = 1
     panRef.current = ZERO_PAN
+    orbitRef.current = ZERO_ORBIT
     setZoom(1)
     panningRef.current = false
     setPanning(false)
+    setOrbiting(false)
   }, [selectedId, selectedFolder, landAt])
 
   useEffect(() => {
@@ -628,6 +704,7 @@ export function SelectionThumbnail({
           target.camera.lookAt,
           nextZoom,
           panRef.current,
+          orbitRef.current,
         )
         if (
           hit &&
@@ -644,6 +721,7 @@ export function SelectionThumbnail({
             target.camera.lookAt,
             nextZoom,
             panRef.current,
+            orbitRef.current,
           )
         }
       }
@@ -696,6 +774,7 @@ export function SelectionThumbnail({
       dragRef.current.pointerId = -1
       panningRef.current = false
       setPanning(false)
+      setOrbiting(false)
       pinchRef.current = {
         start: touchDistance(event.touches),
         zoom: zoomRef.current,
@@ -726,6 +805,8 @@ export function SelectionThumbnail({
         x: event.clientX,
         y: event.clientY,
         pan: panRef.current,
+        orbit: { ...orbitRef.current },
+        rotate: event.metaKey || event.ctrlKey,
       }
       stage.setPointerCapture(event.pointerId)
     }
@@ -737,12 +818,28 @@ export function SelectionThumbnail({
       if (!panningRef.current) {
         if (Math.hypot(dx, dy) <= 3) return
         panningRef.current = true
-        setPanning(true)
+        if (dragRef.current.rotate) setOrbiting(true)
+        else setPanning(true)
+      }
+      if (dragRef.current.rotate) {
+        const speed = (2 * Math.PI) / Math.max(stage.clientHeight, 1)
+        const basePitch = sphericalFromOffset(
+          cameraOffset(target.camera.position, target.camera.lookAt, 1),
+        ).pitch
+        orbitRef.current = {
+          yaw: dragRef.current.orbit.yaw - dx * speed,
+          pitch: clampOrbitPitch(
+            basePitch,
+            dragRef.current.orbit.pitch + dy * speed,
+          ),
+        }
+        return
       }
       const { right, up, distance } = cameraPanBasis(
         target.camera.position,
         target.camera.lookAt,
         zoomRef.current,
+        orbitRef.current,
       )
       const speed = distance / Math.max(stage.clientHeight, 1)
       panRef.current = vecAdd(
@@ -756,6 +853,7 @@ export function SelectionThumbnail({
       dragRef.current.pointerId = -1
       panningRef.current = false
       setPanning(false)
+      setOrbiting(false)
       if (stage.hasPointerCapture(event.pointerId)) {
         stage.releasePointerCapture(event.pointerId)
       }
@@ -766,6 +864,7 @@ export function SelectionThumbnail({
       event.preventDefault()
       zoomRef.current = 1
       panRef.current = ZERO_PAN
+      orbitRef.current = ZERO_ORBIT
       setZoom(1)
     }
 
@@ -850,6 +949,7 @@ export function SelectionThumbnail({
         className="hud-thumbnail-stage"
         ref={stageRef}
         data-panning={panning}
+        data-orbiting={orbiting}
       >
         <Canvas
           shadows={false}
@@ -875,12 +975,15 @@ export function SelectionThumbnail({
             zoom={zoom}
             zoomRef={zoomRef}
             panRef={panRef}
+            orbitRef={orbitRef}
             cameraRef={cameraRef}
             visibleLabelIds={visibleLabelIds}
             onVisibleLabels={setVisibleLabelIds}
           />
         </Canvas>
-        <div className="hud-thumbnail-hint">Scroll zoom · drag pan</div>
+        <div className="hud-thumbnail-hint">
+          Scroll zoom · drag pan · ⌘ drag rotate
+        </div>
         <div className="hud-thumbnail-nav">
           <button
             className="hud-button hud-icon-button"

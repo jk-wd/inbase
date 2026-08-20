@@ -41,7 +41,6 @@ type WorldProps = {
   onSelect: (fileId: string | null) => void
   onSelectFolder: (folderPath: string | null) => void
   onLockedChange: (locked: boolean) => void
-  onFolderChange: (label: string) => void
   onLand: (x: number, z: number) => void
   onWalkPosition: (x: number, z: number) => void
   onContext: (context: UserContext) => void
@@ -81,7 +80,6 @@ export function World({
   onSelect,
   onSelectFolder,
   onLockedChange,
-  onFolderChange,
   onLand,
   onWalkPosition,
   onContext,
@@ -277,7 +275,6 @@ export function World({
         locked={locked}
         lockEnabled={!placing}
         onLockedChange={onLockedChange}
-        onFolderChange={onFolderChange}
         onWalkPosition={onWalkPosition}
         flyTo={flyTo}
       />

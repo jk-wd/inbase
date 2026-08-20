@@ -42,12 +42,18 @@ function symbolLabels(items: PatchSymbolAddition[]) {
   }))
 }
 
+function importLabel(item: Pick<PatchImportAddition, 'name' | 'from'>) {
+  const from = fileBase(item.from)
+  return item.name === item.from || item.name === from
+    ? from
+    : `${item.name} from ${from}`
+}
+
 function importLabels(items: PatchImportAddition[]) {
   const files = new Set(items.map((item) => item.file))
   const showFile = files.size > 1
   return items.map((item) => {
-    const what =
-      item.name === item.from ? item.from : `${item.name} from ${item.from}`
+    const what = importLabel(item)
     return {
       key: `${item.file}:${item.name}:${item.from}`,
       label: showFile ? `${what} · ${fileBase(item.file)}` : what,
@@ -692,6 +698,212 @@ function SessionPanel({
   )
 }
 
+type ExplorerInstruction = {
+  id: string
+  keys: string[]
+  label: string
+}
+
+type InstructionView = 'walk' | '3dview' | 'map'
+
+type ExplorerInstructionSection = {
+  id: InstructionView
+  title: string
+  items: ExplorerInstruction[]
+}
+
+function InstructionList({ items }: { items: ExplorerInstruction[] }) {
+  return (
+    <ul className="hud-instructions-list">
+      {items.map((hint) => (
+        <li className="hud-instruction" key={hint.id}>
+          {hint.keys.length > 0 && (
+            <span className="hud-instruction-keys">
+              {hint.keys.map((key) => (
+                <kbd key={key}>{key}</kbd>
+              ))}
+            </span>
+          )}
+          <span className="hud-instruction-label">{hint.label}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function explorerInstructions({
+  creatingBlueprint,
+  hasChangeSet,
+  changePathsOnly,
+  selectedUserCreated,
+  infoVisible,
+  thumbnailVisible,
+  importedBy,
+  canStop,
+  sessionCount,
+}: {
+  creatingBlueprint: boolean
+  hasChangeSet: boolean
+  changePathsOnly: boolean
+  selectedUserCreated: boolean
+  infoVisible: boolean
+  thumbnailVisible: boolean
+  importedBy: boolean
+  canStop: boolean
+  sessionCount: number
+}): ExplorerInstructionSection[] {
+  const backspace: ExplorerInstruction[] =
+    selectedUserCreated && creatingBlueprint
+      ? [{ id: 'backspace', keys: ['Backspace'], label: 'Delete' }]
+      : []
+  const info: ExplorerInstruction[] = [
+    {
+      id: 'info',
+      keys: ['I'],
+      label: infoVisible ? 'Hide info' : 'Show info',
+    },
+    ...(infoVisible
+      ? [{ id: 'scroll-info', keys: ['↑', '↓'], label: 'Scroll info' }]
+      : []),
+  ]
+  const imported: ExplorerInstruction = {
+    id: 'imported',
+    keys: ['K'],
+    label: importedBy ? 'Show imports' : 'Show imported by',
+  }
+  const stop: ExplorerInstruction[] = canStop
+    ? [
+        {
+          id: 'stop',
+          keys: ['Stop'],
+          label:
+            sessionCount > 1
+              ? 'Ends the focused LLM session'
+              : 'Ends this LLM session',
+        },
+      ]
+    : []
+  const thumbnail: ExplorerInstruction = {
+    id: 'thumbnail',
+    keys: ['T'],
+    label: thumbnailVisible ? 'Hide 3D view' : 'Show 3D view',
+  }
+  return [
+    {
+      id: 'walk',
+      title: 'Walk',
+      items: [
+        { id: 'wasd', keys: ['W', 'A', 'S', 'D'], label: 'Walk' },
+        { id: 'mouse-look', keys: ['Mouse'], label: 'Look around' },
+        { id: 'shift', keys: ['Shift'], label: 'Sprint' },
+        ...(creatingBlueprint
+          ? [
+              { id: 'space', keys: ['Space'], label: 'Place file' },
+              { id: 'b-island', keys: ['B'], label: 'Place island' },
+            ]
+          : []),
+        ...backspace,
+        {
+          id: 'dblclick-info',
+          keys: ['Double-click'],
+          label: 'A block for info',
+        },
+        { id: 'aim-line', keys: ['Click'], label: 'Aim a line to fly' },
+        ...info,
+        imported,
+        {
+          id: 'update-model',
+          keys: ['Update model'],
+          label: 'Rescan and rebuild the map',
+        },
+        { id: 'toggle-map', keys: ['M'], label: 'Toggle map' },
+        {
+          id: 'release',
+          keys: ['Double-click', 'Esc'],
+          label: 'Release mouse',
+        },
+        ...stop,
+      ],
+    },
+    {
+      id: '3dview',
+      title: '3D view',
+      items: [
+        { id: 'scroll-zoom', keys: ['Scroll'], label: 'Zoom' },
+        { id: 'drag-pan', keys: ['Drag'], label: 'Pan' },
+        {
+          id: 'cmd-drag-rotate',
+          keys: ['⌘', 'Ctrl', 'Drag'],
+          label: 'Rotate',
+        },
+        {
+          id: 'dblclick-reset',
+          keys: ['Double-click'],
+          label: 'Reset view',
+        },
+        thumbnail,
+      ],
+    },
+    {
+      id: 'map',
+      title: 'Map',
+      items: [
+        { id: 'scroll-zoom', keys: ['Scroll'], label: 'Zoom' },
+        { id: 'drag-pan', keys: ['Drag'], label: 'Pan' },
+        { id: 'click-block', keys: ['Click'], label: 'A block for info' },
+        {
+          id: 'click-island',
+          keys: ['Click'],
+          label: 'An island for its files',
+        },
+        ...(creatingBlueprint
+          ? [
+              { id: 'select-island', keys: ['Click'], label: 'Select an island' },
+              {
+                id: 'add-file-folder',
+                keys: [],
+                label: 'Add file / Add folder in panel',
+              },
+            ]
+          : []),
+        { id: 'click-line', keys: ['Click'], label: 'A line to fly there' },
+        {
+          id: 'ctrl-click-walk',
+          keys: ['Ctrl', 'Click'],
+          label: 'An island to walk',
+        },
+        {
+          id: 'gold-pin',
+          keys: [],
+          label: 'Gold pin is your walk position',
+        },
+        ...(hasChangeSet
+          ? [
+              {
+                id: 'toggle-paths',
+                keys: ['C'],
+                label: changePathsOnly
+                  ? 'Show all paths'
+                  : 'Show only changed paths',
+              },
+            ]
+          : []),
+        ...backspace,
+        ...info,
+        thumbnail,
+        imported,
+        {
+          id: 'update-model',
+          keys: ['Update model'],
+          label: 'Rescan and rebuild the map',
+        },
+        { id: 'map-walk', keys: ['M'], label: 'Back to walk' },
+        ...stop,
+      ],
+    },
+  ]
+}
+
 type HUDProps = {
   graph: CodebaseGraph
   layout: WorldLayout
@@ -704,7 +916,6 @@ type HUDProps = {
   landAt: [number, number]
   aimedRelation: AimedRelation | null
   aimedFileId?: string | null
-  currentFolder: string
   intent: AgentIntent
   intents?: AgentIntent[]
   focusedSessionId?: string | null
@@ -719,6 +930,8 @@ type HUDProps = {
   onWalk: () => void
   followLook: boolean
   onToggleFollowLook: () => void
+  onUpdateModel: () => void
+  updatingModel?: boolean
   importedBy: boolean
   onToggleImportedBy: () => void
   changePathsOnly?: boolean
@@ -762,7 +975,6 @@ export function HUD({
   landAt,
   aimedRelation,
   aimedFileId = null,
-  currentFolder,
   intent,
   intents,
   focusedSessionId = null,
@@ -773,6 +985,8 @@ export function HUD({
   onWalk,
   followLook,
   onToggleFollowLook,
+  onUpdateModel,
+  updatingModel = false,
   importedBy,
   onToggleImportedBy,
   changePathsOnly = false,
@@ -821,6 +1035,7 @@ export function HUD({
   const canStop = canStopSession(intent)
   const [walkIntro, setWalkIntro] = useState(false)
   const walkIntroSeen = useRef(false)
+  const [instructionsOpen, setInstructionsOpen] = useState(false)
   const [infoVisible, setInfoVisible] = useState(false)
   const [infoMinimized, setInfoMinimized] = useState(false)
   const [thumbnailVisible, setThumbnailVisible] = useState(true)
@@ -1039,6 +1254,36 @@ export function HUD({
     return () => window.removeEventListener('keydown', onKey, true)
   }, [infoVisible, selectedId, selectedFolder])
 
+  useEffect(() => {
+    if (!instructionsOpen) return
+    document.exitPointerLock()
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      setInstructionsOpen(false)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [instructionsOpen])
+
+  const instructionSections = explorerInstructions({
+    creatingBlueprint,
+    hasChangeSet,
+    changePathsOnly,
+    selectedUserCreated: Boolean(selected?.userCreated),
+    infoVisible,
+    thumbnailVisible,
+    importedBy,
+    canStop,
+    sessionCount: sessions.length,
+  })
+  const currentInstructionView: InstructionView = mapping
+    ? thumbnailMaximized
+      ? '3dview'
+      : 'map'
+    : 'walk'
+
   return (
     <div className="hud">
       {mode === 'walk' && !locked && walkIntro && !naming && (
@@ -1082,9 +1327,6 @@ export function HUD({
       )}
 
       <div className="hud-top">
-        <div className="hud-chip">
-          {mapping ? `Map of ${graph.targetName}` : `You are in ${currentFolder}`}
-        </div>
         <div className="hud-mode">
           <button
             className="hud-button"
@@ -1309,7 +1551,9 @@ export function HUD({
             ) : (
               <ul>
                 {importers.map((file) => (
-                  <li key={file.id}>{file.id}</li>
+                  <li key={file.id} title={file.id}>
+                    {file.name}
+                  </li>
                 ))}
               </ul>
             )
@@ -1323,8 +1567,9 @@ export function HUD({
                     className={
                       intendedImportFrom.has(id) ? 'hud-intended' : undefined
                     }
+                    title={id}
                   >
-                    {id}
+                    {fileBase(id)}
                   </span>
                   {canEditBlueprint && intendedImportFrom.has(id) && (
                     <button
@@ -1351,10 +1596,8 @@ export function HUD({
               ))}
               {extraBlueprintImports.map((item) => (
                 <li key={`bp-${item.name}-${item.from}`}>
-                  <span className="hud-intended">
-                    {item.name === item.from
-                      ? item.from
-                      : `${item.name} from ${item.from}`}
+                  <span className="hud-intended" title={item.from}>
+                    {importLabel(item)}
                   </span>
                   {canEditBlueprint && (
                     <button
@@ -1487,82 +1730,71 @@ export function HUD({
       )}
       </div>
 
+      {instructionsOpen && (
+        <div
+          className="hud-instructions-overlay"
+          onClick={() => setInstructionsOpen(false)}
+        >
+          <div
+            className="hud-instructions-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="hud-instructions-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="hud-instructions-header">
+              <h1 id="hud-instructions-title">Instructions</h1>
+              <button
+                className="hud-button"
+                type="button"
+                onClick={() => setInstructionsOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+            <div className="hud-instructions-sections">
+              {instructionSections.map((section) => (
+                <section
+                  className="hud-instructions-section"
+                  data-current={section.id === currentInstructionView}
+                  key={section.id}
+                  aria-labelledby={`hud-instructions-${section.id}`}
+                >
+                  <h2 id={`hud-instructions-${section.id}`}>
+                    {section.title}
+                    {section.id === currentInstructionView && (
+                      <span className="hud-instructions-current">Current</span>
+                    )}
+                  </h2>
+                  <InstructionList items={section.items} />
+                </section>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="hud-bottom">
-        <div className="hud-hints">
-          {mapping ? (
-            <>
-              <span>Scroll zoom</span>
-              <span>Drag pan</span>
-              <span>Click a block for info</span>
-              <span>Click an island for its files</span>
-              {creatingBlueprint && (
-                <>
-                  <span>Select an island</span>
-                  <span>Add file / Add folder in panel</span>
-                </>
-              )}
-              <span>Click a line to fly there</span>
-              <span>Ctrl-click an island to walk</span>
-              <span>Gold pin is your walk position</span>
-              {hasChangeSet && (
-                <span>
-                  {changePathsOnly
-                    ? 'C show all paths'
-                    : 'C show only changed paths'}
-                </span>
-              )}
-              {selected?.userCreated && creatingBlueprint && (
-                <span>Backspace delete</span>
-              )}
-              <span>{infoVisible ? 'I hide info' : 'I show info'}</span>
-              {infoVisible && <span>↑↓ scroll info</span>}
-              <span>
-                {thumbnailVisible ? 'T hide 3D view' : 'T show 3D view'}
-              </span>
-              <span>
-                {importedBy ? 'K show imports' : 'K show imported by'}
-              </span>
-              <span>M back to walk</span>
-              {canStop && (
-                <span>
-                  {sessions.length > 1
-                    ? 'Stop ends the focused LLM session'
-                    : 'Stop ends this LLM session'}
-                </span>
-              )}
-            </>
-          ) : (
-            <>
-              <span>WASD walk</span>
-              <span>Mouse look</span>
-              <span>Shift sprint</span>
-              {creatingBlueprint && (
-                <>
-                  <span>Space place file</span>
-                  <span>B place island</span>
-                </>
-              )}
-              {selected?.userCreated && creatingBlueprint && (
-                <span>Backspace delete</span>
-              )}
-              <span>Double-click a block for info</span>
-              <span>Aim a line to fly</span>
-              <span>{infoVisible ? 'I hide info' : 'I show info'}</span>
-              {infoVisible && <span>↑↓ scroll info</span>}
-              <span>
-                {importedBy ? 'K show imports' : 'K show imported by'}
-              </span>
-              <span>M toggle map</span>
-              <span>Double-click or Esc release mouse</span>
-              {canStop && (
-                <span>
-                  {sessions.length > 1
-                    ? 'Stop ends the focused LLM session'
-                    : 'Stop ends this LLM session'}
-                </span>
-              )}
-            </>
-          )}
+        <div className="hud-bottom-actions">
+          <button
+            className="hud-button"
+            data-active={instructionsOpen}
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded={instructionsOpen}
+            onClick={() => setInstructionsOpen((open) => !open)}
+          >
+            Instructions
+          </button>
+          <button
+            className="hud-button"
+            type="button"
+            aria-label="Rescan the project and rebuild the map"
+            disabled={updatingModel}
+            onClick={onUpdateModel}
+          >
+            {updatingModel ? 'Updating…' : 'Update model'}
+          </button>
         </div>
         <div className="hud-icon-row">
           {mapping && hasChangeSet && onToggleChangePathsOnly && (

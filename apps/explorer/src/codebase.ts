@@ -1,14 +1,32 @@
 import type { CodebaseGraph } from './types'
 
+function parseCodebase(data: unknown): CodebaseGraph | null {
+  if (
+    !data ||
+    typeof data !== 'object' ||
+    !Array.isArray((data as CodebaseGraph).files) ||
+    !Array.isArray((data as CodebaseGraph).folders)
+  ) {
+    return null
+  }
+  return data as CodebaseGraph
+}
+
 export async function fetchCodebase(): Promise<CodebaseGraph | null> {
   try {
     const response = await fetch(`/api/codebase?t=${Date.now()}`)
     if (!response.ok) return null
-    const data = (await response.json()) as CodebaseGraph
-    if (!data || !Array.isArray(data.files) || !Array.isArray(data.folders)) {
-      return null
-    }
-    return data
+    return parseCodebase(await response.json())
+  } catch {
+    return null
+  }
+}
+
+export async function updateCodebase(): Promise<CodebaseGraph | null> {
+  try {
+    const response = await fetch('/api/codebase', { method: 'POST' })
+    if (!response.ok) return null
+    return parseCodebase(await response.json())
   } catch {
     return null
   }

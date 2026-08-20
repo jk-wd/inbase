@@ -1,13 +1,30 @@
 {
-  "updatedAt": "2026-08-20T14:41:19.946Z",
+  "updatedAt": "2026-08-20T15:02:29.413Z",
   "mode": "map",
   "island": {
     "path": "src",
     "name": "src"
   },
-  "lookingAt": null,
-  "lookingAtFiles": [],
-  "selected": null,
+  "lookingAt": {
+    "id": "src/main.tsx",
+    "name": "main.tsx",
+    "path": "src/main.tsx",
+    "folder": "src"
+  },
+  "lookingAtFiles": [
+    {
+      "id": "src/main.tsx",
+      "name": "main.tsx",
+      "path": "src/main.tsx",
+      "folder": "src"
+    }
+  ],
+  "selected": {
+    "id": "src/main.tsx",
+    "name": "main.tsx",
+    "path": "src/main.tsx",
+    "folder": "src"
+  },
   "filesOnIsland": [
     {
       "id": "src/App.tsx",
@@ -36,7 +53,7 @@
   ],
   "position": {
     "x": 0,
-    "z": 63.47
+    "z": 40.93
   },
   "followLook": false
 }

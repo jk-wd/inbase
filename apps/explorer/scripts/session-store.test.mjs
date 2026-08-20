@@ -8,6 +8,7 @@ import {
   appendDiff,
   answerBlueprint,
   assertSessionId,
+  clearDiffSessions,
   continueDiff,
   discardInactiveDiffSessions,
   inspectTargetFile,
@@ -832,7 +833,7 @@ test('stop removes leftover diff sessions that have no LLM waiter', () => {
   }
 })
 
-test('startup sweep deletes diff sessions when no LLM waiter is active', () => {
+test('startup sweep always clears the diff-sessions folder', () => {
   const env = fixture()
   try {
     fs.mkdirSync(path.join(env.dataDir, 'diff-sessions'), { recursive: true })
@@ -841,6 +842,7 @@ test('startup sweep deletes diff sessions when no LLM waiter is active', () => {
       path.join(env.dataDir, 'diff-sessions', 'old-chat.stopped'),
       '{}\n',
     )
+    fs.writeFileSync(path.join(env.dataDir, 'diff-sessions', 'junk.txt'), 'nope\n')
     reportPlan(env.dataDir, {
       sessionId: 'stale-chat',
       feature: 'Stale leftover',
@@ -851,28 +853,24 @@ test('startup sweep deletes diff sessions when no LLM waiter is active', () => {
       sessionId: 'stale-chat',
       patchText: oneToTwo,
     })
+    reportPlan(env.dataDir, {
+      sessionId: 'live-chat',
+      feature: 'Keep live',
+      stepTitles: ['Build value'],
+    })
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
       'export const value = 2\n',
     )
 
+    clearDiffSessions(env.dataDir, env.targetRoot)
     assert.deepEqual(
-      discardInactiveDiffSessions(env.dataDir, env.targetRoot, new Set()),
-      [],
-    )
-    assert.equal(
-      fs.existsSync(path.join(env.dataDir, 'diff-sessions', 'stale-chat')),
-      false,
-    )
-    assert.equal(
-      fs.existsSync(path.join(env.dataDir, 'diff-sessions', 'old-chat.stopped')),
-      false,
-    )
-    assert.equal(
-      fs.existsSync(path.join(env.dataDir, 'diff-sessions', '.gitkeep')),
-      true,
+      fs.readdirSync(path.join(env.dataDir, 'diff-sessions')),
+      ['.gitkeep'],
     )
     assert.equal(readActiveSession(env.dataDir), null)
+    assert.equal(readBlueprintSession(env.dataDir), null)
+    assert.equal(readManifest(env.dataDir, 'live-chat'), null)
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
       'export const value = 1\n',
@@ -882,7 +880,7 @@ test('startup sweep deletes diff sessions when no LLM waiter is active', () => {
   }
 })
 
-test('startup sweep keeps sessions that still have an LLM waiter', () => {
+test('inactive sweep keeps sessions that still have an LLM waiter', () => {
   const env = fixture()
   try {
     reportPlan(env.dataDir, {

@@ -10,8 +10,8 @@ import { dataDir, targetRoot } from './scripts/target-config.mjs'
 import { editorFileUri, openInEditor } from './scripts/open-editor.mjs'
 import {
   answerBlueprint,
+  clearDiffSessions,
   continueDiff,
-  discardInactiveDiffSessions,
   inspectTargetFile,
   invokeStep,
   listSessionIntents,
@@ -56,7 +56,9 @@ function rescanTarget(when: string) {
   })
   if (scan.status !== 0) {
     console.error(scan.stderr || scan.stdout || `scan failed ${when}`)
+    return false
   }
+  return true
 }
 
 function knownFileIds() {
@@ -82,8 +84,8 @@ function jsonFilePlugin(): Plugin {
   return {
     name: 'visual-coder-json-files',
     configureServer(server) {
-      discardInactiveDiffSessions(dataDir, targetRoot)
-      rescanTarget('after discarding inactive sessions')
+      clearDiffSessions(dataDir, targetRoot)
+      rescanTarget('after clearing diff sessions')
       server.middlewares.use('/api/user-context', (req, res, next) => {
         if (req.method === 'GET') {
           sendJson(res, 200, readUserContext())
@@ -98,6 +100,14 @@ function jsonFilePlugin(): Plugin {
 
       server.middlewares.use('/api/codebase', (req, res, next) => {
         if (req.method === 'GET') {
+          sendJson(res, 200, readCodebase())
+          return
+        }
+        if (req.method === 'POST') {
+          if (!rescanTarget('on user request')) {
+            sendJson(res, 500, { error: 'scan failed' })
+            return
+          }
           sendJson(res, 200, readCodebase())
           return
         }

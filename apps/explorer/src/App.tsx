@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { emptyIntent, fetchAgentIntent, fetchAgentIntents, inspectTargetFile, performAgentAction, persistSessionBlueprint } from './agentIntent'
-import { fetchCodebase } from './codebase'
+import { fetchCodebase, updateCodebase } from './codebase'
 import {
   layoutWorld,
   markCreatedFolders,
@@ -72,16 +72,34 @@ function intentSignature(intent: AgentIntent) {
 export default function App() {
   const [graph, setGraph] = useState<CodebaseGraph | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [updatingModel, setUpdatingModel] = useState(false)
+  const updatingModelRef = useRef(false)
 
-  const refreshGraph = useCallback(async () => {
-    const next = await fetchCodebase()
+  const applyGraph = useCallback((next: CodebaseGraph | null, failed: string) => {
     if (next) {
       setGraph(next)
       setLoadError(null)
-      return
+      return true
     }
-    setLoadError((current) => current ?? 'Could not load the project map.')
+    setLoadError((current) => current ?? failed)
+    return false
   }, [])
+
+  const refreshGraph = useCallback(async () => {
+    applyGraph(await fetchCodebase(), 'Could not load the project map.')
+  }, [applyGraph])
+
+  const updateModel = useCallback(async () => {
+    if (updatingModelRef.current) return
+    updatingModelRef.current = true
+    setUpdatingModel(true)
+    try {
+      applyGraph(await updateCodebase(), 'Could not update the project map.')
+    } finally {
+      updatingModelRef.current = false
+      setUpdatingModel(false)
+    }
+  }, [applyGraph])
 
   useEffect(() => {
     void refreshGraph()
@@ -95,15 +113,26 @@ export default function App() {
     )
   }
 
-  return <Explorer graph={graph} onRefreshGraph={refreshGraph} />
+  return (
+    <Explorer
+      graph={graph}
+      onRefreshGraph={refreshGraph}
+      onUpdateModel={updateModel}
+      updatingModel={updatingModel}
+    />
+  )
 }
 
 function Explorer({
   graph,
   onRefreshGraph,
+  onUpdateModel,
+  updatingModel,
 }: {
   graph: CodebaseGraph
   onRefreshGraph: () => Promise<void>
+  onUpdateModel: () => Promise<void>
+  updatingModel: boolean
 }) {
   const [intents, setIntents] = useState<AgentIntent[]>([])
   const [focusedSessionId, setFocusedSessionId] = useState<string | null>(null)
@@ -238,7 +267,6 @@ function Explorer({
   const [inspectTick, setInspectTick] = useState(0)
   const [flyTo, setFlyTo] = useState<FlyTo | null>(null)
   const [locked, setLocked] = useState(false)
-  const [currentFolder, setCurrentFolder] = useState(graph.targetName)
   const [followLook, setFollowLook] = useState(false)
   const [importedBy, setImportedBy] = useState(false)
   const [changePathsOnly, setChangePathsOnly] = useState(false)
@@ -287,6 +315,7 @@ function Explorer({
   const toggleMap = useCallback(() => {
     if (mode === 'walk') {
       setLandAt(walkPos.current)
+      setFlyTo(null)
       setLocked(false)
       document.exitPointerLock()
       setMode('map')
@@ -322,6 +351,7 @@ function Explorer({
     (fileId: string, fly: boolean) => {
       const placed = layout.files[fileId]
       if (!placed) return
+      const from = walkPos.current
       const [x, z] = standInFront(placed)
       walkPos.current = [x, z]
       setAimedRelation(null)
@@ -330,6 +360,7 @@ function Explorer({
         fly
           ? {
               nonce: Date.now(),
+              from: [from[0], from[1]],
               lookAt: [placed.position[0], placed.position[1], placed.position[2]],
             }
           : null,
@@ -1099,7 +1130,6 @@ function Explorer({
             onSelect={selectFile}
             onSelectFolder={selectFolder}
             onLockedChange={setLocked}
-            onFolderChange={setCurrentFolder}
             onLand={landFromMap}
             onWalkPosition={rememberWalk}
             onContext={persistUserContext}
@@ -1145,7 +1175,6 @@ function Explorer({
         landAt={landAt}
         aimedRelation={aimedRelation}
         aimedFileId={aimedFileId}
-        currentFolder={currentFolder}
         intent={intent}
         intents={intents}
         focusedSessionId={focusedSessionId}
@@ -1156,6 +1185,8 @@ function Explorer({
         onWalk={openWalk}
         followLook={followLook}
         onToggleFollowLook={toggleFollowLook}
+        onUpdateModel={onUpdateModel}
+        updatingModel={updatingModel}
         importedBy={importedBy}
         onToggleImportedBy={toggleImportedBy}
         changePathsOnly={changePathsOnly}
