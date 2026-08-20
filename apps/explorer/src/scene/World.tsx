@@ -8,7 +8,7 @@ import { SelectionController } from './SelectionController'
 import { UserContextTracker } from './UserContextTracker'
 import { BlockPlacer } from './BlockPlacer'
 import { IslandPlacer } from './IslandPlacer'
-import { folderOfFile, filesImporting } from '../layout'
+import { folderOfFile, filesImporting, worldBounds } from '../layout'
 import { EDITOR_GREY } from '../theme'
 import type { ChangeKind } from '../theme'
 import type {
@@ -159,18 +159,26 @@ export function World({
     return null
   }
 
+  const bounds = worldBounds(layout)
+  const groundPad = 120
+  const groundWidth = Math.max(bounds.width + groundPad * 2, 400)
+  const groundDepth = Math.max(bounds.depth + groundPad * 2, 400)
+
   return (
     <>
-      <color attach="background" args={[EDITOR_GREY.editor]} />
-      {!mapping && <fog attach="fog" args={[EDITOR_GREY.editor, 38, 160]} />}
+      <color attach="background" args={[EDITOR_GREY.chrome]} />
+      {!mapping && <fog attach="fog" args={[EDITOR_GREY.chrome, 38, 160]} />}
       <hemisphereLight args={['#d7e2ee', '#2a3038', mapping ? 1.1 : 0.85]} />
       <directionalLight
         position={mapping ? [8, 60, 8] : [12, 22, 8]}
         intensity={mapping ? 1.35 : 0.55}
       />
       <ambientLight intensity={mapping ? 0.7 : 0.42} />
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.06, 40]}>
-        <planeGeometry args={[400, 400]} />
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[bounds.cx, -0.06, bounds.cz]}
+      >
+        <planeGeometry args={[groundWidth, groundDepth]} />
         <meshBasicMaterial color={EDITOR_GREY.chrome} />
       </mesh>
       <MapView
@@ -191,6 +199,7 @@ export function World({
           folder={folder}
           naming={folder.path === namingIslandId}
           selected={folder.path === selectedFolder}
+          mapMode={mapping}
           highlightKind={highlightedFolders[folder.path] ?? null}
         />
       ))}

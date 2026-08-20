@@ -95,7 +95,7 @@ export function FileBlock({
   onCancelName,
 }: FileBlockProps) {
   const [width, height, depth] = placed.size
-  const highlight = changeKind ? CHANGE_HIGHLIGHT[changeKind] : null
+  const highlight = changeKind && mapMode ? CHANGE_HIGHLIGHT[changeKind] : null
   const color = added || file.userCreated ? '#7ec8e8' : fileColor(file.language)
   const muted = dimColor(color, 0.32)
   const walkSelected = selected && !mapMode

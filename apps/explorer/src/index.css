@@ -21,6 +21,7 @@ body,
 .stage {
   position: absolute;
   inset: 0;
+  z-index: 0;
 }
 
 * {
@@ -35,7 +36,7 @@ button {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 2;
+  z-index: 10;
 }
 
 .hud-top,
@@ -243,6 +244,7 @@ button {
   left: 0;
   right: 0;
   bottom: 0;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -306,11 +308,15 @@ button {
   position: absolute;
   top: 68px;
   right: 20px;
+  z-index: 4;
   width: min(320px, calc(100% - 40px));
-  max-height: calc(100dvh - 132px);
-  overflow: auto;
+  height: auto;
+  max-height: calc(100dvh - 168px);
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 16px;
+  padding: 16px 16px 20px;
+  background: var(--vc-chrome);
 }
 
 .hud-panel-info {
@@ -352,18 +358,31 @@ button {
 
 .hud-steps {
   margin: 10px 0 0;
-  padding-left: 18px;
+  padding: 0;
+  list-style: none;
   color: #8b95a5;
 }
 
 .hud-steps li {
-  margin: 0 0 6px;
+  display: grid;
+  grid-template-columns: 1.6em minmax(0, 1fr);
+  align-items: start;
+  justify-content: start;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+
+.hud-step-index {
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
 }
 
 .hud-step-main {
-  display: inline-flex;
+  display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
+  min-width: 0;
 }
 
 .hud-steps li[data-next='true'] {
@@ -488,6 +507,39 @@ button {
   opacity: 0.35;
 }
 
+.hud-fold {
+  margin-top: 12px;
+}
+
+.hud-fold-summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+}
+
+.hud-fold-summary::-webkit-details-marker,
+.hud-fold-summary::marker {
+  display: none;
+  content: '';
+}
+
+.hud-fold-summary::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid currentColor;
+  transition: transform 0.12s ease;
+}
+
+.hud-fold[open] > .hud-fold-summary::before {
+  transform: rotate(90deg);
+}
+
 .hud-button-approve {
   border-color: #9ad8ff;
   color: #d7eef8;
@@ -519,7 +571,7 @@ button {
   padding-left: 18px;
 }
 
-.hud-panel li {
+.hud-panel ul li {
   margin: 0 0 4px;
   display: flex;
   align-items: center;

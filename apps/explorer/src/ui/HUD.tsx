@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { NameInput } from './NameInput'
 import {
   isReviewingIntent,
@@ -69,6 +69,25 @@ function PanelList({
         ))}
       </ul>
     </>
+  )
+}
+
+function MutationFold({
+  hasContent,
+  children,
+}: {
+  hasContent: boolean
+  children: ReactNode
+}) {
+  if (!hasContent) return null
+  return (
+    <details
+      className="hud-fold"
+      onKeyDown={(event) => event.stopPropagation()}
+    >
+      <summary className="hud-section-title hud-fold-summary">Mutations</summary>
+      {children}
+    </details>
   )
 }
 
@@ -539,6 +558,7 @@ export function HUD({
                     nextStep?.index === step.index && !doneSteps.has(step.index)
                   }
                 >
+                  <span className="hud-step-index">{step.index}.</span>
                   <span className="hud-step-main">
                     <span className="hud-step-title">{step.title}</span>
                     {((canRunNext && nextStep?.index === step.index) ||
@@ -587,81 +607,91 @@ export function HUD({
               </button>
             </div>
           )}
-          {previewing && intent.files.length > 0 && (
-            <>
-              <div className="hud-section-title hud-section-title-edit">Changed</div>
-              <ul>
-                {intent.files.map((id) => (
-                  <li className="hud-file-edit" key={id}>
-                    {id}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          {previewing && (intent.createFolders ?? []).length > 0 && (
-            <>
-              <div className="hud-section-title hud-section-title-add">Added islands</div>
-              <ul>
-                {intent.createFolders.map((id) => (
-                  <li className="hud-file-add" key={id}>
-                    {id}/
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          {previewing && intent.creates.length > 0 && (
-            <>
-              <div className="hud-section-title hud-section-title-add">Added</div>
-              <ul>
-                {intent.creates.map((id) => (
-                  <li className="hud-file-add" key={id}>
-                    {id}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          {previewing && intent.deletes.length > 0 && (
-            <>
-              <div className="hud-section-title hud-section-title-remove">Removed</div>
-              <ul>
-                {intent.deletes.map((id) => (
-                  <li className="hud-file-remove" key={id}>
-                    {id}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          {previewing && (
-            <>
-              <PanelList
-                title="Functions"
-                items={symbolLabels(addedFunctions)}
-              />
-              <PanelList
-                title="Variables"
-                items={symbolLabels(addedVariables)}
-              />
-            </>
-          )}
-          {previewing && addedImports.length > 0 && (
-            <PanelList title="Imports" items={importLabels(addedImports)} />
-          )}
-          {previewing && addedImports.length === 0 && (intent.imports ?? []).length > 0 && (
-            <>
-              <div className="hud-section-title">Imports</div>
-              <ul>
-                {intent.imports.map((edge) => (
-                  <li key={`${edge.from}->${edge.to}`}>
-                    {edge.from.split('/').pop()} → {edge.to.split('/').pop()}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
+          <MutationFold
+            hasContent={
+              previewing &&
+              (intent.files.length > 0 ||
+                (intent.createFolders ?? []).length > 0 ||
+                intent.creates.length > 0 ||
+                intent.deletes.length > 0 ||
+                addedFunctions.length > 0 ||
+                addedVariables.length > 0 ||
+                addedImports.length > 0 ||
+                (intent.imports ?? []).length > 0)
+            }
+          >
+            {intent.files.length > 0 && (
+              <>
+                <div className="hud-section-title hud-section-title-edit">Changed</div>
+                <ul>
+                  {intent.files.map((id) => (
+                    <li className="hud-file-edit" key={id}>
+                      {id}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {(intent.createFolders ?? []).length > 0 && (
+              <>
+                <div className="hud-section-title hud-section-title-add">Added islands</div>
+                <ul>
+                  {intent.createFolders.map((id) => (
+                    <li className="hud-file-add" key={id}>
+                      {id}/
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {intent.creates.length > 0 && (
+              <>
+                <div className="hud-section-title hud-section-title-add">Added</div>
+                <ul>
+                  {intent.creates.map((id) => (
+                    <li className="hud-file-add" key={id}>
+                      {id}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {intent.deletes.length > 0 && (
+              <>
+                <div className="hud-section-title hud-section-title-remove">Removed</div>
+                <ul>
+                  {intent.deletes.map((id) => (
+                    <li className="hud-file-remove" key={id}>
+                      {id}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            <PanelList
+              title="Functions"
+              items={symbolLabels(addedFunctions)}
+            />
+            <PanelList
+              title="Variables"
+              items={symbolLabels(addedVariables)}
+            />
+            {addedImports.length > 0 && (
+              <PanelList title="Imports" items={importLabels(addedImports)} />
+            )}
+            {addedImports.length === 0 && (intent.imports ?? []).length > 0 && (
+              <>
+                <div className="hud-section-title">Imports</div>
+                <ul>
+                  {intent.imports.map((edge) => (
+                    <li key={`${edge.from}->${edge.to}`}>
+                      {edge.from.split('/').pop()} → {edge.to.split('/').pop()}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </MutationFold>
           {(planReady || preparing) && (
             <div className="hud-decide">
               <button
@@ -971,7 +1001,7 @@ export function HUD({
                 </>
               )}
               <span>Click a line to fly there</span>
-              <span>Double-click ground to walk</span>
+              <span>Shift-click ground to walk</span>
               {selected?.userCreated && creatingBlueprint && (
                 <span>Backspace delete</span>
               )}

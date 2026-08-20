@@ -8,6 +8,7 @@ type FolderAreaProps = {
   folder: PlacedFolder
   naming?: boolean
   selected?: boolean
+  mapMode?: boolean
   highlightKind?: ChangeKind | null
 }
 
@@ -15,10 +16,12 @@ export function FolderArea({
   folder,
   naming = false,
   selected = false,
+  mapMode = false,
   highlightKind = null,
 }: FolderAreaProps) {
   const added = Boolean(folder.added)
-  const highlight = highlightKind ? CHANGE_HIGHLIGHT[highlightKind] : null
+  const highlight =
+    mapMode && highlightKind ? CHANGE_HIGHLIGHT[highlightKind] : null
   const addedOnly = added && !highlight
   const outline = highlight ? highlight.color : addedOnly ? '#7ec8e8' : null
   const color = highlight
@@ -48,7 +51,7 @@ export function FolderArea({
         <planeGeometry args={[folder.width, folder.depth]} />
         <meshBasicMaterial color={color} />
       </mesh>
-      {selected && (
+      {selected && mapMode && (
         <MapSelectBorder
           width={folder.width}
           depth={folder.depth}

@@ -34,25 +34,32 @@ export function MapView({
   const bounds = useMemo(() => worldBounds(layout), [layout])
   const drag = useRef({ x: 0, y: 0, moved: false, active: false })
   const sized = size.width > 16 && size.height > 16
+  const hudReserve = 88
+  const topReserve = 28
+  const viewWidth = Math.max(size.width, 1)
+  const viewHeight = Math.max(size.height - hudReserve - topReserve, 1)
 
   const fitZoom = sized
     ? Math.min(
-        size.width / Math.max(bounds.width + 24, 1),
-        size.height / Math.max(bounds.depth + 24, 1),
+        viewWidth / Math.max(bounds.width + 36, 1),
+        viewHeight / Math.max(bounds.depth + 36, 1),
       )
     : 8
-  const zoom = Math.max(fitZoom * 0.92, 1)
+  const zoom = Math.max(fitZoom * 0.92, 0.08)
+  // Ortho up is -Z, so +Z is down the screen. Shift the view so the map sits
+  // above the bottom HUD instead of centering under it.
+  const cz = bounds.cz + hudReserve / 2 / zoom
 
   useLayoutEffect(() => {
     if (!enabled || !(camera instanceof THREE.OrthographicCamera)) return
     camera.up.set(0, 0, -1)
-    camera.position.set(bounds.cx, 120, bounds.cz)
-    camera.lookAt(bounds.cx, 0, bounds.cz)
+    camera.position.set(bounds.cx, 120, cz)
+    camera.lookAt(bounds.cx, 0, cz)
     camera.near = 1
     camera.far = 2000
     camera.zoom = zoom
     camera.updateProjectionMatrix()
-  }, [bounds.cx, bounds.cz, camera, enabled, zoom])
+  }, [bounds.cx, camera, cz, enabled, zoom])
 
   useEffect(() => {
     if (!enabled) return
@@ -86,11 +93,30 @@ export function MapView({
       return { raycaster, relationHit, fileHit }
     }
 
+    const landAtPointer = (clientX: number, clientY: number) => {
+      const pick = pickAt(clientX, clientY)
+      if (!pick) return false
+      const { raycaster, relationHit, fileHit } = pick
+      if (relationHit || fileHit) return false
+
+      const hit = new THREE.Vector3()
+      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+      if (!raycaster.ray.intersectPlane(plane, hit)) return false
+      const lock = element.requestPointerLock()
+      if (lock && typeof lock.catch === 'function') {
+        void lock.catch(() => {})
+      }
+      onLand(hit.x, hit.z)
+      return true
+    }
+
     const onUp = (event: PointerEvent) => {
       element.style.cursor = 'grab'
       const startedOnCanvas = drag.current.active
       drag.current.active = false
       if (!startedOnCanvas || event.button !== 0 || drag.current.moved) return
+
+      if (event.shiftKey && landAtPointer(event.clientX, event.clientY)) return
 
       const pick = pickAt(event.clientX, event.clientY)
       if (!pick) return
@@ -123,34 +149,14 @@ export function MapView({
       onSelectFolder(null)
     }
 
-    const onDblClick = (event: MouseEvent) => {
-      if (event.button !== 0 || drag.current.moved) return
-      const pick = pickAt(event.clientX, event.clientY)
-      if (!pick) return
-      const { raycaster, relationHit, fileHit } = pick
-      if (relationHit || fileHit) return
-
-      const hit = new THREE.Vector3()
-      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
-      if (raycaster.ray.intersectPlane(plane, hit)) {
-        const lock = element.requestPointerLock()
-        if (lock && typeof lock.catch === 'function') {
-          void lock.catch(() => {})
-        }
-        onLand(hit.x, hit.z)
-      }
-    }
-
     element.addEventListener('pointerdown', onDown)
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
-    element.addEventListener('dblclick', onDblClick)
     return () => {
       element.style.cursor = ''
       element.removeEventListener('pointerdown', onDown)
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
-      element.removeEventListener('dblclick', onDblClick)
     }
   }, [
     camera,
@@ -169,7 +175,7 @@ export function MapView({
       {enabled && (
         <OrthographicCamera
           makeDefault
-          position={[bounds.cx, 120, bounds.cz]}
+          position={[bounds.cx, 120, cz]}
           zoom={zoom}
           near={1}
           far={2000}
@@ -183,9 +189,9 @@ export function MapView({
           dampingFactor={0.12}
           screenSpacePanning
           zoomSpeed={1.15}
-          minZoom={Math.max(fitZoom * 0.45, 1)}
+          minZoom={Math.max(fitZoom * 0.35, 0.05)}
           maxZoom={Math.max(fitZoom * 10, 20)}
-          target={[bounds.cx, 0, bounds.cz]}
+          target={[bounds.cx, 0, cz]}
         />
       )}
       {enabled &&
@@ -194,6 +200,7 @@ export function MapView({
             key={folder.path}
             position={[folder.x, 14, folder.z + 1.35]}
             center
+            zIndexRange={[1, 0]}
             style={{ pointerEvents: 'none' }}
           >
             <div
