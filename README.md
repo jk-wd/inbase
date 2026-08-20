@@ -8,11 +8,12 @@
 A first-person 3D map of a JavaScript or TypeScript codebase. Files become blocks, folders become walkable areas, and imports become lines in the air.
 
 <p align="center">
-  <img src="docs/inbase-1.png" alt="First-person walk view of the codebase map" width="49%" />
-  <img src="docs/inbase-2.png" alt="Map view with 3D overlay" width="49%" />
+  <img src="docs/inbase-1.png" alt="First-person walk view of the codebase map" width="47%" />
+  &nbsp;&nbsp;&nbsp;
+  <img src="docs/inbase-2.png" alt="Map view with 3D overlay" width="47%" />
 </p>
 
-Install the package in a project, run `inbase init`, then `inbase run`. Cursor uses the installed skill so code changes go through the visual map.
+Install the package in a project, run `inbase init`, then `inbase run`. Cursor’s LLM then plans and patches through the visual map instead of editing files directly.
 
 The npm package is `@jkwd/inbase` (npm blocks the unscoped name `inbase`). The command is still `inbase`.
 
@@ -40,7 +41,21 @@ Open the printed URL (http://localhost:5173 by default), click the scene, then w
 inbase run --target /path/to/your/project
 ```
 
-`inbase init` copies a Cursor skill into `.cursor/skills/inbase/` and gitignores `.inbase/`. After that, ask Cursor to change source files in this repo — it should follow the visual plan/patch workflow while `inbase run` is up.
+`inbase init` copies a Cursor skill into `.cursor/skills/inbase/` and gitignores `.inbase/`. Keep `inbase run` open, then ask Cursor to change source files — the LLM follows the visual plan and patch loop described below.
+
+## LLM integration
+
+<img src="docs/inbase-llm.png" alt="LLM working through a plan in the heads-up display overlay" align="left" width="280" hspace="16" />
+
+Inbase does not call a model itself. The visual coding loop currently supports **Cursor**. The installed skill makes the agent work through the map: it reports a plan, waits on the **HUD** (heads-up display — the overlay panel on the 3D map), and publishes each step as a patch you can walk before it is applied.
+
+When a chat starts, that overlay asks whether to set up a **blueprint**. **Create blueprint** lets you place files (`Space`) and folders (`B`), then **Send blueprint** — that layout is the source of truth for the chat. **Let LLM continue** skips placement and lets the agent choose files from the request.
+
+Turn on **Make LLM look where I look** if the agent should prefer the island you are standing on and the blocks you are facing. With **Step by step** on, click **Run step** for each patch. With it off, the LLM implements the full plan; you can still walk Previous/Next over the diffs, then **Complete**. Send an alternative instruction from the HUD to revise the remaining plan, or **Stop** to end the session.
+
+The LLM never writes project files itself. Patches apply when you run or complete steps in the visualizer.
+
+<br clear="all" />
 
 ## Commands
 
@@ -51,6 +66,10 @@ inbase run --target /path/to/your/project
 | `inbase run --port 5174` | Start on another port |
 
 Session commands (`start-session`, `wait-for-blueprint`, `report-plan`, `wait-for-approval`, `propose-patch`) are used by the Cursor skill. You do not need to run them yourself.
+
+## Editor support
+
+The map runs in the browser. The LLM plan and patch loop currently works in **Cursor** only (`inbase init` installs a skill into `.cursor/skills/inbase/`).
 
 ## Language support
 
