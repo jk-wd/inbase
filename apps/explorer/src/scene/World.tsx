@@ -8,9 +8,13 @@ import { SelectionController } from './SelectionController'
 import { UserContextTracker } from './UserContextTracker'
 import { BlockPlacer } from './BlockPlacer'
 import { IslandPlacer } from './IslandPlacer'
-import { folderOfFile, filesImporting } from '../layout'
+import {
+  fileChangeKind,
+  filesImporting,
+  folderChangeHighlights,
+  folderOfFile,
+} from '../layout'
 import { WORLD_VOID } from '../theme'
-import type { ChangeKind } from '../theme'
 import type {
   CodebaseGraph,
   FileNode,
@@ -127,37 +131,12 @@ export function World({
     Boolean(selectedFolder) ||
     planned.size > 0 ||
     deleted.size > 0
-  const highlightedFolders: Partial<Record<string, ChangeKind>> = {}
-  const folderKinds = new Map<string, Set<ChangeKind>>()
-  const addFolderKind = (id: string, kind: ChangeKind) => {
-    const folder = folderOfFile(id)
-    const kinds = folderKinds.get(folder) ?? new Set<ChangeKind>()
-    kinds.add(kind)
-    folderKinds.set(folder, kinds)
-  }
-  for (const id of planned) {
-    addFolderKind(id, created.has(id) ? 'add' : 'edit')
-  }
-  for (const id of deleted) addFolderKind(id, 'remove')
-  for (const [folder, kinds] of folderKinds) {
-    if (kinds.size === 1) highlightedFolders[folder] = [...kinds][0]
-  }
-  if (planned.size > 0 || deleted.size > 0) {
-    for (const folder of Object.values(layout.folders)) {
-      if (!folder.added) continue
-      const kinds = folderKinds.get(folder.path)
-      if (!kinds || kinds.size === 1) {
-        highlightedFolders[folder.path] ??= 'add'
-      }
-    }
-  }
-
-  const changeKindOf = (id: string): ChangeKind | null => {
-    if (deleted.has(id)) return 'remove'
-    if (created.has(id)) return 'add'
-    if (planned.has(id)) return 'edit'
-    return null
-  }
+  const highlightedFolders = folderChangeHighlights(
+    planned,
+    created,
+    deleted,
+    layout.folders,
+  )
 
   return (
     <>
@@ -188,7 +167,9 @@ export function World({
           naming={folder.path === namingIslandId}
           selected={folder.path === selectedFolder}
           mapMode={mapping}
-          highlightKind={highlightedFolders[folder.path] ?? null}
+          highlightKind={
+            mapping ? highlightedFolders[folder.path] ?? null : null
+          }
         />
       ))}
       {layout.bridges.map((bridge) => (
@@ -200,7 +181,7 @@ export function World({
         const selected = file.id === selectedId
         const isRelated = related.has(file.id)
         const isPlanned = planned.has(file.id) || deleted.has(file.id)
-        const changeKind = changeKindOf(file.id)
+        const changeKind = fileChangeKind(file.id, planned, created, deleted)
         const naming = file.id === namingId
         return (
           <FileBlock

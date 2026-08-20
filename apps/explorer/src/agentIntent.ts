@@ -1,5 +1,6 @@
 import type {
   AgentIntent,
+  AgentIntentBundle,
   PatchImport,
   PatchImportAddition,
   PatchSymbolAddition,
@@ -124,8 +125,39 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
   }
 }
 
-export async function fetchAgentIntent(diffId?: string): Promise<AgentIntent> {
+export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
   const query = new URLSearchParams({ t: String(Date.now()) })
+  const response = await fetch(`/api/agent-intent?${query}`)
+  if (!response.ok) return { focusedSessionId: null, intents: [] }
+  const data = (await response.json()) as {
+    focusedSessionId?: string | null
+    intents?: unknown
+    sessionId?: string | null
+  } & Partial<AgentIntent>
+  if (Array.isArray(data.intents)) {
+    return {
+      focusedSessionId:
+        typeof data.focusedSessionId === 'string' ? data.focusedSessionId : null,
+      intents: data.intents
+        .map((intent) => normalize(intent as Partial<AgentIntent>))
+        .filter((intent) => Boolean(intent.sessionId)),
+    }
+  }
+  const intent = normalize(data)
+  return {
+    focusedSessionId: intent.sessionId,
+    intents: intent.sessionId ? [intent] : [],
+  }
+}
+
+export async function fetchAgentIntent(
+  sessionId: string,
+  diffId?: string,
+): Promise<AgentIntent> {
+  const query = new URLSearchParams({
+    t: String(Date.now()),
+    sessionId,
+  })
   if (diffId) query.set('diffId', diffId)
   const response = await fetch(`/api/agent-intent?${query}`)
   if (!response.ok) return emptyIntent

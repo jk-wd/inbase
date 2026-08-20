@@ -235,8 +235,8 @@ button {
 }
 
 .map-folder-label-selected {
-  color: #f1f5fa;
-  border: 3px solid #000000;
+  color: #f3e8ff;
+  border: 3px solid #c026ff;
   background: rgba(25, 28, 34, 0.94);
 }
 
@@ -322,6 +322,216 @@ button {
 
 .hud-panel-info {
   pointer-events: auto;
+}
+
+.hud-right-stack {
+  position: absolute;
+  top: 68px;
+  right: 20px;
+  bottom: 72px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(320px, calc(100% - 40px));
+  pointer-events: none;
+}
+
+.hud-right-stack .hud-panel-info {
+  position: relative;
+  top: auto;
+  right: auto;
+  z-index: auto;
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.hud-right-stack .hud-panel-info[data-minimized='true'] {
+  flex: 0 0 auto;
+}
+
+.hud-left-stack {
+  position: absolute;
+  top: 68px;
+  left: 20px;
+  bottom: 72px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(360px, calc(100% - 40px));
+  pointer-events: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.hud-left-stack .hud-panel-planned {
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
+  z-index: auto;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.hud-left-stack .hud-panel-planned[data-minimized='true'] {
+  flex: 0 0 auto;
+}
+
+.hud-left-stack .hud-panel-planned[data-focused='false'] {
+  opacity: 0.86;
+}
+
+.hud-left-stack .hud-panel-planned[data-focused='true'] {
+  box-shadow: 0 0 0 1px #9ad8ff;
+}
+
+.hud-panel-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.hud-right-stack .hud-thumbnail {
+  position: relative;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  z-index: auto;
+  width: 100%;
+  margin-top: auto;
+  flex: none;
+}
+
+.hud-thumbnail {
+  position: fixed;
+  right: 20px;
+  bottom: 72px;
+  left: auto;
+  z-index: 30;
+  width: min(320px, calc(100% - 40px));
+  pointer-events: auto;
+  overflow: hidden;
+  background: rgba(25, 28, 34, 0.96);
+  border: 1px solid #5d9ec4;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.hud-thumbnail-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px 4px 12px;
+  color: #e7ebf2;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.hud-panel-chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -4px 0 8px;
+}
+
+.hud-panel[data-minimized='true'] {
+  overflow: hidden;
+  padding-bottom: 12px;
+}
+
+.hud-panel[data-minimized='true'] .hud-panel-chrome {
+  margin-bottom: 0;
+}
+
+.hud-panel-chrome-title {
+  min-width: 0;
+  overflow: hidden;
+  color: #b7c0ce;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-panel-info .hud-panel-chrome-title {
+  color: #e7ebf2;
+  font-size: 16px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.hud-panel-controls {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.hud-panel-control {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.hud-thumbnail-hide {
+  width: 28px;
+  height: 28px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.hud-thumbnail-stage {
+  position: relative;
+  width: 100%;
+  height: 220px;
+  background: #000;
+  touch-action: none;
+}
+
+.hud-thumbnail-stage canvas {
+  display: block;
+}
+
+.thumbnail-block-label,
+.thumbnail-folder-label {
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  color: #ffffff;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+  text-shadow:
+    0 0 4px #000,
+    0 1px 2px #000,
+    0 0 10px rgba(0, 0, 0, 0.85);
+}
+
+.thumbnail-block-label {
+  font-size: 13px;
+}
+
+.thumbnail-folder-label {
+  font-size: 15px;
 }
 
 .hud-panel-planned {
@@ -452,10 +662,15 @@ button {
 .hud-working {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 9px;
   margin-top: 12px;
   color: #d7eef8;
   font-size: 12px;
+}
+
+.hud-working .hud-button {
+  margin-left: auto;
 }
 
 .hud-spinner {

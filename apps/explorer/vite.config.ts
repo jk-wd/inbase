@@ -11,8 +11,10 @@ import { editorFileUri, openInEditor } from './scripts/open-editor.mjs'
 import {
   answerBlueprint,
   continueDiff,
+  discardInactiveDiffSessions,
   inspectTargetFile,
   invokeStep,
+  listSessionIntents,
   readActiveSession,
   requestReplan,
   sendBlueprint,
@@ -45,6 +47,17 @@ function readBody(req: IncomingMessage) {
   })
 }
 
+function rescanTarget(when: string) {
+  const scan = spawnSync(process.execPath, [scanScript], {
+    cwd: here,
+    encoding: 'utf8',
+    env: scanEnv,
+  })
+  if (scan.status !== 0) {
+    console.error(scan.stderr || scan.stdout || `scan failed ${when}`)
+  }
+}
+
 function knownFileIds() {
   try {
     const graph = JSON.parse(fs.readFileSync(codebaseFile, 'utf8')) as {
@@ -68,6 +81,8 @@ function jsonFilePlugin(): Plugin {
   return {
     name: 'visual-coder-json-files',
     configureServer(server) {
+      discardInactiveDiffSessions(dataDir, targetRoot)
+      rescanTarget('after discarding inactive sessions')
       server.middlewares.use('/api/user-context', (req, res, next) => {
         if (req.method === 'GET') {
           sendJson(res, 200, readUserContext())
@@ -91,12 +106,22 @@ function jsonFilePlugin(): Plugin {
       server.middlewares.use('/api/agent-intent', (req, res, next) => {
         if (req.method === 'GET') {
           const url = new URL(req.url ?? '/', 'http://visual-coder.local')
-          const sessionId = url.searchParams.get('sessionId') ?? readActiveSession(dataDir)
+          const sessionId = url.searchParams.get('sessionId')
           const diffId = url.searchParams.get('diffId') ?? undefined
-          const intent = sessionId
-            ? sessionIntent(dataDir, sessionId, knownFileIds(), diffId)
-            : null
-          sendJson(res, 200, intent ?? { ...emptyIntent })
+          if (sessionId) {
+            const intent = sessionIntent(
+              dataDir,
+              sessionId,
+              knownFileIds(),
+              diffId,
+            )
+            sendJson(res, 200, intent ?? { ...emptyIntent })
+            return
+          }
+          sendJson(res, 200, {
+            focusedSessionId: readActiveSession(dataDir),
+            intents: listSessionIntents(dataDir, knownFileIds()),
+          })
           return
         }
 
@@ -193,28 +218,14 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
         return
       }
       invokeStep(dataDir, body.sessionId, body.step as number, targetRoot)
-      const scan = spawnSync(process.execPath, [scanScript], {
-        cwd: here,
-        encoding: 'utf8',
-        env: scanEnv,
-      })
-      if (scan.status !== 0) {
-        console.error(scan.stderr || scan.stdout || 'scan failed after invoking step')
-      }
+      rescanTarget('after invoking step')
     } else if (action === 'continue') {
       if (!body.diffId) {
         sendJson(res, 400, { error: 'diffId is required for continue' })
         return
       }
       continueDiff(dataDir, targetRoot, body.sessionId, body.diffId)
-      const scan = spawnSync(process.execPath, [scanScript], {
-        cwd: here,
-        encoding: 'utf8',
-        env: scanEnv,
-      })
-      if (scan.status !== 0) {
-        console.error(scan.stderr || scan.stdout || 'scan failed after applying patch')
-      }
+      rescanTarget('after applying patch')
     } else if (action === 'instruct') {
       if (!body.diffId) {
         sendJson(res, 400, { error: 'diffId is required for instruct' })
@@ -248,6 +259,7 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       })
     } else {
       stopSession(dataDir, body.sessionId, targetRoot)
+      rescanTarget('after stopping session')
     }
     const next = sessionIntent(dataDir, body.sessionId, knownFileIds())
     sendJson(res, 200, next ?? { ...emptyIntent })

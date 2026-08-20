@@ -9,7 +9,7 @@ const sessionStorePath = path.resolve(
   repoRoot,
   'apps/explorer/scripts/session-store.mjs',
 )
-const { readBlueprint, readManifest } = await import(
+const { isWorkflowStopped, readBlueprint, readManifest, touchSessionConnection } = await import(
   pathToFileURL(sessionStorePath).href
 )
 const sessionIndex = process.argv.indexOf('--session')
@@ -30,6 +30,12 @@ if (!sessionId) {
 
 const started = Date.now()
 const initial = readManifest(dataDir, sessionId)
+if (isWorkflowStopped(dataDir, sessionId)) {
+  console.error(
+    'VISUAL_CODER_STOPPED The workflow was stopped. Do not modify example-target files.',
+  )
+  process.exit(2)
+}
 if (!initial) {
   console.error(`No workflow session found for ${sessionId}`)
   process.exit(1)
@@ -46,6 +52,7 @@ if (initial.phase === 'blueprint_ask' || initial.phase === 'blueprint') {
 }
 
 while (Date.now() - started < timeoutMs) {
+  touchSessionConnection(dataDir, sessionId)
   const manifest = readManifest(dataDir, sessionId)
   if (!manifest) {
     console.error(
@@ -63,11 +70,11 @@ while (Date.now() - started < timeoutMs) {
     const blueprint = readBlueprint(dataDir, sessionId)
     const blocks = blueprint.userCreatedBlocks ?? []
     const islands = blueprint.userCreatedIslands ?? []
-    console.log(
-      blueprint.enabled
-        ? `VISUAL_CODER_BLUEPRINT_READY The user sent ${blocks.length} file(s) and ${islands.length} island(s) for this chat. Create those paths in the plan even if they are not on disk.`
-        : 'VISUAL_CODER_BLUEPRINT_READY The user skipped the blueprint. Continue without user-placed files or islands.',
-    )
+      console.log(
+        blueprint.enabled
+          ? `VISUAL_CODER_BLUEPRINT_READY The user sent ${blocks.length} file(s) and ${islands.length} island(s) for this chat. The blueprint is leading: create those paths and honor addedFunctions, addedVariables, and addedImports even if they are not on disk. Do not omit, rename, relocate, or replace them. Extra new files not in the blueprint are a deviation. If you would differ from the blueprint, ask the user first; do not silently deviate.`
+          : 'VISUAL_CODER_BLUEPRINT_READY The user skipped the blueprint. Continue without user-placed files or islands.',
+      )
     console.log('VISUAL_CODER_BLUEPRINT_START')
     console.log(JSON.stringify(blueprint, null, 2))
     console.log('VISUAL_CODER_BLUEPRINT_END')

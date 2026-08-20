@@ -5,3 +5,5 @@ dist
 .inbase
 .tmp-cli-*
 *.tgz
+apps/explorer/src/data/diff-sessions/*
+!apps/explorer/src/data/diff-sessions/.gitkeep

@@ -125,49 +125,53 @@ export function RelationLines({
     const selectedRadius = fromAbove ? 0.2 : 0.07
     const plannedRadius = fromAbove ? 0.26 : 0.1
     const lines: LineMesh[] = []
-    const plannedKeys = new Set<string>()
+    const drawn = new Set<string>()
+
+    const addLine = (
+      fromId: string,
+      toId: string,
+      planned: boolean,
+      radius: number,
+    ) => {
+      const key = `${fromId}->${toId}`
+      if (drawn.has(key)) return
+      const from = placed[fromId]
+      const to = placed[toId]
+      if (!from || !to) return
+      drawn.add(key)
+      lines.push(edgeMesh(from, to, toId, planned, radius, fromAbove, false))
+    }
 
     for (const edge of plannedEdges) {
-      const from = placed[edge.from]
-      const to = placed[edge.to]
-      if (!from || !to) continue
-      const key = `${edge.from}->${edge.to}`
-      if (plannedKeys.has(key)) continue
-      plannedKeys.add(key)
-      lines.push(edgeMesh(from, to, edge.to, true, plannedRadius, fromAbove, false))
+      addLine(edge.from, edge.to, true, plannedRadius)
     }
 
     if (selectedId) {
-      const selected = placed[selectedId]
-      if (selected) {
-        if (importedBy) {
-          for (const file of files) {
-            if (file.id === selectedId || !file.imports.includes(selectedId)) continue
-            if (plannedKeys.has(`${file.id}->${selectedId}`)) continue
-            const importer = placed[file.id]
-            if (!importer) continue
-            lines.push(
-              edgeMesh(importer, selected, selectedId, false, selectedRadius, fromAbove, false),
-            )
-          }
-        } else {
-          const file = files.find((item) => item.id === selectedId)
-          if (file) {
-            for (const importId of file.imports) {
-              if (plannedKeys.has(`${file.id}->${importId}`)) continue
-              const target = placed[importId]
-              if (!target) continue
-              lines.push(
-                edgeMesh(selected, target, importId, false, selectedRadius, fromAbove, false),
-              )
-            }
+      if (importedBy) {
+        for (const file of files) {
+          if (file.id === selectedId || !file.imports.includes(selectedId)) continue
+          addLine(file.id, selectedId, false, selectedRadius)
+        }
+      } else {
+        const file = files.find((item) => item.id === selectedId)
+        if (file) {
+          for (const importId of file.imports) {
+            addLine(file.id, importId, false, selectedRadius)
           }
         }
       }
     }
 
     return lines
-  }, [extras, files, fromAbove, importedBy, layout.files, plannedEdges, selectedId])
+  }, [
+    extras,
+    files,
+    fromAbove,
+    importedBy,
+    layout.files,
+    plannedEdges,
+    selectedId,
+  ])
 
   if (meshes.length === 0) return null
 

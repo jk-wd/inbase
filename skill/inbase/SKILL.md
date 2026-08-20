@@ -48,12 +48,17 @@ npx inbase wait-for-blueprint --session "<current-cursor-chat-id>"
 3. Read the handshake output between `VISUAL_CODER_BLUEPRINT_START` and
    `VISUAL_CODER_BLUEPRINT_END`, or read
    `.inbase/diff-sessions/<session-id>/blueprint.json`.
-   If `enabled` is true, always create `userCreatedBlocks` and
-   `userCreatedIslands` at the given path/folder. Those files and folders do
-   not exist on disk yet. They belong to this chat only.
-   Also honor `addedFunctions`, `addedVariables`, and `addedImports`: add those
-   symbols and imports to the named files. They are blueprint intentions, not
-   files that already exist on disk.
+   If `enabled` is true, **the blueprint is leading**. Treat
+   `userCreatedBlocks`, `userCreatedIslands`, `addedFunctions`,
+   `addedVariables`, and `addedImports` as the source of truth for this chat.
+   Create those paths and add those symbols even if they are not on disk.
+   They belong to this chat only.
+   Do not omit, rename, relocate, or replace a blueprint file, island, symbol,
+   or import. Extra edits to existing files are allowed when needed to finish
+   the feature. Extra new files that are not in the blueprint are a deviation.
+   If the user request, viewpoint, a later instruction, or your own plan would
+   differ from the blueprint, **stop and ask the user in chat** before
+   reporting the plan. Do not silently deviate.
 4. Read `.inbase/user-context.json` for viewpoint only.
 5. Use the user's viewpoint only when `followLook` is true:
    - `island` is where they are standing
@@ -62,8 +67,8 @@ npx inbase wait-for-blueprint --session "<current-cursor-chat-id>"
    - `filesOnIsland` is the rest of that folder
    Prefer those files while `followLook` is true, unless the request clearly
    needs something else. If `followLook` is false or missing, ignore viewpoint
-   and choose files from the request itself. Still include this session's
-   blueprint files and islands when `enabled` is true.
+   and choose files from the request itself. Viewpoint never overrides the
+   blueprint: still follow this session's blueprint when `enabled` is true.
 6. List **all** steps needed to finish the feature. Keep steps small enough that
    one patch is one landscape change (usually one new file, or a few related
    edits).
@@ -136,10 +141,12 @@ npx inbase wait-for-approval --session "<current-cursor-chat-id>"
      an earlier diff. Follow the text between
      `VISUAL_CODER_INSTRUCTION_START` and `VISUAL_CODER_INSTRUCTION_END`, read
      this session's `blueprint.json` when it is enabled (files, islands,
-     `addedFunctions`, `addedVariables`, `addedImports`), read
-     `user-context.json` (follow the viewpoint only if `followLook` is true),
-     replace the plan from the current step onward using `inbase report-plan`,
-     then wait for the user to invoke the first revised step.
+     `addedFunctions`, `addedVariables`, `addedImports`). The blueprint stays
+     leading. If the new instruction would differ from it, ask the user before
+     replacing the plan. Read `user-context.json` (follow the viewpoint only if
+     `followLook` is true), replace the plan from the current step onward using
+     `inbase report-plan`, then wait for the user to invoke the first revised
+     step.
    - Exit `2` (`VISUAL_CODER_STOPPED`) or `3` (timeout): make no further
      project changes.
 
@@ -154,8 +161,9 @@ npx inbase propose-patch --session "<current-cursor-chat-id>" --clear
 
 - Skip `inbase start-session` once this skill applies
 - Skip `inbase wait-for-blueprint` or report a plan before `VISUAL_CODER_BLUEPRINT_READY`
-- Skip this session's `blueprint.json` `userCreatedBlocks` or `userCreatedIslands` when `enabled` is true
-- Skip `addedFunctions`, `addedVariables`, or `addedImports` from that blueprint when `enabled` is true
+- Treat the chat request, viewpoint, or your own plan as overriding an enabled blueprint
+- Skip, rename, relocate, or replace this session's `blueprint.json` files, islands, functions, variables, or imports when `enabled` is true
+- Silently differ from the blueprint; ask the user first
 - Read global `user-context.json` for placed files; those live on the session blueprint
 - Follow the user's look when `followLook` is false
 - Write, edit, create, or delete project files directly

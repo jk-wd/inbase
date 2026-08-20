@@ -52,6 +52,12 @@ export async function waitForBlueprint(args) {
 
   const started = Date.now()
   const initial = store.readManifest(config.dataDir, sessionId)
+  if (store.isWorkflowStopped(config.dataDir, sessionId)) {
+    console.error(
+      'VISUAL_CODER_STOPPED The workflow was stopped. Do not modify project files.',
+    )
+    process.exit(2)
+  }
   if (!initial) {
     console.error(`No workflow session found for ${sessionId}`)
     process.exit(1)
@@ -68,6 +74,7 @@ export async function waitForBlueprint(args) {
   }
 
   while (Date.now() - started < timeoutMs) {
+    store.touchSessionConnection(config.dataDir, sessionId)
     const manifest = store.readManifest(config.dataDir, sessionId)
     if (!manifest || manifest.phase === 'stopped') {
       console.error(
@@ -81,7 +88,7 @@ export async function waitForBlueprint(args) {
       const islands = blueprint.userCreatedIslands ?? []
       console.log(
         blueprint.enabled
-          ? `VISUAL_CODER_BLUEPRINT_READY The user sent ${blocks.length} file(s) and ${islands.length} island(s) for this chat. Create those paths in the plan even if they are not on disk.`
+          ? `VISUAL_CODER_BLUEPRINT_READY The user sent ${blocks.length} file(s) and ${islands.length} island(s) for this chat. The blueprint is leading: create those paths and honor addedFunctions, addedVariables, and addedImports even if they are not on disk. Do not omit, rename, relocate, or replace them. Extra new files not in the blueprint are a deviation. If you would differ from the blueprint, ask the user first; do not silently deviate.`
           : 'VISUAL_CODER_BLUEPRINT_READY The user skipped the blueprint. Continue without user-placed files or islands.',
       )
       console.log('VISUAL_CODER_BLUEPRINT_START')
@@ -131,6 +138,12 @@ export async function waitForApproval(args) {
   const started = Date.now()
   const initial = store.readManifest(config.dataDir, sessionId)
   const initialDiff = initial?.diffs?.at(-1)
+  if (store.isWorkflowStopped(config.dataDir, sessionId)) {
+    console.error(
+      'VISUAL_CODER_STOPPED The workflow was stopped. Do not modify project files.',
+    )
+    process.exit(2)
+  }
   if (!initial) {
     console.error(`No workflow session found for ${sessionId}`)
     process.exit(1)
@@ -144,6 +157,7 @@ export async function waitForApproval(args) {
   )
 
   while (Date.now() - started < timeoutMs) {
+    store.touchSessionConnection(config.dataDir, sessionId)
     const manifest = store.readManifest(config.dataDir, sessionId)
     if (!manifest) {
       console.error(
@@ -173,7 +187,7 @@ export async function waitForApproval(args) {
         ? `\nVISUAL_CODER_INSTRUCTION_START\n${manifest.pendingInstruction}\nVISUAL_CODER_INSTRUCTION_END`
         : ''
       console.log(
-        `VISUAL_CODER_REPLAN Keep accepted steps before step ${manifest.currentStep}. Replace the plan from step ${manifest.currentStep} onward using the instruction below. Report the revised tail with inbase report-plan, then wait for invocation.${instruction}`,
+        `VISUAL_CODER_REPLAN Keep accepted steps before step ${manifest.currentStep}. Replace the plan from step ${manifest.currentStep} onward using the instruction below. The session blueprint remains leading; if this instruction would differ from it, ask the user before replacing the plan. Report the revised tail with inbase report-plan, then wait for invocation.${instruction}`,
       )
       process.exit(4)
     }

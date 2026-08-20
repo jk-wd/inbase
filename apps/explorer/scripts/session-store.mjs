@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
 import {
   accumulatePatchAdditions,
   applyUnifiedPatch,
@@ -11,6 +12,7 @@ import {
 } from './patch-lib.mjs'
 
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
+const CONNECTED_TTL_MS = 15_000
 
 export function assertSessionId(value) {
   if (typeof value !== 'string' || !SESSION_ID.test(value) || value === '.' || value === '..') {
@@ -46,7 +48,46 @@ export function sessionPaths(dataDir, sessionId) {
     blueprint: path.join(root, 'blueprint.json'),
     baseline: path.join(root, 'baseline.json'),
     baselineFiles: path.join(root, 'baseline'),
+    stopped: path.join(dataDir, 'diff-sessions', `${safeId}.stopped`),
   }
+}
+
+export function sessionStoppedError(sessionId) {
+  return new Error(
+    `VISUAL_CODER_STOPPED Session ${assertSessionId(sessionId)} was stopped. Do not modify project files.`,
+  )
+}
+
+export function isSessionStopped(dataDir, sessionId) {
+  return fs.existsSync(sessionPaths(dataDir, sessionId).stopped)
+}
+
+export function isWorkflowStopped(dataDir, sessionId) {
+  const safeId = assertSessionId(sessionId)
+  const manifest = readManifest(dataDir, safeId)
+  if (manifest?.phase === 'stopped') return true
+  return !manifest && isSessionStopped(dataDir, safeId)
+}
+
+function writeStoppedMarker(dataDir, sessionId) {
+  const { stopped } = sessionPaths(dataDir, sessionId)
+  atomicWrite(
+    stopped,
+    `${JSON.stringify({ sessionId: assertSessionId(sessionId), stoppedAt: new Date().toISOString() }, null, 2)}\n`,
+  )
+}
+
+function clearStoppedMarker(dataDir, sessionId) {
+  const { stopped } = sessionPaths(dataDir, sessionId)
+  if (fs.existsSync(stopped)) fs.unlinkSync(stopped)
+}
+
+function requireManifest(dataDir, sessionId, missingMessage) {
+  const safeId = assertSessionId(sessionId)
+  const manifest = readManifest(dataDir, safeId)
+  if (manifest) return manifest
+  if (isSessionStopped(dataDir, safeId)) throw sessionStoppedError(safeId)
+  throw new Error(missingMessage ?? `Unknown session ${safeId}`)
 }
 
 export function resolveTargetFile(targetRoot, fileId) {
@@ -76,6 +117,138 @@ export function writeActiveSession(dataDir, sessionId) {
     path.join(dataDir, 'active-session.json'),
     `${JSON.stringify({ sessionId: sessionId ? assertSessionId(sessionId) : null }, null, 2)}\n`,
   )
+}
+
+function connectionFile(dataDir, sessionId) {
+  return path.join(sessionPaths(dataDir, sessionId).root, 'connected.json')
+}
+
+function isFreshTimestamp(value, now = Date.now()) {
+  if (typeof value !== 'string') return false
+  const at = Date.parse(value)
+  return Number.isFinite(at) && now - at >= 0 && now - at < CONNECTED_TTL_MS
+}
+
+export function touchSessionConnection(dataDir, sessionId) {
+  const safeId = assertSessionId(sessionId)
+  if (isSessionStopped(dataDir, safeId)) return
+  atomicWrite(
+    connectionFile(dataDir, safeId),
+    `${JSON.stringify({ sessionId: safeId, connectedAt: new Date().toISOString() }, null, 2)}\n`,
+  )
+}
+
+function waiterSessionIds() {
+  try {
+    const result = spawnSync('ps', ['-ax', '-o', 'command='], {
+      encoding: 'utf8',
+    })
+    if (result.status !== 0 || !result.stdout) return new Set()
+    const ids = new Set()
+    for (const line of result.stdout.split('\n')) {
+      if (
+        !line.includes('wait-for-blueprint') &&
+        !line.includes('wait-for-approval')
+      ) {
+        continue
+      }
+      const match = line.match(/--session\s+(\S+)/)
+      if (!match) continue
+      try {
+        ids.add(assertSessionId(match[1]))
+      } catch {
+        // Ignore process command lines with invalid session ids.
+      }
+    }
+    return ids
+  } catch {
+    return new Set()
+  }
+}
+
+function isGeneratingPhase(phase) {
+  return phase === 'preparing' || phase === 'working' || phase === 'replanning'
+}
+
+export function isSessionConnected(
+  dataDir,
+  sessionId,
+  waiterIds = waiterSessionIds(),
+) {
+  const safeId = assertSessionId(sessionId)
+  const manifest = readManifest(dataDir, safeId)
+  if (!manifest) return false
+  if (
+    manifest.phase === 'finished' ||
+    manifest.phase === 'stopped' ||
+    manifest.status === 'finished' ||
+    manifest.status === 'rejected'
+  ) {
+    return false
+  }
+  if (isGeneratingPhase(manifest.phase)) return true
+  if (waiterIds.has(safeId)) return true
+  const connected = readJson(connectionFile(dataDir, safeId), null)
+  if (isFreshTimestamp(connected?.connectedAt)) return true
+  return isFreshTimestamp(manifest.updatedAt) || isFreshTimestamp(manifest.createdAt)
+}
+
+function diffSessionsRoot(dataDir) {
+  return path.join(dataDir, 'diff-sessions')
+}
+
+export function listStoredSessionIds(dataDir) {
+  const root = diffSessionsRoot(dataDir)
+  if (!fs.existsSync(root)) return []
+  const ids = new Set()
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    if (entry.name === '.gitkeep') continue
+    const name =
+      entry.isFile() && entry.name.endsWith('.stopped')
+        ? entry.name.slice(0, -'.stopped'.length)
+        : entry.name
+    try {
+      ids.add(assertSessionId(name))
+    } catch {
+      // Skip files that are not valid session ids.
+    }
+  }
+  return [...ids]
+}
+
+export function listOpenSessionIds(dataDir) {
+  const root = diffSessionsRoot(dataDir)
+  if (!fs.existsSync(root)) return []
+  const waiters = waiterSessionIds()
+  const sessions = []
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    try {
+      const sessionId = assertSessionId(entry.name)
+      if (!isSessionConnected(dataDir, sessionId, waiters)) continue
+      const manifest = readManifest(dataDir, sessionId)
+      if (!manifest) continue
+      sessions.push({
+        sessionId,
+        createdAt: typeof manifest.createdAt === 'string' ? manifest.createdAt : '',
+      })
+    } catch {
+      // Skip folders that are not valid session ids.
+    }
+  }
+  sessions.sort((left, right) => {
+    if (left.createdAt !== right.createdAt) {
+      return left.createdAt.localeCompare(right.createdAt)
+    }
+    return left.sessionId.localeCompare(right.sessionId)
+  })
+  return sessions.map((item) => item.sessionId)
+}
+
+export function listSessionIntents(dataDir, knownFileIds = []) {
+  return listOpenSessionIds(dataDir)
+    .map((sessionId) => sessionIntent(dataDir, sessionId, knownFileIds))
+    .filter(Boolean)
 }
 
 export function readBlueprintSession(dataDir) {
@@ -400,8 +573,51 @@ function replayPatches(dataDir, sessionId, targetRoot, entries) {
   }
 }
 
-function acceptedEntries(manifest) {
-  return manifest.diffs.filter((entry) => entry.status === 'applied')
+function gitTopLevel(fromDir) {
+  try {
+    const result = spawnSync('git', ['rev-parse', '--show-toplevel'], {
+      cwd: fromDir,
+      encoding: 'utf8',
+    })
+    if (result.status !== 0) return null
+    const root = result.stdout.trim()
+    return root ? fs.realpathSync(root) : null
+  } catch {
+    return null
+  }
+}
+
+function repoRelativePath(root, absolutePath) {
+  const resolved = path.resolve(absolutePath)
+  let candidate = resolved
+  try {
+    if (fs.existsSync(resolved)) candidate = fs.realpathSync(resolved)
+    else if (fs.existsSync(path.dirname(resolved))) {
+      candidate = path.join(fs.realpathSync(path.dirname(resolved)), path.basename(resolved))
+    }
+  } catch {
+    candidate = resolved
+  }
+  const relative = path.relative(root, candidate)
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return null
+  return relative
+}
+
+function unstagePaths(fromDir, absolutePaths) {
+  if (!absolutePaths.length) return
+  const root = gitTopLevel(fromDir)
+  if (!root) return
+  const relative = [...new Set(absolutePaths)]
+    .map((item) => repoRelativePath(root, item))
+    .filter((item) => Boolean(item))
+  if (!relative.length) return
+  for (const item of relative) {
+    spawnSync('git', ['restore', '--staged', '--', item], {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: 'ignore',
+    })
+  }
 }
 
 function liveEntries(manifest, diffId) {
@@ -409,8 +625,7 @@ function liveEntries(manifest, diffId) {
 }
 
 export function materializeDiff(dataDir, targetRoot, sessionId, diffId) {
-  const manifest = readManifest(dataDir, assertSessionId(sessionId))
-  if (!manifest) throw new Error(`Unknown session ${sessionId}`)
+  const manifest = requireManifest(dataDir, sessionId)
   const through = diffId || manifest.activeDiffId
   if (!through) return manifest
   restoreBaseline(dataDir, sessionId, targetRoot)
@@ -473,6 +688,7 @@ function featureName(value) {
 
 export function startSession(dataDir, input) {
   const sessionId = assertSessionId(input.sessionId)
+  clearStoppedMarker(dataDir, sessionId)
   const existing = readManifest(dataDir, sessionId)
   if (existing) {
     focusSession(dataDir, sessionId)
@@ -502,8 +718,7 @@ export function startSession(dataDir, input) {
 }
 
 export function answerBlueprint(dataDir, sessionId, enabled) {
-  const manifest = readManifest(dataDir, assertSessionId(sessionId))
-  if (!manifest) throw new Error(`Unknown session ${sessionId}`)
+  const manifest = requireManifest(dataDir, sessionId)
   if (manifest.phase !== 'blueprint_ask') {
     throw new Error(`Session ${sessionId} is not asking for a blueprint`)
   }
@@ -522,8 +737,7 @@ export function answerBlueprint(dataDir, sessionId, enabled) {
 
 export function updateBlueprint(dataDir, sessionId, input = {}) {
   const safeId = assertSessionId(sessionId)
-  const manifest = readManifest(dataDir, safeId)
-  if (!manifest) throw new Error(`Unknown session ${safeId}`)
+  const manifest = requireManifest(dataDir, safeId)
   if (manifest.phase !== 'blueprint') {
     throw new Error(`Session ${safeId} is not in blueprint mode`)
   }
@@ -544,8 +758,7 @@ export function updateBlueprint(dataDir, sessionId, input = {}) {
 
 export function sendBlueprint(dataDir, sessionId, input = {}) {
   const safeId = assertSessionId(sessionId)
-  const manifest = readManifest(dataDir, safeId)
-  if (!manifest) throw new Error(`Unknown session ${safeId}`)
+  const manifest = requireManifest(dataDir, safeId)
   if (manifest.phase !== 'blueprint') {
     throw new Error(`Session ${safeId} is not in blueprint mode`)
   }
@@ -570,6 +783,9 @@ export function sendBlueprint(dataDir, sessionId, input = {}) {
 export function reportPlan(dataDir, input) {
   const sessionId = assertSessionId(input.sessionId)
   const existing = readManifest(dataDir, sessionId)
+  if (!existing && isSessionStopped(dataDir, sessionId)) {
+    throw sessionStoppedError(sessionId)
+  }
   const now = new Date().toISOString()
 
   if (existing?.phase === 'blueprint_ask' || existing?.phase === 'blueprint') {
@@ -623,8 +839,7 @@ export function reportPlan(dataDir, input) {
 }
 
 export function invokeStep(dataDir, sessionId, step, targetRoot = null) {
-  const manifest = readManifest(dataDir, assertSessionId(sessionId))
-  if (!manifest) throw new Error(`Unknown session ${sessionId}`)
+  const manifest = requireManifest(dataDir, sessionId)
 
   if (manifest.phase === 'review') {
     if (!targetRoot) throw new Error('A target root is required to apply the current step')
@@ -665,8 +880,11 @@ export function invokeStep(dataDir, sessionId, step, targetRoot = null) {
 
 export function appendDiff(dataDir, targetRoot, input) {
   const sessionId = assertSessionId(input.sessionId)
-  const manifest = readManifest(dataDir, sessionId)
-  if (!manifest) throw new Error(`Report a plan for session ${sessionId} first`)
+  const manifest = requireManifest(
+    dataDir,
+    sessionId,
+    `Report a plan for session ${sessionId} first`,
+  )
   if (manifest.phase !== 'working') {
     throw new Error(`Step ${manifest.currentStep} has not been invoked`)
   }
@@ -748,8 +966,7 @@ function applyUnresolved(dataDir, targetRoot, manifest, diffId) {
 }
 
 export function continueDiff(dataDir, targetRoot, sessionId, diffId) {
-  const manifest = readManifest(dataDir, assertSessionId(sessionId))
-  if (!manifest) throw new Error(`Unknown session ${sessionId}`)
+  const manifest = requireManifest(dataDir, sessionId)
   const active = pendingActive(manifest, diffId)
   applyUnresolved(dataDir, targetRoot, manifest, diffId)
 
@@ -769,8 +986,7 @@ export function continueDiff(dataDir, targetRoot, sessionId, diffId) {
 }
 
 export function requestReplan(dataDir, sessionId, diffId, instruction) {
-  const manifest = readManifest(dataDir, assertSessionId(sessionId))
-  if (!manifest) throw new Error(`Unknown session ${sessionId}`)
+  const manifest = requireManifest(dataDir, sessionId)
   const active = pendingActive(manifest, diffId)
   const guidance = typeof instruction === 'string' ? instruction.trim() : ''
   if (!guidance) throw new Error('An alternative instruction is required')
@@ -784,14 +1000,91 @@ export function requestReplan(dataDir, sessionId, diffId, instruction) {
   return manifest
 }
 
+function unstageDiffSessionArtifacts(dataDir, targetRoot, extraPaths = []) {
+  if (!targetRoot) return
+  unstagePaths(targetRoot, [
+    ...extraPaths,
+    diffSessionsRoot(dataDir),
+    path.join(dataDir, 'active-session.json'),
+    path.join(dataDir, 'blueprint-session.json'),
+  ])
+}
+
+function discardStoredSession(
+  dataDir,
+  sessionId,
+  targetRoot = null,
+  { restore = true, keepStoppedMarker = false } = {},
+) {
+  const safeId = assertSessionId(sessionId)
+  const paths = sessionPaths(dataDir, safeId)
+  const fileIds = Object.keys(readBaseline(dataDir, safeId).files)
+  if (targetRoot && restore) {
+    try {
+      restoreBaseline(dataDir, safeId, targetRoot)
+    } catch {
+      // Incomplete session artifacts should still be deleted.
+    }
+  }
+  if (targetRoot) {
+    unstageDiffSessionArtifacts(
+      dataDir,
+      targetRoot,
+      fileIds.flatMap((id) => {
+        try {
+          return [resolveTargetFile(targetRoot, id).absolute]
+        } catch {
+          return []
+        }
+      }),
+    )
+  }
+  releaseBlueprintSession(dataDir, safeId)
+  if (fs.existsSync(paths.root)) {
+    fs.rmSync(paths.root, { recursive: true, force: true })
+  }
+  if (!keepStoppedMarker) clearStoppedMarker(dataDir, safeId)
+  const active = readActiveSession(dataDir)
+  if (active === safeId) writeActiveSession(dataDir, null)
+}
+
+export function discardInactiveDiffSessions(
+  dataDir,
+  targetRoot = null,
+  waiterIds = waiterSessionIds(),
+) {
+  const keep = new Set()
+  for (const value of waiterIds) {
+    try {
+      keep.add(assertSessionId(value))
+    } catch {
+      // Ignore process command lines with invalid session ids.
+    }
+  }
+
+  for (const sessionId of listStoredSessionIds(dataDir)) {
+    const live = keep.has(sessionId) && Boolean(readManifest(dataDir, sessionId))
+    const stopping = keep.has(sessionId) && isSessionStopped(dataDir, sessionId)
+    if (live || stopping) continue
+    discardStoredSession(dataDir, sessionId, targetRoot)
+  }
+
+  const liveIds = [...keep].filter((id) => readManifest(dataDir, id))
+  const active = readActiveSession(dataDir)
+  if (active && !liveIds.includes(active)) writeActiveSession(dataDir, null)
+  const locked = readBlueprintSession(dataDir)
+  if (locked && !liveIds.includes(locked)) writeBlueprintSession(dataDir, null)
+  unstageDiffSessionArtifacts(dataDir, targetRoot)
+  return liveIds
+}
+
 export function stopSession(dataDir, sessionId, targetRoot = null) {
   const safeId = assertSessionId(sessionId)
-  const manifest = readManifest(dataDir, safeId)
-  if (manifest && targetRoot) {
-    restoreBaseline(dataDir, safeId, targetRoot)
-    replayPatches(dataDir, safeId, targetRoot, acceptedEntries(manifest))
-  }
-  finalizeFinishedSession(dataDir, safeId)
+  writeStoppedMarker(dataDir, safeId)
+  discardStoredSession(dataDir, safeId, targetRoot, { keepStoppedMarker: true })
+  const waiters = waiterSessionIds()
+  waiters.add(safeId)
+  discardInactiveDiffSessions(dataDir, targetRoot, waiters)
   return null
 }
 
@@ -819,14 +1112,7 @@ export function closeSession(dataDir, sessionId) {
 }
 
 export function finalizeFinishedSession(dataDir, sessionId) {
-  const safeId = assertSessionId(sessionId)
-  const paths = sessionPaths(dataDir, safeId)
-  releaseBlueprintSession(dataDir, safeId)
-  if (fs.existsSync(paths.root)) {
-    fs.rmSync(paths.root, { recursive: true, force: true })
-  }
-  const active = readActiveSession(dataDir)
-  if (active === safeId) writeActiveSession(dataDir, null)
+  discardStoredSession(dataDir, sessionId, null, { restore: false })
 }
 
 export function emptyBlueprint() {

@@ -1,5 +1,5 @@
 import { Suspense } from 'react'
-import { Text } from '@react-three/drei'
+import { Html, Text } from '@react-three/drei'
 import { CHANGE_HIGHLIGHT, folderFloorColor, MAP_SELECTION, type ChangeKind } from '../theme'
 import type { PlacedFolder } from '../types'
 import { MapSelectBorder } from './MapSelectBorder'
@@ -10,6 +10,7 @@ type FolderAreaProps = {
   selected?: boolean
   mapMode?: boolean
   highlightKind?: ChangeKind | null
+  previewLabels?: boolean
 }
 
 export function FolderArea({
@@ -18,10 +19,10 @@ export function FolderArea({
   selected = false,
   mapMode = false,
   highlightKind = null,
+  previewLabels = false,
 }: FolderAreaProps) {
   const added = Boolean(folder.added)
-  const highlight =
-    mapMode && highlightKind ? CHANGE_HIGHLIGHT[highlightKind] : null
+  const highlight = highlightKind ? CHANGE_HIGHLIGHT[highlightKind] : null
   const addedOnly = added && !highlight
   const outline = highlight ? highlight.color : addedOnly ? '#7ec8e8' : null
   const color = highlight
@@ -57,6 +58,7 @@ export function FolderArea({
           depth={folder.depth}
           y={0.06}
           stroke={MAP_SELECTION.islandPad}
+          color={MAP_SELECTION.island}
         />
       )}
       <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -79,7 +81,18 @@ export function FolderArea({
         </mesh>
       )}
       <Suspense fallback={null}>
-        {!naming && (
+        {!naming && previewLabels && (
+          <Html
+            position={[0, 1.35, -folder.depth / 2 + 1.6]}
+            center
+            occlude={false}
+            style={{ pointerEvents: 'none' }}
+            zIndexRange={[20, 0]}
+          >
+            <div className="thumbnail-folder-label">{label}</div>
+          </Html>
+        )}
+        {!naming && !previewLabels && !mapMode && (
           <Text
             position={[0, 0.05, -folder.depth / 2 + 1.6]}
             rotation={[-Math.PI / 2, 0, 0]}

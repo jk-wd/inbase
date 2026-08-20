@@ -7,6 +7,7 @@ type MapSelectBorderProps = {
   depth: number
   y?: number
   stroke?: number
+  color?: string
   userData?: Record<string, unknown>
 }
 
@@ -15,6 +16,7 @@ export function MapSelectBorder({
   depth,
   y = 0.04,
   stroke = MAP_SELECTION.blockPad,
+  color = MAP_SELECTION.color,
   userData,
 }: MapSelectBorderProps) {
   const geometry = useMemo(() => {
@@ -47,7 +49,7 @@ export function MapSelectBorder({
       userData={userData}
     >
       <meshBasicMaterial
-        color={MAP_SELECTION.color}
+        color={color}
         toneMapped={false}
         side={THREE.DoubleSide}
         depthWrite={false}

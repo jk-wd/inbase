@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { NameInput } from './NameInput'
+import { SelectionThumbnail } from '../scene/SelectionThumbnail'
 import {
+  canStopSession,
   isReviewingIntent,
   type AgentIntent,
   type AgentIntentStatus,
@@ -9,6 +11,7 @@ import {
   type PatchImportAddition,
   type PatchSymbolAddition,
   type ViewMode,
+  type WorldLayout,
   type WorkflowAction,
 } from '../types'
 
@@ -123,21 +126,488 @@ function AddIntentRow({
   )
 }
 
+function PanelChrome({
+  title,
+  minimized = false,
+  onMinimize,
+  onClose,
+}: {
+  title: ReactNode
+  minimized?: boolean
+  onMinimize?: () => void
+  onClose?: () => void
+}) {
+  return (
+    <div className="hud-panel-chrome">
+      <div className="hud-panel-chrome-title">{title}</div>
+      <div className="hud-panel-controls">
+        {onMinimize && (
+          <button
+            className="hud-button hud-icon-button hud-panel-control"
+            type="button"
+            aria-label={minimized ? 'Restore' : 'Minimize'}
+            onClick={onMinimize}
+          >
+            {minimized ? '+' : '−'}
+          </button>
+        )}
+        {onClose && (
+          <button
+            className="hud-button hud-icon-button hud-panel-control"
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+type SessionPanelProps = {
+  intent: AgentIntent
+  focused: boolean
+  naming: boolean
+  onFocus: () => void
+  onWorkflowAction: (
+    sessionId: string,
+    action: WorkflowAction,
+    options?: { instruction?: string; step?: number },
+  ) => void
+  onNavigateDiff: (sessionId: string, diffId: string) => void
+}
+
+function SessionPanel({
+  intent,
+  focused,
+  naming,
+  onFocus,
+  onWorkflowAction,
+  onNavigateDiff,
+}: SessionPanelProps) {
+  const [minimized, setMinimized] = useState(false)
+  const [instruction, setInstruction] = useState('')
+  const sessionId = intent.sessionId
+  const pending = intent.status === 'pending' && intent.isActiveDiff
+  const askingBlueprint = intent.status === 'blueprint_ask'
+  const creatingBlueprint = intent.creationMode || intent.status === 'blueprint'
+  const preparing = intent.status === 'preparing'
+  const planReady = intent.status === 'planned'
+  const working = intent.status === 'working' || intent.status === 'replanning'
+  const previewing = intent.preview
+  const chainIndex = intent.chainIndex ?? 0
+  const previousDiff = intent.chain[chainIndex - 1]
+  const nextDiff = intent.chain[chainIndex + 1]
+  const stepLabel =
+    intent.step && intent.steps?.length > 0
+      ? `Step ${intent.step} of ${intent.steps.length}`
+      : 'Patch'
+  const lastStep =
+    typeof intent.step === 'number' &&
+    intent.steps.length > 0 &&
+    intent.step >= intent.steps.length
+  const addedFunctions = intent.addedFunctions ?? []
+  const addedVariables = intent.addedVariables ?? []
+  const addedImports = intent.addedImports ?? []
+  const doneSteps = new Set(
+    intent.status === 'finished'
+      ? intent.steps.map((step) => step.index)
+      : intent.chain
+          .filter(
+            (entry) =>
+              entry.status === 'applied' || entry.status === 'extended',
+          )
+          .map((entry) => entry.step),
+  )
+  if (intent.status === 'approved' && typeof intent.step === 'number') {
+    doneSteps.add(intent.step)
+  }
+  if (pending && typeof intent.step === 'number' && !lastStep) {
+    doneSteps.add(intent.step)
+  }
+  const nextStep =
+    intent.status === 'finished'
+      ? null
+      : (intent.steps.find((step) => !doneSteps.has(step.index)) ?? null)
+  const canRunNext =
+    Boolean(nextStep) && (planReady || pending) && !working
+  const canComplete = pending && lastStep
+  const panelDone =
+    intent.status === 'finished' ||
+    intent.status === 'approved' ||
+    doneSteps.size > 0
+
+  useEffect(() => {
+    setInstruction('')
+  }, [intent.diffId])
+
+  if (!sessionId || !isReviewingIntent(intent.status)) return null
+
+  const act = (
+    action: WorkflowAction,
+    options?: { instruction?: string; step?: number },
+  ) => onWorkflowAction(sessionId, action, options)
+
+  return (
+    <aside
+      className={
+        panelDone
+          ? 'hud-panel hud-panel-planned hud-panel-done'
+          : 'hud-panel hud-panel-planned'
+      }
+      data-minimized={minimized}
+      data-focused={focused}
+      onPointerDown={onFocus}
+    >
+      <PanelChrome
+        title={reviewTitle(intent.status)}
+        minimized={minimized}
+        onMinimize={() => setMinimized((current) => !current)}
+      />
+      {!minimized && (
+        <>
+          {intent.feature && <p className="hud-feature">{intent.feature}</p>}
+          {askingBlueprint ? (
+            <>
+              <p>
+                {intent.canEnterBlueprint
+                  ? 'Place files and folders for this chat, then send them as a blueprint for the LLM?'
+                  : `Blueprint edit mode is active in another chat (${intent.blueprintSessionId}). Finish or stop it before starting here.`}
+              </p>
+              <div className="hud-decide">
+                <button
+                  className="hud-button hud-button-approve"
+                  type="button"
+                  disabled={!intent.canEnterBlueprint}
+                  onClick={() => act('blueprint_yes')}
+                >
+                  Create blueprint
+                </button>
+                <button
+                  className="hud-button hud-button-approve"
+                  type="button"
+                  onClick={() => act('blueprint_no')}
+                >
+                  Let LLM continue
+                </button>
+                <button
+                  className="hud-button hud-button-reject"
+                  type="button"
+                  onClick={() => act('stop')}
+                >
+                  Stop
+                </button>
+              </div>
+            </>
+          ) : creatingBlueprint ? (
+            <>
+              <p>
+                Walk the map, press <kbd>Space</kbd> for a file and{' '}
+                <kbd>B</kbd> for an island. Send the blueprint when the layout
+                is ready.
+              </p>
+              <div className="hud-decide">
+                <button
+                  className="hud-button hud-button-approve"
+                  type="button"
+                  disabled={naming}
+                  onClick={() => act('blueprint_send')}
+                >
+                  Send blueprint
+                </button>
+                <button
+                  className="hud-button hud-button-reject"
+                  type="button"
+                  onClick={() => act('stop')}
+                >
+                  Stop
+                </button>
+              </div>
+            </>
+          ) : intent.status === 'finished' ? (
+            <p>All plan steps were applied.</p>
+          ) : preparing ? (
+            <div className="hud-working">
+              <span className="hud-spinner" aria-hidden="true" />
+              <span>LLM preparing…</span>
+              <button
+                className="hud-button hud-button-reject"
+                type="button"
+                onClick={() => act('stop')}
+              >
+                Stop
+              </button>
+            </div>
+          ) : working ? (
+            <div className="hud-working">
+              <span className="hud-spinner" aria-hidden="true" />
+              <span>
+                {intent.status === 'replanning'
+                  ? 'Updating the remaining plan from your instruction…'
+                  : `Implementing ${stepLabel.toLowerCase()}…`}
+              </span>
+              <button
+                className="hud-button hud-button-reject"
+                type="button"
+                onClick={() => act('stop')}
+              >
+                Stop
+              </button>
+            </div>
+          ) : (
+            <p>
+              {stepLabel}
+              {intent.reason ? ` · ${intent.reason}` : ''}
+            </p>
+          )}
+          {!askingBlueprint && !creatingBlueprint && (
+            <>
+              {intent.steps?.length > 0 && (
+                <ol className="hud-steps">
+                  {intent.steps.map((step) => (
+                    <li
+                      key={step.index}
+                      data-current={
+                        intent.status !== 'finished' &&
+                        step.index === intent.step &&
+                        !doneSteps.has(step.index)
+                      }
+                      data-done={doneSteps.has(step.index)}
+                      data-next={
+                        nextStep?.index === step.index &&
+                        !doneSteps.has(step.index)
+                      }
+                    >
+                      <span className="hud-step-index">{step.index}.</span>
+                      <span className="hud-step-main">
+                        <span className="hud-step-title">{step.title}</span>
+                        {((canRunNext && nextStep?.index === step.index) ||
+                          (canComplete && step.index === intent.step)) && (
+                          <button
+                            className="hud-button hud-button-approve hud-run-step"
+                            type="button"
+                            onClick={() =>
+                              canComplete && step.index === intent.step
+                                ? act('continue')
+                                : act('invoke', {
+                                    step: step.index,
+                                  })
+                            }
+                          >
+                            {canComplete && step.index === intent.step
+                              ? 'Complete'
+                              : 'Run step'}
+                          </button>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+              {intent.chain.length > 0 && (
+                <div className="hud-chain">
+                  <button
+                    className="hud-button"
+                    type="button"
+                    disabled={!previousDiff}
+                    onClick={() =>
+                      previousDiff && onNavigateDiff(sessionId, previousDiff.id)
+                    }
+                  >
+                    Previous
+                  </button>
+                  <span>
+                    Diff {chainIndex + 1} of {intent.chain.length}
+                  </span>
+                  <button
+                    className="hud-button"
+                    type="button"
+                    disabled={!nextDiff}
+                    onClick={() =>
+                      nextDiff && onNavigateDiff(sessionId, nextDiff.id)
+                    }
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+              <MutationFold
+                hasContent={
+                  previewing &&
+                  (intent.files.length > 0 ||
+                    (intent.createFolders ?? []).length > 0 ||
+                    intent.creates.length > 0 ||
+                    intent.deletes.length > 0 ||
+                    addedFunctions.length > 0 ||
+                    addedVariables.length > 0 ||
+                    addedImports.length > 0 ||
+                    (intent.imports ?? []).length > 0)
+                }
+              >
+                {intent.files.length > 0 && (
+                  <>
+                    <div className="hud-section-title hud-section-title-edit">
+                      Changed
+                    </div>
+                    <ul>
+                      {intent.files.map((id) => (
+                        <li className="hud-file-edit" key={id}>
+                          {id}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {(intent.createFolders ?? []).length > 0 && (
+                  <>
+                    <div className="hud-section-title hud-section-title-add">
+                      Added islands
+                    </div>
+                    <ul>
+                      {intent.createFolders.map((id) => (
+                        <li className="hud-file-add" key={id}>
+                          {id}/
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {intent.creates.length > 0 && (
+                  <>
+                    <div className="hud-section-title hud-section-title-add">
+                      Added
+                    </div>
+                    <ul>
+                      {intent.creates.map((id) => (
+                        <li className="hud-file-add" key={id}>
+                          {id}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {intent.deletes.length > 0 && (
+                  <>
+                    <div className="hud-section-title hud-section-title-remove">
+                      Removed
+                    </div>
+                    <ul>
+                      {intent.deletes.map((id) => (
+                        <li className="hud-file-remove" key={id}>
+                          {id}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                <PanelList
+                  title="Functions"
+                  items={symbolLabels(addedFunctions)}
+                />
+                <PanelList
+                  title="Variables"
+                  items={symbolLabels(addedVariables)}
+                />
+                {addedImports.length > 0 && (
+                  <PanelList title="Imports" items={importLabels(addedImports)} />
+                )}
+                {addedImports.length === 0 && (intent.imports ?? []).length > 0 && (
+                  <>
+                    <div className="hud-section-title">Imports</div>
+                    <ul>
+                      {intent.imports.map((edge) => (
+                        <li key={`${edge.from}->${edge.to}`}>
+                          {edge.from.split('/').pop()} → {edge.to.split('/').pop()}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </MutationFold>
+              {planReady && (
+                <div className="hud-decide">
+                  <button
+                    className="hud-button hud-button-reject"
+                    type="button"
+                    onClick={() => act('stop')}
+                  >
+                    Stop
+                  </button>
+                </div>
+              )}
+              {pending && (
+                <>
+                  <label className="hud-instruction">
+                    <span>Alternative instruction for the LLM</span>
+                    <textarea
+                      value={instruction}
+                      maxLength={4000}
+                      rows={3}
+                      placeholder="Describe what should change in the next diff…"
+                      onChange={(event) => setInstruction(event.target.value)}
+                    />
+                  </label>
+                  <div className="hud-decide">
+                    {lastStep && (
+                      <button
+                        className="hud-button hud-button-approve"
+                        type="button"
+                        onClick={() => act('continue')}
+                      >
+                        Complete
+                      </button>
+                    )}
+                    <button
+                      className="hud-button hud-button-extend"
+                      type="button"
+                      disabled={!instruction.trim()}
+                      onClick={() =>
+                        act('instruct', { instruction })
+                      }
+                    >
+                      Send instruction
+                    </button>
+                    <button
+                      className="hud-button hud-button-reject"
+                      type="button"
+                      onClick={() => act('stop')}
+                    >
+                      Stop
+                    </button>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </aside>
+  )
+}
+
 type HUDProps = {
   graph: CodebaseGraph
+  layout: WorldLayout
   mode: ViewMode
   locked: boolean
   selectedId: string | null
   selectedTick?: number
   selectedFolder?: string | null
+  landAt: [number, number]
   aimedRelation: AimedRelation | null
   currentFolder: string
   intent: AgentIntent
+  intents?: AgentIntent[]
+  focusedSessionId?: string | null
+  onFocusSession?: (sessionId: string) => void
   onWorkflowAction: (
+    sessionId: string,
     action: WorkflowAction,
     options?: { instruction?: string; step?: number },
   ) => void
-  onNavigateDiff: (diffId: string) => void
+  onNavigateDiff: (sessionId: string, diffId: string) => void
   onOpenMap: () => void
   onWalk: () => void
   followLook: boolean
@@ -164,18 +634,26 @@ type HUDProps = {
   onMapAddFile?: (folderPath: string) => void
   onMapAddFolder?: (folderPath: string) => void
   onInspectFile?: (fileId: string) => void
+  plannedIds?: string[]
+  createdIds?: string[]
+  deletedIds?: string[]
 }
 
 export function HUD({
   graph,
+  layout,
   mode,
   locked,
   selectedId,
   selectedTick = 0,
   selectedFolder = null,
+  landAt,
   aimedRelation,
   currentFolder,
   intent,
+  intents,
+  focusedSessionId = null,
+  onFocusSession,
   onWorkflowAction,
   onNavigateDiff,
   onOpenMap,
@@ -200,6 +678,9 @@ export function HUD({
   onMapAddFile,
   onMapAddFolder,
   onInspectFile,
+  plannedIds = [],
+  createdIds = [],
+  deletedIds = [],
 }: HUDProps) {
   const selected = graph.files.find((file) => file.id === selectedId)
   const selectedFolderNode = graph.folders.find(
@@ -217,31 +698,21 @@ export function HUD({
     ? graph.files.filter((file) => file.imports.includes(selected.id))
     : []
   const mapping = mode === 'map'
-  const sessionMode = Boolean(intent.sessionId)
+  const sessions = (intents ?? [intent]).filter(
+    (item) => item.sessionId && isReviewingIntent(item.status),
+  )
+  const canStop = canStopSession(intent)
   const [walkIntro, setWalkIntro] = useState(false)
   const walkIntroSeen = useRef(false)
-  const [instruction, setInstruction] = useState('')
   const [infoVisible, setInfoVisible] = useState(false)
-  const infoPanelRef = useRef<HTMLElement>(null)
-  const pending = intent.status === 'pending' && intent.isActiveDiff
-  const askingBlueprint = intent.status === 'blueprint_ask'
-  const creatingBlueprint = intent.creationMode || intent.status === 'blueprint'
-  const preparing = intent.status === 'preparing'
-  const planReady = intent.status === 'planned'
-  const working = intent.status === 'working' || intent.status === 'replanning'
+  const [infoMinimized, setInfoMinimized] = useState(false)
+  const [thumbnailVisible, setThumbnailVisible] = useState(true)
+  const [thumbnailMinimized, setThumbnailMinimized] = useState(false)
+  const infoPanelRef = useRef<HTMLDivElement>(null)
+  const creatingBlueprint = sessions.some(
+    (item) => item.creationMode || item.status === 'blueprint',
+  )
   const previewing = intent.preview
-  const reviewing = isReviewingIntent(intent.status) || intent.chain.length > 0
-  const chainIndex = intent.chainIndex ?? 0
-  const previousDiff = intent.chain[chainIndex - 1]
-  const nextDiff = intent.chain[chainIndex + 1]
-  const stepLabel =
-    intent.step && intent.steps?.length > 0
-      ? `Step ${intent.step} of ${intent.steps.length}`
-      : 'Patch'
-  const lastStep =
-    typeof intent.step === 'number' &&
-    intent.steps.length > 0 &&
-    intent.step >= intent.steps.length
   const addedFunctions = intent.addedFunctions ?? []
   const addedVariables = intent.addedVariables ?? []
   const addedImports = intent.addedImports ?? []
@@ -280,38 +751,11 @@ export function HUD({
   )
   const canEditBlueprint =
     creatingBlueprint && Boolean(selected) && !selected?.id.startsWith('draft:')
-  const doneSteps = new Set(
-    intent.status === 'finished'
-      ? intent.steps.map((step) => step.index)
-      : intent.chain
-          .filter(
-            (entry) =>
-              entry.status === 'applied' || entry.status === 'extended',
-          )
-          .map((entry) => entry.step),
-  )
-  if (intent.status === 'approved' && typeof intent.step === 'number') {
-    doneSteps.add(intent.step)
-  }
-  if (pending && typeof intent.step === 'number' && !lastStep) {
-    doneSteps.add(intent.step)
-  }
-  const nextStep =
-    intent.status === 'finished'
-      ? null
-      : (intent.steps.find((step) => !doneSteps.has(step.index)) ?? null)
-  const canRunNext =
-    Boolean(nextStep) && (planReady || pending) && !working
-  const canComplete = pending && lastStep
   const canInspectFile = (fileId: string, userCreated = false) =>
     Boolean(onInspectFile) &&
     !fileId.startsWith('draft:') &&
     !(previewing && (intent.deletes ?? []).includes(fileId)) &&
     (!userCreated || (intent.creates ?? []).includes(fileId))
-  const panelDone =
-    intent.status === 'finished' ||
-    intent.status === 'approved' ||
-    doneSteps.size > 0
 
   useEffect(() => {
     if (mode !== 'walk') {
@@ -331,10 +775,6 @@ export function HUD({
     const timer = window.setTimeout(() => setWalkIntro(true), 160)
     return () => window.clearTimeout(timer)
   }, [locked, mode, naming])
-
-  useEffect(() => {
-    setInstruction('')
-  }, [intent.diffId])
 
   useEffect(() => {
     infoPanelRef.current?.scrollTo({ top: 0 })
@@ -362,11 +802,38 @@ export function HUD({
         return
       }
       event.preventDefault()
-      setInfoVisible((visible) => !visible)
+      setInfoVisible((visible) => {
+        if (!visible) setInfoMinimized(false)
+        return !visible
+      })
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+
+  useEffect(() => {
+    if (!mapping) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.repeat || event.code !== 'KeyT') return
+      const target = event.target
+      if (
+        target instanceof HTMLElement &&
+        (target.tagName === 'TEXTAREA' ||
+          target.tagName === 'INPUT' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return
+      }
+      event.preventDefault()
+      setThumbnailVisible((visible) => {
+        if (!visible) setThumbnailMinimized(false)
+        return !visible
+      })
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [mapping])
 
   useEffect(() => {
     if (!infoVisible || (!selectedId && !selectedFolder)) return
@@ -400,8 +867,9 @@ export function HUD({
           <div className="hud-gate-card">
             <h1>Walk</h1>
             <p>
-              Click to look around. Press <kbd>M</kbd> to open the map, press{' '}
-              <kbd>M</kbd> again to return here.
+              Click to look around. Double-click to release the mouse. Press{' '}
+              <kbd>M</kbd> to open the map, press <kbd>M</kbd> again to return
+              here.
             </p>
             <p>
               <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> walk,{' '}
@@ -455,313 +923,57 @@ export function HUD({
           >
             Walk
           </button>
+          {canStop && (
+            <button
+              className="hud-button hud-button-reject"
+              type="button"
+              aria-label="Stop LLM session"
+              onClick={() =>
+                intent.sessionId && onWorkflowAction(intent.sessionId, 'stop')
+              }
+            >
+              Stop
+            </button>
+          )}
         </div>
         {selected && <div className="hud-chip">{selected.path}</div>}
       </div>
 
-      {reviewing && (
-        <aside
-          className={
-            panelDone
-              ? 'hud-panel hud-panel-planned hud-panel-done'
-              : 'hud-panel hud-panel-planned'
-          }
-        >
-          <div className="hud-section-title">
-            {reviewTitle(intent.status)}
-          </div>
-          {intent.feature && <p className="hud-feature">{intent.feature}</p>}
-          {askingBlueprint ? (
-            <>
-              <p>
-                {intent.canEnterBlueprint
-                  ? 'Place files and islands for this chat, then send them as a blueprint for the LLM?'
-                  : `Blueprint edit mode is active in another chat (${intent.blueprintSessionId}). Finish or stop it before starting here.`}
-              </p>
-              <div className="hud-decide">
-                <button
-                  className="hud-button hud-button-approve"
-                  type="button"
-                  disabled={!intent.canEnterBlueprint}
-                  onClick={() => onWorkflowAction('blueprint_yes')}
-                >
-                  Yes
-                </button>
-                <button
-                  className="hud-button"
-                  type="button"
-                  onClick={() => onWorkflowAction('blueprint_no')}
-                >
-                  No
-                </button>
-                <button
-                  className="hud-button hud-button-reject"
-                  type="button"
-                  onClick={() => onWorkflowAction('stop')}
-                >
-                  Stop
-                </button>
-              </div>
-            </>
-          ) : creatingBlueprint ? (
-            <>
-              <p>
-                Walk the map, press <kbd>Space</kbd> for a file and{' '}
-                <kbd>B</kbd> for an island. Send the blueprint when the layout
-                is ready.
-              </p>
-              <div className="hud-decide">
-                <button
-                  className="hud-button hud-button-approve"
-                  type="button"
-                  disabled={naming}
-                  onClick={() => onWorkflowAction('blueprint_send')}
-                >
-                  Send blueprint
-                </button>
-                <button
-                  className="hud-button hud-button-reject"
-                  type="button"
-                  onClick={() => onWorkflowAction('stop')}
-                >
-                  Stop
-                </button>
-              </div>
-            </>
-          ) : intent.status === 'finished' ? (
-            <p>All plan steps were applied.</p>
-          ) : preparing ? (
-            <div className="hud-working">
-              <span className="hud-spinner" aria-hidden="true" />
-              <span>LLM preparing…</span>
-            </div>
-          ) : working ? (
-            <div className="hud-working">
-              <span className="hud-spinner" aria-hidden="true" />
-              <span>
-                {intent.status === 'replanning'
-                  ? 'Updating the remaining plan from your instruction…'
-                  : `Implementing ${stepLabel.toLowerCase()}…`}
-              </span>
-            </div>
-          ) : (
-            <p>
-              {stepLabel}
-              {intent.reason ? ` · ${intent.reason}` : ''}
-            </p>
-          )}
-          {!askingBlueprint && !creatingBlueprint && (
-            <>
-          {intent.steps?.length > 0 && (
-            <ol className="hud-steps">
-              {intent.steps.map((step) => (
-                <li
-                  key={step.index}
-                  data-current={
-                    intent.status !== 'finished' &&
-                    step.index === intent.step &&
-                    !doneSteps.has(step.index)
-                  }
-                  data-done={doneSteps.has(step.index)}
-                  data-next={
-                    nextStep?.index === step.index && !doneSteps.has(step.index)
-                  }
-                >
-                  <span className="hud-step-index">{step.index}.</span>
-                  <span className="hud-step-main">
-                    <span className="hud-step-title">{step.title}</span>
-                    {((canRunNext && nextStep?.index === step.index) ||
-                      (canComplete && step.index === intent.step)) && (
-                      <button
-                        className="hud-button hud-button-approve hud-run-step"
-                        type="button"
-                        onClick={() =>
-                          canComplete && step.index === intent.step
-                            ? onWorkflowAction('continue')
-                            : onWorkflowAction('invoke', {
-                                step: step.index,
-                              })
-                        }
-                      >
-                        {canComplete && step.index === intent.step
-                          ? 'Complete'
-                          : 'Run step'}
-                      </button>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          )}
-          {intent.chain.length > 0 && (
-            <div className="hud-chain">
-              <button
-                className="hud-button"
-                type="button"
-                disabled={!previousDiff}
-                onClick={() => previousDiff && onNavigateDiff(previousDiff.id)}
-              >
-                Previous
-              </button>
-              <span>
-                Diff {chainIndex + 1} of {intent.chain.length}
-              </span>
-              <button
-                className="hud-button"
-                type="button"
-                disabled={!nextDiff}
-                onClick={() => nextDiff && onNavigateDiff(nextDiff.id)}
-              >
-                Next
-              </button>
-            </div>
-          )}
-          <MutationFold
-            hasContent={
-              previewing &&
-              (intent.files.length > 0 ||
-                (intent.createFolders ?? []).length > 0 ||
-                intent.creates.length > 0 ||
-                intent.deletes.length > 0 ||
-                addedFunctions.length > 0 ||
-                addedVariables.length > 0 ||
-                addedImports.length > 0 ||
-                (intent.imports ?? []).length > 0)
-            }
-          >
-            {intent.files.length > 0 && (
-              <>
-                <div className="hud-section-title hud-section-title-edit">Changed</div>
-                <ul>
-                  {intent.files.map((id) => (
-                    <li className="hud-file-edit" key={id}>
-                      {id}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-            {(intent.createFolders ?? []).length > 0 && (
-              <>
-                <div className="hud-section-title hud-section-title-add">Added islands</div>
-                <ul>
-                  {intent.createFolders.map((id) => (
-                    <li className="hud-file-add" key={id}>
-                      {id}/
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-            {intent.creates.length > 0 && (
-              <>
-                <div className="hud-section-title hud-section-title-add">Added</div>
-                <ul>
-                  {intent.creates.map((id) => (
-                    <li className="hud-file-add" key={id}>
-                      {id}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-            {intent.deletes.length > 0 && (
-              <>
-                <div className="hud-section-title hud-section-title-remove">Removed</div>
-                <ul>
-                  {intent.deletes.map((id) => (
-                    <li className="hud-file-remove" key={id}>
-                      {id}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-            <PanelList
-              title="Functions"
-              items={symbolLabels(addedFunctions)}
+      {sessions.length > 0 && (
+        <div className="hud-left-stack">
+          {sessions.map((session) => (
+            <SessionPanel
+              key={session.sessionId}
+              intent={session}
+              focused={session.sessionId === (focusedSessionId ?? intent.sessionId)}
+              naming={naming}
+              onFocus={() => {
+                if (session.sessionId) onFocusSession?.(session.sessionId)
+              }}
+              onWorkflowAction={onWorkflowAction}
+              onNavigateDiff={onNavigateDiff}
             />
-            <PanelList
-              title="Variables"
-              items={symbolLabels(addedVariables)}
-            />
-            {addedImports.length > 0 && (
-              <PanelList title="Imports" items={importLabels(addedImports)} />
-            )}
-            {addedImports.length === 0 && (intent.imports ?? []).length > 0 && (
-              <>
-                <div className="hud-section-title">Imports</div>
-                <ul>
-                  {intent.imports.map((edge) => (
-                    <li key={`${edge.from}->${edge.to}`}>
-                      {edge.from.split('/').pop()} → {edge.to.split('/').pop()}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </MutationFold>
-          {(planReady || preparing) && (
-            <div className="hud-decide">
-              <button
-                className="hud-button hud-button-reject"
-                type="button"
-                onClick={() => onWorkflowAction('stop')}
-              >
-                Stop
-              </button>
-            </div>
-          )}
-          {pending && (
-            <>
-              <label className="hud-instruction">
-                <span>Alternative instruction for the LLM</span>
-                <textarea
-                  value={instruction}
-                  maxLength={4000}
-                  rows={3}
-                  placeholder="Describe what should change in the next diff…"
-                  onChange={(event) => setInstruction(event.target.value)}
-                />
-              </label>
-              <div className="hud-decide">
-                {lastStep && (
-                  <button
-                    className="hud-button hud-button-approve"
-                    type="button"
-                    onClick={() => onWorkflowAction('continue')}
-                  >
-                    Complete
-                  </button>
-                )}
-                <button
-                  className="hud-button hud-button-extend"
-                  type="button"
-                  disabled={!instruction.trim()}
-                  onClick={() =>
-                    onWorkflowAction('instruct', { instruction })
-                  }
-                >
-                  Send instruction
-                </button>
-                <button
-                  className="hud-button hud-button-reject"
-                  type="button"
-                  onClick={() => onWorkflowAction('stop')}
-                >
-                  Stop
-                </button>
-              </div>
-            </>
-          )}
-            </>
-          )}
-        </aside>
+          ))}
+        </div>
       )}
 
+      <div className="hud-right-stack">
       {selected && infoVisible && (
-        <aside ref={infoPanelRef} className="hud-panel hud-panel-info">
-          <h2>{selected.name}</h2>
+        <aside
+          className="hud-panel hud-panel-info"
+          data-minimized={infoMinimized}
+        >
+          <PanelChrome
+            title={selected.name}
+            minimized={infoMinimized}
+            onMinimize={() => setInfoMinimized((current) => !current)}
+            onClose={() => {
+              setInfoVisible(false)
+              setInfoMinimized(false)
+            }}
+          />
+          {!infoMinimized && (
+            <div ref={infoPanelRef} className="hud-panel-body">
           <p className="path">{selected.path}</p>
           <p>
             {selected.lines} lines · {selected.language}
@@ -953,12 +1165,27 @@ export function HUD({
               onAdd={(raw) => onAddBlueprintImport(selected.id, raw)}
             />
           )}
+            </div>
+          )}
         </aside>
       )}
 
       {!selected && selectedFolderNode && infoVisible && (
-        <aside ref={infoPanelRef} className="hud-panel hud-panel-info">
-          <h2>{selectedFolderNode.name}</h2>
+        <aside
+          className="hud-panel hud-panel-info"
+          data-minimized={infoMinimized}
+        >
+          <PanelChrome
+            title={selectedFolderNode.name}
+            minimized={infoMinimized}
+            onMinimize={() => setInfoMinimized((current) => !current)}
+            onClose={() => {
+              setInfoVisible(false)
+              setInfoMinimized(false)
+            }}
+          />
+          {!infoMinimized && (
+            <div ref={infoPanelRef} className="hud-panel-body">
           <p className="path">
             {selectedFolderNode.path === '.'
               ? graph.targetName
@@ -1008,8 +1235,31 @@ export function HUD({
               </button>
             </div>
           )}
+            </div>
+          )}
         </aside>
       )}
+
+      {mapping && thumbnailVisible && (
+        <SelectionThumbnail
+          graph={graph}
+          layout={layout}
+          selectedId={selectedId}
+          selectedFolder={selectedFolder}
+          landAt={landAt}
+          importedBy={importedBy}
+          minimized={thumbnailMinimized}
+          plannedIds={plannedIds}
+          createdIds={createdIds}
+          deletedIds={deletedIds}
+          onMinimize={() => setThumbnailMinimized((current) => !current)}
+          onHide={() => {
+            setThumbnailVisible(false)
+            setThumbnailMinimized(false)
+          }}
+        />
+      )}
+      </div>
 
       <div className="hud-bottom">
         <div className="hud-hints">
@@ -1033,9 +1283,19 @@ export function HUD({
               <span>{infoVisible ? 'I hide info' : 'I show info'}</span>
               {infoVisible && <span>↑↓ scroll info</span>}
               <span>
+                {thumbnailVisible ? 'T hide 3D view' : 'T show 3D view'}
+              </span>
+              <span>
                 {importedBy ? 'K show imports' : 'K show imported by'}
               </span>
               <span>M back to walk</span>
+              {canStop && (
+                <span>
+                  {sessions.length > 1
+                    ? 'Stop ends the focused LLM session'
+                    : 'Stop ends this LLM session'}
+                </span>
+              )}
             </>
           ) : (
             <>
@@ -1059,11 +1319,55 @@ export function HUD({
                 {importedBy ? 'K show imports' : 'K show imported by'}
               </span>
               <span>M toggle map</span>
-              <span>Esc release mouse</span>
+              <span>Double-click or Esc release mouse</span>
+              {canStop && (
+                <span>
+                  {sessions.length > 1
+                    ? 'Stop ends the focused LLM session'
+                    : 'Stop ends this LLM session'}
+                </span>
+              )}
             </>
           )}
         </div>
         <div className="hud-icon-row">
+          {mapping && (
+            <button
+              className="hud-button hud-icon-button"
+              data-active={thumbnailVisible}
+              aria-label={
+                thumbnailVisible ? 'Hide 3D view' : 'Show 3D view'
+              }
+              aria-keyshortcuts="T"
+              aria-pressed={thumbnailVisible}
+              type="button"
+              onClick={() => {
+                setThumbnailVisible((visible) => {
+                  if (!visible) setThumbnailMinimized(false)
+                  return !visible
+                })
+              }}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="3" y="5" width="11" height="14" rx="1.5" />
+                <path d="M16 8h5v11H9v-3" />
+                <path d="M6.5 16.5 9 12l2 2.5 1.5-2L15 16.5" />
+              </svg>
+              <span className="hud-tooltip">
+                {thumbnailVisible ? 'T hide 3D view' : 'T show 3D view'}
+              </span>
+            </button>
+          )}
           <button
             className="hud-button hud-icon-button"
             data-active={importedBy}

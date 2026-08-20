@@ -49,6 +49,7 @@ export function MapView({
   // Ortho up is -Z, so +Z is down the screen. Shift the view so the map sits
   // above the bottom HUD instead of centering under it.
   const cz = bounds.cz + hudReserve / 2 / zoom
+  const target = useMemo(() => [bounds.cx, 0, cz] as [number, number, number], [bounds.cx, cz])
 
   useLayoutEffect(() => {
     if (!enabled || !(camera instanceof THREE.OrthographicCamera)) return
@@ -66,8 +67,7 @@ export function MapView({
     const element = gl.domElement
     element.style.cursor = 'grab'
 
-    const isWalkClick = (event: PointerEvent | MouseEvent) =>
-      event.shiftKey || event.ctrlKey || event.metaKey
+    const isWalkClick = (event: PointerEvent | MouseEvent) => event.ctrlKey
 
     const isWalkButton = (event: PointerEvent) =>
       event.button === 0 || (event.ctrlKey && event.button === 2)
@@ -111,6 +111,7 @@ export function MapView({
       const pick = pickAt(clientX, clientY)
       if (!pick) return false
       const { raycaster, relationHit, fileHit } = pick
+      if (fileHit) return false
 
       const hit = new THREE.Vector3()
       const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
@@ -121,7 +122,7 @@ export function MapView({
         landAt(hit.x, hit.z)
         return true
       }
-      if (relationHit || fileHit) return false
+      if (relationHit) return false
 
       landAt(hit.x, hit.z)
       return true
@@ -140,18 +141,15 @@ export function MapView({
       const pick = pickAt(event.clientX, event.clientY)
       if (!pick) return
       const { relationHit, fileHit } = pick
-      if (
-        relationHit &&
-        (!fileHit || relationHit.distance <= fileHit.distance + 0.4)
-      ) {
+      if (fileHit) {
+        onSelect(fileHit.object.userData.fileId as string)
+        return
+      }
+      if (relationHit) {
         onTravelTo(
           relationHit.object.userData.relationFrom as string,
           relationHit.object.userData.relationTo as string,
         )
-        return
-      }
-      if (fileHit) {
-        onSelect(fileHit.object.userData.fileId as string)
         return
       }
 
@@ -216,7 +214,7 @@ export function MapView({
           zoomSpeed={1.15}
           minZoom={Math.max(fitZoom * 0.35, 0.05)}
           maxZoom={Math.max(fitZoom * 10, 20)}
-          target={[bounds.cx, 0, cz]}
+          target={target}
         />
       )}
       {enabled &&

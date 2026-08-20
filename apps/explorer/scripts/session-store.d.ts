@@ -45,10 +45,30 @@ export type DiffManifest = {
 export function assertSessionId(value: unknown): string
 export function readActiveSession(dataDir: string): string | null
 export function writeActiveSession(dataDir: string, sessionId: string | null): void
+export function touchSessionConnection(dataDir: string, sessionId: string): void
+export function isSessionConnected(
+  dataDir: string,
+  sessionId: string,
+  waiterIds?: Set<string>,
+): boolean
+export function listStoredSessionIds(dataDir: string): string[]
+export function listOpenSessionIds(dataDir: string): string[]
+export function discardInactiveDiffSessions(
+  dataDir: string,
+  targetRoot?: string | null,
+  waiterIds?: Iterable<string>,
+): string[]
+export function listSessionIntents(
+  dataDir: string,
+  knownFileIds?: string[],
+): Array<Record<string, unknown>>
 export function readBlueprintSession(dataDir: string): string | null
 export function writeBlueprintSession(dataDir: string, sessionId: string | null): void
 export function readManifest(dataDir: string, sessionId: string): DiffManifest | null
 export function writeManifest(dataDir: string, manifest: DiffManifest): void
+export function isSessionStopped(dataDir: string, sessionId: string): boolean
+export function isWorkflowStopped(dataDir: string, sessionId: string): boolean
+export function sessionStoppedError(sessionId: string): Error
 export function startSession(
   dataDir: string,
   input: {

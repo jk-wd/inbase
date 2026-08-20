@@ -54,10 +54,16 @@ export const CHANGE_HIGHLIGHT: Record<
   },
 }
 
+export const FILE_SELECTION = {
+  color: '#c026ff',
+  emissive: '#6d00b8',
+}
+
 export const MAP_SELECTION = {
   color: '#000000',
+  island: FILE_SELECTION.color,
   islandPad: 0.38,
-  blockPad: 0.2,
+  blockPad: 0.1,
 }
 
 export function fileHeight(lines: number) {

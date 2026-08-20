@@ -1,4 +1,6 @@
-# Inbase
+<p align="center">
+  <img src="docs/inbase-logo.png" alt="InBase — Dive into your codebase" width="520" />
+</p>
 
 A first-person 3D map of a JavaScript or TypeScript codebase. Files become blocks, folders become walkable areas, and imports become lines in the air.
 

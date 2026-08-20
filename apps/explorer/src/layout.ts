@@ -1,4 +1,5 @@
 import { CONFIG, fileHeight } from './theme'
+import type { ChangeKind } from './theme'
 import type {
   CodebaseGraph,
   FileNode,
@@ -505,4 +506,49 @@ export function worldBounds(layout: WorldLayout) {
     width: maxX - minX,
     depth: maxZ - minZ,
   }
+}
+
+export function fileChangeKind(
+  id: string,
+  planned: Set<string>,
+  created: Set<string>,
+  deleted: Set<string>,
+): ChangeKind | null {
+  if (deleted.has(id)) return 'remove'
+  if (created.has(id)) return 'add'
+  if (planned.has(id)) return 'edit'
+  return null
+}
+
+export function folderChangeHighlights(
+  planned: Set<string>,
+  created: Set<string>,
+  deleted: Set<string>,
+  folders: Record<string, PlacedFolder>,
+): Partial<Record<string, ChangeKind>> {
+  const highlighted: Partial<Record<string, ChangeKind>> = {}
+  const folderKinds = new Map<string, Set<ChangeKind>>()
+  const addFolderKind = (id: string, kind: ChangeKind) => {
+    const folder = folderOfFile(id)
+    const kinds = folderKinds.get(folder) ?? new Set<ChangeKind>()
+    kinds.add(kind)
+    folderKinds.set(folder, kinds)
+  }
+  for (const id of planned) {
+    addFolderKind(id, created.has(id) ? 'add' : 'edit')
+  }
+  for (const id of deleted) addFolderKind(id, 'remove')
+  for (const [folder, kinds] of folderKinds) {
+    if (kinds.size === 1) highlighted[folder] = [...kinds][0]
+  }
+  if (planned.size > 0 || deleted.size > 0) {
+    for (const folder of Object.values(folders)) {
+      if (!folder.added) continue
+      const kinds = folderKinds.get(folder.path)
+      if (!kinds || kinds.size === 1) {
+        highlighted[folder.path] ??= 'add'
+      }
+    }
+  }
+  return highlighted
 }

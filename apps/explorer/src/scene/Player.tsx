@@ -49,6 +49,7 @@ export function Player({
   const [steering, setSteering] = useState(true)
   const controlsRef = useRef<PointerLockControlsImpl>(null)
   const capturedLook = useRef(false)
+  const lookHeld = useRef(false)
   const flying = useRef<{
     startPos: THREE.Vector3
     endPos: THREE.Vector3
@@ -133,6 +134,31 @@ export function Player({
     controls.lock()
   }, [lockEnabled, onLockedChange, steering, walking])
 
+  useEffect(() => {
+    if (!walking) return
+
+    const looking = () =>
+      Boolean(controlsRef.current?.isLocked || document.pointerLockElement)
+
+    const onClick = (event: MouseEvent) => {
+      if (event.button !== 0 || event.detail !== 1) return
+      lookHeld.current = looking()
+    }
+
+    const onDblClick = () => {
+      if (!lookHeld.current) return
+      controlsRef.current?.unlock()
+      document.exitPointerLock()
+    }
+
+    document.addEventListener('click', onClick, true)
+    document.addEventListener('dblclick', onDblClick)
+    return () => {
+      document.removeEventListener('click', onClick, true)
+      document.removeEventListener('dblclick', onDblClick)
+    }
+  }, [walking])
+
   useFrame((_, delta) => {
     try {
       if (walking && flying.current) {
@@ -198,6 +224,7 @@ export function Player({
       <PointerLockControls
         ref={controlsRef}
         makeDefault
+        selector=".stage canvas"
         enabled={steering && lockEnabled}
         onLock={() => onLockedChange(true)}
         onUnlock={() => onLockedChange(false)}

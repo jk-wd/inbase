@@ -9,7 +9,7 @@ const sessionStorePath = path.resolve(
   repoRoot,
   'apps/explorer/scripts/session-store.mjs',
 )
-const { readManifest } = await import(pathToFileURL(sessionStorePath).href)
+const { isWorkflowStopped, readManifest, touchSessionConnection } = await import(pathToFileURL(sessionStorePath).href)
 const sessionIndex = process.argv.indexOf('--session')
 const sessionId = sessionIndex >= 0 ? process.argv[sessionIndex + 1] : null
 
@@ -27,6 +27,12 @@ if (!sessionId) {
 const started = Date.now()
 const initial = readManifest(dataDir, sessionId)
 const initialDiff = initial?.diffs?.at(-1)
+if (isWorkflowStopped(dataDir, sessionId)) {
+  console.error(
+    'VISUAL_CODER_STOPPED The workflow was stopped. Do not modify example-target files.',
+  )
+  process.exit(2)
+}
 if (!initial) {
   console.error(`No workflow session found for ${sessionId}`)
   process.exit(1)
@@ -40,6 +46,7 @@ console.log(
 )
 
 while (Date.now() - started < timeoutMs) {
+  touchSessionConnection(dataDir, sessionId)
   const manifest = readManifest(dataDir, sessionId)
   if (!manifest) {
     console.error(
@@ -69,7 +76,7 @@ while (Date.now() - started < timeoutMs) {
       ? `\nVISUAL_CODER_INSTRUCTION_START\n${manifest.pendingInstruction}\nVISUAL_CODER_INSTRUCTION_END`
       : ''
     console.log(
-      `VISUAL_CODER_REPLAN Keep accepted steps before step ${manifest.currentStep}. Replace the plan from step ${manifest.currentStep} onward using the instruction below. Report the revised tail with report-plan.mjs, then wait for invocation.${instruction}`,
+      `VISUAL_CODER_REPLAN Keep accepted steps before step ${manifest.currentStep}. Replace the plan from step ${manifest.currentStep} onward using the instruction below. The session blueprint remains leading; if this instruction would differ from it, ask the user before replacing the plan. Report the revised tail with report-plan.mjs, then wait for invocation.${instruction}`,
     )
     process.exit(4)
   }

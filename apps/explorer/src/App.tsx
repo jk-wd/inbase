@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { emptyIntent, fetchAgentIntent, inspectTargetFile, performAgentAction, persistSessionBlueprint } from './agentIntent'
+import { emptyIntent, fetchAgentIntent, fetchAgentIntents, inspectTargetFile, performAgentAction, persistSessionBlueprint } from './agentIntent'
 import { fetchCodebase } from './codebase'
 import {
   layoutWorld,
@@ -100,7 +100,17 @@ function Explorer({
   graph: CodebaseGraph
   onRefreshGraph: () => Promise<void>
 }) {
-  const [intent, setIntent] = useState<AgentIntent>(emptyIntent)
+  const [intents, setIntents] = useState<AgentIntent[]>([])
+  const [focusedSessionId, setFocusedSessionId] = useState<string | null>(null)
+  const intent =
+    intents.find((item) => item.sessionId === focusedSessionId) ??
+    intents[0] ??
+    emptyIntent
+  const creationIntent =
+    intents.find((item) => item.creationMode) ??
+    intents.find((item) => item.status === 'blueprint') ??
+    null
+  const creationMode = Boolean(creationIntent?.creationMode)
   const previewing = intent.preview || isPatchPreview(intent.status)
   const plannedCreates = previewing ? intent.creates : []
   const [userBlocks, setUserBlocks] = useState<UserCreatedBlock[]>([])
@@ -172,12 +182,30 @@ function Explorer({
   const [followLook, setFollowLook] = useState(false)
   const [importedBy, setImportedBy] = useState(false)
   const lastIntentSig = useRef<string | null>(null)
-  const viewedDiffId = useRef<string | null>(null)
-  const browsingHistory = useRef(false)
+  const viewedDiffId = useRef<Record<string, string | null>>({})
+  const browsingHistory = useRef<Record<string, boolean>>({})
 
-  const applyIntent = useCallback((next: AgentIntent) => {
-    setIntent(next)
-    viewedDiffId.current = next.diffId
+  const applyIntent = useCallback((next: AgentIntent, sessionId?: string) => {
+    const targetId = next.sessionId ?? sessionId ?? null
+    setIntents((current) => {
+      const nextList =
+        !targetId || next.status === 'idle' || !next.sessionId
+          ? current.filter((item) => item.sessionId !== targetId)
+          : current.some((item) => item.sessionId === targetId)
+            ? current.map((item) => (item.sessionId === targetId ? next : item))
+            : [...current, next]
+      setFocusedSessionId((currentFocus) => {
+        if (
+          currentFocus &&
+          nextList.some((item) => item.sessionId === currentFocus)
+        ) {
+          return currentFocus
+        }
+        return nextList[0]?.sessionId ?? null
+      })
+      return nextList
+    })
+    if (targetId && next.sessionId) viewedDiffId.current[targetId] = next.diffId
   }, [])
 
   const rememberWalk = useCallback((x: number, z: number) => {
@@ -244,23 +272,25 @@ function Explorer({
 
   const runWorkflowAction = useCallback(
     async (
+      sessionId: string,
       action: WorkflowAction,
       options: { instruction?: string; step?: number } = {},
     ) => {
-      if (!intent.sessionId) return
+      const current = intents.find((item) => item.sessionId === sessionId)
+      if (!current?.sessionId) return
       if (
         (action === 'continue' || action === 'instruct') &&
-        (!intent.diffId || !intent.isActiveDiff)
+        (!current.diffId || !current.isActiveDiff)
       ) {
         return
       }
       try {
         const next = await performAgentAction(
           action,
-          intent.sessionId,
+          current.sessionId,
           {
             ...options,
-            diffId: intent.diffId ?? undefined,
+            diffId: current.diffId ?? undefined,
             ...(action === 'blueprint_send'
               ? {
                   userCreatedBlocks: namedCreatedBlocks(userBlocks),
@@ -272,9 +302,9 @@ function Explorer({
               : {}),
           },
         )
-        browsingHistory.current = false
-        lastIntentSig.current = intentSignature(next)
-        applyIntent(next)
+        browsingHistory.current[sessionId] = false
+        lastIntentSig.current = null
+        applyIntent(next, sessionId)
         if (action === 'invoke' || action === 'continue' || action === 'stop') {
           await onRefreshGraph()
         }
@@ -287,9 +317,7 @@ function Explorer({
       blueprintFunctions,
       blueprintImports,
       blueprintVariables,
-      intent.diffId,
-      intent.isActiveDiff,
-      intent.sessionId,
+      intents,
       onRefreshGraph,
       userBlocks,
       userIslands,
@@ -297,28 +325,29 @@ function Explorer({
   )
 
   const navigateDiff = useCallback(
-    async (diffId: string) => {
+    async (sessionId: string, diffId: string) => {
+      const current = intents.find((item) => item.sessionId === sessionId)
+      if (!current) return
       try {
-        const latest = intent.chain.at(-1)?.id
-        browsingHistory.current = diffId !== latest
-        if (intent.sessionId) {
-          try {
-            await inspectTargetFile({
-              sessionId: intent.sessionId,
-              diffId,
-            })
-          } catch {
-            // Still show the historical preview if disk replay failed.
-          }
+        const latest = current.chain.at(-1)?.id
+        browsingHistory.current[sessionId] = diffId !== latest
+        try {
+          await inspectTargetFile({
+            sessionId,
+            diffId,
+          })
+        } catch {
+          // Still show the historical preview if disk replay failed.
         }
-        const next = await fetchAgentIntent(diffId)
-        lastIntentSig.current = intentSignature(next)
-        applyIntent(next)
+        const next = await fetchAgentIntent(sessionId, diffId)
+        lastIntentSig.current = null
+        applyIntent(next, sessionId)
+        setFocusedSessionId(sessionId)
       } catch {
         // Keep the current chain position if navigation failed.
       }
     },
-    [applyIntent, intent.chain, intent.sessionId],
+    [applyIntent, intents],
   )
 
   const inspectFile = useCallback(
@@ -370,7 +399,7 @@ function Explorer({
   }, [])
 
   useEffect(() => {
-    if (!intent.sessionId) {
+    if (!creationIntent?.sessionId) {
       setUserBlocks([])
       setUserIslands([])
       setBlueprintFunctions([])
@@ -380,13 +409,13 @@ function Explorer({
     }
     const knownFiles = new Set(graph.files.map((file) => file.id))
     const knownFolders = new Set(graph.folders.map((folder) => folder.path))
-    const nextBlocks = parseUserCreatedBlocks(intent.userCreatedBlocks).filter(
+    const nextBlocks = parseUserCreatedBlocks(creationIntent.userCreatedBlocks).filter(
       (block) => !knownFiles.has(block.id),
     )
-    const nextIslands = parseUserCreatedIslands(intent.userCreatedIslands).filter(
+    const nextIslands = parseUserCreatedIslands(creationIntent.userCreatedIslands).filter(
       (island) => !knownFolders.has(island.path),
     )
-    if (intent.creationMode) {
+    if (creationIntent.creationMode) {
       setUserBlocks((current) =>
         current.some((block) => block.naming) || current.length > 0
           ? current
@@ -398,28 +427,29 @@ function Explorer({
           : nextIslands,
       )
       setBlueprintFunctions((current) =>
-        current.length > 0 ? current : intent.blueprintFunctions,
+        current.length > 0 ? current : creationIntent.blueprintFunctions,
       )
       setBlueprintVariables((current) =>
-        current.length > 0 ? current : intent.blueprintVariables,
+        current.length > 0 ? current : creationIntent.blueprintVariables,
       )
       setBlueprintImports((current) =>
-        current.length > 0 ? current : intent.blueprintImports,
+        current.length > 0 ? current : creationIntent.blueprintImports,
       )
       return
     }
     setUserBlocks(nextBlocks)
     setUserIslands(nextIslands)
-    setBlueprintFunctions(intent.blueprintFunctions)
-    setBlueprintVariables(intent.blueprintVariables)
-    setBlueprintImports(intent.blueprintImports)
+    setBlueprintFunctions(creationIntent.blueprintFunctions)
+    setBlueprintVariables(creationIntent.blueprintVariables)
+    setBlueprintImports(creationIntent.blueprintImports)
   }, [
-    intent.blueprintFunctions,
-    intent.blueprintImports,
-    intent.blueprintVariables,
-    intent.creationMode,
-    intent.userCreatedBlocks,
-    intent.userCreatedIslands,
+    creationIntent?.blueprintFunctions,
+    creationIntent?.blueprintImports,
+    creationIntent?.blueprintVariables,
+    creationIntent?.creationMode,
+    creationIntent?.sessionId,
+    creationIntent?.userCreatedBlocks,
+    creationIntent?.userCreatedIslands,
     graph,
   ])
 
@@ -431,8 +461,8 @@ function Explorer({
       variables: PatchSymbolAddition[] = blueprintVariables,
       imports: PatchImportAddition[] = blueprintImports,
     ) => {
-      if (!intent.sessionId || !intent.creationMode) return
-      persistSessionBlueprint(intent.sessionId, {
+      if (!creationIntent?.sessionId || !creationIntent.creationMode) return
+      persistSessionBlueprint(creationIntent.sessionId, {
         userCreatedBlocks: namedCreatedBlocks(blocks),
         userCreatedIslands: namedCreatedIslands(islands),
         addedFunctions: functions,
@@ -444,8 +474,8 @@ function Explorer({
       blueprintFunctions,
       blueprintImports,
       blueprintVariables,
-      intent.creationMode,
-      intent.sessionId,
+      creationIntent?.creationMode,
+      creationIntent?.sessionId,
       userBlocks,
       userIslands,
     ],
@@ -453,7 +483,7 @@ function Explorer({
 
   const placeBlock = useCallback(
     (spot: { x: number; z: number; folder: string }) => {
-      if (!intent.creationMode) return
+      if (!creationMode) return
       setUserBlocks((current) => {
         if (current.some((block) => block.naming)) return current
         return [
@@ -471,12 +501,12 @@ function Explorer({
       })
       document.exitPointerLock()
     },
-    [intent.creationMode],
+    [creationMode],
   )
 
   const placeBlockOnFolder = useCallback(
     (folderPath: string) => {
-      if (!intent.creationMode) return
+      if (!creationMode) return
       const fileCount = displayGraph.files.filter(
         (file) => file.folder === folderPath,
       ).length
@@ -484,7 +514,7 @@ function Explorer({
       if (!spot) return
       placeBlock(spot)
     },
-    [displayGraph.files, intent.creationMode, layout, placeBlock],
+    [displayGraph.files, creationMode, layout, placeBlock],
   )
 
   const commitBlockName = useCallback(
@@ -521,7 +551,7 @@ function Explorer({
 
   const placeIsland = useCallback(
     (parent: string) => {
-      if (!intent.creationMode) return
+      if (!creationMode) return
       setUserIslands((current) => {
         if (current.some((island) => island.naming)) return current
         return [
@@ -537,15 +567,15 @@ function Explorer({
       })
       document.exitPointerLock()
     },
-    [intent.creationMode],
+    [creationMode],
   )
 
   const placeIslandOnFolder = useCallback(
     (parent: string) => {
-      if (!intent.creationMode) return
+      if (!creationMode) return
       placeIsland(parent)
     },
-    [intent.creationMode, placeIsland],
+    [creationMode, placeIsland],
   )
 
   const commitIslandName = useCallback(
@@ -579,7 +609,7 @@ function Explorer({
   }, [])
 
   const deleteSelectedCreatedBlock = useCallback(() => {
-    if (!intent.creationMode || !selectedId) return false
+    if (!creationMode || !selectedId) return false
     const selected = userBlocks.find((block) => block.id === selectedId)
     if (!selected || selected.naming) return false
     const next = userBlocks.filter((block) => block.id !== selectedId)
@@ -587,7 +617,7 @@ function Explorer({
     persistBlueprint(next, userIslands)
     setSelectedId(null)
     return true
-  }, [intent.creationMode, persistBlueprint, selectedId, userBlocks, userIslands])
+  }, [creationMode, persistBlueprint, selectedId, userBlocks, userIslands])
 
   const selectFile = useCallback(
     (fileId: string | null) => {
@@ -596,9 +626,9 @@ function Explorer({
         setSelectedFolder(null)
         setSelectedTick((tick) => tick + 1)
       }
-      if (fileId && intent.creationMode) document.exitPointerLock()
+      if (fileId && creationMode) document.exitPointerLock()
     },
-    [intent.creationMode],
+    [creationMode],
   )
 
   const selectFolder = useCallback((folderPath: string | null) => {
@@ -608,7 +638,7 @@ function Explorer({
 
   const addBlueprintFunction = useCallback(
     (fileId: string, rawName: string) => {
-      if (!intent.creationMode || fileId.startsWith('draft:')) return false
+      if (!creationMode || fileId.startsWith('draft:')) return false
       const name = rawName.trim()
       if (!isBlueprintSymbolName(name)) return false
       const exists =
@@ -631,7 +661,7 @@ function Explorer({
       blueprintImports,
       blueprintVariables,
       displayGraph.files,
-      intent.creationMode,
+      creationMode,
       persistBlueprint,
       userBlocks,
       userIslands,
@@ -640,7 +670,7 @@ function Explorer({
 
   const addBlueprintVariable = useCallback(
     (fileId: string, rawName: string) => {
-      if (!intent.creationMode || fileId.startsWith('draft:')) return false
+      if (!creationMode || fileId.startsWith('draft:')) return false
       const name = rawName.trim()
       if (!isBlueprintSymbolName(name)) return false
       const exists =
@@ -663,7 +693,7 @@ function Explorer({
       blueprintImports,
       blueprintVariables,
       displayGraph.files,
-      intent.creationMode,
+      creationMode,
       persistBlueprint,
       userBlocks,
       userIslands,
@@ -672,7 +702,7 @@ function Explorer({
 
   const addBlueprintImport = useCallback(
     (fileId: string, raw: string) => {
-      if (!intent.creationMode || fileId.startsWith('draft:')) return false
+      if (!creationMode || fileId.startsWith('draft:')) return false
       const parsed = parseBlueprintImport(
         raw,
         fileId,
@@ -702,7 +732,7 @@ function Explorer({
       blueprintImports,
       blueprintVariables,
       displayGraph.files,
-      intent.creationMode,
+      creationMode,
       persistBlueprint,
       userBlocks,
       userIslands,
@@ -711,7 +741,7 @@ function Explorer({
 
   const removeBlueprintFunction = useCallback(
     (fileId: string, name: string) => {
-      if (!intent.creationMode) return
+      if (!creationMode) return
       const next = blueprintFunctions.filter(
         (item) => !(item.file === fileId && item.name === name),
       )
@@ -722,7 +752,7 @@ function Explorer({
       blueprintFunctions,
       blueprintImports,
       blueprintVariables,
-      intent.creationMode,
+      creationMode,
       persistBlueprint,
       userBlocks,
       userIslands,
@@ -731,7 +761,7 @@ function Explorer({
 
   const removeBlueprintVariable = useCallback(
     (fileId: string, name: string) => {
-      if (!intent.creationMode) return
+      if (!creationMode) return
       const next = blueprintVariables.filter(
         (item) => !(item.file === fileId && item.name === name),
       )
@@ -742,7 +772,7 @@ function Explorer({
       blueprintFunctions,
       blueprintImports,
       blueprintVariables,
-      intent.creationMode,
+      creationMode,
       persistBlueprint,
       userBlocks,
       userIslands,
@@ -751,7 +781,7 @@ function Explorer({
 
   const removeBlueprintImport = useCallback(
     (fileId: string, name: string, from: string) => {
-      if (!intent.creationMode) return
+      if (!creationMode) return
       const next = blueprintImports.filter(
         (item) =>
           !(item.file === fileId && item.name === name && item.from === from),
@@ -769,7 +799,7 @@ function Explorer({
       blueprintFunctions,
       blueprintImports,
       blueprintVariables,
-      intent.creationMode,
+      creationMode,
       persistBlueprint,
       userBlocks,
       userIslands,
@@ -844,15 +874,45 @@ function Explorer({
     let cancelled = false
     const poll = async () => {
       try {
-        const next = await fetchAgentIntent(
-          browsingHistory.current ? viewedDiffId.current ?? undefined : undefined,
-        )
-        const signature = intentSignature(next)
+        const bundle = await fetchAgentIntents()
+        const merged: AgentIntent[] = []
+        for (const next of bundle.intents) {
+          const sessionId = next.sessionId
+          if (
+            sessionId &&
+            browsingHistory.current[sessionId] &&
+            viewedDiffId.current[sessionId]
+          ) {
+            merged.push(
+              await fetchAgentIntent(sessionId, viewedDiffId.current[sessionId] ?? undefined),
+            )
+          } else {
+            merged.push(next)
+          }
+        }
+        const signature = JSON.stringify(merged.map(intentSignature))
         if (cancelled || signature === lastIntentSig.current) {
           return
         }
         lastIntentSig.current = signature
-        applyIntent(next)
+        setIntents(merged)
+        for (const next of merged) {
+          if (next.sessionId && !browsingHistory.current[next.sessionId]) {
+            viewedDiffId.current[next.sessionId] = next.diffId
+          }
+        }
+        setFocusedSessionId((current) => {
+          if (current && merged.some((item) => item.sessionId === current)) {
+            return current
+          }
+          if (
+            bundle.focusedSessionId &&
+            merged.some((item) => item.sessionId === bundle.focusedSessionId)
+          ) {
+            return bundle.focusedSessionId
+          }
+          return merged[0]?.sessionId ?? null
+        })
       } catch {
         // Explorer may be running without the intent endpoint yet.
       }
@@ -865,7 +925,7 @@ function Explorer({
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [applyIntent])
+  }, [])
 
   const plannedIds = previewing ? [...intent.files, ...intent.creates] : []
   const blueprintImportEdges = blueprintImports.flatMap((item) => {
@@ -883,6 +943,7 @@ function Explorer({
       <div className="stage">
         <Canvas
           shadows={false}
+          dpr={[1, 1.5]}
           gl={{ antialias: true, toneMappingExposure: 1.25 }}
           camera={{
             position: layout.spawn,
@@ -919,8 +980,8 @@ function Explorer({
             importedBy={importedBy}
             namingId={namingId}
             namingIslandId={namingIslandId}
-            onPlaceBlock={intent.creationMode ? placeBlock : undefined}
-            onPlaceIsland={intent.creationMode ? placeIsland : undefined}
+            onPlaceBlock={creationMode ? placeBlock : undefined}
+            onPlaceIsland={creationMode ? placeIsland : undefined}
             onCommitName={commitBlockName}
             onCancelName={cancelBlockName}
             userCreatedBlocks={userBlocks}
@@ -930,14 +991,19 @@ function Explorer({
       </div>
       <HUD
         graph={displayGraph}
+        layout={layout}
         mode={mode}
         locked={locked}
         selectedId={selectedId}
         selectedTick={selectedTick}
         selectedFolder={selectedFolder}
+        landAt={landAt}
         aimedRelation={aimedRelation}
         currentFolder={currentFolder}
         intent={intent}
+        intents={intents}
+        focusedSessionId={focusedSessionId}
+        onFocusSession={setFocusedSessionId}
         onWorkflowAction={runWorkflowAction}
         onNavigateDiff={navigateDiff}
         onOpenMap={openMap}
@@ -966,6 +1032,9 @@ function Explorer({
         onMapAddFile={placeBlockOnFolder}
         onMapAddFolder={placeIslandOnFolder}
         onInspectFile={inspectFile}
+        plannedIds={plannedIds}
+        createdIds={plannedCreates}
+        deletedIds={deletedIds}
       />
     </>
   )

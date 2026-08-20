@@ -152,6 +152,13 @@ export function isReviewingIntent(status: AgentIntentStatus) {
   )
 }
 
+export function canStopSession(intent: {
+  sessionId: string | null
+  status: AgentIntentStatus
+}) {
+  return Boolean(intent.sessionId) && intent.status !== 'idle'
+}
+
 export type PlanStep = {
   index: number
   title: string
@@ -207,6 +214,11 @@ export type WorkflowAction =
   | 'blueprint_no'
   | 'blueprint_send'
   | 'blueprint_update'
+
+export type AgentIntentBundle = {
+  focusedSessionId: string | null
+  intents: AgentIntent[]
+}
 
 export type AgentIntent = {
   updatedAt: string | null

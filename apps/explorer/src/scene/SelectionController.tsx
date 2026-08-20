@@ -68,21 +68,39 @@ export function SelectionController({
   })
 
   useEffect(() => {
-    const onClick = () => {
+    let travelTimer: number | undefined
+
+    const onClick = (event: MouseEvent) => {
       if (!locked) return
+      if (event.detail > 1) {
+        if (travelTimer) window.clearTimeout(travelTimer)
+        return
+      }
       raycaster.setFromCamera(ndc, camera)
       const hits = raycaster.intersectObjects(scene.children, true)
       const aim = aimedRelation(hits, camera.position, files)
       if (aim) {
-        onTravelTo(aim.from, aim.to)
+        travelTimer = window.setTimeout(() => {
+          travelTimer = undefined
+          onTravelTo(aim.from, aim.to)
+        }, 280)
         return
       }
       const file = hits.find((item) => item.object.userData.fileId)
       onSelect(file ? (file.object.userData.fileId as string) : null)
     }
 
+    const onDblClick = () => {
+      if (travelTimer) window.clearTimeout(travelTimer)
+    }
+
     window.addEventListener('click', onClick)
-    return () => window.removeEventListener('click', onClick)
+    window.addEventListener('dblclick', onDblClick)
+    return () => {
+      if (travelTimer) window.clearTimeout(travelTimer)
+      window.removeEventListener('click', onClick)
+      window.removeEventListener('dblclick', onDblClick)
+    }
   }, [camera, files, locked, onSelect, onTravelTo, scene])
 
   return null
