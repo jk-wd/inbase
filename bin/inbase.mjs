@@ -161,8 +161,17 @@ export async function main(argv = process.argv.slice(2)) {
   process.exitCode = 1
 }
 
-const invoked = process.argv[1] ? path.resolve(process.argv[1]) : ''
-if (invoked === fileURLToPath(import.meta.url)) {
+export function isCliEntry(argv1 = process.argv[1]) {
+  if (!argv1) return false
+  const self = fileURLToPath(import.meta.url)
+  try {
+    return fs.realpathSync(argv1) === fs.realpathSync(self)
+  } catch {
+    return path.resolve(argv1) === path.resolve(self)
+  }
+}
+
+if (isCliEntry()) {
   main().catch((error) => {
     console.error(error instanceof Error ? error.message : error)
     process.exit(1)

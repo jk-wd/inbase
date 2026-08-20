@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { initProject, main } from './inbase.mjs'
+import { initProject, isCliEntry, main } from './inbase.mjs'
 import { applyHostEnv, copyDir, ensureDataDir, ensureGitignoreEntry, skillTemplateDir } from './project.mjs'
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -103,6 +103,20 @@ test('start-session writes a manifest under .inbase', async () => {
   } finally {
     console.log = log
     restoreEnv(env)
+    cleanup()
+  }
+})
+
+test('CLI entry detection follows npm bin symlinks', () => {
+  const { root, cleanup } = tempProject()
+  try {
+    const bin = path.join(packageRoot, 'bin/inbase.mjs')
+    const shim = path.join(root, 'inbase')
+    fs.symlinkSync(bin, shim)
+    assert.equal(isCliEntry(shim), true)
+    assert.equal(isCliEntry(bin), true)
+    assert.equal(isCliEntry(fileURLToPath(import.meta.url)), false)
+  } finally {
     cleanup()
   }
 })
