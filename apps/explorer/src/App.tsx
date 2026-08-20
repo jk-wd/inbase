@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import codebase from './data/codebase.json'
 import { emptyIntent, fetchAgentIntent, performAgentAction, persistSessionBlueprint } from './agentIntent'
+import { fetchCodebase } from './codebase'
 import {
   layoutWorld,
   markCreatedFolders,
@@ -44,8 +44,6 @@ import {
   type WorkflowAction,
 } from './types'
 
-const graph = codebase as CodebaseGraph
-
 function intentSignature(intent: AgentIntent) {
   return JSON.stringify({
     updatedAt: intent.updatedAt,
@@ -67,6 +65,41 @@ function intentSignature(intent: AgentIntent) {
 }
 
 export default function App() {
+  const [graph, setGraph] = useState<CodebaseGraph | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  const refreshGraph = useCallback(async () => {
+    const next = await fetchCodebase()
+    if (next) {
+      setGraph(next)
+      setLoadError(null)
+      return
+    }
+    setLoadError((current) => current ?? 'Could not load the project map.')
+  }, [])
+
+  useEffect(() => {
+    void refreshGraph()
+  }, [refreshGraph])
+
+  if (!graph) {
+    return (
+      <div className="boot">
+        <p>{loadError ?? 'Loading map…'}</p>
+      </div>
+    )
+  }
+
+  return <Explorer graph={graph} onRefreshGraph={refreshGraph} />
+}
+
+function Explorer({
+  graph,
+  onRefreshGraph,
+}: {
+  graph: CodebaseGraph
+  onRefreshGraph: () => Promise<void>
+}) {
   const [intent, setIntent] = useState<AgentIntent>(emptyIntent)
   const previewing = intent.preview || isPatchPreview(intent.status)
   const plannedCreates = previewing ? intent.creates : []
@@ -94,6 +127,7 @@ export default function App() {
       intent.imports ?? [],
     )
   }, [
+    graph,
     intent.createFolders,
     intent.createLines,
     intent.imports,
@@ -240,6 +274,9 @@ export default function App() {
         browsingHistory.current = false
         lastIntentSig.current = intentSignature(next)
         applyIntent(next)
+        if (action === 'invoke' || action === 'continue') {
+          await onRefreshGraph()
+        }
       } catch {
         // Keep the pending patch visible if apply failed.
       }
@@ -252,6 +289,7 @@ export default function App() {
       intent.diffId,
       intent.isActiveDiff,
       intent.sessionId,
+      onRefreshGraph,
       userBlocks,
       userIslands,
     ],
@@ -356,6 +394,7 @@ export default function App() {
     intent.creationMode,
     intent.userCreatedBlocks,
     intent.userCreatedIslands,
+    graph,
   ])
 
   const persistBlueprint = useCallback(
@@ -447,7 +486,7 @@ export default function App() {
       persistBlueprint(next, userIslands)
       return true
     },
-    [persistBlueprint, userBlocks, userIslands],
+    [graph.files, persistBlueprint, userBlocks, userIslands],
   )
 
   const cancelBlockName = useCallback((id: string) => {
@@ -506,7 +545,7 @@ export default function App() {
       persistBlueprint(userBlocks, next)
       return true
     },
-    [persistBlueprint, userBlocks, userIslands],
+    [graph.folders, persistBlueprint, userBlocks, userIslands],
   )
 
   const cancelIslandName = useCallback((id: string) => {

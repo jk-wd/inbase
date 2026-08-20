@@ -8,10 +8,13 @@ import {
   collectImportSpecifiers,
   extractJsSymbols,
 } from './js-source.mjs'
-import { targetName as defaultTargetName, targetRoot as defaultTargetRoot } from './target-config.mjs'
+import {
+  dataDir as defaultDataDir,
+  targetName as defaultTargetName,
+  targetRoot as defaultTargetRoot,
+} from './target-config.mjs'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const defaultOutPath = path.resolve(__dirname, '../src/data/codebase.json')
+const defaultOutPath = path.join(defaultDataDir, 'codebase.json')
 const IGNORE_DIRS = new Set([
   'node_modules',
   'dist',
@@ -19,6 +22,7 @@ const IGNORE_DIRS = new Set([
   'out',
   'coverage',
   '.git',
+  '.inbase',
 ])
 const IGNORE_FILES = new Set(['package-lock.json'])
 

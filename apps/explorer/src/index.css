@@ -52,13 +52,14 @@ button {
   background: rgba(25, 28, 34, 0.72);
 }
 
-.canvas-error {
+.boot {
   position: fixed;
   inset: 0;
   display: grid;
   place-items: center;
   background: var(--vc-chrome);
-  z-index: 3;
+  color: #e7ebf2;
+  font-size: 15px;
 }
 
 .canvas-error .hud-button {

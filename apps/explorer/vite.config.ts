@@ -6,7 +6,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { emptyIntent } from './scripts/patch-lib.mjs'
-import { targetRoot } from './scripts/target-config.mjs'
+import { dataDir, targetRoot } from './scripts/target-config.mjs'
 import {
   answerBlueprint,
   continueDiff,
@@ -20,14 +20,17 @@ import {
 } from './scripts/session-store.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-const dataDir = path.resolve(here, 'src/data')
 const userContextFile = path.join(dataDir, 'user-context.json')
 const codebaseFile = path.join(dataDir, 'codebase.json')
 const scanScript = path.resolve(here, 'scripts/scan-target.mjs')
 
 // The rescan runs with cwd set to the explorer, so hand it the already-resolved
-// root instead of letting a relative VISUAL_CODER_TARGET resolve differently.
-const scanEnv = { ...process.env, VISUAL_CODER_TARGET: targetRoot }
+// root and data dir instead of letting relative env values resolve differently.
+const scanEnv = {
+  ...process.env,
+  VISUAL_CODER_TARGET: targetRoot,
+  INBASE_DATA_DIR: dataDir,
+}
 
 function readBody(req: IncomingMessage) {
   return new Promise<string>((resolve, reject) => {
@@ -70,6 +73,14 @@ function jsonFilePlugin(): Plugin {
         }
         if (req.method === 'POST') {
           void writeUserContext(req, res)
+          return
+        }
+        next()
+      })
+
+      server.middlewares.use('/api/codebase', (req, res, next) => {
+        if (req.method === 'GET') {
+          sendJson(res, 200, readCodebase())
           return
         }
         next()
@@ -208,6 +219,32 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
   }
 }
 
+function readCodebase() {
+  try {
+    return JSON.parse(fs.readFileSync(codebaseFile, 'utf8')) as {
+      root?: string
+      targetName?: string
+      files?: unknown[]
+      folders?: unknown[]
+    }
+  } catch {
+    return {
+      root: '.',
+      targetName: path.basename(targetRoot),
+      files: [],
+      folders: [
+        {
+          path: '.',
+          name: path.basename(targetRoot),
+          parent: null,
+          files: [],
+          children: [],
+        },
+      ],
+    }
+  }
+}
+
 function readUserContext() {
   try {
     const parsed = JSON.parse(fs.readFileSync(userContextFile, 'utf8')) as Record<
@@ -251,5 +288,8 @@ export default defineConfig({
   plugins: [react(), jsonFilePlugin()],
   server: {
     port: 5173,
+    fs: {
+      allow: [here, dataDir],
+    },
   },
 })

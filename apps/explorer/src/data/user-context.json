@@ -1,66 +1,42 @@
 {
-  "updatedAt": "2026-08-20T07:29:10.780Z",
-  "mode": "walk",
+  "updatedAt": "2026-08-20T08:13:33.670Z",
+  "mode": "map",
   "island": {
-    "path": ".",
-    "name": "example-target"
+    "path": "src",
+    "name": "src"
   },
-  "lookingAt": {
-    "id": "tsconfig.json",
-    "name": "tsconfig.json",
-    "path": "tsconfig.json",
-    "folder": "."
-  },
-  "lookingAtFiles": [
-    {
-      "id": "tsconfig.json",
-      "name": "tsconfig.json",
-      "path": "tsconfig.json",
-      "folder": "."
-    },
-    {
-      "id": "vite.config.ts",
-      "name": "vite.config.ts",
-      "path": "vite.config.ts",
-      "folder": "."
-    },
-    {
-      "id": "index.html",
-      "name": "index.html",
-      "path": "index.html",
-      "folder": "."
-    }
-  ],
+  "lookingAt": null,
+  "lookingAtFiles": [],
   "selected": null,
   "filesOnIsland": [
     {
-      "id": "index.html",
-      "name": "index.html",
-      "path": "index.html",
-      "folder": "."
+      "id": "src/App.tsx",
+      "name": "App.tsx",
+      "path": "src/App.tsx",
+      "folder": "src"
     },
     {
-      "id": "package.json",
-      "name": "package.json",
-      "path": "package.json",
-      "folder": "."
+      "id": "src/index.css",
+      "name": "index.css",
+      "path": "src/index.css",
+      "folder": "src"
     },
     {
-      "id": "tsconfig.json",
-      "name": "tsconfig.json",
-      "path": "tsconfig.json",
-      "folder": "."
+      "id": "src/main.tsx",
+      "name": "main.tsx",
+      "path": "src/main.tsx",
+      "folder": "src"
     },
     {
-      "id": "vite.config.ts",
-      "name": "vite.config.ts",
-      "path": "vite.config.ts",
-      "folder": "."
+      "id": "src/vite-env.d.ts",
+      "name": "vite-env.d.ts",
+      "path": "src/vite-env.d.ts",
+      "folder": "src"
     }
   ],
   "position": {
     "x": 0,
-    "z": 2.4
+    "z": 33
   },
   "followLook": false
 }

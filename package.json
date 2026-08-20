@@ -1,6 +1,34 @@
 {
-  "name": "visual-coder",
-  "private": true,
+  "name": "inbase",
+  "version": "0.1.0",
+  "description": "A first-person 3D map of a codebase, with a visual coding workflow for Cursor.",
+  "type": "module",
+  "bin": {
+    "inbase": "bin/inbase.mjs"
+  },
+  "files": [
+    "bin/inbase.mjs",
+    "bin/project.mjs",
+    "bin/session.mjs",
+    "skill",
+    "apps/explorer/index.html",
+    "apps/explorer/package.json",
+    "apps/explorer/tsconfig.json",
+    "apps/explorer/vite.config.ts",
+    "apps/explorer/src/*.ts",
+    "apps/explorer/src/*.tsx",
+    "apps/explorer/src/*.css",
+    "apps/explorer/src/scene",
+    "apps/explorer/src/ui",
+    "apps/explorer/scripts/js-source.mjs",
+    "apps/explorer/scripts/patch-lib.d.ts",
+    "apps/explorer/scripts/patch-lib.mjs",
+    "apps/explorer/scripts/scan-target.mjs",
+    "apps/explorer/scripts/session-store.d.ts",
+    "apps/explorer/scripts/session-store.mjs",
+    "apps/explorer/scripts/target-config.d.ts",
+    "apps/explorer/scripts/target-config.mjs"
+  ],
   "workspaces": [
     "apps/*"
   ],
@@ -8,6 +36,20 @@
     "dev": "npm run dev -w @visual-coder/explorer",
     "dev:target": "npm run dev -w @visual-coder/example-target",
     "build": "npm run build -w @visual-coder/explorer",
-    "scan": "npm run scan -w @visual-coder/explorer"
+    "scan": "npm run scan -w @visual-coder/explorer",
+    "inbase": "node bin/inbase.mjs",
+    "test": "npm test -w @visual-coder/explorer && node --test bin/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@react-three/drei": "^9.117.3",
+    "@react-three/fiber": "^8.17.10",
+    "@vitejs/plugin-react": "^4.3.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.170.0",
+    "vite": "^6.0.3"
   }
 }
