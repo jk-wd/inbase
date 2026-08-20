@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import * as THREE from 'three'
 import {
   fileChangeKind,
   filesImporting,
@@ -12,6 +13,8 @@ import type { CodebaseGraph, PlacedFile, PlacedFolder, WorldLayout } from '../ty
 import { FileBlock } from './FileBlock'
 import { FolderArea } from './FolderArea'
 import { RelationLines } from './RelationLines'
+
+type Vec3 = [number, number, number]
 
 type SelectionThumbnailProps = {
   graph: CodebaseGraph
@@ -154,11 +157,162 @@ function resolveTarget(
   }
 }
 
-const MIN_ZOOM = 0.55
-const MAX_ZOOM = 3.4
+const MIN_ZOOM = 0.45
+const MAX_ZOOM = 6
+const ZERO_PAN: Vec3 = [0, 0, 0]
+const WORLD_UP: Vec3 = [0, 1, 0]
+const LABEL_PROJECT = new THREE.Vector3()
+const GROUND_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+const CURSOR_NDC = new THREE.Vector2()
+const CURSOR_BEFORE = new THREE.Vector3()
+const CURSOR_AFTER = new THREE.Vector3()
+const CURSOR_RAY = new THREE.Raycaster()
+const ZOOM_SCALE = Math.pow(0.95, 1.15)
+
+type LabelCandidate = {
+  id: string
+  position: Vec3
+  priority: number
+}
 
 function clampZoom(value: number) {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value))
+}
+
+function vecAdd(a: Vec3, b: Vec3): Vec3 {
+  return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+}
+
+function vecSub(a: Vec3, b: Vec3): Vec3 {
+  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+
+function vecScale(a: Vec3, scale: number): Vec3 {
+  return [a[0] * scale, a[1] * scale, a[2] * scale]
+}
+
+function vecCross(a: Vec3, b: Vec3): Vec3 {
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ]
+}
+
+function vecLength(a: Vec3) {
+  return Math.hypot(a[0], a[1], a[2])
+}
+
+function vecNormalize(a: Vec3): Vec3 {
+  const length = vecLength(a)
+  return length < 1e-6 ? a : vecScale(a, 1 / length)
+}
+
+function cameraOffset(position: Vec3, lookAt: Vec3, zoom: number): Vec3 {
+  return vecScale(vecSub(position, lookAt), 1 / zoom)
+}
+
+function applyThumbnailCamera(
+  camera: THREE.Camera,
+  position: Vec3,
+  lookAt: Vec3,
+  zoom: number,
+  pan: Vec3,
+) {
+  const offset = cameraOffset(position, lookAt, zoom)
+  camera.up.set(0, 1, 0)
+  camera.position.set(
+    lookAt[0] + pan[0] + offset[0],
+    lookAt[1] + pan[1] + offset[1],
+    lookAt[2] + pan[2] + offset[2],
+  )
+  camera.lookAt(lookAt[0] + pan[0], lookAt[1] + pan[1], lookAt[2] + pan[2])
+  camera.updateProjectionMatrix()
+}
+
+function worldUnderCursor(
+  camera: THREE.Camera,
+  element: HTMLElement,
+  clientX: number,
+  clientY: number,
+  target: THREE.Vector3,
+) {
+  const rect = element.getBoundingClientRect()
+  if (rect.width < 2 || rect.height < 2) return false
+  CURSOR_NDC.set(
+    ((clientX - rect.left) / rect.width) * 2 - 1,
+    -((clientY - rect.top) / rect.height) * 2 + 1,
+  )
+  CURSOR_RAY.setFromCamera(CURSOR_NDC, camera)
+  return Boolean(CURSOR_RAY.ray.intersectPlane(GROUND_PLANE, target))
+}
+
+function cameraPanBasis(position: Vec3, lookAt: Vec3, zoom: number) {
+  const offset = cameraOffset(position, lookAt, zoom)
+  const forward = vecNormalize(vecScale(offset, -1))
+  const right = vecNormalize(vecCross(forward, WORLD_UP))
+  const up = vecNormalize(vecCross(right, forward))
+  return { right, up, distance: vecLength(offset) }
+}
+
+function sameIdSet(a: Set<string>, b: Set<string>) {
+  if (a.size !== b.size) return false
+  for (const id of a) {
+    if (!b.has(id)) return false
+  }
+  return true
+}
+
+function priorityLabels(candidates: LabelCandidate[], limit: number) {
+  return new Set(
+    [...candidates]
+      .sort((left, right) => right.priority - left.priority)
+      .slice(0, limit)
+      .map((candidate) => candidate.id),
+  )
+}
+
+function visibleThumbnailLabels(
+  candidates: LabelCandidate[],
+  camera: THREE.Camera,
+  width: number,
+  height: number,
+  zoom: number,
+) {
+  if (candidates.length <= 4) {
+    return new Set(candidates.map((candidate) => candidate.id))
+  }
+
+  const maxLabels = zoom < 0.85 ? 5 : zoom < 1.35 ? 8 : zoom < 2.2 ? 12 : 18
+  const boxW = Math.max(40, 78 / Math.sqrt(Math.max(zoom, 0.5)))
+  const boxH = Math.max(12, 18 / Math.sqrt(Math.max(zoom, 0.5)))
+  const ranked = [...candidates].sort((left, right) => right.priority - left.priority)
+  const placed: Array<{ x: number; y: number }> = []
+  const visible = new Set<string>()
+
+  for (const candidate of ranked) {
+    LABEL_PROJECT.set(
+      candidate.position[0],
+      candidate.position[1],
+      candidate.position[2],
+    ).project(camera)
+    if (LABEL_PROJECT.z < -1 || LABEL_PROJECT.z > 1) continue
+    const x = (LABEL_PROJECT.x * 0.5 + 0.5) * width
+    const y = (-LABEL_PROJECT.y * 0.5 + 0.5) * height
+    if (x < -24 || x > width + 24 || y < -16 || y > height + 16) continue
+
+    const essential = candidate.priority >= 1000
+    const overlaps = placed.some(
+      (other) => Math.abs(other.x - x) < boxW && Math.abs(other.y - y) < boxH,
+    )
+    if (overlaps && !essential) continue
+    if (visible.size >= maxLabels && !essential) continue
+
+    placed.push({ x, y })
+    visible.add(candidate.id)
+  }
+
+  return visible
 }
 
 function touchDistance(touches: TouchList) {
@@ -172,27 +326,58 @@ function touchDistance(touches: TouchList) {
 function CameraRig({
   position,
   lookAt,
-  zoom,
+  zoomRef,
+  panRef,
+  cameraRef,
 }: {
-  position: [number, number, number]
-  lookAt: [number, number, number]
-  zoom: number
+  position: Vec3
+  lookAt: Vec3
+  zoomRef: { current: number }
+  panRef: { current: Vec3 }
+  cameraRef: { current: THREE.Camera | null }
 }) {
   const { camera } = useThree()
+  cameraRef.current = camera
   const aim = () => {
-    const scale = 1 / zoom
-    camera.up.set(0, 1, 0)
-    camera.position.set(
-      lookAt[0] + (position[0] - lookAt[0]) * scale,
-      lookAt[1] + (position[1] - lookAt[1]) * scale,
-      lookAt[2] + (position[2] - lookAt[2]) * scale,
+    applyThumbnailCamera(
+      camera,
+      position,
+      lookAt,
+      zoomRef.current,
+      panRef.current,
     )
-    camera.lookAt(lookAt[0], lookAt[1], lookAt[2])
-    camera.updateProjectionMatrix()
   }
 
-  useLayoutEffect(aim, [camera, lookAt, position, zoom])
+  useLayoutEffect(aim, [camera, cameraRef, lookAt, panRef, position, zoomRef])
   useFrame(aim)
+  return null
+}
+
+function ThumbnailLabelFilter({
+  candidates,
+  zoom,
+  onChange,
+}: {
+  candidates: LabelCandidate[]
+  zoom: number
+  onChange: (ids: Set<string>) => void
+}) {
+  const { camera, size } = useThree()
+  const visibleRef = useRef<Set<string>>(new Set())
+
+  useFrame(() => {
+    const next = visibleThumbnailLabels(
+      candidates,
+      camera,
+      size.width,
+      size.height,
+      zoom,
+    )
+    if (sameIdSet(visibleRef.current, next)) return
+    visibleRef.current = next
+    onChange(next)
+  })
+
   return null
 }
 
@@ -206,6 +391,11 @@ function ThumbnailScene({
   created,
   deleted,
   zoom,
+  zoomRef,
+  panRef,
+  cameraRef,
+  visibleLabelIds,
+  onVisibleLabels,
 }: {
   graph: CodebaseGraph
   layout: WorldLayout
@@ -216,7 +406,42 @@ function ThumbnailScene({
   created: Set<string>
   deleted: Set<string>
   zoom: number
+  zoomRef: { current: number }
+  panRef: { current: Vec3 }
+  cameraRef: { current: THREE.Camera | null }
+  visibleLabelIds: Set<string>
+  onVisibleLabels: (ids: Set<string>) => void
 }) {
+  const labelCandidates = useMemo(
+    () =>
+      target.files.map(({ file, placed }) => {
+        const selected = file.id === target.selectedFileId
+        const related = target.relatedIds.has(file.id)
+        const changeKind = fileChangeKind(file.id, planned, created, deleted)
+        const dimmed =
+          Boolean(target.selectedFileId) &&
+          !selected &&
+          !related &&
+          !changeKind
+        let priority = placed.size[1]
+        if (selected) priority += 1000
+        else if (related) priority += 400
+        else if (changeKind) priority += 300
+        else if (file.userCreated) priority += 80
+        if (dimmed) priority -= 200
+        return {
+          id: file.id,
+          position: [
+            placed.position[0],
+            placed.position[1] + placed.size[1] / 2 + 0.4,
+            placed.position[2],
+          ] satisfies Vec3,
+          priority,
+        }
+      }),
+    [created, deleted, planned, target],
+  )
+
   return (
     <>
       <color attach="background" args={[WORLD_VOID]} />
@@ -237,12 +462,19 @@ function ThumbnailScene({
       <CameraRig
         position={target.camera.position}
         lookAt={target.camera.lookAt}
+        zoomRef={zoomRef}
+        panRef={panRef}
+        cameraRef={cameraRef}
+      />
+      <ThumbnailLabelFilter
+        candidates={labelCandidates}
         zoom={zoom}
+        onChange={onVisibleLabels}
       />
       <FolderArea
         folder={target.folder}
         highlightKind={highlightedFolders[target.folder.path] ?? null}
-        previewLabels
+        previewLabels={zoom < 1.45}
       />
       {target.files.map(({ file, placed }) => {
         const selected = file.id === target.selectedFileId
@@ -260,6 +492,7 @@ function ThumbnailScene({
             added={created.has(file.id) || file.userCreated}
             highlightMapChange
             previewLabels
+            labelVisible={visibleLabelIds.has(file.id)}
             dimmed={
               Boolean(target.selectedFileId) &&
               !selected &&
@@ -298,9 +531,24 @@ export function SelectionThumbnail({
   onHide,
 }: SelectionThumbnailProps) {
   const stageRef = useRef<HTMLDivElement>(null)
+  const cameraRef = useRef<THREE.Camera | null>(null)
   const zoomRef = useRef(1)
+  const panRef = useRef<Vec3>(ZERO_PAN)
   const pinchRef = useRef({ start: 0, zoom: 1 })
+  const zoomAtCursorRef = useRef(
+    (_clientX: number, _clientY: number, _dollyScale: number) => {},
+  )
+  const dragRef = useRef({
+    pointerId: -1,
+    x: 0,
+    y: 0,
+    pan: ZERO_PAN,
+  })
   const [zoom, setZoom] = useState(1)
+  const [panning, setPanning] = useState(false)
+  const [visibleLabelIds, setVisibleLabelIds] = useState<Set<string>>(
+    () => new Set(),
+  )
   const planned = useMemo(() => new Set(plannedIds), [plannedIds])
   const created = useMemo(() => new Set(createdIds), [createdIds])
   const deleted = useMemo(() => new Set(deletedIds), [deletedIds])
@@ -321,9 +569,14 @@ export function SelectionThumbnail({
     [graph, importedBy, landAt, layout, selectedFolder, selectedId],
   )
 
+  const panningRef = useRef(false)
+
   useEffect(() => {
-    setZoom(1)
     zoomRef.current = 1
+    panRef.current = ZERO_PAN
+    setZoom(1)
+    panningRef.current = false
+    setPanning(false)
   }, [selectedId, selectedFolder, landAt])
 
   useEffect(() => {
@@ -331,20 +584,87 @@ export function SelectionThumbnail({
   }, [zoom])
 
   useEffect(() => {
-    const stage = stageRef.current
-    if (!stage || minimized) return
+    if (!target) {
+      setVisibleLabelIds(new Set())
+      return
+    }
+    const candidates = target.files.map(({ file, placed }) => {
+      const selected = file.id === target.selectedFileId
+      const related = target.relatedIds.has(file.id)
+      const changeKind = fileChangeKind(file.id, planned, created, deleted)
+      let priority = placed.size[1]
+      if (selected) priority += 1000
+      else if (related) priority += 400
+      else if (changeKind) priority += 300
+      return { id: file.id, position: placed.position, priority }
+    })
+    setVisibleLabelIds(priorityLabels(candidates, 8))
+  }, [created, deleted, planned, target])
 
-    const applyZoom = (next: number) => {
-      const clamped = clampZoom(next)
-      zoomRef.current = clamped
-      setZoom(clamped)
+  useEffect(() => {
+    const stage = stageRef.current
+    if (!stage || minimized || !target) return
+
+    const zoomAtCursor = (
+      clientX: number,
+      clientY: number,
+      dollyScale: number,
+    ) => {
+      const camera = cameraRef.current
+      const nextZoom = clampZoom(zoomRef.current / dollyScale)
+      if (nextZoom === zoomRef.current) return
+      const hit =
+        camera !== null &&
+        worldUnderCursor(camera, stage, clientX, clientY, CURSOR_BEFORE)
+      zoomRef.current = nextZoom
+      if (camera) {
+        applyThumbnailCamera(
+          camera,
+          target.camera.position,
+          target.camera.lookAt,
+          nextZoom,
+          panRef.current,
+        )
+        if (
+          hit &&
+          worldUnderCursor(camera, stage, clientX, clientY, CURSOR_AFTER)
+        ) {
+          panRef.current = [
+            panRef.current[0] + CURSOR_BEFORE.x - CURSOR_AFTER.x,
+            panRef.current[1],
+            panRef.current[2] + CURSOR_BEFORE.z - CURSOR_AFTER.z,
+          ]
+          applyThumbnailCamera(
+            camera,
+            target.camera.position,
+            target.camera.lookAt,
+            nextZoom,
+            panRef.current,
+          )
+        }
+      }
+      setZoom(nextZoom)
+    }
+    zoomAtCursorRef.current = zoomAtCursor
+
+    const pointerOverStage = (clientX: number, clientY: number) => {
+      const rect = stage.getBoundingClientRect()
+      return (
+        clientX >= rect.left &&
+        clientX <= rect.right &&
+        clientY >= rect.top &&
+        clientY <= rect.bottom
+      )
     }
 
     const onWheel = (event: WheelEvent) => {
-      if (!event.ctrlKey && !event.metaKey) return
+      if (!pointerOverStage(event.clientX, event.clientY)) return
       event.preventDefault()
-      event.stopPropagation()
-      applyZoom(zoomRef.current * Math.exp(-event.deltaY * 0.01))
+      event.stopImmediatePropagation()
+      if (event.deltaY < 0) zoomAtCursor(event.clientX, event.clientY, ZOOM_SCALE)
+      else if (event.deltaY > 0) {
+        zoomAtCursor(event.clientX, event.clientY, 1 / ZOOM_SCALE)
+      }
     }
 
     const onGestureStart = (event: Event) => {
@@ -356,11 +676,22 @@ export function SelectionThumbnail({
       event.preventDefault()
       const scale = Number((event as Event & { scale?: number }).scale)
       if (!Number.isFinite(scale) || scale <= 0) return
-      applyZoom(pinchRef.current.zoom * scale)
+      const nextZoom = clampZoom(pinchRef.current.zoom * scale)
+      const dolly = zoomRef.current / Math.max(nextZoom, 1e-6)
+      const gesture = event as Event & { clientX?: number; clientY?: number }
+      const rect = stage.getBoundingClientRect()
+      zoomAtCursor(
+        gesture.clientX ?? rect.left + rect.width / 2,
+        gesture.clientY ?? rect.top + rect.height / 2,
+        dolly,
+      )
     }
 
     const onTouchStart = (event: TouchEvent) => {
       if (event.touches.length !== 2) return
+      dragRef.current.pointerId = -1
+      panningRef.current = false
+      setPanning(false)
       pinchRef.current = {
         start: touchDistance(event.touches),
         zoom: zoomRef.current,
@@ -371,25 +702,92 @@ export function SelectionThumbnail({
       if (event.touches.length !== 2 || pinchRef.current.start <= 0) return
       event.preventDefault()
       event.stopPropagation()
-      applyZoom(
-        pinchRef.current.zoom *
-          (touchDistance(event.touches) / pinchRef.current.start),
+      const scale = touchDistance(event.touches) / pinchRef.current.start
+      const nextZoom = clampZoom(pinchRef.current.zoom * scale)
+      const midX = (event.touches[0].clientX + event.touches[1].clientX) / 2
+      const midY = (event.touches[0].clientY + event.touches[1].clientY) / 2
+      const dolly =
+        nextZoom === 0 ? 1 : zoomRef.current / Math.max(nextZoom, 1e-6)
+      zoomAtCursor(midX, midY, dolly)
+    }
+
+    const fromNav = (event: Event) =>
+      event.target instanceof Element &&
+      event.target.closest('.hud-thumbnail-nav')
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (fromNav(event) || event.button !== 0) return
+      dragRef.current = {
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        pan: panRef.current,
+      }
+      stage.setPointerCapture(event.pointerId)
+    }
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (dragRef.current.pointerId !== event.pointerId) return
+      const dx = event.clientX - dragRef.current.x
+      const dy = event.clientY - dragRef.current.y
+      if (!panningRef.current) {
+        if (Math.hypot(dx, dy) <= 3) return
+        panningRef.current = true
+        setPanning(true)
+      }
+      const { right, up, distance } = cameraPanBasis(
+        target.camera.position,
+        target.camera.lookAt,
+        zoomRef.current,
+      )
+      const speed = distance / Math.max(stage.clientHeight, 1)
+      panRef.current = vecAdd(
+        dragRef.current.pan,
+        vecAdd(vecScale(right, -dx * speed), vecScale(up, dy * speed)),
       )
     }
 
-    stage.addEventListener('wheel', onWheel, { passive: false, capture: true })
+    const onPointerUp = (event: PointerEvent) => {
+      if (dragRef.current.pointerId !== event.pointerId) return
+      dragRef.current.pointerId = -1
+      panningRef.current = false
+      setPanning(false)
+      if (stage.hasPointerCapture(event.pointerId)) {
+        stage.releasePointerCapture(event.pointerId)
+      }
+    }
+
+    const onDoubleClick = (event: MouseEvent) => {
+      if (fromNav(event)) return
+      event.preventDefault()
+      zoomRef.current = 1
+      panRef.current = ZERO_PAN
+      setZoom(1)
+    }
+
+    window.addEventListener('wheel', onWheel, { passive: false, capture: true })
     stage.addEventListener('gesturestart', onGestureStart, { capture: true })
     stage.addEventListener('gesturechange', onGestureChange, { capture: true })
     stage.addEventListener('touchstart', onTouchStart, { passive: true })
     stage.addEventListener('touchmove', onTouchMove, { passive: false, capture: true })
+    stage.addEventListener('pointerdown', onPointerDown)
+    stage.addEventListener('pointermove', onPointerMove)
+    stage.addEventListener('pointerup', onPointerUp)
+    stage.addEventListener('pointercancel', onPointerUp)
+    stage.addEventListener('dblclick', onDoubleClick)
     return () => {
-      stage.removeEventListener('wheel', onWheel, { capture: true })
+      window.removeEventListener('wheel', onWheel, { capture: true })
       stage.removeEventListener('gesturestart', onGestureStart, { capture: true })
       stage.removeEventListener('gesturechange', onGestureChange, { capture: true })
       stage.removeEventListener('touchstart', onTouchStart)
       stage.removeEventListener('touchmove', onTouchMove, { capture: true })
+      stage.removeEventListener('pointerdown', onPointerDown)
+      stage.removeEventListener('pointermove', onPointerMove)
+      stage.removeEventListener('pointerup', onPointerUp)
+      stage.removeEventListener('pointercancel', onPointerUp)
+      stage.removeEventListener('dblclick', onDoubleClick)
     }
-  }, [minimized])
+  }, [minimized, target])
 
   if (!target) return null
 
@@ -419,7 +817,11 @@ export function SelectionThumbnail({
         </div>
       </div>
       {!minimized && (
-      <div className="hud-thumbnail-stage" ref={stageRef}>
+      <div
+        className="hud-thumbnail-stage"
+        ref={stageRef}
+        data-panning={panning}
+      >
         <Canvas
           shadows={false}
           dpr={[1, 1.5]}
@@ -442,8 +844,50 @@ export function SelectionThumbnail({
             created={created}
             deleted={deleted}
             zoom={zoom}
+            zoomRef={zoomRef}
+            panRef={panRef}
+            cameraRef={cameraRef}
+            visibleLabelIds={visibleLabelIds}
+            onVisibleLabels={setVisibleLabelIds}
           />
         </Canvas>
+        <div className="hud-thumbnail-hint">Scroll zoom · drag pan</div>
+        <div className="hud-thumbnail-nav">
+          <button
+            className="hud-button hud-icon-button"
+            type="button"
+            aria-label="Zoom out"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => {
+              const rect = stageRef.current?.getBoundingClientRect()
+              if (!rect) return
+              zoomAtCursorRef.current(
+                rect.left + rect.width / 2,
+                rect.top + rect.height / 2,
+                1 / ZOOM_SCALE,
+              )
+            }}
+          >
+            −
+          </button>
+          <button
+            className="hud-button hud-icon-button"
+            type="button"
+            aria-label="Zoom in"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => {
+              const rect = stageRef.current?.getBoundingClientRect()
+              if (!rect) return
+              zoomAtCursorRef.current(
+                rect.left + rect.width / 2,
+                rect.top + rect.height / 2,
+                ZOOM_SCALE,
+              )
+            }}
+          >
+            +
+          </button>
+        </div>
       </div>
       )}
     </div>

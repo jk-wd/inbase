@@ -1,65 +1,17 @@
 {
-  "updatedAt": "2026-08-20T13:58:41.240Z",
-  "mode": "walk",
+  "updatedAt": "2026-08-20T14:23:30.762Z",
+  "mode": "map",
   "island": {
-    "path": "src",
-    "name": "src"
+    "path": null,
+    "name": "open ground"
   },
-  "lookingAt": {
-    "id": "src/main.tsx",
-    "name": "main.tsx",
-    "path": "src/main.tsx",
-    "folder": "src"
-  },
-  "lookingAtFiles": [
-    {
-      "id": "src/main.tsx",
-      "name": "main.tsx",
-      "path": "src/main.tsx",
-      "folder": "src"
-    },
-    {
-      "id": "src/App.tsx",
-      "name": "App.tsx",
-      "path": "src/App.tsx",
-      "folder": "src"
-    }
-  ],
-  "selected": {
-    "id": "src/main.tsx",
-    "name": "main.tsx",
-    "path": "src/main.tsx",
-    "folder": "src"
-  },
-  "filesOnIsland": [
-    {
-      "id": "src/App.tsx",
-      "name": "App.tsx",
-      "path": "src/App.tsx",
-      "folder": "src"
-    },
-    {
-      "id": "src/index.css",
-      "name": "index.css",
-      "path": "src/index.css",
-      "folder": "src"
-    },
-    {
-      "id": "src/main.tsx",
-      "name": "main.tsx",
-      "path": "src/main.tsx",
-      "folder": "src"
-    },
-    {
-      "id": "src/vite-env.d.ts",
-      "name": "vite-env.d.ts",
-      "path": "src/vite-env.d.ts",
-      "folder": "src"
-    }
-  ],
+  "lookingAt": null,
+  "lookingAtFiles": [],
+  "selected": null,
+  "filesOnIsland": [],
   "position": {
-    "x": 0.14,
-    "z": 47.61
+    "x": 0,
+    "z": 40.93
   },
   "followLook": false
 }

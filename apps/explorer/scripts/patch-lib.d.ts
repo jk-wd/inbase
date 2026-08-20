@@ -46,12 +46,16 @@ export function extractPatchAdditions(
   addedFunctions: PatchSymbolAddition[]
   addedVariables: PatchSymbolAddition[]
   addedImports: PatchImportAddition[]
+  changedFunctions: PatchSymbolAddition[]
+  changedVariables: PatchSymbolAddition[]
 }
 
 export function accumulatePatchAdditions(patches?: string[]): {
   addedFunctions: PatchSymbolAddition[]
   addedVariables: PatchSymbolAddition[]
   addedImports: PatchImportAddition[]
+  changedFunctions: PatchSymbolAddition[]
+  changedVariables: PatchSymbolAddition[]
 }
 
 export function applyUnifiedPatchToContents(
@@ -79,6 +83,7 @@ export const emptyIntent: {
   feature: null
   steps: unknown[]
   step: null
+  stepByStep: boolean
   files: string[]
   creates: string[]
   deletes: string[]
@@ -88,6 +93,8 @@ export const emptyIntent: {
   addedFunctions: PatchSymbolAddition[]
   addedVariables: PatchSymbolAddition[]
   addedImports: PatchImportAddition[]
+  changedFunctions: PatchSymbolAddition[]
+  changedVariables: PatchSymbolAddition[]
   reason: null
   sessionId: null
   diffId: null

@@ -217,6 +217,12 @@ export function MapView({
     }
 
     const onWheel = (event: WheelEvent) => {
+      const overlay = document.elementFromPoint(event.clientX, event.clientY)
+      if (overlay?.closest('.hud-thumbnail')) {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        return
+      }
       event.preventDefault()
       event.stopImmediatePropagation()
       if (event.deltaY < 0) zoomAtCursor(event.clientX, event.clientY, zoomScale)

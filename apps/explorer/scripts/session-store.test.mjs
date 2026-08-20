@@ -24,6 +24,7 @@ import {
   requestReplan,
   sendBlueprint,
   sessionIntent,
+  setStepByStep,
   startSession,
   stopSession,
   touchSessionConnection,
@@ -388,6 +389,101 @@ test('invokes, reviews, continues, and waits to run the next step', () => {
       fs.existsSync(path.join(env.dataDir, 'diff-sessions', 'happy-chat')),
       false,
     )
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('step-by-step off runs remaining steps and waits on Complete', () => {
+  const env = fixture()
+  try {
+    startSession(env.dataDir, { sessionId: 'auto-chat' })
+    assert.equal(sessionIntent(env.dataDir, 'auto-chat').stepByStep, true)
+    setStepByStep(env.dataDir, 'auto-chat', false)
+    assert.equal(readManifest(env.dataDir, 'auto-chat').stepByStep, false)
+    answerBlueprint(env.dataDir, 'auto-chat', false)
+
+    const planned = reportPlan(env.dataDir, {
+      sessionId: 'auto-chat',
+      feature: 'Auto run',
+      stepTitles: ['Build value', 'Finish value'],
+    })
+    assert.equal(planned.phase, 'working')
+    assert.equal(planned.currentStep, 1)
+    assert.equal(sessionIntent(env.dataDir, 'auto-chat').stepByStep, false)
+
+    const first = appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'auto-chat',
+      patchText: oneToTwo,
+    })
+    assert.equal(first.entry.step, 1)
+    assert.equal(first.entry.status, 'applied')
+    assert.equal(first.manifest.phase, 'working')
+    assert.equal(first.manifest.currentStep, 2)
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
+
+    const second = appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'auto-chat',
+      patchText:
+        '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 2\n+export const value = 4\n',
+    })
+    assert.equal(second.entry.step, 2)
+    assert.equal(second.entry.status, 'pending')
+    assert.equal(second.manifest.phase, 'review')
+    const intent = sessionIntent(env.dataDir, 'auto-chat', ['src/a.ts'])
+    assert.equal(intent.status, 'pending')
+    assert.equal(intent.chain.length, 2)
+
+    continueDiff(env.dataDir, env.targetRoot, 'auto-chat', '0002')
+    assert.equal(readManifest(env.dataDir, 'auto-chat'), null)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('turning step-by-step off at plan ready invokes the current step', () => {
+  const env = fixture()
+  try {
+    reportPlan(env.dataDir, {
+      sessionId: 'toggle-chat',
+      feature: 'Toggle off',
+      stepTitles: ['Build value', 'Finish value'],
+    })
+    assert.equal(readManifest(env.dataDir, 'toggle-chat').phase, 'plan_ready')
+    const next = setStepByStep(env.dataDir, 'toggle-chat', false)
+    assert.equal(next.phase, 'working')
+    assert.equal(next.currentStep, 1)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('turning step-by-step off during review continues into the next step', () => {
+  const env = fixture()
+  try {
+    reportPlan(env.dataDir, {
+      sessionId: 'review-toggle',
+      feature: 'Toggle during review',
+      stepTitles: ['Build value', 'Finish value'],
+    })
+    invokeStep(env.dataDir, 'review-toggle', 1)
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'review-toggle',
+      patchText: oneToTwo,
+    })
+    assert.equal(readManifest(env.dataDir, 'review-toggle').phase, 'review')
+    const next = setStepByStep(
+      env.dataDir,
+      'review-toggle',
+      false,
+      env.targetRoot,
+    )
+    assert.equal(next.phase, 'working')
+    assert.equal(next.currentStep, 2)
+    assert.equal(next.diffs[0].status, 'applied')
   } finally {
     env.cleanup()
   }

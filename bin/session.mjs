@@ -125,7 +125,9 @@ export async function reportPlan(args) {
     stepTitles: stepsParsed.values,
   })
   console.log(
-    `VISUAL_CODER_PLAN_READY Reported ${manifest.steps.length} plan step(s) for session ${sessionId}. Wait for the user to invoke step ${manifest.currentStep}.`,
+    manifest.phase === 'working'
+      ? `VISUAL_CODER_PLAN_READY Reported ${manifest.steps.length} plan step(s) for session ${sessionId}. Step by step is off, so step ${manifest.currentStep} is already invoked. Implement it, then wait again.`
+      : `VISUAL_CODER_PLAN_READY Reported ${manifest.steps.length} plan step(s) for session ${sessionId}. Wait for the user to invoke step ${manifest.currentStep}.`,
   )
 }
 
@@ -148,16 +150,21 @@ export async function waitForApproval(args) {
     console.error(`No workflow session found for ${sessionId}`)
     process.exit(1)
   }
+  store.autoAdvance(config.dataDir, sessionId, config.targetRoot)
+  const afterAdvance = store.readManifest(config.dataDir, sessionId) ?? initial
   console.log(
-    initial.phase === 'plan_ready'
-      ? `Waiting for the user to invoke step ${initial.currentStep}...`
-      : initial.phase === 'review' && initialDiff
-        ? `Waiting for the user to run the next step after ${initialDiff.id}...`
+    afterAdvance.phase === 'plan_ready'
+      ? `Waiting for the user to invoke step ${afterAdvance.currentStep}...`
+      : afterAdvance.phase === 'review' && afterAdvance.diffs?.at(-1)
+        ? afterAdvance.stepByStep === false
+          ? `Waiting for the finish step after ${afterAdvance.diffs.at(-1).id}...`
+          : `Waiting for the user to run the next step after ${afterAdvance.diffs.at(-1).id}...`
         : `Waiting for the visual workflow in session ${sessionId}...`,
   )
 
   while (Date.now() - started < timeoutMs) {
     store.touchSessionConnection(config.dataDir, sessionId)
+    store.autoAdvance(config.dataDir, sessionId, config.targetRoot)
     const manifest = store.readManifest(config.dataDir, sessionId)
     if (!manifest) {
       console.error(
@@ -249,7 +256,12 @@ export async function proposePatch(args) {
     patchText,
   })
 
+  const last = entry.step >= manifest.steps.length
   console.log(
-    `VISUAL_CODER_STEP_READY Published diff ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Wait for Continue or an alternative instruction.`,
+    manifest.phase === 'working'
+      ? `VISUAL_CODER_STEP_READY Published diff ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Step by step is off, so the next step is already invoked. Wait again.`
+      : last
+        ? `VISUAL_CODER_STEP_READY Published diff ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Walk the diffs, then Complete to finish.`
+        : `VISUAL_CODER_STEP_READY Published diff ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Wait for Continue or an alternative instruction.`,
   )
 }

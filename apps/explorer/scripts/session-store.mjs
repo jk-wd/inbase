@@ -323,6 +323,7 @@ export function readManifest(dataDir, sessionId) {
     value.pendingInstruction ??= null
     value.workStartedAt ??= null
   }
+  if (typeof value.stepByStep !== 'boolean') value.stepByStep = true
   return value
 }
 
@@ -483,6 +484,7 @@ export function sessionIntent(
     feature: manifest.feature,
     steps: manifest.steps,
     step: activeView ? manifest.currentStep : selected?.step ?? manifest.currentStep,
+    stepByStep: isStepByStep(manifest),
     reason: activeView ? currentPlanStep?.title ?? null : selected?.title ?? null,
     sessionId,
     diffId: selected?.id ?? null,
@@ -725,6 +727,33 @@ function featureName(value) {
   return trimmed
 }
 
+export function isStepByStep(manifest) {
+  return manifest?.stepByStep !== false
+}
+
+export function autoAdvance(dataDir, sessionId, targetRoot = null) {
+  const manifest = readManifest(dataDir, sessionId)
+  if (!manifest || isStepByStep(manifest)) return manifest
+  if (manifest.phase === 'plan_ready') {
+    return invokeStep(dataDir, sessionId, manifest.currentStep, targetRoot)
+  }
+  if (manifest.phase === 'review') {
+    const active = manifest.diffs.at(-1)
+    if (!active || active.status !== 'pending') return manifest
+    if (active.step >= manifest.steps.length) return manifest
+    return invokeStep(dataDir, sessionId, active.step + 1, targetRoot)
+  }
+  return manifest
+}
+
+export function setStepByStep(dataDir, sessionId, enabled, targetRoot = null) {
+  const manifest = requireManifest(dataDir, sessionId)
+  manifest.stepByStep = Boolean(enabled)
+  writeManifest(dataDir, manifest)
+  if (isStepByStep(manifest)) return manifest
+  return autoAdvance(dataDir, sessionId, targetRoot)
+}
+
 export function startSession(dataDir, input) {
   const sessionId = assertSessionId(input.sessionId)
   clearStoppedMarker(dataDir, sessionId)
@@ -742,6 +771,7 @@ export function startSession(dataDir, input) {
     steps: [],
     status: 'active',
     phase: 'blueprint_ask',
+    stepByStep: true,
     currentStep: 1,
     activeDiffId: null,
     pendingInstruction: null,
@@ -841,6 +871,7 @@ export function reportPlan(dataDir, input) {
       steps: [],
       status: 'active',
       phase: 'preparing',
+      stepByStep: true,
       currentStep: 1,
       activeDiffId: null,
       pendingInstruction: null,
@@ -857,7 +888,7 @@ export function reportPlan(dataDir, input) {
     manifest.workStartedAt = null
     writeManifest(dataDir, manifest)
     focusSession(dataDir, sessionId)
-    return manifest
+    return autoAdvance(dataDir, sessionId)
   }
 
   if (existing.phase !== 'replanning') {
@@ -874,7 +905,7 @@ export function reportPlan(dataDir, input) {
   existing.workStartedAt = null
   writeManifest(dataDir, existing)
   focusSession(dataDir, sessionId)
-  return existing
+  return autoAdvance(dataDir, sessionId)
 }
 
 export function invokeStep(dataDir, sessionId, step, targetRoot = null) {
@@ -978,7 +1009,14 @@ export function appendDiff(dataDir, targetRoot, input) {
   writeManifest(dataDir, manifest)
   materializeDiff(dataDir, targetRoot, sessionId, id)
   focusSession(dataDir, sessionId)
-  return { manifest, entry }
+  const advanced = autoAdvance(dataDir, sessionId, targetRoot)
+  if (!advanced) {
+    throw new Error(`Session ${sessionId} disappeared after publishing a diff`)
+  }
+  return {
+    manifest: advanced,
+    entry: advanced.diffs.find((item) => item.id === id) ?? entry,
+  }
 }
 
 function pendingActive(manifest, diffId) {
@@ -1015,13 +1053,12 @@ export function continueDiff(dataDir, targetRoot, sessionId, diffId) {
     writeManifest(dataDir, manifest)
     finalizeFinishedSession(dataDir, sessionId)
     return manifest
-  } else {
-    manifest.currentStep = active.step + 1
-    manifest.phase = 'plan_ready'
-    manifest.workStartedAt = null
   }
+  manifest.currentStep = active.step + 1
+  manifest.phase = 'plan_ready'
+  manifest.workStartedAt = null
   writeManifest(dataDir, manifest)
-  return manifest
+  return autoAdvance(dataDir, sessionId, targetRoot)
 }
 
 export function requestReplan(dataDir, sessionId, diffId, instruction) {

@@ -14,10 +14,13 @@ Skip it for git, lockfiles, `.inbase`, `.cursor`, or questions with no code
 changes.
 
 The LLM uses a plan-first loop. It reports the complete plan before writing a
-patch, waits for the user to invoke the highlighted step, publishes only that
-step's diff, then waits for **Run step** on the following step or an alternative
-instruction. Always work via patch files. Do not Write, StrReplace, or Delete
-project files.
+patch. When **Step by step** is on, it waits for the user to invoke the
+highlighted step, publishes only that step's diff, then waits for **Run step**
+on the following step or an alternative instruction. When **Step by step** is
+off, `inbase wait-for-approval` returns `VISUAL_CODER_EXECUTE` for every
+remaining step without the user clicking Run step; after the last patch, wait
+for the user to **Complete**. They can still walk Previous/Next over the diffs.
+Always work via patch files. Do not Write, StrReplace, or Delete project files.
 
 Every Cursor chat has an explicit session ID. Pass that same ID to every
 command. The visualizer stores immutable diffs under `.inbase/diff-sessions/<session-id>/diffs/`.
@@ -88,7 +91,8 @@ npx inbase report-plan \
 npx inbase wait-for-approval --session "<current-cursor-chat-id>"
 ```
 
-   Do not write a patch until this prints `VISUAL_CODER_EXECUTE`.
+   Do not write a patch until this prints `VISUAL_CODER_EXECUTE`. If Step by
+   step is off, this returns immediately for each remaining step.
 9. Implement only the invoked step as a unified diff. Paths are relative to the
    project root (same ids as `codebase.json`):
 
@@ -121,8 +125,9 @@ npx inbase propose-patch \
    stored in the session folder.
 
 10. **Stop.** Do not apply the patch and do not edit project files directly.
-11. Wait until the user clicks **Run step** on the next step, sends an alternative instruction,
-   or stops the workflow:
+11. Wait until the user clicks **Run step** on the next step (or, when Step by
+   step is off, until the next step is auto-invoked), sends an alternative
+   instruction, clicks **Complete** on the last step, or stops the workflow:
 
 ```bash
 npx inbase wait-for-approval --session "<current-cursor-chat-id>"
@@ -169,7 +174,7 @@ npx inbase propose-patch --session "<current-cursor-chat-id>" --clear
 - Write, edit, create, or delete project files directly
 - Announce file lists instead of a patch
 - Write a patch before its plan step is invoked
-- Propose the next step before the user clicks **Run step**
+- Propose the next step before `inbase wait-for-approval` returns `VISUAL_CODER_EXECUTE`
 - Propose another patch after `VISUAL_CODER_FINISHED`
 - Reuse, overwrite, or expand an existing session diff
 - Use this flow for git, lockfiles, or other non-source work

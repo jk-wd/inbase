@@ -9,10 +9,12 @@ const sessionStorePath = path.resolve(
   repoRoot,
   'apps/explorer/scripts/session-store.mjs',
 )
-const { isWorkflowStopped, readManifest, touchSessionConnection } = await import(pathToFileURL(sessionStorePath).href)
+const { isWorkflowStopped, readManifest, touchSessionConnection, autoAdvance } =
+  await import(pathToFileURL(sessionStorePath).href)
 const sessionIndex = process.argv.indexOf('--session')
 const sessionId = sessionIndex >= 0 ? process.argv[sessionIndex + 1] : null
 
+const targetRoot = path.resolve(repoRoot, 'apps/example-target')
 const timeoutMs = Number(
   process.argv.includes('--timeout')
     ? process.argv[process.argv.indexOf('--timeout') + 1]
@@ -25,28 +27,34 @@ if (!sessionId) {
 }
 
 const started = Date.now()
-const initial = readManifest(dataDir, sessionId)
-const initialDiff = initial?.diffs?.at(-1)
 if (isWorkflowStopped(dataDir, sessionId)) {
   console.error(
     'VISUAL_CODER_STOPPED The workflow was stopped. Do not modify example-target files.',
   )
   process.exit(2)
 }
+autoAdvance(dataDir, sessionId, targetRoot)
+const initial = readManifest(dataDir, sessionId)
+const initialDiff = initial?.diffs?.at(-1)
 if (!initial) {
   console.error(`No workflow session found for ${sessionId}`)
   process.exit(1)
 }
 console.log(
   initial.phase === 'plan_ready'
-    ? `Waiting for the user to invoke step ${initial.currentStep}...`
+    ? initial.stepByStep === false
+      ? `Waiting for step ${initial.currentStep} to start…`
+      : `Waiting for the user to invoke step ${initial.currentStep}...`
     : initial.phase === 'review' && initialDiff
-      ? `Waiting for the user to run the next step after ${initialDiff.id}...`
+      ? initial.stepByStep === false
+        ? `Waiting for the finish step after ${initialDiff.id}...`
+        : `Waiting for the user to run the next step after ${initialDiff.id}...`
       : `Waiting for the visual workflow in session ${sessionId}...`,
 )
 
 while (Date.now() - started < timeoutMs) {
   touchSessionConnection(dataDir, sessionId)
+  autoAdvance(dataDir, sessionId, targetRoot)
   const manifest = readManifest(dataDir, sessionId)
   if (!manifest) {
     console.error(

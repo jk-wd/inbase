@@ -27,12 +27,49 @@
       "name": "App.tsx",
       "path": "src/App.tsx",
       "folder": "src",
-      "lines": 10,
+      "lines": 13,
       "language": "tsx",
       "symbols": [
         {
           "name": "App",
           "kind": "function"
+        }
+      ],
+      "imports": [
+        "src/components/Joke.tsx"
+      ]
+    },
+    {
+      "id": "src/components/Joke.tsx",
+      "name": "Joke.tsx",
+      "path": "src/components/Joke.tsx",
+      "folder": "src/components",
+      "lines": 28,
+      "language": "tsx",
+      "symbols": [
+        {
+          "name": "pickJoke",
+          "kind": "function"
+        },
+        {
+          "name": "Joke",
+          "kind": "function"
+        },
+        {
+          "name": "JOKES",
+          "kind": "variable"
+        },
+        {
+          "name": "options",
+          "kind": "variable"
+        },
+        {
+          "name": "joke",
+          "kind": "variable"
+        },
+        {
+          "name": "setJoke",
+          "kind": "variable"
         }
       ],
       "imports": []
@@ -120,6 +157,17 @@
         "src/index.css",
         "src/main.tsx",
         "src/vite-env.d.ts"
+      ],
+      "children": [
+        "src/components"
+      ]
+    },
+    {
+      "path": "src/components",
+      "name": "components",
+      "parent": "src",
+      "files": [
+        "src/components/Joke.tsx"
       ],
       "children": []
     }

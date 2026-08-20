@@ -39,7 +39,7 @@ function parseHunks(section) {
   let current = null
 
   for (const line of lines) {
-    const header = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/)
+    const header = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$/)
     if (header) {
       if (current) hunks.push(current)
       current = {
@@ -47,6 +47,7 @@ function parseHunks(section) {
         oldCount: Number(header[2] ?? '1'),
         newStart: Number(header[3]),
         newCount: Number(header[4] ?? '1'),
+        headerContext: (header[5] ?? '').trim(),
         lines: [],
       }
       continue
@@ -182,30 +183,107 @@ function emptyAdditions() {
     addedFunctions: [],
     addedVariables: [],
     addedImports: [],
+    changedFunctions: [],
+    changedVariables: [],
   }
+}
+
+function isImportLine(line) {
+  return /^\s*import\b/.test(line)
+}
+
+function isTopLevelSymbolLine(line) {
+  return extractSymbols(line).length > 0 && !/^\s/.test(line)
+}
+
+function enclosingChangedSymbols(entry) {
+  if (entry.kind === 'add') return []
+  const found = []
+  const seen = new Set()
+
+  for (const hunk of entry.hunks) {
+    const contextLines = []
+    let addedTopLevel = false
+    let hasBodyEdit = false
+    for (const line of hunk.lines) {
+      const tag = line[0]
+      const body = line.slice(1)
+      if (tag === ' ') contextLines.push(body)
+      if (tag !== '+' && tag !== '-') continue
+      if (tag === '+' && isTopLevelSymbolLine(body)) addedTopLevel = true
+      if (
+        !addedTopLevel &&
+        extractSymbols(body).length === 0 &&
+        !isImportLine(body) &&
+        body.trim()
+      ) {
+        hasBodyEdit = true
+      }
+    }
+    if (!hasBodyEdit) continue
+    for (const symbol of [
+      ...extractSymbols(hunk.headerContext ?? ''),
+      ...extractSymbols(contextLines.join('\n')),
+    ]) {
+      const key = `${symbol.kind}:${symbol.name}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      found.push(symbol)
+    }
+  }
+
+  return found
 }
 
 function applyEntriesToAdditions(current, entries) {
   const functions = new Map(
-    current.addedFunctions.map((item) => [additionKey(item.file, item.name), item]),
+    (current.addedFunctions ?? []).map((item) => [additionKey(item.file, item.name), item]),
   )
   const variables = new Map(
-    current.addedVariables.map((item) => [additionKey(item.file, item.name), item]),
+    (current.addedVariables ?? []).map((item) => [additionKey(item.file, item.name), item]),
+  )
+  const changedFunctions = new Map(
+    (current.changedFunctions ?? []).map((item) => [
+      additionKey(item.file, item.name),
+      item,
+    ]),
+  )
+  const changedVariables = new Map(
+    (current.changedVariables ?? []).map((item) => [
+      additionKey(item.file, item.name),
+      item,
+    ]),
   )
   const imports = new Map(
-    current.addedImports.map((item) => [additionKey(item.file, item.name, item.from), item]),
+    (current.addedImports ?? []).map((item) => [
+      additionKey(item.file, item.name, item.from),
+      item,
+    ]),
   )
 
+  const dropFrom = (bucket, fileId) => {
+    for (const key of [...bucket.keys()]) {
+      if (bucket.get(key).file === fileId) bucket.delete(key)
+    }
+  }
+
   const dropFile = (fileId) => {
-    for (const key of [...functions.keys()]) {
-      if (functions.get(key).file === fileId) functions.delete(key)
+    dropFrom(functions, fileId)
+    dropFrom(variables, fileId)
+    dropFrom(changedFunctions, fileId)
+    dropFrom(changedVariables, fileId)
+    dropFrom(imports, fileId)
+  }
+
+  const markChanged = (kind, file, name) => {
+    const key = additionKey(file, name)
+    if (kind === 'function') {
+      if (functions.has(key)) return
+      changedFunctions.set(key, { name, file })
+      return
     }
-    for (const key of [...variables.keys()]) {
-      if (variables.get(key).file === fileId) variables.delete(key)
-    }
-    for (const key of [...imports.keys()]) {
-      if (imports.get(key).file === fileId) imports.delete(key)
-    }
+    if (variables.has(key)) return
+    changedVariables.set(key, { name, file })
   }
 
   for (const entry of entries) {
@@ -224,15 +302,36 @@ function applyEntriesToAdditions(current, entries) {
     )
 
     for (const symbol of removedSymbols) {
-      if (keptSymbolKeys.has(`${symbol.kind}:${symbol.name}`)) continue
-      if (symbol.kind === 'function') functions.delete(additionKey(entry.id, symbol.name))
-      else variables.delete(additionKey(entry.id, symbol.name))
+      const key = additionKey(entry.id, symbol.name)
+      if (keptSymbolKeys.has(`${symbol.kind}:${symbol.name}`)) {
+        markChanged(symbol.kind, entry.id, symbol.name)
+        continue
+      }
+      if (symbol.kind === 'function') {
+        functions.delete(key)
+        changedFunctions.delete(key)
+      } else {
+        variables.delete(key)
+        changedVariables.delete(key)
+      }
     }
     for (const symbol of addedSymbols) {
-      if (previousSymbolKeys.has(`${symbol.kind}:${symbol.name}`)) continue
+      if (previousSymbolKeys.has(`${symbol.kind}:${symbol.name}`)) {
+        markChanged(symbol.kind, entry.id, symbol.name)
+        continue
+      }
       const item = { name: symbol.name, file: entry.id }
-      if (symbol.kind === 'function') functions.set(additionKey(entry.id, symbol.name), item)
-      else variables.set(additionKey(entry.id, symbol.name), item)
+      const key = additionKey(entry.id, symbol.name)
+      if (symbol.kind === 'function') {
+        changedFunctions.delete(key)
+        functions.set(key, item)
+      } else {
+        changedVariables.delete(key)
+        variables.set(key, item)
+      }
+    }
+    for (const symbol of enclosingChangedSymbols(entry)) {
+      markChanged(symbol.kind, entry.id, symbol.name)
     }
 
     const removedBindings = extractImportBindings(removedSource(entry))
@@ -262,6 +361,8 @@ function applyEntriesToAdditions(current, entries) {
     addedFunctions: [...functions.values()],
     addedVariables: [...variables.values()],
     addedImports: [...imports.values()],
+    changedFunctions: [...changedFunctions.values()],
+    changedVariables: [...changedVariables.values()],
   }
 }
 
@@ -409,6 +510,7 @@ export const emptyIntent = {
   feature: null,
   steps: [],
   step: null,
+  stepByStep: true,
   files: [],
   creates: [],
   deletes: [],
@@ -418,6 +520,8 @@ export const emptyIntent = {
   addedFunctions: [],
   addedVariables: [],
   addedImports: [],
+  changedFunctions: [],
+  changedVariables: [],
   reason: null,
   sessionId: null,
   diffId: null,
@@ -464,6 +568,8 @@ export function overlayPatch(intent, patchText, knownFileIds = []) {
       addedFunctions: [],
       addedVariables: [],
       addedImports: [],
+      changedFunctions: [],
+      changedVariables: [],
     }
   }
 
@@ -480,6 +586,8 @@ export function overlayPatch(intent, patchText, knownFileIds = []) {
       addedFunctions: base.addedFunctions ?? [],
       addedVariables: base.addedVariables ?? [],
       addedImports: base.addedImports ?? [],
+      changedFunctions: base.changedFunctions ?? [],
+      changedVariables: base.changedVariables ?? [],
     }
   }
 

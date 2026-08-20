@@ -52,6 +52,7 @@ export const emptyIntent: AgentIntent = {
   feature: null,
   steps: [],
   step: null,
+  stepByStep: true,
   files: [],
   creates: [],
   deletes: [],
@@ -61,6 +62,8 @@ export const emptyIntent: AgentIntent = {
   addedFunctions: [],
   addedVariables: [],
   addedImports: [],
+  changedFunctions: [],
+  changedVariables: [],
   reason: null,
   sessionId: null,
   diffId: null,
@@ -90,6 +93,7 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     feature: data?.feature ?? null,
     steps: Array.isArray(data?.steps) ? data.steps : [],
     step: typeof data?.step === 'number' ? data.step : null,
+    stepByStep: data?.stepByStep !== false,
     files: Array.isArray(data?.files) ? data.files : [],
     creates: Array.isArray(data?.creates) ? data.creates : [],
     deletes: Array.isArray(data?.deletes) ? data.deletes : [],
@@ -102,6 +106,8 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     addedFunctions: normalizeSymbolAdditions(data?.addedFunctions),
     addedVariables: normalizeSymbolAdditions(data?.addedVariables),
     addedImports: normalizeImportAdditions(data?.addedImports),
+    changedFunctions: normalizeSymbolAdditions(data?.changedFunctions),
+    changedVariables: normalizeSymbolAdditions(data?.changedVariables),
     reason: data?.reason ?? null,
     sessionId: data?.sessionId ?? null,
     diffId: data?.diffId ?? null,
@@ -173,6 +179,7 @@ export async function performAgentAction(
     diffId?: string
     instruction?: string
     step?: number
+    stepByStep?: boolean
     userCreatedBlocks?: UserCreatedBlock[]
     userCreatedIslands?: UserCreatedIsland[]
     addedFunctions?: PatchSymbolAddition[]

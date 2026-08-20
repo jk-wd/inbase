@@ -19,6 +19,7 @@ import {
   requestReplan,
   sendBlueprint,
   sessionIntent,
+  setStepByStep,
   stopSession,
   updateBlueprint,
 } from './scripts/session-store.mjs'
@@ -180,6 +181,7 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       diffId?: string
       instruction?: string
       step?: number
+      stepByStep?: boolean
       userCreatedBlocks?: unknown[]
       userCreatedIslands?: unknown[]
       addedFunctions?: unknown[]
@@ -195,7 +197,8 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       action !== 'blueprint_yes' &&
       action !== 'blueprint_no' &&
       action !== 'blueprint_send' &&
-      action !== 'blueprint_update'
+      action !== 'blueprint_update' &&
+      action !== 'set_step_by_step'
     ) {
       sendJson(res, 400, { error: 'invalid workflow action' })
       return
@@ -257,6 +260,13 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
         addedVariables: body.addedVariables,
         addedImports: body.addedImports,
       })
+    } else if (action === 'set_step_by_step') {
+      if (typeof body.stepByStep !== 'boolean') {
+        sendJson(res, 400, { error: 'stepByStep is required' })
+        return
+      }
+      setStepByStep(dataDir, body.sessionId, body.stepByStep, targetRoot)
+      rescanTarget('after changing step-by-step mode')
     } else {
       stopSession(dataDir, body.sessionId, targetRoot)
       rescanTarget('after stopping session')

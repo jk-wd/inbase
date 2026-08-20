@@ -8,6 +8,8 @@ type SelectionControllerProps = {
   locked: boolean
   files: Record<string, PlacedFile>
   onSelect: (fileId: string | null) => void
+  onInspect?: (fileId: string) => void
+  onAimFile?: (fileId: string | null) => void
   onAimRelation?: (aim: AimedRelation | null) => void
   onTravelTo: (fromId: string, toId: string) => void
 }
@@ -36,35 +38,50 @@ function aimKey(aim: AimedRelation | null) {
   return aim ? `${aim.from}->${aim.to}:${aim.flyTo}` : ''
 }
 
+function aimedFileId(hits: THREE.Intersection[]): string | null {
+  const file = hits.find((item) => item.object.userData.fileId)
+  return file ? (file.object.userData.fileId as string) : null
+}
+
 export function SelectionController({
   locked,
   files,
   onSelect,
+  onInspect,
+  onAimFile,
   onAimRelation,
   onTravelTo,
 }: SelectionControllerProps) {
   const { camera, scene } = useThree()
   const lastAim = useRef('')
+  const lastAimedFile = useRef<string | null>(null)
 
   useFrame(() => {
-    if (!onAimRelation) return
+    if (!onAimRelation && !onAimFile) return
     if (!locked) {
       if (lastAim.current) {
         lastAim.current = ''
-        onAimRelation(null)
+        onAimRelation?.(null)
+      }
+      if (lastAimedFile.current) {
+        lastAimedFile.current = null
+        onAimFile?.(null)
       }
       return
     }
     raycaster.setFromCamera(ndc, camera)
-    const next = aimedRelation(
-      raycaster.intersectObjects(scene.children, true),
-      camera.position,
-      files,
-    )
+    const hits = raycaster.intersectObjects(scene.children, true)
+    const next = aimedRelation(hits, camera.position, files)
     const key = aimKey(next)
-    if (key === lastAim.current) return
-    lastAim.current = key
-    onAimRelation(next)
+    if (onAimRelation && key !== lastAim.current) {
+      lastAim.current = key
+      onAimRelation(next)
+    }
+    const fileId = aimedFileId(hits)
+    if (onAimFile && fileId !== lastAimedFile.current) {
+      lastAimedFile.current = fileId
+      onAimFile(fileId)
+    }
   })
 
   useEffect(() => {
@@ -86,12 +103,18 @@ export function SelectionController({
         }, 280)
         return
       }
-      const file = hits.find((item) => item.object.userData.fileId)
-      onSelect(file ? (file.object.userData.fileId as string) : null)
+      const fileId = aimedFileId(hits)
+      onSelect(fileId)
     }
 
     const onDblClick = () => {
       if (travelTimer) window.clearTimeout(travelTimer)
+      if (!locked) return
+      raycaster.setFromCamera(ndc, camera)
+      const fileId = aimedFileId(raycaster.intersectObjects(scene.children, true))
+      if (!fileId) return
+      onSelect(fileId)
+      onInspect?.(fileId)
     }
 
     window.addEventListener('click', onClick)
@@ -101,7 +124,7 @@ export function SelectionController({
       window.removeEventListener('click', onClick)
       window.removeEventListener('dblclick', onDblClick)
     }
-  }, [camera, files, locked, onSelect, onTravelTo, scene])
+  }, [camera, files, locked, onInspect, onSelect, onTravelTo, scene])
 
   return null
 }

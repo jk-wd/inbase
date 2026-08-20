@@ -16,8 +16,12 @@ Apply this skill **only** when the work is file changes in `apps/example-target`
 Skip it for explorer, layout, lighting, or other Visual Coder app work.
 
 The LLM uses a plan-first loop. It reports the complete plan before writing a
-patch, waits for the user to invoke the highlighted step, publishes only that
-step's diff, then waits for **Run step** on the following step or an alternative instruction. Always
+patch. When **Step by step** is on, it waits for the user to invoke the
+highlighted step, publishes only that step's diff, then waits for **Run step**
+on the following step or an alternative instruction. When **Step by step** is
+off, `wait-for-approval` returns `VISUAL_CODER_EXECUTE` for every remaining
+step without the user clicking Run step; after the last patch, wait for the
+user to **Complete**. They can still walk Previous/Next over the diffs. Always
 work via patch files. Do not Write, StrReplace, or Delete files under
 `apps/example-target`.
 
@@ -91,7 +95,8 @@ node .cursor/skills/example-target-visual-edits/scripts/wait-for-approval.mjs \
   --session "<current-cursor-chat-id>"
 ```
 
-   Do not write a patch until this prints `VISUAL_CODER_EXECUTE`.
+   Do not write a patch until this prints `VISUAL_CODER_EXECUTE`. If Step by
+   step is off, this returns immediately for each remaining step.
 9. Implement only the invoked step as a unified diff. Paths are relative to
    `apps/example-target/` (same ids as `codebase.json`):
 
@@ -124,8 +129,9 @@ node .cursor/skills/example-target-visual-edits/scripts/propose-patch.mjs \
    stored in the session folder.
 
 10. **Stop.** Do not apply the patch and do not edit `apps/example-target`.
-11. Wait until the user clicks **Run step** on the next step, sends an alternative instruction,
-   or stops the workflow:
+11. Wait until the user clicks **Run step** on the next step (or, when Step by
+   step is off, until the next step is auto-invoked), sends an alternative
+   instruction, clicks **Complete** on the last step, or stops the workflow:
 
 ```bash
 node .cursor/skills/example-target-visual-edits/scripts/wait-for-approval.mjs \
@@ -173,7 +179,7 @@ node .cursor/skills/example-target-visual-edits/scripts/propose-patch.mjs \
 - Write, edit, create, or delete `apps/example-target` files directly
 - Announce file lists instead of a patch
 - Write a patch before its plan step is invoked
-- Propose the next step before the user clicks **Run step**
+- Propose the next step before `wait-for-approval` returns `VISUAL_CODER_EXECUTE`
 - Propose another patch after `VISUAL_CODER_FINISHED`
 - Reuse, overwrite, or expand an existing session diff
 - Use this flow for explorer or other non-target work

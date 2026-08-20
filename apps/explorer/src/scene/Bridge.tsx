@@ -1,10 +1,11 @@
 import { Suspense } from 'react'
 import { Text } from '@react-three/drei'
-import { CONFIG } from '../theme'
-import type { PlacedBridge } from '../types'
+import { folderAt } from '../layout'
+import { CONFIG, folderAisleColor } from '../theme'
+import type { PlacedBridge, PlacedFolder } from '../types'
 
 const WALK_Y = 0.02
-const LAND_COLOR = '#2a3340'
+const LAND_COLOR = 'hsl(210, 6%, 40%)'
 const SPAN_COLOR = '#232e3a'
 const CORNER_SIZE = CONFIG.bridgeWidth
 
@@ -22,6 +23,19 @@ const SIGN_COLOR = '#323a46'
 
 type BridgeProps = {
   bridge: PlacedBridge
+  folders?: Record<string, PlacedFolder>
+}
+
+function landColorAt(
+  x: number,
+  z: number,
+  folders: Record<string, PlacedFolder> | undefined,
+) {
+  if (!folders) return LAND_COLOR
+  const folder = folderAt(x, z, { folders })
+  if (!folder) return LAND_COLOR
+  if (folder.added) return '#23485a'
+  return folderAisleColor(folder.path)
 }
 
 type Segment = {
@@ -233,7 +247,7 @@ function Gate({
   )
 }
 
-export function Bridge({ bridge }: BridgeProps) {
+export function Bridge({ bridge, folders }: BridgeProps) {
   const segments = segmentsFromPoints(bridge.points)
   const corners = cornersFromPoints(bridge.points)
   const start = bridge.points[0]
@@ -252,7 +266,11 @@ export function Bridge({ bridge }: BridgeProps) {
           z={piece.z}
           width={piece.width}
           depth={piece.depth}
-          color={piece.color}
+          color={
+            piece.color === LAND_COLOR
+              ? landColorAt(piece.x, piece.z, folders)
+              : piece.color
+          }
         />
       ))}
 

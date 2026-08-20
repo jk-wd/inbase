@@ -170,6 +170,51 @@ export function folderParent(folderPath: string) {
   return folderPath.includes('/') ? folderPath.split('/').slice(0, -1).join('/') : '.'
 }
 
+export function changeRelatedFolderPaths(
+  graph: CodebaseGraph,
+  fileIds: Iterable<string>,
+  extraFolders: Iterable<string> = [],
+) {
+  const root = graph.root || '.'
+  const paths = new Set<string>([root])
+  const filesById = new Map(graph.files.map((file) => [file.id, file]))
+
+  const addAncestors = (start: string | null | undefined) => {
+    let current = start
+    while (current) {
+      paths.add(current)
+      current = folderParent(current)
+    }
+  }
+
+  for (const id of fileIds) {
+    const file = filesById.get(id)
+    addAncestors(file?.folder ?? folderOfFile(id))
+  }
+  for (const folder of extraFolders) addAncestors(folder)
+  return paths
+}
+
+export function filterGraphToChangePaths(
+  graph: CodebaseGraph,
+  fileIds: Iterable<string>,
+  extraFolders: Iterable<string> = [],
+): CodebaseGraph {
+  const keepFiles = new Set(fileIds)
+  const keepFolders = changeRelatedFolderPaths(graph, fileIds, extraFolders)
+  return {
+    ...graph,
+    files: graph.files.filter((file) => keepFiles.has(file.id)),
+    folders: graph.folders
+      .filter((folder) => keepFolders.has(folder.path))
+      .map((folder) => ({
+        ...folder,
+        files: folder.files.filter((id) => keepFiles.has(id)),
+        children: folder.children.filter((path) => keepFolders.has(path)),
+      })),
+  }
+}
+
 function folderName(folderPath: string, rootName: string) {
   if (!folderPath || folderPath === '.') return rootName
   return folderPath.split('/').pop() ?? folderPath
@@ -434,7 +479,7 @@ export function layoutWorld(graph: CodebaseGraph): WorldLayout {
 export function folderAt(
   x: number,
   z: number,
-  layout: WorldLayout,
+  layout: Pick<WorldLayout, 'folders'>,
 ): PlacedFolder | null {
   let current: PlacedFolder | null = null
   for (const folder of Object.values(layout.folders)) {
@@ -443,6 +488,25 @@ export function folderAt(
     if (insideX && insideZ) current = folder
   }
   return current
+}
+
+export function mapPointOntoFolder(
+  x: number,
+  z: number,
+  fromLayout: Pick<WorldLayout, 'folders'>,
+  toLayout: Pick<WorldLayout, 'folders'>,
+  fallback: [number, number] | null = null,
+): [number, number] | null {
+  const folder = folderAt(x, z, fromLayout)
+  if (!folder) return fallback
+  const next = toLayout.folders[folder.path]
+  if (!next) return fallback
+  const relX = folder.width ? (x - folder.x) / folder.width : 0
+  const relZ = folder.depth ? (z - folder.z) / folder.depth : 0
+  return [
+    next.x + Math.min(Math.max(relX, -0.45), 0.45) * next.width,
+    next.z + Math.min(Math.max(relZ, 0), 1) * next.depth,
+  ]
 }
 
 function distanceToSegment(

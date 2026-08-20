@@ -214,6 +214,7 @@ export type WorkflowAction =
   | 'blueprint_no'
   | 'blueprint_send'
   | 'blueprint_update'
+  | 'set_step_by_step'
 
 export type AgentIntentBundle = {
   focusedSessionId: string | null
@@ -227,6 +228,7 @@ export type AgentIntent = {
   feature: string | null
   steps: PlanStep[]
   step: number | null
+  stepByStep: boolean
   files: string[]
   creates: string[]
   deletes: string[]
@@ -236,6 +238,8 @@ export type AgentIntent = {
   addedFunctions: PatchSymbolAddition[]
   addedVariables: PatchSymbolAddition[]
   addedImports: PatchImportAddition[]
+  changedFunctions: PatchSymbolAddition[]
+  changedVariables: PatchSymbolAddition[]
   reason: string | null
   sessionId: string | null
   diffId: string | null

@@ -58,17 +58,83 @@ function importLabels(items: PatchImportAddition[]) {
 function PanelList({
   title,
   items,
+  tone,
 }: {
   title: string
   items: Array<{ key: string; label: string }>
+  tone?: 'add' | 'edit' | 'remove'
 }) {
   if (items.length === 0) return null
+  const titleClass =
+    tone === 'add'
+      ? 'hud-section-title hud-section-title-add'
+      : tone === 'edit'
+        ? 'hud-section-title hud-section-title-edit'
+        : tone === 'remove'
+          ? 'hud-section-title hud-section-title-remove'
+          : 'hud-section-title'
+  const itemClass =
+    tone === 'add'
+      ? 'hud-file-add'
+      : tone === 'edit'
+        ? 'hud-file-edit'
+        : tone === 'remove'
+          ? 'hud-file-remove'
+          : undefined
+  return (
+    <>
+      <div className={titleClass}>{title}</div>
+      <ul>
+        {items.map((item) => (
+          <li className={itemClass} key={item.key}>
+            {item.label}
+          </li>
+        ))}
+      </ul>
+    </>
+  )
+}
+
+function symbolChangeClass(kind: 'add' | 'edit' | null | undefined) {
+  if (kind === 'add') return 'hud-file-add'
+  if (kind === 'edit') return 'hud-file-edit'
+  return undefined
+}
+
+function extraAddedSymbols(
+  existing: Array<{ name: string }>,
+  added: PatchSymbolAddition[],
+) {
+  const have = new Set(existing.map((item) => item.name))
+  return added.filter((item) => !have.has(item.name))
+}
+
+function PatchSymbolChanges({
+  title,
+  added,
+  changed,
+}: {
+  title: string
+  added: PatchSymbolAddition[]
+  changed: PatchSymbolAddition[]
+}) {
+  if (added.length === 0 && changed.length === 0) return null
+  const addedNames = new Set(added.map((item) => item.name))
   return (
     <>
       <div className="hud-section-title">{title}</div>
       <ul>
-        {items.map((item) => (
-          <li key={item.key}>{item.label}</li>
+        {changed
+          .filter((item) => !addedNames.has(item.name))
+          .map((item) => (
+            <li className="hud-file-edit" key={`edit-${item.file}:${item.name}`}>
+              {item.name}
+            </li>
+          ))}
+        {added.map((item) => (
+          <li className="hud-file-add" key={`add-${item.file}:${item.name}`}>
+            {item.name}
+          </li>
         ))}
       </ul>
     </>
@@ -174,7 +240,7 @@ type SessionPanelProps = {
   onWorkflowAction: (
     sessionId: string,
     action: WorkflowAction,
-    options?: { instruction?: string; step?: number },
+    options?: { instruction?: string; step?: number; stepByStep?: boolean },
   ) => void
   onNavigateDiff: (sessionId: string, diffId: string) => void
 }
@@ -208,9 +274,12 @@ function SessionPanel({
     typeof intent.step === 'number' &&
     intent.steps.length > 0 &&
     intent.step >= intent.steps.length
+  const stepByStep = intent.stepByStep !== false
   const addedFunctions = intent.addedFunctions ?? []
   const addedVariables = intent.addedVariables ?? []
   const addedImports = intent.addedImports ?? []
+  const changedFunctions = intent.changedFunctions ?? []
+  const changedVariables = intent.changedVariables ?? []
   const doneSteps = new Set(
     intent.status === 'finished'
       ? intent.steps.map((step) => step.index)
@@ -247,7 +316,7 @@ function SessionPanel({
 
   const act = (
     action: WorkflowAction,
-    options?: { instruction?: string; step?: number },
+    options?: { instruction?: string; step?: number; stepByStep?: boolean },
   ) => onWorkflowAction(sessionId, action, options)
 
   return (
@@ -268,6 +337,24 @@ function SessionPanel({
       />
       {!minimized && (
         <>
+          <label className="hud-mode-switch">
+            <span>Step by step</span>
+            <button
+              className="hud-switch"
+              type="button"
+              role="switch"
+              aria-checked={stepByStep}
+              aria-label="Step by step"
+              onKeyDown={(event) => event.stopPropagation()}
+              onClick={() => act('set_step_by_step', { stepByStep: !stepByStep })}
+            />
+          </label>
+          {!stepByStep && (
+            <p className="hud-mode-hint">
+              LLM implements the full plan. You can still walk the diffs, then
+              Complete.
+            </p>
+          )}
           {intent.feature && <p className="hud-feature">{intent.feature}</p>}
           {askingBlueprint ? (
             <>
@@ -385,7 +472,9 @@ function SessionPanel({
                       <span className="hud-step-index">{step.index}.</span>
                       <span className="hud-step-main">
                         <span className="hud-step-title">{step.title}</span>
-                        {((canRunNext && nextStep?.index === step.index) ||
+                        {((stepByStep &&
+                          canRunNext &&
+                          nextStep?.index === step.index) ||
                           (canComplete && step.index === intent.step)) && (
                           <button
                             className="hud-button hud-button-approve hud-run-step"
@@ -445,6 +534,8 @@ function SessionPanel({
                     addedFunctions.length > 0 ||
                     addedVariables.length > 0 ||
                     addedImports.length > 0 ||
+                    changedFunctions.length > 0 ||
+                    changedVariables.length > 0 ||
                     (intent.imports ?? []).length > 0)
                 }
               >
@@ -505,12 +596,24 @@ function SessionPanel({
                   </>
                 )}
                 <PanelList
-                  title="Functions"
-                  items={symbolLabels(addedFunctions)}
+                  title="Changed functions"
+                  items={symbolLabels(changedFunctions)}
+                  tone="edit"
                 />
                 <PanelList
-                  title="Variables"
+                  title="Added functions"
+                  items={symbolLabels(addedFunctions)}
+                  tone="add"
+                />
+                <PanelList
+                  title="Changed variables"
+                  items={symbolLabels(changedVariables)}
+                  tone="edit"
+                />
+                <PanelList
+                  title="Added variables"
                   items={symbolLabels(addedVariables)}
+                  tone="add"
                 />
                 {addedImports.length > 0 && (
                   <PanelList title="Imports" items={importLabels(addedImports)} />
@@ -596,9 +699,11 @@ type HUDProps = {
   locked: boolean
   selectedId: string | null
   selectedTick?: number
+  inspectTick?: number
   selectedFolder?: string | null
   landAt: [number, number]
   aimedRelation: AimedRelation | null
+  aimedFileId?: string | null
   currentFolder: string
   intent: AgentIntent
   intents?: AgentIntent[]
@@ -607,7 +712,7 @@ type HUDProps = {
   onWorkflowAction: (
     sessionId: string,
     action: WorkflowAction,
-    options?: { instruction?: string; step?: number },
+    options?: { instruction?: string; step?: number; stepByStep?: boolean },
   ) => void
   onNavigateDiff: (sessionId: string, diffId: string) => void
   onOpenMap: () => void
@@ -616,6 +721,9 @@ type HUDProps = {
   onToggleFollowLook: () => void
   importedBy: boolean
   onToggleImportedBy: () => void
+  changePathsOnly?: boolean
+  hasChangeSet?: boolean
+  onToggleChangePathsOnly?: () => void
   naming?: boolean
   namingIsland?: boolean
   onCommitIslandName?: (name: string) => void
@@ -636,6 +744,7 @@ type HUDProps = {
   onMapAddFile?: (folderPath: string) => void
   onMapAddFolder?: (folderPath: string) => void
   onInspectFile?: (fileId: string) => void
+  onInspectBlock?: (fileId: string) => void
   plannedIds?: string[]
   createdIds?: string[]
   deletedIds?: string[]
@@ -648,9 +757,11 @@ export function HUD({
   locked,
   selectedId,
   selectedTick = 0,
+  inspectTick = 0,
   selectedFolder = null,
   landAt,
   aimedRelation,
+  aimedFileId = null,
   currentFolder,
   intent,
   intents,
@@ -664,6 +775,9 @@ export function HUD({
   onToggleFollowLook,
   importedBy,
   onToggleImportedBy,
+  changePathsOnly = false,
+  hasChangeSet = false,
+  onToggleChangePathsOnly,
   naming = false,
   namingIsland = false,
   onCommitIslandName,
@@ -680,6 +794,7 @@ export function HUD({
   onMapAddFile,
   onMapAddFolder,
   onInspectFile,
+  onInspectBlock,
   plannedIds = [],
   createdIds = [],
   deletedIds = [],
@@ -718,6 +833,8 @@ export function HUD({
   const addedFunctions = intent.addedFunctions ?? []
   const addedVariables = intent.addedVariables ?? []
   const addedImports = intent.addedImports ?? []
+  const changedFunctions = intent.changedFunctions ?? []
+  const changedVariables = intent.changedVariables ?? []
   const selectedAddedFunctions = selected
     ? addedFunctions.filter((item) => item.file === selected.id)
     : []
@@ -726,6 +843,12 @@ export function HUD({
     : []
   const selectedAddedImports = selected
     ? addedImports.filter((item) => item.file === selected.id)
+    : []
+  const selectedChangedFunctions = selected
+    ? changedFunctions.filter((item) => item.file === selected.id)
+    : []
+  const selectedChangedVariables = selected
+    ? changedVariables.filter((item) => item.file === selected.id)
     : []
   const selectedClasses = selected
     ? selected.symbols.filter((symbol) => symbol.kind === 'class')
@@ -736,6 +859,26 @@ export function HUD({
   const selectedVariables = selected
     ? selected.symbols.filter((symbol) => symbol.kind === 'variable')
     : []
+  const functionChange = new Map<string, 'add' | 'edit'>([
+    ...selectedChangedFunctions.map(
+      (item) => [item.name, 'edit'] as const,
+    ),
+    ...selectedAddedFunctions.map((item) => [item.name, 'add'] as const),
+  ])
+  const variableChange = new Map<string, 'add' | 'edit'>([
+    ...selectedChangedVariables.map(
+      (item) => [item.name, 'edit'] as const,
+    ),
+    ...selectedAddedVariables.map((item) => [item.name, 'add'] as const),
+  ])
+  const extraAddedFunctions = extraAddedSymbols(
+    selectedFunctions,
+    selectedAddedFunctions,
+  )
+  const extraAddedVariables = extraAddedSymbols(
+    selectedVariables,
+    selectedAddedVariables,
+  )
   const selectedBlueprintFunctions = selected
     ? blueprintFunctions.filter((item) => item.file === selected.id)
     : []
@@ -783,8 +926,16 @@ export function HUD({
   }, [selectedId, selectedFolder])
 
   useEffect(() => {
+    if (mode === 'walk') return
     if (selectedId) setInfoVisible(true)
-  }, [selectedId, selectedTick])
+  }, [mode, selectedId, selectedTick])
+
+  useEffect(() => {
+    if (inspectTick > 0) {
+      setInfoVisible(true)
+      setInfoMinimized(false)
+    }
+  }, [inspectTick])
 
   useEffect(() => {
     if (selectedFolder) setInfoVisible(true)
@@ -816,14 +967,22 @@ export function HUD({
         return
       }
       event.preventDefault()
-      setInfoVisible((visible) => {
-        if (!visible) setInfoMinimized(false)
-        return !visible
-      })
+      if (infoVisible) {
+        setInfoVisible(false)
+        setInfoMinimized(false)
+        return
+      }
+      const blockId = aimedFileId ?? selectedId
+      if (mode === 'walk') {
+        if (!blockId) return
+        onInspectBlock?.(blockId)
+      }
+      setInfoMinimized(false)
+      setInfoVisible(true)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [aimedFileId, infoVisible, mode, onInspectBlock, selectedId])
 
   useEffect(() => {
     if (!mapping) return
@@ -893,7 +1052,7 @@ export function HUD({
                   , <kbd>Space</kbd> place a file, <kbd>B</kbd> place an island
                 </>
               ) : null}
-              , click a block for info.
+              , double-click a block or press <kbd>I</kbd> for info.
             </p>
           </div>
         </div>
@@ -1001,13 +1160,45 @@ export function HUD({
               Inspect file
             </button>
           )}
+          {previewing &&
+            (selectedChangedFunctions.length > 0 ||
+              selectedAddedFunctions.length > 0 ||
+              selectedChangedVariables.length > 0 ||
+              selectedAddedVariables.length > 0 ||
+              selectedAddedImports.length > 0) && (
+              <>
+                <div className="hud-section-title hud-section-title-edit">
+                  LLM changes
+                </div>
+                <PatchSymbolChanges
+                  title="Functions"
+                  added={selectedAddedFunctions}
+                  changed={selectedChangedFunctions}
+                />
+                <PatchSymbolChanges
+                  title="Vars"
+                  added={selectedAddedVariables}
+                  changed={selectedChangedVariables}
+                />
+                <PanelList
+                  title="Imports"
+                  items={importLabels(selectedAddedImports)}
+                  tone="add"
+                />
+              </>
+            )}
           {selectedClasses.length > 0 && (
             <>
               <div className="hud-section-title">Classes</div>
               <ul>
                 {selectedClasses.map((symbol) => (
                   <li key={`class-${symbol.name}`}>
-                    <span className={symbol.intended ? 'hud-intended' : undefined}>
+                    <span
+                      className={
+                        symbolChangeClass(functionChange.get(symbol.name)) ??
+                        (symbol.intended ? 'hud-intended' : undefined)
+                      }
+                    >
                       {symbol.name}
                     </span>
                   </li>
@@ -1017,13 +1208,19 @@ export function HUD({
           )}
           <div className="hud-section-title">Functions</div>
           {selectedFunctions.length === 0 &&
+          extraAddedFunctions.length === 0 &&
           selectedBlueprintFunctions.length === 0 ? (
             <p>No functions</p>
           ) : (
             <ul>
               {selectedFunctions.map((symbol) => (
                 <li key={`fn-${symbol.name}`}>
-                  <span className={symbol.intended ? 'hud-intended' : undefined}>
+                  <span
+                    className={
+                      symbolChangeClass(functionChange.get(symbol.name)) ??
+                      (symbol.intended ? 'hud-intended' : undefined)
+                    }
+                  >
                     {symbol.name}
                   </span>
                   {canEditBlueprint && symbol.intended && (
@@ -1040,6 +1237,11 @@ export function HUD({
                   )}
                 </li>
               ))}
+              {extraAddedFunctions.map((item) => (
+                <li key={`fn-add-${item.name}`}>
+                  <span className="hud-file-add">{item.name}</span>
+                </li>
+              ))}
             </ul>
           )}
           {canEditBlueprint && onAddBlueprintFunction && (
@@ -1050,13 +1252,19 @@ export function HUD({
           )}
           <div className="hud-section-title">Vars</div>
           {selectedVariables.length === 0 &&
+          extraAddedVariables.length === 0 &&
           selectedBlueprintVariables.length === 0 ? (
             <p>No vars</p>
           ) : (
             <ul>
               {selectedVariables.map((symbol) => (
                 <li key={`var-${symbol.name}`}>
-                  <span className={symbol.intended ? 'hud-intended' : undefined}>
+                  <span
+                    className={
+                      symbolChangeClass(variableChange.get(symbol.name)) ??
+                      (symbol.intended ? 'hud-intended' : undefined)
+                    }
+                  >
                     {symbol.name}
                   </span>
                   {canEditBlueprint && symbol.intended && (
@@ -1073,6 +1281,11 @@ export function HUD({
                   )}
                 </li>
               ))}
+              {extraAddedVariables.map((item) => (
+                <li key={`var-add-${item.name}`}>
+                  <span className="hud-file-add">{item.name}</span>
+                </li>
+              ))}
             </ul>
           )}
           {canEditBlueprint && onAddBlueprintVariable && (
@@ -1080,22 +1293,6 @@ export function HUD({
               placeholder="Variable name"
               onAdd={(name) => onAddBlueprintVariable(selected.id, name)}
             />
-          )}
-          {previewing && (
-            <>
-              <PanelList
-                title="Added functions"
-                items={symbolLabels(selectedAddedFunctions)}
-              />
-              <PanelList
-                title="Added variables"
-                items={symbolLabels(selectedAddedVariables)}
-              />
-              <PanelList
-                title="Added imports"
-                items={importLabels(selectedAddedImports)}
-              />
-            </>
           )}
           <div className="hud-section-title">
             {importedBy ? 'Imported by' : 'Imports'}
@@ -1291,6 +1488,13 @@ export function HUD({
               )}
               <span>Click a line to fly there</span>
               <span>Ctrl-click an island to walk</span>
+              {hasChangeSet && (
+                <span>
+                  {changePathsOnly
+                    ? 'C show all paths'
+                    : 'C show only changed paths'}
+                </span>
+              )}
               {selected?.userCreated && creatingBlueprint && (
                 <span>Backspace delete</span>
               )}
@@ -1325,7 +1529,7 @@ export function HUD({
               {selected?.userCreated && creatingBlueprint && (
                 <span>Backspace delete</span>
               )}
-              <span>Click a block for info</span>
+              <span>Double-click a block for info</span>
               <span>Aim a line to fly</span>
               <span>{infoVisible ? 'I hide info' : 'I show info'}</span>
               {infoVisible && <span>↑↓ scroll info</span>}
@@ -1345,6 +1549,45 @@ export function HUD({
           )}
         </div>
         <div className="hud-icon-row">
+          {mapping && hasChangeSet && onToggleChangePathsOnly && (
+            <button
+              className="hud-button hud-icon-button"
+              data-active={changePathsOnly}
+              aria-label={
+                changePathsOnly
+                  ? 'Show all folder paths'
+                  : 'Show only changed paths'
+              }
+              aria-keyshortcuts="C"
+              aria-pressed={changePathsOnly}
+              type="button"
+              onClick={onToggleChangePathsOnly}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="5" r="2.4" />
+                <path d="M12 7.4v4.2" />
+                <path d="M12 11.6 6.2 16" />
+                <path d="M12 11.6 17.8 16" />
+                <circle cx="6.2" cy="18" r="2.1" />
+                <circle cx="17.8" cy="18" r="2.1" />
+              </svg>
+              <span className="hud-tooltip">
+                {changePathsOnly
+                  ? 'C show all paths'
+                  : 'C show only changed paths'}
+              </span>
+            </button>
+          )}
           {mapping && (
             <button
               className="hud-button hud-icon-button"

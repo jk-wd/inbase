@@ -8,6 +8,8 @@ import {
   standInFront,
   relationTravelTarget,
   withPreviewGraph,
+  filterGraphToChangePaths,
+  mapPointOntoFolder,
 } from './layout'
 import { World } from './scene/World'
 import { HUD } from './ui/HUD'
@@ -62,6 +64,8 @@ function intentSignature(intent: AgentIntent) {
     addedFunctions: intent.addedFunctions,
     addedVariables: intent.addedVariables,
     addedImports: intent.addedImports,
+    changedFunctions: intent.changedFunctions,
+    changedVariables: intent.changedVariables,
   })
 }
 
@@ -167,6 +171,59 @@ function Explorer({
     if (previewing) markCreatedFolders(world, intent.createFolders ?? [])
     return withUserCreatedLayout(world, userBlocks, userIslands)
   }, [intent.createFolders, previewGraph, previewing, userBlocks, userIslands])
+  const changeFileIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const id of intent.files) ids.add(id)
+    for (const id of intent.creates) ids.add(id)
+    for (const id of intent.deletes) ids.add(id)
+    for (const block of userBlocks) ids.add(block.id)
+    for (const item of blueprintFunctions) ids.add(item.file)
+    for (const item of blueprintVariables) ids.add(item.file)
+    for (const item of blueprintImports) ids.add(item.file)
+    return [...ids]
+  }, [
+    blueprintFunctions,
+    blueprintImports,
+    blueprintVariables,
+    intent.creates,
+    intent.deletes,
+    intent.files,
+    userBlocks,
+  ])
+  const changeFolderPaths = useMemo(() => {
+    const paths = new Set<string>()
+    for (const path of intent.createFolders ?? []) paths.add(path)
+    for (const island of userIslands) {
+      if (island.path) paths.add(island.path)
+      else if (island.id) paths.add(island.id)
+    }
+    return [...paths]
+  }, [intent.createFolders, userIslands])
+  const hasChangeSet =
+    changeFileIds.length > 0 || changeFolderPaths.length > 0
+  const changePathGraph = useMemo(() => {
+    if (!hasChangeSet) return displayGraph
+    return filterGraphToChangePaths(
+      displayGraph,
+      changeFileIds,
+      changeFolderPaths,
+    )
+  }, [changeFileIds, changeFolderPaths, displayGraph, hasChangeSet])
+  const changePathLayout = useMemo(() => {
+    if (!hasChangeSet) return layout
+    const world = layoutWorld(changePathGraph)
+    markCreatedFolders(world, [
+      ...(intent.createFolders ?? []),
+      ...userIslands.map((island) => island.path || island.id),
+    ])
+    return world
+  }, [
+    changePathGraph,
+    hasChangeSet,
+    intent.createFolders,
+    layout,
+    userIslands,
+  ])
   const [mode, setMode] = useState<ViewMode>('map')
   const [landAt, setLandAt] = useState<[number, number]>([
     layout.spawn[0],
@@ -177,11 +234,14 @@ function Explorer({
   const [selectedTick, setSelectedTick] = useState(0)
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null)
   const [aimedRelation, setAimedRelation] = useState<AimedRelation | null>(null)
+  const [aimedFileId, setAimedFileId] = useState<string | null>(null)
+  const [inspectTick, setInspectTick] = useState(0)
   const [flyTo, setFlyTo] = useState<FlyTo | null>(null)
   const [locked, setLocked] = useState(false)
   const [currentFolder, setCurrentFolder] = useState(graph.targetName)
   const [followLook, setFollowLook] = useState(false)
   const [importedBy, setImportedBy] = useState(false)
+  const [changePathsOnly, setChangePathsOnly] = useState(false)
   const lastIntentSig = useRef<string | null>(null)
   const viewedDiffId = useRef<Record<string, string | null>>({})
   const browsingHistory = useRef<Record<string, boolean>>({})
@@ -242,6 +302,22 @@ function Explorer({
     setMode('walk')
   }, [])
 
+  const landFromMap = useCallback(
+    (x: number, z: number) => {
+      if (!changePathsOnly || !hasChangeSet) {
+        land(x, z)
+        return
+      }
+      const mapped = mapPointOntoFolder(x, z, changePathLayout, layout, [
+        layout.spawn[0],
+        layout.spawn[2],
+      ])
+      if (!mapped) return
+      land(mapped[0], mapped[1])
+    },
+    [changePathLayout, changePathsOnly, hasChangeSet, land, layout],
+  )
+
   const travelToFile = useCallback(
     (fileId: string, fly: boolean) => {
       const placed = layout.files[fileId]
@@ -275,7 +351,7 @@ function Explorer({
     async (
       sessionId: string,
       action: WorkflowAction,
-      options: { instruction?: string; step?: number } = {},
+      options: { instruction?: string; step?: number; stepByStep?: boolean } = {},
     ) => {
       const current = intents.find((item) => item.sessionId === sessionId)
       if (!current?.sessionId) return
@@ -306,7 +382,12 @@ function Explorer({
         browsingHistory.current[sessionId] = false
         lastIntentSig.current = null
         applyIntent(next, sessionId)
-        if (action === 'invoke' || action === 'continue' || action === 'stop') {
+        if (
+          action === 'invoke' ||
+          action === 'continue' ||
+          action === 'stop' ||
+          action === 'set_step_by_step'
+        ) {
           await onRefreshGraph()
         }
       } catch {
@@ -632,10 +713,38 @@ function Explorer({
     [creationMode],
   )
 
+  const inspectBlock = useCallback(
+    (fileId: string) => {
+      selectFile(fileId)
+      setInspectTick((tick) => tick + 1)
+    },
+    [selectFile],
+  )
+
   const selectFolder = useCallback((folderPath: string | null) => {
     setSelectedFolder(folderPath)
     if (folderPath) setSelectedId(null)
   }, [])
+
+  useEffect(() => {
+    if (!changePathsOnly || !hasChangeSet) return
+    if (selectedFolder && !changePathLayout.folders[selectedFolder]) {
+      setSelectedFolder(null)
+    }
+    if (
+      selectedId &&
+      !changePathGraph.files.some((file) => file.id === selectedId)
+    ) {
+      setSelectedId(null)
+    }
+  }, [
+    changePathGraph.files,
+    changePathLayout.folders,
+    changePathsOnly,
+    hasChangeSet,
+    selectedFolder,
+    selectedId,
+  ])
 
   const addBlueprintFunction = useCallback(
     (fileId: string, rawName: string) => {
@@ -851,6 +960,11 @@ function Explorer({
     setImportedBy((current) => !current)
   }, [])
 
+  const toggleChangePathsOnly = useCallback(() => {
+    if (!hasChangeSet) return
+    setChangePathsOnly((current) => !current)
+  }, [hasChangeSet])
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat || event.code !== 'KeyK') return
@@ -870,6 +984,27 @@ function Explorer({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [toggleImportedBy])
+
+  useEffect(() => {
+    if (mode !== 'map' || !hasChangeSet) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.repeat || event.code !== 'KeyC') return
+      const target = event.target
+      if (
+        target instanceof HTMLElement &&
+        (target.tagName === 'TEXTAREA' ||
+          target.tagName === 'INPUT' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return
+      }
+      event.preventDefault()
+      toggleChangePathsOnly()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [hasChangeSet, mode, toggleChangePathsOnly])
 
   useEffect(() => {
     let cancelled = false
@@ -965,7 +1100,7 @@ function Explorer({
             onSelectFolder={selectFolder}
             onLockedChange={setLocked}
             onFolderChange={setCurrentFolder}
-            onLand={land}
+            onLand={landFromMap}
             onWalkPosition={rememberWalk}
             onContext={persistUserContext}
             plannedIds={plannedIds}
@@ -977,6 +1112,8 @@ function Explorer({
             flyTo={flyTo}
             aimedRelation={aimedRelation}
             onAimRelation={setAimedRelation}
+            onAimFile={setAimedFileId}
+            onInspect={inspectBlock}
             onTravelTo={flyAlongRelation}
             importedBy={importedBy}
             namingId={namingId}
@@ -987,6 +1124,12 @@ function Explorer({
             onCancelName={cancelBlockName}
             userCreatedBlocks={userBlocks}
             userCreatedIslands={userIslands}
+            mapGraph={
+              changePathsOnly && hasChangeSet ? changePathGraph : null
+            }
+            mapLayout={
+              changePathsOnly && hasChangeSet ? changePathLayout : null
+            }
           />
         </Canvas>
       </div>
@@ -997,9 +1140,11 @@ function Explorer({
         locked={locked}
         selectedId={selectedId}
         selectedTick={selectedTick}
+        inspectTick={inspectTick}
         selectedFolder={selectedFolder}
         landAt={landAt}
         aimedRelation={aimedRelation}
+        aimedFileId={aimedFileId}
         currentFolder={currentFolder}
         intent={intent}
         intents={intents}
@@ -1013,6 +1158,9 @@ function Explorer({
         onToggleFollowLook={toggleFollowLook}
         importedBy={importedBy}
         onToggleImportedBy={toggleImportedBy}
+        changePathsOnly={changePathsOnly}
+        hasChangeSet={hasChangeSet}
+        onToggleChangePathsOnly={toggleChangePathsOnly}
         naming={naming}
         namingIsland={Boolean(namingIslandId)}
         onCommitIslandName={(name) => {
@@ -1033,6 +1181,7 @@ function Explorer({
         onMapAddFile={placeBlockOnFolder}
         onMapAddFolder={placeIslandOnFolder}
         onInspectFile={inspectFile}
+        onInspectBlock={inspectBlock}
         plannedIds={plannedIds}
         createdIds={plannedCreates}
         deletedIds={deletedIds}

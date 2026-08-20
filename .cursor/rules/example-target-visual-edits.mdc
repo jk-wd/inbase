@@ -11,10 +11,12 @@ alwaysApply: false
 You are changing files in `apps/example-target`. Follow
 `.cursor/skills/example-target-visual-edits/SKILL.md`.
 
-Always report the plan before writing a patch. The visualizer invokes one step
-at a time and showcases its result. Run step on the following step applies that
-result and starts the next step. Do not modify example-target except
-through this workflow.
+Always report the plan before writing a patch. When Step by step is on, the
+visualizer invokes one step at a time and showcases its result. Run step on the
+following step applies that result and starts the next step. When Step by step
+is off, every remaining step is invoked without Run step; after the last patch,
+Complete finishes the feature. The user can still walk Previous/Next over the
+diffs. Do not modify example-target except through this workflow.
 
 1. Read `apps/explorer/src/data/user-context.json`. Follow the user's viewpoint
    only when `followLook` is true.

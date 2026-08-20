@@ -37,6 +37,7 @@ export type DiffManifest = {
   activeDiffId: string | null
   pendingInstruction: string | null
   workStartedAt: string | null
+  stepByStep: boolean
   createdAt: string
   updatedAt: string
   diffs: DiffEntry[]
@@ -129,6 +130,18 @@ export function reportPlan(
     feature: string
     stepTitles: string[]
   },
+): DiffManifest
+export function isStepByStep(manifest: DiffManifest | null | undefined): boolean
+export function autoAdvance(
+  dataDir: string,
+  sessionId: string,
+  targetRoot?: string | null,
+): DiffManifest | null
+export function setStepByStep(
+  dataDir: string,
+  sessionId: string,
+  enabled: boolean,
+  targetRoot?: string | null,
 ): DiffManifest
 export function invokeStep(
   dataDir: string,

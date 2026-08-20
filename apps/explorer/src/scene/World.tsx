@@ -13,6 +13,7 @@ import {
   filesImporting,
   folderChangeHighlights,
   folderOfFile,
+  mapPointOntoFolder,
 } from '../layout'
 import { WORLD_VOID } from '../theme'
 import type {
@@ -53,6 +54,8 @@ type WorldProps = {
   flyTo: FlyTo | null
   aimedRelation: AimedRelation | null
   onAimRelation: (aim: AimedRelation | null) => void
+  onAimFile?: (fileId: string | null) => void
+  onInspect?: (fileId: string) => void
   onTravelTo: (fromId: string, toId: string) => void
   importedBy?: boolean
   namingId?: string | null
@@ -63,6 +66,8 @@ type WorldProps = {
   userCreatedBlocks?: UserCreatedBlock[]
   userCreatedIslands?: UserCreatedIsland[]
   namingIslandId?: string | null
+  mapGraph?: CodebaseGraph | null
+  mapLayout?: WorldLayout | null
 }
 
 export function World({
@@ -89,6 +94,8 @@ export function World({
   flyTo,
   aimedRelation,
   onAimRelation,
+  onAimFile,
+  onInspect,
   onTravelTo,
   importedBy = false,
   namingId = null,
@@ -99,10 +106,18 @@ export function World({
   onCancelName,
   userCreatedBlocks = [],
   userCreatedIslands = [],
+  mapGraph = null,
+  mapLayout = null,
 }: WorldProps) {
   const created = new Set(createdIds)
   const deleted = new Set(deletedIds)
   const mapping = mode === 'map'
+  const viewGraph = mapping && mapGraph ? mapGraph : graph
+  const viewLayout = mapping && mapLayout ? mapLayout : layout
+  const mapMarker =
+    viewLayout === layout
+      ? landAt
+      : mapPointOntoFolder(landAt[0], landAt[1], layout, viewLayout)
   const placing = Boolean(namingId || namingIslandId)
   const planned = new Set(plannedIds)
   const ghosts = previewFiles
@@ -135,7 +150,7 @@ export function World({
     planned,
     created,
     deleted,
-    layout.folders,
+    viewLayout.folders,
   )
 
   return (
@@ -149,9 +164,9 @@ export function World({
       />
       <ambientLight intensity={mapping ? 0.7 : 0.42} />
       <MapView
-        layout={layout}
+        layout={viewLayout}
         enabled={mapping}
-        marker={landAt}
+        marker={mapMarker}
         highlightedFolders={highlightedFolders}
         selectedFolder={selectedFolder}
         onLand={onLand}
@@ -160,7 +175,7 @@ export function World({
         onTravelTo={onTravelTo}
       />
 
-      {Object.values(layout.folders).map((folder) => (
+      {Object.values(viewLayout.folders).map((folder) => (
         <FolderArea
           key={folder.path}
           folder={folder}
@@ -172,11 +187,11 @@ export function World({
           }
         />
       ))}
-      {layout.bridges.map((bridge) => (
-        <Bridge key={bridge.id} bridge={bridge} />
+      {viewLayout.bridges.map((bridge) => (
+        <Bridge key={bridge.id} bridge={bridge} folders={viewLayout.folders} />
       ))}
-      {graph.files.map((file) => {
-        const placed = layout.files[file.id]
+      {viewGraph.files.map((file) => {
+        const placed = viewLayout.files[file.id]
         if (!placed) return null
         const selected = file.id === selectedId
         const isRelated = related.has(file.id)
@@ -248,8 +263,8 @@ export function World({
       <RelationLines
         selectedId={selectedId}
         aimedRelation={aimedRelation}
-        files={graph.files}
-        layout={layout}
+        files={viewGraph.files}
+        layout={viewLayout}
         extras={ghosts}
         plannedEdges={plannedImports}
         fromAbove={mapping}
@@ -283,6 +298,8 @@ export function World({
       <SelectionController
         locked={locked && !mapping}
         onSelect={onSelect}
+        onInspect={onInspect}
+        onAimFile={onAimFile}
         onAimRelation={onAimRelation}
         onTravelTo={onTravelTo}
         files={{ ...layout.files, ...ghosts }}

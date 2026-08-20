@@ -29,6 +29,7 @@ type FileBlockProps = {
   mapMode?: boolean
   highlightMapChange?: boolean
   previewLabels?: boolean
+  labelVisible?: boolean
   onCommitName?: (name: string) => void
   onCancelName?: () => void
 }
@@ -53,6 +54,7 @@ export function FileBlock({
   mapMode = false,
   highlightMapChange = mapMode,
   previewLabels = false,
+  labelVisible = true,
   onCommitName,
   onCancelName,
 }: FileBlockProps) {
@@ -164,15 +166,17 @@ export function FileBlock({
       {showLabels && (
         <Suspense fallback={null}>
           {previewLabels ? (
-            <Html
-              position={[0, height / 2 + 0.55, 0]}
-              center
-              occlude={false}
-              style={{ pointerEvents: 'none' }}
-              zIndexRange={[20, 0]}
-            >
-              <div className="thumbnail-block-label">{label}</div>
-            </Html>
+            labelVisible && (
+              <Html
+                position={[0, height / 2 + 0.4, 0]}
+                center
+                occlude={false}
+                style={{ pointerEvents: 'none' }}
+                zIndexRange={[20, 0]}
+              >
+                <div className="thumbnail-block-label">{label}</div>
+              </Html>
+            )
           ) : (
             <>
               <Billboard position={[0, height / 2 + (planned || highlight ? 0.55 : 0.38), 0]}>

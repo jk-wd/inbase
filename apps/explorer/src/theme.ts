@@ -110,11 +110,18 @@ export function dimColor(hex: string, amount = 0.32) {
   return `#${channel(0)}${channel(2)}${channel(4)}`
 }
 
-export function folderFloorColor(path: string) {
+function folderHue(path: string) {
   let hash = 0
   for (let i = 0; i < path.length; i += 1) {
     hash = path.charCodeAt(i) + ((hash << 5) - hash)
   }
-  const hue = Math.abs(hash) % 360
-  return `hsl(${hue}, 16%, 18%)`
+  return Math.abs(hash) % 360
+}
+
+export function folderFloorColor(path: string) {
+  return `hsl(${folderHue(path)}, 5%, 48%)`
+}
+
+export function folderAisleColor(path: string) {
+  return `hsl(${folderHue(path)}, 6%, 40%)`
 }

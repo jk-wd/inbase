@@ -1,6 +1,13 @@
 import { Suspense } from 'react'
 import { Html, Text } from '@react-three/drei'
-import { CHANGE_HIGHLIGHT, folderFloorColor, MAP_SELECTION, type ChangeKind } from '../theme'
+import {
+  CHANGE_HIGHLIGHT,
+  CONFIG,
+  folderAisleColor,
+  folderFloorColor,
+  MAP_SELECTION,
+  type ChangeKind,
+} from '../theme'
 import type { PlacedFolder } from '../types'
 import { MapSelectBorder } from './MapSelectBorder'
 
@@ -30,6 +37,11 @@ export function FolderArea({
     : addedOnly
       ? '#16323f'
       : folderFloorColor(folder.path)
+  const aisle = highlight
+    ? highlight.aisle
+    : addedOnly
+      ? '#23485a'
+      : folderAisleColor(folder.path)
   const label =
     highlightKind === 'remove'
       ? `- ${folder.name}`
@@ -62,22 +74,16 @@ export function FolderArea({
         />
       )}
       <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[2.2, folder.depth - 1.5]} />
-        <meshBasicMaterial
-          color={highlight ? highlight.aisle : addedOnly ? '#23485a' : '#2a3340'}
-        />
+        <planeGeometry args={[CONFIG.bridgeWidth, folder.depth]} />
+        <meshBasicMaterial color={aisle} />
       </mesh>
       {folder.width > 28 && (
         <mesh
-          position={[0, 0.02, folder.depth / 2 - 1.3]}
+          position={[0, 0.02, folder.depth / 2 - CONFIG.bridgeWidth / 2]}
           rotation={[-Math.PI / 2, 0, 0]}
         >
-          <planeGeometry args={[folder.width - 2.4, 2.4]} />
-          <meshBasicMaterial
-            color={
-              highlight ? highlight.aisle : addedOnly ? '#23485a' : '#2a3340'
-            }
-          />
+          <planeGeometry args={[folder.width, CONFIG.bridgeWidth]} />
+          <meshBasicMaterial color={aisle} />
         </mesh>
       )}
       <Suspense fallback={null}>

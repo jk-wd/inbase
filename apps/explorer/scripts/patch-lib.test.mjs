@@ -54,6 +54,8 @@ test('extracts added functions, variables, and import names from a new file', ()
     { name: 'Point', from: './points', file: 'src/mocked-api/weeklyVisitors.ts' },
     { name: 'formatDay', from: './points', file: 'src/mocked-api/weeklyVisitors.ts' },
   ])
+  assert.deepEqual(additions.changedFunctions, [])
+  assert.deepEqual(additions.changedVariables, [])
 })
 
 test('extracts added imports, functions, and variables from a modified file', () => {
@@ -64,18 +66,24 @@ test('extracts added imports, functions, and variables from a modified file', ()
     { name: 'open', file: 'src/pages/Home.tsx' },
     { name: 'setOpen', file: 'src/pages/Home.tsx' },
   ])
+  assert.deepEqual(additions.changedFunctions, [
+    { name: 'Home', file: 'src/pages/Home.tsx' },
+  ])
+  assert.deepEqual(additions.changedVariables, [])
   assert.deepEqual(additions.addedImports, [
     { name: 'useState', from: 'react', file: 'src/pages/Home.tsx' },
     { name: 'Clock', from: '../components/Clock', file: 'src/pages/Home.tsx' },
   ])
 })
 
-test('does not treat a rewritten existing binding as added', () => {
+test('treats a rewritten existing binding as changed, not added', () => {
   const parsed = parseUnifiedPatch(tweakExisting)
   assert.deepEqual(extractPatchAdditions(parsed.entries), {
     addedFunctions: [],
     addedVariables: [],
     addedImports: [],
+    changedFunctions: [],
+    changedVariables: [{ name: 'value', file: 'src/a.ts' }],
   })
 })
 
@@ -101,7 +109,27 @@ test('accumulates additions across diffs and drops deleted files', () => {
     addedFunctions: [],
     addedVariables: [],
     addedImports: [],
+    changedFunctions: [],
+    changedVariables: [],
   })
+})
+
+const editHomeBody = `--- a/src/pages/Home.tsx
++++ b/src/pages/Home.tsx
+@@ -3,3 +3,3 @@ export function Home() {
+-  return <Counter />
++  return <Clock />
+ }
+`
+
+test('marks the enclosing function as changed when its body is edited', () => {
+  const parsed = parseUnifiedPatch(editHomeBody)
+  const additions = extractPatchAdditions(parsed.entries)
+  assert.deepEqual(additions.changedFunctions, [
+    { name: 'Home', file: 'src/pages/Home.tsx' },
+  ])
+  assert.deepEqual(additions.addedFunctions, [])
+  assert.deepEqual(additions.changedVariables, [])
 })
 
 const addAngularClass = `--- /dev/null
