@@ -345,11 +345,49 @@ function applyHunks(original, hunks) {
   return `${lines.join('\n')}\n`
 }
 
+export function applyUnifiedPatchToContents(files, patch) {
+  const parsed = parseUnifiedPatch(patch)
+  if (parsed.entries.length === 0) {
+    throw new Error('Patch did not contain any file changes')
+  }
+
+  for (const file of parsed.entries) {
+    if (file.kind === 'delete') {
+      files.delete(file.id)
+      continue
+    }
+
+    const original =
+      file.kind === 'add' || !files.has(file.id) ? '' : files.get(file.id)
+
+    if (file.kind === 'modify' && original === '') {
+      throw new Error(`Cannot modify missing file ${file.id}`)
+    }
+
+    files.set(file.id, applyHunks(original, file.hunks))
+  }
+
+  return parsed
+}
+
 export function applyUnifiedPatch(patch, targetRoot) {
   const parsed = parseUnifiedPatch(patch)
   if (parsed.entries.length === 0) {
     throw new Error('Patch did not contain any file changes')
   }
+
+  const files = new Map()
+  for (const file of parsed.entries) {
+    const absolute = path.join(targetRoot, file.id)
+    if (
+      file.kind !== 'add' &&
+      fs.existsSync(absolute) &&
+      fs.statSync(absolute).isFile()
+    ) {
+      files.set(file.id, fs.readFileSync(absolute, 'utf8'))
+    }
+  }
+  applyUnifiedPatchToContents(files, patch)
 
   for (const file of parsed.entries) {
     const absolute = path.join(targetRoot, file.id)
@@ -357,18 +395,8 @@ export function applyUnifiedPatch(patch, targetRoot) {
       if (fs.existsSync(absolute)) fs.rmSync(absolute)
       continue
     }
-
-    const original =
-      file.kind === 'add' || !fs.existsSync(absolute)
-        ? ''
-        : fs.readFileSync(absolute, 'utf8')
-
-    if (file.kind === 'modify' && original === '') {
-      throw new Error(`Cannot modify missing file ${file.id}`)
-    }
-
     fs.mkdirSync(path.dirname(absolute), { recursive: true })
-    fs.writeFileSync(absolute, applyHunks(original, file.hunks))
+    fs.writeFileSync(absolute, files.get(file.id))
   }
 
   return parsed
@@ -400,6 +428,7 @@ export const emptyIntent = {
   preview: false,
   phase: null,
   working: false,
+  stalledWait: false,
   creationMode: false,
   canEnterBlueprint: false,
   blueprintSessionId: null,

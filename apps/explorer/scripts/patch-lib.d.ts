@@ -54,6 +54,11 @@ export function accumulatePatchAdditions(patches?: string[]): {
   addedImports: PatchImportAddition[]
 }
 
+export function applyUnifiedPatchToContents(
+  files: Map<string, string>,
+  patch: string,
+): ReturnType<typeof parseUnifiedPatch>
+
 export function applyUnifiedPatch(
   patch: string,
   targetRoot: string,
@@ -93,6 +98,7 @@ export const emptyIntent: {
   preview: boolean
   phase: null
   working: boolean
+  stalledWait: boolean
   creationMode: boolean
   canEnterBlueprint: boolean
   blueprintSessionId: string | null

@@ -246,6 +246,7 @@ export type AgentIntent = {
   preview: boolean
   phase: WorkflowPhase | null
   working: boolean
+  stalledWait: boolean
   creationMode: boolean
   canEnterBlueprint: boolean
   blueprintSessionId: string | null

@@ -30,7 +30,7 @@ export function MapView({
   onTravelTo,
 }: MapViewProps) {
   const size = useThree((state) => state.size)
-  const { camera, gl, scene } = useThree()
+  const { camera, gl, invalidate, scene } = useThree()
   const bounds = useMemo(() => worldBounds(layout), [layout])
   const drag = useRef({ x: 0, y: 0, moved: false, active: false })
   const sized = size.width > 16 && size.height > 16
@@ -49,7 +49,7 @@ export function MapView({
   // Ortho up is -Z, so +Z is down the screen. Shift the view so the map sits
   // above the bottom HUD instead of centering under it.
   const cz = bounds.cz + hudReserve / 2 / zoom
-  const target = useMemo(() => [bounds.cx, 0, cz] as [number, number, number], [bounds.cx, cz])
+  const controlsRef = useRef<{ target: THREE.Vector3; update: () => void }>(null)
 
   useLayoutEffect(() => {
     if (!enabled || !(camera instanceof THREE.OrthographicCamera)) return
@@ -60,7 +60,12 @@ export function MapView({
     camera.far = 2000
     camera.zoom = zoom
     camera.updateProjectionMatrix()
-  }, [bounds.cx, camera, cz, enabled, zoom])
+    const controls = controlsRef.current
+    if (controls) {
+      controls.target.set(bounds.cx, 0, cz)
+      controls.update()
+    }
+  }, [bounds.cx, camera, cz, enabled, sized, zoom])
 
   useEffect(() => {
     if (!enabled) return
@@ -170,21 +175,73 @@ export function MapView({
       if (event.ctrlKey) event.preventDefault()
     }
 
+    const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+    const ndc = new THREE.Vector2()
+    const before = new THREE.Vector3()
+    const after = new THREE.Vector3()
+    const raycaster = new THREE.Raycaster()
+    const minZoom = Math.max(fitZoom * 0.35, 0.05)
+    const maxZoom = Math.max(fitZoom * 10, 20)
+    const zoomScale = Math.pow(0.95, 1.15)
+
+    const worldUnderCursor = (clientX: number, clientY: number, target: THREE.Vector3) => {
+      const rect = element.getBoundingClientRect()
+      if (rect.width < 2 || rect.height < 2) return false
+      ndc.set(
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        -((clientY - rect.top) / rect.height) * 2 + 1,
+      )
+      raycaster.setFromCamera(ndc, camera)
+      return Boolean(raycaster.ray.intersectPlane(ground, target))
+    }
+
+    const zoomAtCursor = (clientX: number, clientY: number, dollyScale: number) => {
+      if (!(camera instanceof THREE.OrthographicCamera)) return
+      if (!worldUnderCursor(clientX, clientY, before)) return
+      const nextZoom = Math.min(maxZoom, Math.max(minZoom, camera.zoom / dollyScale))
+      if (nextZoom === camera.zoom) return
+      camera.zoom = nextZoom
+      camera.updateProjectionMatrix()
+      if (!worldUnderCursor(clientX, clientY, after)) return
+      const dx = before.x - after.x
+      const dz = before.z - after.z
+      camera.position.x += dx
+      camera.position.z += dz
+      const controls = controlsRef.current
+      if (controls) {
+        controls.target.x += dx
+        controls.target.z += dz
+        controls.update()
+      }
+      invalidate()
+    }
+
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      if (event.deltaY < 0) zoomAtCursor(event.clientX, event.clientY, zoomScale)
+      else if (event.deltaY > 0) zoomAtCursor(event.clientX, event.clientY, 1 / zoomScale)
+    }
+
     element.addEventListener('pointerdown', onDown)
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
     element.addEventListener('contextmenu', onContextMenu)
+    element.addEventListener('wheel', onWheel, { capture: true, passive: false })
     return () => {
       element.style.cursor = ''
       element.removeEventListener('pointerdown', onDown)
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
       element.removeEventListener('contextmenu', onContextMenu)
+      element.removeEventListener('wheel', onWheel, { capture: true })
     }
   }, [
     camera,
     enabled,
+    fitZoom,
     gl.domElement,
+    invalidate,
     layout,
     onLand,
     onSelect,
@@ -196,25 +253,19 @@ export function MapView({
   return (
     <>
       {enabled && (
-        <OrthographicCamera
-          makeDefault
-          position={[bounds.cx, 120, cz]}
-          zoom={zoom}
-          near={1}
-          far={2000}
-          up={[0, 0, -1]}
-        />
+        <OrthographicCamera makeDefault near={1} far={2000} up={[0, 0, -1]} />
       )}
       {enabled && sized && (
         <MapControls
+          ref={controlsRef}
           enableRotate={false}
           enableDamping
           dampingFactor={0.12}
           screenSpacePanning
+          zoomToCursor
           zoomSpeed={1.15}
           minZoom={Math.max(fitZoom * 0.35, 0.05)}
           maxZoom={Math.max(fitZoom * 10, 20)}
-          target={target}
         />
       )}
       {enabled &&

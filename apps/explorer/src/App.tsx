@@ -49,6 +49,7 @@ function intentSignature(intent: AgentIntent) {
     updatedAt: intent.updatedAt,
     status: intent.status,
     phase: intent.phase,
+    stalledWait: intent.stalledWait,
     sessionId: intent.sessionId,
     creationMode: intent.creationMode,
     diffId: intent.diffId,

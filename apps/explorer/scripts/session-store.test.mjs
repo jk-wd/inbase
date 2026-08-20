@@ -28,6 +28,7 @@ import {
   stopSession,
   touchSessionConnection,
   updateBlueprint,
+  writeManifest,
   isSessionStopped,
   isWorkflowStopped,
 } from './session-store.mjs'
@@ -985,6 +986,84 @@ test('inspecting a file materializes the selected diff into the editor path', ()
     })
     assert.equal(inspected, path.join(env.targetRoot, 'src/a.ts'))
     assert.equal(fs.readFileSync(inspected, 'utf8'), 'export const value = 3\n')
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('publishes a patch without copying the rest of the target tree', () => {
+  const env = fixture()
+  try {
+    fs.mkdirSync(path.join(env.targetRoot, 'node_modules/pkg'), { recursive: true })
+    fs.writeFileSync(
+      path.join(env.targetRoot, 'node_modules/pkg/index.js'),
+      'export default 1\n',
+    )
+    fs.writeFileSync(
+      path.join(env.targetRoot, 'package.json'),
+      `${JSON.stringify({ name: 'target' }, null, 2)}\n`,
+    )
+
+    reportPlan(env.dataDir, {
+      sessionId: 'cursor-copy-chat',
+      feature: 'Avoid sandbox copy',
+      stepTitles: ['Build value'],
+    })
+    invokeStep(env.dataDir, 'cursor-copy-chat', 1)
+    const published = appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'cursor-copy-chat',
+      patchText: oneToTwo,
+    })
+    assert.equal(published.entry.step, 1)
+    assert.equal(published.manifest.phase, 'review')
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('flags a working session when the LLM is still waiting', () => {
+  const env = fixture()
+  try {
+    reportPlan(env.dataDir, {
+      sessionId: 'stall-chat',
+      feature: 'Stalled wait',
+      stepTitles: ['Build value'],
+    })
+    invokeStep(env.dataDir, 'stall-chat', 1)
+    const fresh = sessionIntent(
+      env.dataDir,
+      'stall-chat',
+      ['src/a.ts'],
+      undefined,
+      new Set(['stall-chat']),
+    )
+    assert.equal(fresh.working, true)
+    assert.equal(fresh.stalledWait, false)
+
+    const manifest = readManifest(env.dataDir, 'stall-chat')
+    manifest.workStartedAt = new Date(Date.now() - 5_000).toISOString()
+    writeManifest(env.dataDir, manifest)
+
+    const stalled = sessionIntent(
+      env.dataDir,
+      'stall-chat',
+      ['src/a.ts'],
+      undefined,
+      new Set(['stall-chat']),
+    )
+    assert.equal(stalled.stalledWait, true)
+    const implementing = sessionIntent(
+      env.dataDir,
+      'stall-chat',
+      ['src/a.ts'],
+      undefined,
+      new Set(),
+    )
+    assert.equal(implementing.stalledWait, false)
   } finally {
     env.cleanup()
   }

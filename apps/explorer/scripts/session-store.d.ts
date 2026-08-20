@@ -52,7 +52,10 @@ export function isSessionConnected(
   waiterIds?: Set<string>,
 ): boolean
 export function listStoredSessionIds(dataDir: string): string[]
-export function listOpenSessionIds(dataDir: string): string[]
+export function listOpenSessionIds(
+  dataDir: string,
+  waiterIds?: Set<string>,
+): string[]
 export function discardInactiveDiffSessions(
   dataDir: string,
   targetRoot?: string | null,
@@ -138,6 +141,7 @@ export function sessionIntent(
   sessionId: string,
   knownFileIds?: string[],
   selectedDiffId?: string,
+  waiterIds?: Set<string>,
 ): Record<string, unknown> | null
 export function resolveTargetFile(
   targetRoot: string,

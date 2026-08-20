@@ -1,10 +1,10 @@
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import {
   accumulatePatchAdditions,
   applyUnifiedPatch,
+  applyUnifiedPatchToContents,
   collectCreateFolders,
   extractPatchImports,
   foldersFromFileIds,
@@ -13,6 +13,7 @@ import {
 
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const CONNECTED_TTL_MS = 15_000
+const STALLED_WAIT_MS = 2_000
 
 export function assertSessionId(value) {
   if (typeof value !== 'string' || !SESSION_ID.test(value) || value === '.' || value === '..') {
@@ -170,6 +171,13 @@ function isGeneratingPhase(phase) {
   return phase === 'preparing' || phase === 'working' || phase === 'replanning'
 }
 
+function isStalledWorking(manifest, waiterIds, sessionId, now = Date.now()) {
+  if (manifest.phase !== 'working') return false
+  if (!waiterIds.has(sessionId)) return false
+  const started = Date.parse(manifest.workStartedAt)
+  return Number.isFinite(started) && now - started >= STALLED_WAIT_MS
+}
+
 export function isSessionConnected(
   dataDir,
   sessionId,
@@ -216,16 +224,15 @@ export function listStoredSessionIds(dataDir) {
   return [...ids]
 }
 
-export function listOpenSessionIds(dataDir) {
+export function listOpenSessionIds(dataDir, waiterIds = waiterSessionIds()) {
   const root = diffSessionsRoot(dataDir)
   if (!fs.existsSync(root)) return []
-  const waiters = waiterSessionIds()
   const sessions = []
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue
     try {
       const sessionId = assertSessionId(entry.name)
-      if (!isSessionConnected(dataDir, sessionId, waiters)) continue
+      if (!isSessionConnected(dataDir, sessionId, waiterIds)) continue
       const manifest = readManifest(dataDir, sessionId)
       if (!manifest) continue
       sessions.push({
@@ -246,8 +253,11 @@ export function listOpenSessionIds(dataDir) {
 }
 
 export function listSessionIntents(dataDir, knownFileIds = []) {
-  return listOpenSessionIds(dataDir)
-    .map((sessionId) => sessionIntent(dataDir, sessionId, knownFileIds))
+  const waiters = waiterSessionIds()
+  return listOpenSessionIds(dataDir, waiters)
+    .map((sessionId) =>
+      sessionIntent(dataDir, sessionId, knownFileIds, undefined, waiters),
+    )
     .filter(Boolean)
 }
 
@@ -417,7 +427,13 @@ export function previewPatchChain(patches, knownFileIds = []) {
   }
 }
 
-export function sessionIntent(dataDir, sessionId, knownFileIds = [], selectedDiffId) {
+export function sessionIntent(
+  dataDir,
+  sessionId,
+  knownFileIds = [],
+  selectedDiffId,
+  waiterIds = waiterSessionIds(),
+) {
   const manifest = readManifest(dataDir, sessionId)
   if (!manifest) return null
   const selectedId = selectedDiffId || manifest.activeDiffId
@@ -485,6 +501,7 @@ export function sessionIntent(dataDir, sessionId, knownFileIds = [], selectedDif
       manifest.phase === 'preparing' ||
       manifest.phase === 'working' ||
       manifest.phase === 'replanning',
+    stalledWait: isStalledWorking(manifest, waiterIds, sessionId),
     creationMode: manifest.phase === 'blueprint' && ownsBlueprintLock,
     canEnterBlueprint,
     blueprintSessionId,
@@ -633,25 +650,47 @@ export function materializeDiff(dataDir, targetRoot, sessionId, diffId) {
   return manifest
 }
 
-function withSessionReplay(dataDir, sessionId, targetRoot, patches, action) {
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'visual-coder-chain-'))
-  try {
-    fs.cpSync(targetRoot, temporary, { recursive: true })
-    restoreBaseline(dataDir, sessionId, temporary)
-    for (const patchText of patches) applyUnifiedPatch(patchText, temporary)
-    return action(temporary)
-  } finally {
-    fs.rmSync(temporary, { recursive: true, force: true })
+function loadReplayContents(dataDir, sessionId, targetRoot, patches) {
+  const baseline = readBaseline(dataDir, sessionId)
+  const paths = sessionPaths(dataDir, sessionId)
+  const fileIds = new Set(Object.keys(baseline.files))
+  for (const patchText of patches) {
+    for (const entry of parseUnifiedPatch(patchText).entries) {
+      fileIds.add(entry.id)
+    }
   }
+
+  const files = new Map()
+  for (const fileId of fileIds) {
+    const info = baseline.files[fileId]
+    if (info) {
+      if (!info.existed) continue
+      const stored = resolveTargetFile(paths.baselineFiles, fileId).absolute
+      if (fs.existsSync(stored) && fs.statSync(stored).isFile()) {
+        files.set(fileId, fs.readFileSync(stored, 'utf8'))
+      }
+      continue
+    }
+    const { absolute } = resolveTargetFile(targetRoot, fileId)
+    if (fs.existsSync(absolute) && fs.statSync(absolute).isFile()) {
+      files.set(fileId, fs.readFileSync(absolute, 'utf8'))
+    }
+  }
+  return files
 }
 
 export function validateContinuation(dataDir, manifest, targetRoot, patchText) {
   const prior = manifest.diffs
     .filter((entry) => entry.status !== 'rejected')
     .map((entry) => readDiff(dataDir, manifest.sessionId, entry))
-  withSessionReplay(dataDir, manifest.sessionId, targetRoot, [...prior, patchText], () =>
-    undefined,
+  const patches = [...prior, patchText]
+  const files = loadReplayContents(
+    dataDir,
+    manifest.sessionId,
+    targetRoot,
+    patches,
   )
+  for (const next of patches) applyUnifiedPatchToContents(files, next)
 }
 
 export function inspectTargetFile(

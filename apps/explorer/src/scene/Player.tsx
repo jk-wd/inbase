@@ -226,7 +226,15 @@ export function Player({
         makeDefault
         selector=".stage canvas"
         enabled={steering && lockEnabled}
-        onLock={() => onLockedChange(true)}
+        onLock={() => {
+          if (!lockEnabled) {
+            controlsRef.current?.unlock()
+            document.exitPointerLock()
+            onLockedChange(false)
+            return
+          }
+          onLockedChange(true)
+        }}
         onUnlock={() => onLockedChange(false)}
       />
     </>

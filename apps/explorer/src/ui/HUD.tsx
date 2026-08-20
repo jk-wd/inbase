@@ -346,7 +346,9 @@ function SessionPanel({
               <span>
                 {intent.status === 'replanning'
                   ? 'Updating the remaining plan from your instruction…'
-                  : `Implementing ${stepLabel.toLowerCase()}…`}
+                  : intent.stalledWait
+                    ? 'The LLM is still waiting on this step…'
+                    : `Implementing ${stepLabel.toLowerCase()}…`}
               </span>
               <button
                 className="hud-button hud-button-reject"
@@ -789,6 +791,18 @@ export function HUD({
   }, [selectedFolder])
 
   useEffect(() => {
+    if (!locked) return
+    setInfoVisible(false)
+    setInfoMinimized(false)
+  }, [locked])
+
+  const infoOpen = infoVisible && Boolean(selected || selectedFolderNode)
+
+  useEffect(() => {
+    if (infoOpen) document.exitPointerLock()
+  }, [infoOpen])
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat || event.code !== 'KeyI') return
       const target = event.target
@@ -1201,7 +1215,7 @@ export function HUD({
             <ul>
               {folderFiles.map((file) => (
                 <li key={file.id}>
-                  <span>{file.path || file.id}</span>
+                  <span>{file.name}</span>
                   {canInspectFile(file.id, file.userCreated) && (
                     <button
                       className="hud-item-inspect"

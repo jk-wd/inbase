@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   accumulatePatchAdditions,
+  applyUnifiedPatchToContents,
   extractPatchAdditions,
   extractPatchImports,
   parseUnifiedPatch,
@@ -149,5 +150,27 @@ test('extracts require() bindings and relative edges', () => {
       { from: 'src/server.cjs', to: 'src/format.cjs' },
       { from: 'src/server.cjs', to: 'src/side-effect.mjs' },
     ],
+  )
+})
+
+test('applies a patch chain in memory without a temp project copy', () => {
+  const files = new Map([['src/a.ts', 'export const value = 1\n']])
+  applyUnifiedPatchToContents(
+    files,
+    '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 2\n',
+  )
+  assert.equal(files.get('src/a.ts'), 'export const value = 2\n')
+  applyUnifiedPatchToContents(
+    files,
+    '--- /dev/null\n+++ b/src/b.ts\n@@ -0,0 +1,1 @@\n+export const extra = 1\n',
+  )
+  assert.equal(files.get('src/b.ts'), 'export const extra = 1\n')
+  assert.throws(
+    () =>
+      applyUnifiedPatchToContents(
+        files,
+        '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 9\n',
+      ),
+    /Hunk does not apply/,
   )
 })

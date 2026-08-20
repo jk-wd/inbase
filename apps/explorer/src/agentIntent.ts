@@ -71,6 +71,7 @@ export const emptyIntent: AgentIntent = {
   preview: false,
   phase: null,
   working: false,
+  stalledWait: false,
   creationMode: false,
   canEnterBlueprint: false,
   blueprintSessionId: null,
@@ -111,6 +112,7 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     preview: Boolean(data?.preview),
     phase: data?.phase ?? null,
     working: Boolean(data?.working),
+    stalledWait: Boolean(data?.stalledWait),
     creationMode: Boolean(data?.creationMode),
     canEnterBlueprint: Boolean(data?.canEnterBlueprint),
     blueprintSessionId:
