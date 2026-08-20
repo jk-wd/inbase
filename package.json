@@ -1,6 +1,6 @@
 {
   "name": "@jkwd/inbase",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "A first-person 3D map of a codebase, with a visual coding workflow for Cursor.",
   "repository": {
     "type": "git",
