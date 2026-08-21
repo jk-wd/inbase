@@ -47,13 +47,16 @@ inbase run --target /path/to/your/project
 
 <img src="docs/inbase-llm.png" alt="LLM working through a plan in the heads-up display overlay" align="left" width="280" hspace="16" />
 
-Inbase does not call a model itself. The visual coding loop currently supports **Cursor**. The installed skill makes the agent work through the map: it reports a plan, waits on the **HUD** (heads-up display — the overlay panel on the 3D map), and publishes each step as a patch you can walk before it is applied.
+Inbase does not call a model itself. The visual coding loop currently supports **Cursor**. The installed skill makes the agent work through the map: it reports a plan, waits on the **HUD** (heads-up display — the overlay panel on the 3D map), and publishes each step as a patch file. Those patch files are the source of truth and are applied on every step update.
 
-When a chat starts, that overlay asks whether to set up a **blueprint**. **Create blueprint** lets you place files (`Space`) and folders (`B`), then **Send blueprint** — that layout is the source of truth for the chat. **Let LLM continue** skips placement and lets the agent choose files from the request.
+When a chat starts, that overlay asks whether to set up a **blueprint**. **Create blueprint** lets you place files (`Space`) and folders (`B`), then **Send blueprint** — that layout is the source of truth for the chat. **Let LLM continue** skips the initial placement. You can still place files and islands on later steps; they are stored on that chat’s blueprint. When the session finishes, placement stops.
 
-Turn on **Make LLM look where I look** if the agent should prefer the island you are standing on and the blocks you are facing. With **Step by step** on, click **Run step** for each patch. With it off, the LLM implements the full plan; you can still walk Previous/Next over the diffs, then **Complete**. Send an alternative instruction from the HUD to revise the remaining plan, or **Stop** to end the session.
+If several chats are open, only one session window is shown at a time. Switch with the tabs so the focused chat is the one whose blueprint you see and edit.
 
-The LLM never writes project files itself. Patches apply when you run or complete steps in the visualizer.
+Turn on **Make LLM look where I look** if the agent should prefer the island you are standing on and the blocks you are facing. With **Step by step** on, click **Run step** to start a step, then **Accept proposal** when the patch is ready. With it off, the LLM implements the full plan; you can still walk Previous/Next over the diffs, then **Accept proposal**. Send an alternative instruction from the HUD to revise the remaining plan, or **Stop** to end the session.
+
+The LLM never writes project files itself. It only publishes patch files. Those
+stored patches are the source of truth and are applied on every step update.
 
 <br clear="all" />
 

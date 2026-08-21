@@ -2,12 +2,12 @@
 name: example-target-visual-edits
 description: >-
   Grounds example-target code changes in the Visual Coder map. List every step
-  of the feature, then work only via patch files. The visualizer reads each
-  patch, showcases added and changed components, and the user Run step
-  or sends an instruction in the UI. Use only in this repo when changing files
-  under apps/example-target. Do not use for explorer, Vite, Three.js, or other
-  non-target changes. Never modify or add example-target files except by a
-  patch the user applied in the visualizer.
+  of the feature, then work only via patch files. Patch files are the single
+  source of truth: never Write, StrReplace, or Delete example-target files;
+  only write a unified diff and publish it. The visualizer stores each patch
+  and applies the live chain on every step update. Use only in this repo when
+  changing files under apps/example-target. Do not use for explorer, Vite,
+  Three.js, or other non-target changes.
 ---
 
 # Example-target visual edits
@@ -16,14 +16,19 @@ Apply this skill **only** when the work is file changes in `apps/example-target`
 Skip it for explorer, layout, lighting, or other Visual Coder app work.
 
 The LLM uses a plan-first loop. It reports the complete plan before writing a
-patch. When **Step by step** is on, it waits for the user to invoke the
-highlighted step, publishes only that step's diff, then waits for **Run step**
-on the following step or an alternative instruction. When **Step by step** is
+patch. When **Step by step** is on, it waits for the user to invoke the first
+step, publishes only that step's diff, then waits for **Accept proposal** on
+that step or an alternative instruction. When **Step by step** is
 off, `wait-for-approval` returns `VISUAL_CODER_EXECUTE` for every remaining
-step without the user clicking Run step; after the last patch, wait for the
-user to **Complete**. They can still walk Previous/Next over the diffs. Always
-work via patch files. Do not Write, StrReplace, or Delete files under
-`apps/example-target`.
+step without the user clicking; after the last patch, wait for the
+user to **Accept proposal**. They can still walk Previous/Next over the diffs.
+
+**Patch files are the single source of truth.** Do not Write, StrReplace, or
+Delete files under `apps/example-target`. Only write a unified diff and publish
+it with `propose-patch.mjs`. That command stores the patch and applies the live
+patch chain (baseline + accepted patches + this step). A later instruction
+replaces the withdrawn step's patch; write the new diff against the accepted
+live files, not against the withdrawn proposal.
 
 Every Cursor chat has an explicit session ID. Pass that same ID to every script
 invocation. The visualizer stores immutable diffs under
@@ -48,9 +53,12 @@ node .cursor/skills/example-target-visual-edits/scripts/wait-for-blueprint.mjs \
 ```
 
    The explorer asks **Setup blueprint: Yes vs No**.
-   - **No**: skip placement; continue without user-placed files or islands.
+   - **No**: skip the initial placement. The user can still place files and
+     islands on later steps; re-read this session's `blueprint.json` before
+     each step.
    - **Yes**: the user places files (`Space`) and islands (`B`), then clicks
-     **Send blueprint**.
+     **Send blueprint**. They can keep placing on later steps. This chat's
+     blueprint is stored only for this session.
 3. Read the handshake output between `VISUAL_CODER_BLUEPRINT_START` and
    `VISUAL_CODER_BLUEPRINT_END`, or read
    `apps/explorer/src/data/diff-sessions/<session-id>/blueprint.json`.
@@ -96,8 +104,11 @@ node .cursor/skills/example-target-visual-edits/scripts/wait-for-approval.mjs \
 ```
 
    Do not write a patch until this prints `VISUAL_CODER_EXECUTE`. If Step by
-   step is off, this returns immediately for each remaining step.
-9. Implement only the invoked step as a unified diff. Paths are relative to
+   step is off, this returns immediately for each remaining step. Before
+   implementing, re-read this session's `blueprint.json`; the user can place
+   files and islands on any step.
+9. Implement only the invoked step as a unified diff against the current live
+   files (baseline + accepted patch files). Paths are relative to
    `apps/example-target/` (same ids as `codebase.json`):
 
 ```diff
@@ -126,12 +137,15 @@ node .cursor/skills/example-target-visual-edits/scripts/propose-patch.mjs \
 ```
 
    The patch path or stdin is required. Never write or replace a patch already
-   stored in the session folder.
+   stored in the session folder. `propose-patch` stores the new file and
+   applies the live patch chain. Do not `git apply`, copy files, or edit
+   `apps/example-target` yourself.
 
-10. **Stop.** Do not apply the patch and do not edit `apps/example-target`.
-11. Wait until the user clicks **Run step** on the next step (or, when Step by
+10. **Stop.** Do not edit `apps/example-target`. The stored patch files are
+    already the live tree.
+11. Wait until the user clicks **Accept proposal** on the current step (or, when Step by
    step is off, until the next step is auto-invoked), sends an alternative
-   instruction, clicks **Complete** on the last step, or stops the workflow:
+   instruction, or stops the workflow:
 
 ```bash
 node .cursor/skills/example-target-visual-edits/scripts/wait-for-approval.mjs \
@@ -140,14 +154,18 @@ node .cursor/skills/example-target-visual-edits/scripts/wait-for-approval.mjs \
 
 12. Read the wait script output:
 
-   - Exit `0` (`VISUAL_CODER_EXECUTE`): the highlighted step was invoked. Build
-     only that step, publish its diff, then wait again.
+   - Exit `0` (`VISUAL_CODER_EXECUTE`): the highlighted step was invoked. Re-read
+     this session's `blueprint.json` first; the user can place files and islands
+     on any step, not only during the initial blueprint. Build only that step as
+     a unified diff against the live files, publish it, then wait again. Do not
+     edit `apps/example-target` files.
    - Exit `5` (`VISUAL_CODER_FINISHED`): that was the last step. The visualizer
      already applied the final patch and removed stored session diffs and
      blueprint drafts. Optionally run `--clear` if anything remains, tell the
      user the feature is done, and **stop**. Do not propose another patch.
-   - Exit `4` (`VISUAL_CODER_REPLAN`): do **not** apply files and do not rewrite
-     an earlier diff. Follow the text between
+   - Exit `4` (`VISUAL_CODER_REPLAN`): do **not** edit project files and do not
+     rewrite an earlier accepted patch. The withdrawn proposal is no longer live;
+     disk is baseline + accepted patch files. Follow the text between
      `VISUAL_CODER_INSTRUCTION_START` and `VISUAL_CODER_INSTRUCTION_END`, read
      this session's `blueprint.json` when it is enabled (files, islands,
      `addedFunctions`, `addedVariables`, `addedImports`). The blueprint stays
@@ -155,6 +173,8 @@ node .cursor/skills/example-target-visual-edits/scripts/wait-for-approval.mjs \
      replacing the plan. Read `user-context.json` (follow the viewpoint only if
      `followLook` is true), replace the plan from the current step onward using
      `report-plan.mjs`, then wait for the user to invoke the first revised step.
+     The replacement patch must apply on top of the accepted live files, not the
+     withdrawn proposal.
    - Exit `2` (`VISUAL_CODER_STOPPED`) or `3` (timeout): make no further
      example-target changes.
 
@@ -177,6 +197,9 @@ node .cursor/skills/example-target-visual-edits/scripts/propose-patch.mjs \
 - Read global `user-context.json` for placed files; those live on the session blueprint
 - Follow the user's look when `followLook` is false
 - Write, edit, create, or delete `apps/example-target` files directly
+- `git apply`, copy, or otherwise materialize a patch yourself
+- Treat on-disk example-target files as something to edit; they are a replay of
+  the stored patch files
 - Announce file lists instead of a patch
 - Write a patch before its plan step is invoked
 - Propose the next step before `wait-for-approval` returns `VISUAL_CODER_EXECUTE`

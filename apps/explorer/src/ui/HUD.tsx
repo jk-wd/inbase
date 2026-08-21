@@ -29,6 +29,16 @@ function reviewTitle(status: AgentIntentStatus) {
   return 'Visual workflow'
 }
 
+function sessionTabLabel(intent: AgentIntent, sessions: AgentIntent[]) {
+  const title = intent.feature?.trim() || reviewTitle(intent.status)
+  const same = sessions.filter(
+    (item) => (item.feature?.trim() || reviewTitle(item.status)) === title,
+  )
+  if (same.length < 2) return title
+  const id = intent.sessionId ?? ''
+  return `${title} · ${id.slice(-4)}`
+}
+
 function fileBase(id: string) {
   return id.split('/').pop() ?? id
 }
@@ -264,7 +274,8 @@ function SessionPanel({
   const sessionId = intent.sessionId
   const pending = intent.status === 'pending' && intent.isActiveDiff
   const askingBlueprint = intent.status === 'blueprint_ask'
-  const creatingBlueprint = intent.creationMode || intent.status === 'blueprint'
+  const sendingBlueprint = intent.status === 'blueprint'
+  const canPlace = Boolean(intent.creationMode)
   const preparing = intent.status === 'preparing'
   const planReady = intent.status === 'planned'
   const working = intent.status === 'working' || intent.status === 'replanning'
@@ -286,7 +297,7 @@ function SessionPanel({
   const addedImports = intent.addedImports ?? []
   const changedFunctions = intent.changedFunctions ?? []
   const changedVariables = intent.changedVariables ?? []
-  const doneSteps = new Set(
+  const acceptedSteps = new Set(
     intent.status === 'finished'
       ? intent.steps.map((step) => step.index)
       : intent.chain
@@ -297,22 +308,23 @@ function SessionPanel({
           .map((entry) => entry.step),
   )
   if (intent.status === 'approved' && typeof intent.step === 'number') {
-    doneSteps.add(intent.step)
+    acceptedSteps.add(intent.step)
   }
-  if (pending && typeof intent.step === 'number' && !lastStep) {
-    doneSteps.add(intent.step)
-  }
-  const nextStep =
-    intent.status === 'finished'
-      ? null
-      : (intent.steps.find((step) => !doneSteps.has(step.index)) ?? null)
-  const canRunNext =
-    Boolean(nextStep) && (planReady || pending) && !working
-  const canComplete = pending && lastStep
+  const proposalStep =
+    pending && typeof intent.step === 'number' ? intent.step : null
+  const processingStep =
+    working && typeof intent.step === 'number' ? intent.step : null
+  const invokeStep =
+    planReady && !working
+      ? (intent.steps.find((step) => !acceptedSteps.has(step.index)) ?? null)
+      : null
+  const canRunNext = stepByStep && Boolean(invokeStep)
+  const canAcceptProposal = proposalStep !== null
   const panelDone =
     intent.status === 'finished' ||
     intent.status === 'approved' ||
-    doneSteps.size > 0
+    acceptedSteps.size > 0 ||
+    canAcceptProposal
 
   useEffect(() => {
     setInstruction('')
@@ -358,22 +370,26 @@ function SessionPanel({
           {!stepByStep && (
             <p className="hud-mode-hint">
               LLM implements the full plan. You can still walk the diffs, then
-              Complete.
+              Accept proposal.
+            </p>
+          )}
+          {intent.llmIdle && !working && !preparing && (
+            <p className="hud-mode-hint">
+              LLM is idle. Current changes stay on the map.
             </p>
           )}
           {intent.feature && <p className="hud-feature">{intent.feature}</p>}
           {askingBlueprint ? (
             <>
               <p>
-                {intent.canEnterBlueprint
-                  ? 'Place files and folders for this chat, then send them as a blueprint for the LLM?'
-                  : `Blueprint edit mode is active in another chat (${intent.blueprintSessionId}). Finish or stop it before starting here.`}
+                Place files and folders for this chat, then send them as a
+                blueprint for the LLM? You can still add files and islands on
+                later steps.
               </p>
               <div className="hud-decide">
                 <button
                   className="hud-button hud-button-approve"
                   type="button"
-                  disabled={!intent.canEnterBlueprint}
                   onClick={() => act('blueprint_yes')}
                 >
                   Create blueprint
@@ -394,12 +410,12 @@ function SessionPanel({
                 </button>
               </div>
             </>
-          ) : creatingBlueprint ? (
+          ) : sendingBlueprint ? (
             <>
               <p>
                 Walk the map, press <kbd>Space</kbd> for a file and{' '}
                 <kbd>B</kbd> for an island. Send the blueprint when the layout
-                is ready.
+                is ready. You can keep placing files after this handshake.
               </p>
               <div className="hud-decide">
                 <button
@@ -457,50 +473,53 @@ function SessionPanel({
               {intent.reason ? ` · ${intent.reason}` : ''}
             </p>
           )}
-          {!askingBlueprint && !creatingBlueprint && (
+          {!askingBlueprint && !sendingBlueprint && (
             <>
+              {canPlace && (
+                <p>
+                  <kbd>Space</kbd> places a file, <kbd>B</kbd> an island for
+                  this session.
+                </p>
+              )}
               {intent.steps?.length > 0 && (
                 <ol className="hud-steps">
-                  {intent.steps.map((step) => (
-                    <li
-                      key={step.index}
-                      data-current={
-                        intent.status !== 'finished' &&
-                        step.index === intent.step &&
-                        !doneSteps.has(step.index)
-                      }
-                      data-done={doneSteps.has(step.index)}
-                      data-next={
-                        nextStep?.index === step.index &&
-                        !doneSteps.has(step.index)
-                      }
-                    >
-                      <span className="hud-step-index">{step.index}.</span>
-                      <span className="hud-step-main">
-                        <span className="hud-step-title">{step.title}</span>
-                        {((stepByStep &&
-                          canRunNext &&
-                          nextStep?.index === step.index) ||
-                          (canComplete && step.index === intent.step)) && (
-                          <button
-                            className="hud-button hud-button-approve hud-run-step"
-                            type="button"
-                            onClick={() =>
-                              canComplete && step.index === intent.step
-                                ? act('continue')
-                                : act('invoke', {
-                                    step: step.index,
-                                  })
-                            }
-                          >
-                            {canComplete && step.index === intent.step
-                              ? 'Complete'
-                              : 'Run step'}
-                          </button>
-                        )}
-                      </span>
-                    </li>
-                  ))}
+                  {intent.steps.map((step) => {
+                    const proposed = proposalStep === step.index
+                    const processing = processingStep === step.index
+                    const accepted = acceptedSteps.has(step.index)
+                    return (
+                      <li
+                        key={step.index}
+                        data-done={accepted || proposed}
+                        data-active={processing || proposed}
+                      >
+                        <span className="hud-step-index">{step.index}.</span>
+                        <span className="hud-step-main">
+                          <span className="hud-step-title">{step.title}</span>
+                          {((canRunNext && invokeStep?.index === step.index) ||
+                            (canAcceptProposal && proposed)) && (
+                            <button
+                              className="hud-button hud-button-approve hud-run-step"
+                              type="button"
+                              onClick={() =>
+                                proposed
+                                  ? lastStep
+                                    ? act('continue')
+                                    : act('invoke', {
+                                        step: step.index + 1,
+                                      })
+                                  : act('invoke', {
+                                      step: step.index,
+                                    })
+                              }
+                            >
+                              {proposed ? 'Accept proposal' : 'Run step'}
+                            </button>
+                          )}
+                        </span>
+                      </li>
+                    )
+                  })}
                 </ol>
               )}
               {intent.chain.length > 0 && (
@@ -661,15 +680,6 @@ function SessionPanel({
                     />
                   </label>
                   <div className="hud-decide">
-                    {lastStep && (
-                      <button
-                        className="hud-button hud-button-approve"
-                        type="button"
-                        onClick={() => act('continue')}
-                      >
-                        Complete
-                      </button>
-                    )}
                     <button
                       className="hud-button hud-button-extend"
                       type="button"
@@ -732,7 +742,7 @@ function InstructionList({ items }: { items: ExplorerInstruction[] }) {
 }
 
 function explorerInstructions({
-  creatingBlueprint,
+  canPlace,
   hasChangeSet,
   changePathsOnly,
   selectedUserCreated,
@@ -742,7 +752,7 @@ function explorerInstructions({
   canStop,
   sessionCount,
 }: {
-  creatingBlueprint: boolean
+  canPlace: boolean
   hasChangeSet: boolean
   changePathsOnly: boolean
   selectedUserCreated: boolean
@@ -753,7 +763,7 @@ function explorerInstructions({
   sessionCount: number
 }): ExplorerInstructionSection[] {
   const backspace: ExplorerInstruction[] =
-    selectedUserCreated && creatingBlueprint
+    selectedUserCreated && canPlace
       ? [{ id: 'backspace', keys: ['Backspace'], label: 'Delete' }]
       : []
   const info: ExplorerInstruction[] = [
@@ -796,7 +806,7 @@ function explorerInstructions({
         { id: 'wasd', keys: ['W', 'A', 'S', 'D'], label: 'Walk' },
         { id: 'mouse-look', keys: ['Mouse'], label: 'Look around' },
         { id: 'shift', keys: ['Shift'], label: 'Sprint' },
-        ...(creatingBlueprint
+        ...(canPlace
           ? [
               { id: 'space', keys: ['Space'], label: 'Place file' },
               { id: 'b-island', keys: ['B'], label: 'Place island' },
@@ -856,7 +866,7 @@ function explorerInstructions({
           keys: ['Click'],
           label: 'An island for its files',
         },
-        ...(creatingBlueprint
+        ...(canPlace
           ? [
               { id: 'select-island', keys: ['Click'], label: 'Select an island' },
               {
@@ -1042,9 +1052,7 @@ export function HUD({
   const [thumbnailMinimized, setThumbnailMinimized] = useState(false)
   const [thumbnailMaximized, setThumbnailMaximized] = useState(false)
   const infoPanelRef = useRef<HTMLDivElement>(null)
-  const creatingBlueprint = sessions.some(
-    (item) => item.creationMode || item.status === 'blueprint',
-  )
+  const canPlace = Boolean(intent.creationMode)
   const previewing = intent.preview
   const addedFunctions = intent.addedFunctions ?? []
   const addedVariables = intent.addedVariables ?? []
@@ -1111,7 +1119,7 @@ export function HUD({
     (item) => !selected?.imports.includes(item.from),
   )
   const canEditBlueprint =
-    creatingBlueprint && Boolean(selected) && !selected?.id.startsWith('draft:')
+    canPlace && Boolean(selected) && !selected?.id.startsWith('draft:')
   const canInspectFile = (fileId: string, userCreated = false) =>
     Boolean(onInspectFile) &&
     !fileId.startsWith('draft:') &&
@@ -1268,7 +1276,7 @@ export function HUD({
   }, [instructionsOpen])
 
   const instructionSections = explorerInstructions({
-    creatingBlueprint,
+    canPlace,
     hasChangeSet,
     changePathsOnly,
     selectedUserCreated: Boolean(selected?.userCreated),
@@ -1298,7 +1306,7 @@ export function HUD({
             <p>
               <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> walk,{' '}
               <kbd>Shift</kbd> sprint
-              {creatingBlueprint ? (
+              {canPlace ? (
                 <>
                   , <kbd>Space</kbd> place a file, <kbd>B</kbd> place an island
                 </>
@@ -1362,19 +1370,39 @@ export function HUD({
 
       {sessions.length > 0 && (
         <div className="hud-left-stack">
-          {sessions.map((session) => (
-            <SessionPanel
-              key={session.sessionId}
-              intent={session}
-              focused={session.sessionId === (focusedSessionId ?? intent.sessionId)}
-              naming={naming}
-              onFocus={() => {
-                if (session.sessionId) onFocusSession?.(session.sessionId)
-              }}
-              onWorkflowAction={onWorkflowAction}
-              onNavigateDiff={onNavigateDiff}
-            />
-          ))}
+          {sessions.length > 1 && (
+            <div className="hud-session-tabs" role="tablist" aria-label="LLM sessions">
+              {sessions.map((session) => {
+                const active =
+                  session.sessionId === (focusedSessionId ?? intent.sessionId)
+                return (
+                  <button
+                    className="hud-button hud-session-tab"
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    data-active={active}
+                    key={session.sessionId}
+                    onClick={() => {
+                      if (session.sessionId) onFocusSession?.(session.sessionId)
+                    }}
+                  >
+                    {sessionTabLabel(session, sessions)}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          <SessionPanel
+            intent={intent}
+            focused
+            naming={naming}
+            onFocus={() => {
+              if (intent.sessionId) onFocusSession?.(intent.sessionId)
+            }}
+            onWorkflowAction={onWorkflowAction}
+            onNavigateDiff={onNavigateDiff}
+          />
         </div>
       )}
 
@@ -1675,7 +1703,7 @@ export function HUD({
               ))}
             </ul>
           )}
-          {creatingBlueprint && mapping && onMapAddFile && onMapAddFolder && (
+          {canPlace && mapping && onMapAddFile && onMapAddFolder && (
             <div className="hud-decide hud-map-blueprint">
               <button
                 className="hud-button hud-button-approve"

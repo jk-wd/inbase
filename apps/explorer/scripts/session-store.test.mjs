@@ -11,12 +11,14 @@ import {
   clearDiffSessions,
   continueDiff,
   discardInactiveDiffSessions,
+  recoverOpenDiffSessions,
   inspectTargetFile,
   invokeStep,
   materializeDiff,
   listOpenSessionIds,
   listSessionIntents,
   readActiveSession,
+  focusSession,
   readBlueprint,
   readBlueprintSession,
   readDiff,
@@ -69,6 +71,10 @@ function runGit(cwd, args) {
 
 const oneToTwo =
   '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 2\n'
+const oneToThree =
+  '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 3\n'
+const oneToNine =
+  '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 9\n'
 const twoToThree =
   '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 2\n+export const value = 3\n'
 const threeToFour =
@@ -110,7 +116,7 @@ test('starts a blueprint handshake before the LLM can prepare', () => {
     const skipped = sessionIntent(env.dataDir, 'prep-chat', ['src/a.ts'])
     assert.equal(skipped.status, 'preparing')
     assert.equal(skipped.working, true)
-    assert.equal(skipped.creationMode, false)
+    assert.equal(skipped.creationMode, true)
 
     reportPlan(env.dataDir, {
       sessionId: 'prep-chat',
@@ -174,7 +180,7 @@ test('shares user-placed files with the chat after Send blueprint', () => {
     const sent = sessionIntent(env.dataDir, 'blue-chat', ['src/a.ts'])
     assert.equal(sent.status, 'preparing')
     assert.equal(sent.working, true)
-    assert.equal(sent.creationMode, false)
+    assert.equal(sent.creationMode, true)
     assert.deepEqual(sent.userCreatedBlocks, [block])
     assert.deepEqual(sent.userCreatedIslands, [island])
     assert.deepEqual(sent.blueprintFunctions, [
@@ -192,35 +198,108 @@ test('shares user-placed files with the chat after Send blueprint', () => {
   }
 })
 
-test('allows only one blueprint edit session at a time', () => {
+test('stores a separate blueprint for each open LLM session', () => {
   const env = fixture()
   try {
     startSession(env.dataDir, { sessionId: 'edit-a' })
     answerBlueprint(env.dataDir, 'edit-a', true)
-    assert.equal(readBlueprintSession(env.dataDir), 'edit-a')
+    const blockA = {
+      id: 'src/A.tsx',
+      name: 'A.tsx',
+      path: 'src/A.tsx',
+      folder: 'src',
+      x: 1,
+      z: 2,
+    }
+    updateBlueprint(env.dataDir, 'edit-a', { userCreatedBlocks: [blockA] })
 
     startSession(env.dataDir, { sessionId: 'edit-b' })
-    assert.equal(readActiveSession(env.dataDir), 'edit-a')
+    assert.equal(readActiveSession(env.dataDir), 'edit-b')
     assert.deepEqual(listOpenSessionIds(env.dataDir), ['edit-a', 'edit-b'])
     assert.equal(listSessionIntents(env.dataDir, ['src/a.ts']).length, 2)
 
-    assert.throws(() => answerBlueprint(env.dataDir, 'edit-b', true))
-    const blocked = sessionIntent(env.dataDir, 'edit-b', ['src/a.ts'])
-    assert.equal(blocked.canEnterBlueprint, false)
-    assert.equal(blocked.creationMode, false)
-    assert.equal(blocked.blueprintSessionId, 'edit-a')
-
-    const editing = sessionIntent(env.dataDir, 'edit-a', ['src/a.ts'])
-    assert.equal(editing.creationMode, true)
-    assert.equal(editing.canEnterBlueprint, false)
-
-    sendBlueprint(env.dataDir, 'edit-a')
-    assert.equal(readBlueprintSession(env.dataDir), null)
-
     answerBlueprint(env.dataDir, 'edit-b', true)
-    assert.equal(readBlueprintSession(env.dataDir), 'edit-b')
-    const unlocked = sessionIntent(env.dataDir, 'edit-b', ['src/a.ts'])
-    assert.equal(unlocked.creationMode, true)
+    const blockB = {
+      id: 'src/B.tsx',
+      name: 'B.tsx',
+      path: 'src/B.tsx',
+      folder: 'src',
+      x: 3,
+      z: 4,
+    }
+    updateBlueprint(env.dataDir, 'edit-b', { userCreatedBlocks: [blockB] })
+
+    const editingA = sessionIntent(env.dataDir, 'edit-a', ['src/a.ts'])
+    const editingB = sessionIntent(env.dataDir, 'edit-b', ['src/a.ts'])
+    assert.equal(editingA.creationMode, true)
+    assert.equal(editingB.creationMode, true)
+    assert.deepEqual(editingA.userCreatedBlocks, [blockA])
+    assert.deepEqual(editingB.userCreatedBlocks, [blockB])
+    assert.deepEqual(readBlueprint(env.dataDir, 'edit-a').userCreatedBlocks, [
+      blockA,
+    ])
+    assert.deepEqual(readBlueprint(env.dataDir, 'edit-b').userCreatedBlocks, [
+      blockB,
+    ])
+
+    focusSession(env.dataDir, 'edit-a')
+    assert.equal(readActiveSession(env.dataDir), 'edit-a')
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('keeps accepting placed files after the blueprint handshake', () => {
+  const env = fixture()
+  try {
+    startSession(env.dataDir, { sessionId: 'later-chat' })
+    answerBlueprint(env.dataDir, 'later-chat', true)
+    sendBlueprint(env.dataDir, 'later-chat')
+    reportPlan(env.dataDir, {
+      sessionId: 'later-chat',
+      feature: 'Later files',
+      stepTitles: ['Add later file'],
+    })
+    const afterSend = {
+      id: 'src/Later.tsx',
+      name: 'Later.tsx',
+      path: 'src/Later.tsx',
+      folder: 'src',
+      x: 5,
+      z: 6,
+    }
+    updateBlueprint(env.dataDir, 'later-chat', {
+      userCreatedBlocks: [afterSend],
+    })
+    const intent = sessionIntent(env.dataDir, 'later-chat', ['src/a.ts'])
+    assert.equal(intent.status, 'planned')
+    assert.equal(intent.creationMode, true)
+    assert.deepEqual(intent.userCreatedBlocks, [afterSend])
+    assert.equal(readBlueprint(env.dataDir, 'later-chat').enabled, true)
+    assert.equal(readBlueprint(env.dataDir, 'later-chat').sent, true)
+
+    startSession(env.dataDir, { sessionId: 'ask-chat' })
+    assert.throws(() =>
+      updateBlueprint(env.dataDir, 'ask-chat', { userCreatedBlocks: [afterSend] }),
+    )
+
+    startSession(env.dataDir, { sessionId: 'skip-chat' })
+    answerBlueprint(env.dataDir, 'skip-chat', false)
+    const skipped = {
+      id: 'src/Skipped.tsx',
+      name: 'Skipped.tsx',
+      path: 'src/Skipped.tsx',
+      folder: 'src',
+      x: 7,
+      z: 8,
+    }
+    updateBlueprint(env.dataDir, 'skip-chat', {
+      userCreatedBlocks: [skipped],
+    })
+    const skipIntent = sessionIntent(env.dataDir, 'skip-chat', ['src/a.ts'])
+    assert.equal(skipIntent.creationMode, true)
+    assert.deepEqual(skipIntent.userCreatedBlocks, [skipped])
+    assert.equal(readBlueprint(env.dataDir, 'skip-chat').enabled, true)
   } finally {
     env.cleanup()
   }
@@ -263,7 +342,7 @@ test('lists every open LLM session so multiple prompts stay visible', () => {
   }
 })
 
-test('hides finished and abandoned sessions that the LLM is not waiting on', () => {
+test('hides finished sessions but keeps review and handshake sessions without a waiter', () => {
   const env = fixture()
   const stale = '2026-01-01T00:00:00.000Z'
   try {
@@ -296,7 +375,7 @@ test('hides finished and abandoned sessions that the LLM is not waiting on', () 
       `${JSON.stringify(finished, null, 2)}\n`,
     )
 
-    for (const sessionId of ['old-review', 'working-chat']) {
+    for (const sessionId of ['old-review', 'working-chat', 'live-chat']) {
       const manifest = readManifest(env.dataDir, sessionId)
       manifest.createdAt = stale
       manifest.updatedAt = stale
@@ -306,19 +385,11 @@ test('hides finished and abandoned sessions that the LLM is not waiting on', () 
       )
     }
 
-    assert.deepEqual(listOpenSessionIds(env.dataDir), ['working-chat', 'live-chat'])
-
-    const live = readManifest(env.dataDir, 'live-chat')
-    live.createdAt = stale
-    live.updatedAt = stale
-    fs.writeFileSync(
-      path.join(env.dataDir, 'diff-sessions', 'live-chat', 'manifest.json'),
-      `${JSON.stringify(live, null, 2)}\n`,
-    )
-    assert.deepEqual(listOpenSessionIds(env.dataDir), ['working-chat'])
-
-    touchSessionConnection(env.dataDir, 'live-chat')
-    assert.deepEqual(listOpenSessionIds(env.dataDir), ['live-chat', 'working-chat'])
+    assert.deepEqual(listOpenSessionIds(env.dataDir), [
+      'live-chat',
+      'old-review',
+      'working-chat',
+    ])
   } finally {
     env.cleanup()
   }
@@ -564,7 +635,15 @@ test('alternative instruction replaces the unfinished plan tail', () => {
       'replan-chat',
       '0001',
       'Make the value configurable before finishing',
+      env.targetRoot,
     )
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 1\n',
+    )
+    const withdrawn = sessionIntent(env.dataDir, 'replan-chat', ['src/a.ts'])
+    assert.equal(withdrawn.preview, false)
+    assert.deepEqual(withdrawn.files, [])
     let manifest = readManifest(env.dataDir, 'replan-chat')
     assert.equal(manifest.phase, 'replanning')
     assert.equal(
@@ -585,11 +664,28 @@ test('alternative instruction replaces the unfinished plan tail', () => {
     )
 
     invokeStep(env.dataDir, 'replan-chat', 1)
-    appendDiff(env.dataDir, env.targetRoot, {
+    const revised = appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'replan-chat',
-      patchText: twoToThree,
+      patchText: oneToThree,
     })
     assert.equal(readDiff(env.dataDir, 'replan-chat', first.entry), firstText)
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 3\n',
+    )
+    const replacement = sessionIntent(env.dataDir, 'replan-chat', ['src/a.ts'])
+    assert.deepEqual(replacement.files, ['src/a.ts'])
+    assert.equal(replacement.diffId, revised.entry.id)
+    materializeDiff(env.dataDir, env.targetRoot, 'replan-chat', '0001')
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
+    materializeDiff(env.dataDir, env.targetRoot, 'replan-chat', '0002')
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 3\n',
+    )
     continueDiff(env.dataDir, env.targetRoot, 'replan-chat', '0002')
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
@@ -625,7 +721,17 @@ test('rejects stale actions and invalid virtual continuations', () => {
     assert.throws(() =>
       continueDiff(env.dataDir, env.targetRoot, 'guard-chat', '9999'),
     )
-    requestReplan(env.dataDir, 'guard-chat', '0001', 'Try another value')
+    requestReplan(
+      env.dataDir,
+      'guard-chat',
+      '0001',
+      'Try another value',
+      env.targetRoot,
+    )
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 1\n',
+    )
     reportPlan(env.dataDir, {
       sessionId: 'guard-chat',
       feature: 'Guards',
@@ -635,9 +741,17 @@ test('rejects stale actions and invalid virtual continuations', () => {
     assert.throws(() =>
       appendDiff(env.dataDir, env.targetRoot, {
         sessionId: 'guard-chat',
-        patchText:
-          '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 9\n',
+        patchText: twoToThree,
       }),
+    )
+    const replaced = appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'guard-chat',
+      patchText: oneToNine,
+    })
+    assert.equal(replaced.entry.step, 1)
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 9\n',
     )
     stopSession(env.dataDir, 'guard-chat', env.targetRoot)
     assert.equal(readManifest(env.dataDir, 'guard-chat'), null)
@@ -780,7 +894,7 @@ test('stop deletes the session plan, patches, and active pointer', () => {
   }
 })
 
-test('stop removes leftover diff sessions that have no LLM waiter', () => {
+test('stop keeps other open sessions and only drops finished leftovers', () => {
   const env = fixture()
   try {
     fs.mkdirSync(path.join(env.dataDir, 'diff-sessions'), { recursive: true })
@@ -809,7 +923,7 @@ test('stop removes leftover diff sessions that have no LLM waiter', () => {
     stopSession(env.dataDir, 'stop-chat', env.targetRoot)
     assert.equal(
       fs.existsSync(path.join(env.dataDir, 'diff-sessions', 'orphan-chat')),
-      false,
+      true,
     )
     assert.equal(
       fs.existsSync(path.join(env.dataDir, 'diff-sessions', 'old-chat.stopped')),
@@ -826,14 +940,14 @@ test('stop removes leftover diff sessions that have no LLM waiter', () => {
     )
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 1\n',
+      'export const value = 2\n',
     )
   } finally {
     env.cleanup()
   }
 })
 
-test('startup sweep always clears the diff-sessions folder', () => {
+test('explicit clear still wipes the diff-sessions folder', () => {
   const env = fixture()
   try {
     fs.mkdirSync(path.join(env.dataDir, 'diff-sessions'), { recursive: true })
@@ -880,7 +994,7 @@ test('startup sweep always clears the diff-sessions folder', () => {
   }
 })
 
-test('inactive sweep keeps sessions that still have an LLM waiter', () => {
+test('inactive sweep keeps open sessions even without an LLM waiter', () => {
   const env = fixture()
   try {
     reportPlan(env.dataDir, {
@@ -889,24 +1003,89 @@ test('inactive sweep keeps sessions that still have an LLM waiter', () => {
       stepTitles: ['Build value'],
     })
     reportPlan(env.dataDir, {
-      sessionId: 'dead-chat',
-      feature: 'Drop dead',
+      sessionId: 'idle-chat',
+      feature: 'Keep idle',
       stepTitles: ['Build value'],
     })
+    const finished = reportPlan(env.dataDir, {
+      sessionId: 'done-chat',
+      feature: 'Drop finished',
+      stepTitles: ['Build value'],
+    })
+    finished.phase = 'finished'
+    finished.status = 'finished'
+    writeManifest(env.dataDir, finished)
 
-    assert.deepEqual(
-      discardInactiveDiffSessions(
-        env.dataDir,
-        env.targetRoot,
-        new Set(['live-chat']),
-      ),
-      ['live-chat'],
+    const kept = discardInactiveDiffSessions(
+      env.dataDir,
+      env.targetRoot,
+      new Set(['live-chat']),
     )
+    assert.deepEqual(kept.sort(), ['idle-chat', 'live-chat'])
     assert.equal(readManifest(env.dataDir, 'live-chat')?.feature, 'Keep live')
-    assert.equal(readManifest(env.dataDir, 'dead-chat'), null)
+    assert.equal(readManifest(env.dataDir, 'idle-chat')?.feature, 'Keep idle')
+    assert.equal(readManifest(env.dataDir, 'done-chat'), null)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('last-step review stays on the map after the LLM waiter disappears', () => {
+  const env = fixture()
+  const stale = '2026-01-01T00:00:00.000Z'
+  try {
+    startSession(env.dataDir, { sessionId: 'usecase-chat' })
+    setStepByStep(env.dataDir, 'usecase-chat', false)
+    answerBlueprint(env.dataDir, 'usecase-chat', false)
+    reportPlan(env.dataDir, {
+      sessionId: 'usecase-chat',
+      feature: 'Auto run',
+      stepTitles: ['Build value', 'Finish value'],
+    })
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'usecase-chat',
+      patchText: oneToTwo,
+    })
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'usecase-chat',
+      patchText:
+        '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 2\n+export const value = 4\n',
+    })
+
+    const review = readManifest(env.dataDir, 'usecase-chat')
+    assert.equal(review.phase, 'review')
+    assert.equal(review.diffs.at(-1).step, 2)
+    review.createdAt = stale
+    review.updatedAt = stale
+    fs.writeFileSync(
+      path.join(env.dataDir, 'diff-sessions', 'usecase-chat', 'manifest.json'),
+      `${JSON.stringify(review, null, 2)}\n`,
+    )
+
+    assert.deepEqual(listOpenSessionIds(env.dataDir), ['usecase-chat'])
+    const intent = sessionIntent(env.dataDir, 'usecase-chat', ['src/a.ts'])
+    assert.equal(intent.status, 'pending')
+    assert.equal(intent.preview, true)
+    assert.equal(intent.llmIdle, true)
     assert.equal(
-      fs.existsSync(path.join(env.dataDir, 'diff-sessions', 'dead-chat')),
-      false,
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 4\n',
+    )
+
+    discardInactiveDiffSessions(env.dataDir, env.targetRoot, new Set())
+    assert.equal(readManifest(env.dataDir, 'usecase-chat').phase, 'review')
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 4\n',
+    )
+
+    fs.writeFileSync(path.join(env.targetRoot, 'src/a.ts'), 'export const value = 1\n')
+    recoverOpenDiffSessions(env.dataDir, env.targetRoot)
+    assert.equal(readManifest(env.dataDir, 'usecase-chat').phase, 'review')
+    assert.deepEqual(listOpenSessionIds(env.dataDir), ['usecase-chat'])
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 4\n',
     )
   } finally {
     env.cleanup()

@@ -80,11 +80,11 @@ const { entry, manifest } = appendDiff(dataDir, targetRoot, {
   patchText,
 })
 
-const last = entry.step >= manifest.steps.length
-console.log(
-  manifest.phase === 'working'
-    ? `VISUAL_CODER_STEP_READY Published diff ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Step by step is off, so the next step is already invoked. Wait again.`
-    : last
-      ? `VISUAL_CODER_STEP_READY Published diff ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Walk the diffs, then Complete to finish.`
-      : `VISUAL_CODER_STEP_READY Published diff ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Wait for Continue or an alternative instruction.`,
-)
+  const last = entry.step >= manifest.steps.length
+  console.log(
+    manifest.phase === 'working'
+      ? `VISUAL_CODER_STEP_READY Stored patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Applied the live patch files. Do not edit target files. Step by step is off, so the next step is already invoked. Wait again.`
+      : last
+        ? `VISUAL_CODER_STEP_READY Stored patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Applied the live patch files. Do not edit target files. Walk the diffs, then Accept proposal to finish.`
+        : `VISUAL_CODER_STEP_READY Stored patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Applied the live patch files. Do not edit target files. Wait for Accept proposal or an alternative instruction.`,
+  )

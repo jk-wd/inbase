@@ -215,6 +215,7 @@ export type WorkflowAction =
   | 'blueprint_no'
   | 'blueprint_send'
   | 'blueprint_update'
+  | 'focus'
   | 'set_step_by_step'
 
 export type AgentIntentBundle = {
@@ -252,6 +253,7 @@ export type AgentIntent = {
   phase: WorkflowPhase | null
   working: boolean
   stalledWait: boolean
+  llmIdle?: boolean
   creationMode: boolean
   canEnterBlueprint: boolean
   blueprintSessionId: string | null

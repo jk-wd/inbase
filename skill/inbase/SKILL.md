@@ -3,8 +3,10 @@ name: inbase
 description: >-
   Grounds source-file changes in the Inbase visual map. Use when creating,
   editing, or deleting application source files in this repository. Lists every
-  feature step, then works only via patch files. Do not use for git, docs-only,
-  lockfiles, or questions.
+  feature step, then works only via patch files. Patch files are the single
+  source of truth: never Write, StrReplace, or Delete project files; only write
+  a unified diff and publish it. Do not use for git, docs-only, lockfiles, or
+  questions.
 ---
 
 # Inbase visual edits
@@ -14,13 +16,19 @@ Skip it for git, lockfiles, `.inbase`, `.cursor`, or questions with no code
 changes.
 
 The LLM uses a plan-first loop. It reports the complete plan before writing a
-patch. When **Step by step** is on, it waits for the user to invoke the
-highlighted step, publishes only that step's diff, then waits for **Run step**
-on the following step or an alternative instruction. When **Step by step** is
+patch. When **Step by step** is on, it waits for the user to invoke the first
+step, publishes only that step's diff, then waits for **Accept proposal** on
+that step or an alternative instruction. When **Step by step** is
 off, `inbase wait-for-approval` returns `VISUAL_CODER_EXECUTE` for every
-remaining step without the user clicking Run step; after the last patch, wait
-for the user to **Complete**. They can still walk Previous/Next over the diffs.
-Always work via patch files. Do not Write, StrReplace, or Delete project files.
+remaining step without the user clicking; after the last patch, wait
+for the user to **Accept proposal**. They can still walk Previous/Next over the diffs.
+
+**Patch files are the single source of truth.** Do not Write, StrReplace, or
+Delete project files. Only write a unified diff and publish it with
+`inbase propose-patch`. That command stores the patch and applies the live
+patch chain (baseline + accepted patches + this step). A later instruction
+replaces the withdrawn step's patch; write the new diff against the accepted
+live files, not against the withdrawn proposal.
 
 Every Cursor chat has an explicit session ID. Pass that same ID to every
 command. The visualizer stores immutable diffs under `.inbase/diff-sessions/<session-id>/diffs/`.
@@ -45,9 +53,12 @@ npx inbase wait-for-blueprint --session "<current-cursor-chat-id>"
 ```
 
    The explorer asks **Setup blueprint: Yes vs No**.
-   - **No**: skip placement; continue without user-placed files or islands.
+   - **No**: skip the initial placement. The user can still place files and
+     islands on later steps; re-read this session's `blueprint.json` before
+     each step.
    - **Yes**: the user places files (`Space`) and islands (`B`), then clicks
-     **Send blueprint**.
+     **Send blueprint**. They can keep placing on later steps. This chat's
+     blueprint is stored only for this session.
 3. Read the handshake output between `VISUAL_CODER_BLUEPRINT_START` and
    `VISUAL_CODER_BLUEPRINT_END`, or read
    `.inbase/diff-sessions/<session-id>/blueprint.json`.
@@ -92,8 +103,11 @@ npx inbase wait-for-approval --session "<current-cursor-chat-id>"
 ```
 
    Do not write a patch until this prints `VISUAL_CODER_EXECUTE`. If Step by
-   step is off, this returns immediately for each remaining step.
-9. Implement only the invoked step as a unified diff. Paths are relative to the
+   step is off, this returns immediately for each remaining step. Before
+   implementing, re-read this session's `blueprint.json`; the user can place
+   files and islands on any step.
+9. Implement only the invoked step as a unified diff against the current live
+   files (baseline + accepted patch files). Paths are relative to the
    project root (same ids as `codebase.json`):
 
 ```diff
@@ -122,12 +136,15 @@ npx inbase propose-patch \
 ```
 
    The patch path or stdin is required. Never write or replace a patch already
-   stored in the session folder.
+   stored in the session folder. `inbase propose-patch` stores the new file and
+   applies the live patch chain. Do not `git apply`, copy files, or edit
+   project files yourself.
 
-10. **Stop.** Do not apply the patch and do not edit project files directly.
-11. Wait until the user clicks **Run step** on the next step (or, when Step by
+10. **Stop.** Do not edit project files. The stored patch files are already the
+    live tree.
+11. Wait until the user clicks **Accept proposal** on the current step (or, when Step by
    step is off, until the next step is auto-invoked), sends an alternative
-   instruction, clicks **Complete** on the last step, or stops the workflow:
+   instruction, or stops the workflow:
 
 ```bash
 npx inbase wait-for-approval --session "<current-cursor-chat-id>"
@@ -135,15 +152,18 @@ npx inbase wait-for-approval --session "<current-cursor-chat-id>"
 
 12. Read the wait command output:
 
-   - Exit `0` (`VISUAL_CODER_EXECUTE`): the highlighted step was invoked. Build
-     only that step, publish its incremental diff with `inbase propose-patch`,
-     then wait again.
+   - Exit `0` (`VISUAL_CODER_EXECUTE`): the highlighted step was invoked. Re-read
+     this session's `blueprint.json` first; the user can place files and islands
+     on any step, not only during the initial blueprint. Build only that step as
+     a unified diff against the live files, publish it with `inbase propose-patch`,
+     then wait again. Do not edit project files.
    - Exit `5` (`VISUAL_CODER_FINISHED`): that was the last step. The visualizer
      already applied the final patch and removed stored session diffs and
      blueprint drafts. Optionally run `--clear` if anything remains, tell the
      user the feature is done, and **stop**. Do not propose another patch.
-   - Exit `4` (`VISUAL_CODER_REPLAN`): do **not** apply files and do not rewrite
-     an earlier diff. Follow the text between
+   - Exit `4` (`VISUAL_CODER_REPLAN`): do **not** edit project files and do not
+     rewrite an earlier accepted patch. The withdrawn proposal is no longer live;
+     disk is baseline + accepted patch files. Follow the text between
      `VISUAL_CODER_INSTRUCTION_START` and `VISUAL_CODER_INSTRUCTION_END`, read
      this session's `blueprint.json` when it is enabled (files, islands,
      `addedFunctions`, `addedVariables`, `addedImports`). The blueprint stays
@@ -151,7 +171,8 @@ npx inbase wait-for-approval --session "<current-cursor-chat-id>"
      replacing the plan. Read `user-context.json` (follow the viewpoint only if
      `followLook` is true), replace the plan from the current step onward using
      `inbase report-plan`, then wait for the user to invoke the first revised
-     step.
+     step. The replacement patch must apply on top of the accepted live files,
+     not the withdrawn proposal.
    - Exit `2` (`VISUAL_CODER_STOPPED`) or `3` (timeout): make no further
      project changes.
 
@@ -172,6 +193,9 @@ npx inbase propose-patch --session "<current-cursor-chat-id>" --clear
 - Read global `user-context.json` for placed files; those live on the session blueprint
 - Follow the user's look when `followLook` is false
 - Write, edit, create, or delete project files directly
+- `git apply`, copy, or otherwise materialize a patch yourself
+- Treat on-disk project files as something to edit; they are a replay of the
+  stored patch files
 - Announce file lists instead of a patch
 - Write a patch before its plan step is invoked
 - Propose the next step before `inbase wait-for-approval` returns `VISUAL_CODER_EXECUTE`

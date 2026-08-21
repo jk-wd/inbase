@@ -88,8 +88,8 @@ export async function waitForBlueprint(args) {
       const islands = blueprint.userCreatedIslands ?? []
       console.log(
         blueprint.enabled
-          ? `VISUAL_CODER_BLUEPRINT_READY The user sent ${blocks.length} file(s) and ${islands.length} island(s) for this chat. The blueprint is leading: create those paths and honor addedFunctions, addedVariables, and addedImports even if they are not on disk. Do not omit, rename, relocate, or replace them. Extra new files not in the blueprint are a deviation. If you would differ from the blueprint, ask the user first; do not silently deviate.`
-          : 'VISUAL_CODER_BLUEPRINT_READY The user skipped the blueprint. Continue without user-placed files or islands.',
+          ? `VISUAL_CODER_BLUEPRINT_READY The user sent ${blocks.length} file(s) and ${islands.length} island(s) for this chat. The blueprint is leading: create those paths and honor addedFunctions, addedVariables, and addedImports even if they are not on disk. Do not omit, rename, relocate, or replace them. Extra new files not in the blueprint are a deviation. If you would differ from the blueprint, ask the user first; do not silently deviate. The user can still place files and islands on later steps; re-read this session's blueprint.json before each step.`
+          : 'VISUAL_CODER_BLUEPRINT_READY The user skipped the initial blueprint. They can still place files and islands on later steps; re-read this session\'s blueprint.json before each step. Continue without user-placed files until that file is enabled.',
       )
       console.log('VISUAL_CODER_BLUEPRINT_START')
       console.log(JSON.stringify(blueprint, null, 2))
@@ -157,8 +157,8 @@ export async function waitForApproval(args) {
       ? `Waiting for the user to invoke step ${afterAdvance.currentStep}...`
       : afterAdvance.phase === 'review' && afterAdvance.diffs?.at(-1)
         ? afterAdvance.stepByStep === false
-          ? `Waiting for the finish step after ${afterAdvance.diffs.at(-1).id}...`
-          : `Waiting for the user to run the next step after ${afterAdvance.diffs.at(-1).id}...`
+          ? `Waiting for the user to accept the proposal after ${afterAdvance.diffs.at(-1).id}...`
+          : `Waiting for the user to accept the proposal on ${afterAdvance.diffs.at(-1).id}...`
         : `Waiting for the visual workflow in session ${sessionId}...`,
   )
 
@@ -185,7 +185,7 @@ export async function waitForApproval(args) {
     if (manifest.phase === 'working') {
       const next = manifest.steps.find((step) => step.index === manifest.currentStep)
       console.log(
-        `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${next ? `: ${next.title}` : ''}. Implement only this step, publish its incremental diff with inbase propose-patch --session ${sessionId}, then wait again.`,
+        `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${next ? `: ${next.title}` : ''}. Re-read this session's blueprint.json before implementing; the user can place files and islands on any step. Patch files are the source of truth: write only this step's unified diff against the current live files (baseline + accepted patches), publish it with inbase propose-patch --session ${sessionId}, then wait again. Do not Write, StrReplace, or Delete project files.`,
       )
       process.exit(0)
     }
@@ -194,7 +194,7 @@ export async function waitForApproval(args) {
         ? `\nVISUAL_CODER_INSTRUCTION_START\n${manifest.pendingInstruction}\nVISUAL_CODER_INSTRUCTION_END`
         : ''
       console.log(
-        `VISUAL_CODER_REPLAN Keep accepted steps before step ${manifest.currentStep}. Replace the plan from step ${manifest.currentStep} onward using the instruction below. The session blueprint remains leading; if this instruction would differ from it, ask the user before replacing the plan. Report the revised tail with inbase report-plan, then wait for invocation.${instruction}`,
+        `VISUAL_CODER_REPLAN Keep accepted patch files before step ${manifest.currentStep}. Replace the withdrawn step with a new patch against those live files, not against the withdrawn proposal. Do not edit project files. The session blueprint remains leading; if this instruction would differ from it, ask the user before replacing the plan. Report the revised tail with inbase report-plan, then wait for invocation.${instruction}`,
       )
       process.exit(4)
     }
@@ -259,9 +259,9 @@ export async function proposePatch(args) {
   const last = entry.step >= manifest.steps.length
   console.log(
     manifest.phase === 'working'
-      ? `VISUAL_CODER_STEP_READY Published diff ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Step by step is off, so the next step is already invoked. Wait again.`
+      ? `VISUAL_CODER_STEP_READY Stored patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Applied the live patch files. Do not edit project files. Step by step is off, so the next step is already invoked. Wait again.`
       : last
-        ? `VISUAL_CODER_STEP_READY Published diff ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Walk the diffs, then Complete to finish.`
-        : `VISUAL_CODER_STEP_READY Published diff ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Wait for Continue or an alternative instruction.`,
+        ? `VISUAL_CODER_STEP_READY Stored patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Applied the live patch files. Do not edit project files. Walk the diffs, then Accept proposal to finish.`
+        : `VISUAL_CODER_STEP_READY Stored patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Applied the live patch files. Do not edit project files. Wait for Accept proposal or an alternative instruction.`,
   )
 }

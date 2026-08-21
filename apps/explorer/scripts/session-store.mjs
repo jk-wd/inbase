@@ -171,6 +171,16 @@ function isGeneratingPhase(phase) {
   return phase === 'preparing' || phase === 'working' || phase === 'replanning'
 }
 
+function isTerminalSession(manifest) {
+  return (
+    !manifest ||
+    manifest.phase === 'finished' ||
+    manifest.phase === 'stopped' ||
+    manifest.status === 'finished' ||
+    manifest.status === 'rejected'
+  )
+}
+
 function isStalledWorking(manifest, waiterIds, sessionId, now = Date.now()) {
   if (manifest.phase !== 'working') return false
   if (!waiterIds.has(sessionId)) return false
@@ -185,15 +195,7 @@ export function isSessionConnected(
 ) {
   const safeId = assertSessionId(sessionId)
   const manifest = readManifest(dataDir, safeId)
-  if (!manifest) return false
-  if (
-    manifest.phase === 'finished' ||
-    manifest.phase === 'stopped' ||
-    manifest.status === 'finished' ||
-    manifest.status === 'rejected'
-  ) {
-    return false
-  }
+  if (isTerminalSession(manifest)) return false
   if (isGeneratingPhase(manifest.phase)) return true
   if (waiterIds.has(safeId)) return true
   const connected = readJson(connectionFile(dataDir, safeId), null)
@@ -232,9 +234,8 @@ export function listOpenSessionIds(dataDir, waiterIds = waiterSessionIds()) {
     if (!entry.isDirectory()) continue
     try {
       const sessionId = assertSessionId(entry.name)
-      if (!isSessionConnected(dataDir, sessionId, waiterIds)) continue
       const manifest = readManifest(dataDir, sessionId)
-      if (!manifest) continue
+      if (isTerminalSession(manifest)) continue
       sessions.push({
         sessionId,
         createdAt: typeof manifest.createdAt === 'string' ? manifest.createdAt : '',
@@ -273,32 +274,34 @@ export function writeBlueprintSession(dataDir, sessionId) {
   )
 }
 
-function assertBlueprintSessionAvailable(dataDir, sessionId) {
-  const safeId = assertSessionId(sessionId)
-  const locked = readBlueprintSession(dataDir)
-  if (locked && locked !== safeId) {
-    throw new Error(
-      `Blueprint edit mode is active in session ${locked}. Finish or stop it before starting another.`,
-    )
-  }
-  return safeId
-}
-
-function claimBlueprintSession(dataDir, sessionId) {
-  const safeId = assertBlueprintSessionAvailable(dataDir, sessionId)
-  writeBlueprintSession(dataDir, safeId)
-  return safeId
-}
-
 function releaseBlueprintSession(dataDir, sessionId) {
   const safeId = assertSessionId(sessionId)
   if (readBlueprintSession(dataDir) === safeId) writeBlueprintSession(dataDir, null)
 }
 
-function focusSession(dataDir, sessionId) {
+export function focusSession(dataDir, sessionId) {
   const safeId = assertSessionId(sessionId)
-  const locked = readBlueprintSession(dataDir)
-  if (!locked || locked === safeId) writeActiveSession(dataDir, safeId)
+  requireManifest(dataDir, safeId)
+  writeActiveSession(dataDir, safeId)
+  return safeId
+}
+
+function sessionAllowsPlacement(manifest) {
+  return (
+    manifest.phase !== 'blueprint_ask' &&
+    manifest.phase !== 'finished' &&
+    manifest.phase !== 'stopped'
+  )
+}
+
+function blueprintHasContent(blueprint) {
+  return (
+    (blueprint.userCreatedBlocks?.length ?? 0) > 0 ||
+    (blueprint.userCreatedIslands?.length ?? 0) > 0 ||
+    (blueprint.addedFunctions?.length ?? 0) > 0 ||
+    (blueprint.addedVariables?.length ?? 0) > 0 ||
+    (blueprint.addedImports?.length ?? 0) > 0
+  )
 }
 
 export function readManifest(dataDir, sessionId) {
@@ -353,13 +356,34 @@ export function chainThrough(manifest, diffId = manifest.activeDiffId) {
   return manifest.diffs.slice(0, entryIndex(manifest, diffId) + 1)
 }
 
-function unresolvedEntries(manifest, diffId = manifest.activeDiffId) {
+function isSupersededPatch(entry) {
+  return (
+    entry.status === 'rejected' ||
+    entry.status === 'extend' ||
+    entry.status === 'extended'
+  )
+}
+
+function liveEntries(manifest, diffId) {
   const chain = chainThrough(manifest, diffId)
-  let lastApplied = -1
-  chain.forEach((entry, index) => {
-    if (entry.status === 'applied') lastApplied = index
+  if (chain.length === 0) return []
+  const selected = chain.at(-1)
+  const browsingHistory = selected.id !== manifest.activeDiffId
+  return chain.filter((entry) => {
+    if (entry.status === 'rejected') return false
+    if (entry.status === 'extended' || entry.status === 'extend') {
+      return browsingHistory && entry.id === selected.id
+    }
+    return true
   })
-  return chain.slice(lastApplied + 1).filter((entry) => entry.status !== 'rejected')
+}
+
+function workingPatchEntries(manifest) {
+  return manifest.diffs.filter((entry) => !isSupersededPatch(entry))
+}
+
+function unresolvedEntries(manifest, diffId = manifest.activeDiffId) {
+  return liveEntries(manifest, diffId).filter((entry) => entry.status !== 'applied')
 }
 
 export function previewPatchChain(patches, knownFileIds = []) {
@@ -444,10 +468,9 @@ export function sessionIntent(
   const patches =
     selectedIndex === null
       ? []
-      : manifest.diffs
-          .slice(0, selectedIndex + 1)
-          .filter((entry) => entry.status !== 'rejected')
-          .map((entry) => readDiff(dataDir, sessionId, entry))
+      : liveEntries(manifest, selectedId).map((entry) =>
+          readDiff(dataDir, sessionId, entry),
+        )
   const preview = previewPatchChain(patches, knownFileIds)
   const activeView = !selectedDiffId || selectedId === manifest.activeDiffId
   const phaseStatus = {
@@ -470,11 +493,7 @@ export function sessionIntent(
   )
   const previewVisible = patches.length > 0
   const blueprint = readBlueprint(dataDir, sessionId)
-  const blueprintSessionId = readBlueprintSession(dataDir)
-  const ownsBlueprintLock = blueprintSessionId === sessionId
-  const canEnterBlueprint =
-    manifest.phase === 'blueprint_ask' &&
-    (!blueprintSessionId || ownsBlueprintLock)
+  const canEnterBlueprint = manifest.phase === 'blueprint_ask'
 
   return {
     updatedAt: manifest.updatedAt,
@@ -504,9 +523,10 @@ export function sessionIntent(
       manifest.phase === 'working' ||
       manifest.phase === 'replanning',
     stalledWait: isStalledWorking(manifest, waiterIds, sessionId),
-    creationMode: manifest.phase === 'blueprint' && ownsBlueprintLock,
+    llmIdle: !isSessionConnected(dataDir, sessionId, waiterIds),
+    creationMode: sessionAllowsPlacement(manifest),
     canEnterBlueprint,
-    blueprintSessionId,
+    blueprintSessionId: null,
     userCreatedBlocks: blueprint.userCreatedBlocks,
     userCreatedIslands: blueprint.userCreatedIslands,
     ...preview,
@@ -639,10 +659,6 @@ function unstagePaths(fromDir, absolutePaths) {
   }
 }
 
-function liveEntries(manifest, diffId) {
-  return chainThrough(manifest, diffId).filter((entry) => entry.status !== 'rejected')
-}
-
 export function materializeDiff(dataDir, targetRoot, sessionId, diffId) {
   const manifest = requireManifest(dataDir, sessionId)
   const through = diffId || manifest.activeDiffId
@@ -682,9 +698,9 @@ function loadReplayContents(dataDir, sessionId, targetRoot, patches) {
 }
 
 export function validateContinuation(dataDir, manifest, targetRoot, patchText) {
-  const prior = manifest.diffs
-    .filter((entry) => entry.status !== 'rejected')
-    .map((entry) => readDiff(dataDir, manifest.sessionId, entry))
+  const prior = workingPatchEntries(manifest).map((entry) =>
+    readDiff(dataDir, manifest.sessionId, entry),
+  )
   const patches = [...prior, patchText]
   const files = loadReplayContents(
     dataDir,
@@ -791,7 +807,6 @@ export function answerBlueprint(dataDir, sessionId, enabled) {
   if (manifest.phase !== 'blueprint_ask') {
     throw new Error(`Session ${sessionId} is not asking for a blueprint`)
   }
-  if (enabled) claimBlueprintSession(dataDir, sessionId)
   const blueprint = {
     ...emptyBlueprint(),
     enabled: Boolean(enabled),
@@ -807,20 +822,22 @@ export function answerBlueprint(dataDir, sessionId, enabled) {
 export function updateBlueprint(dataDir, sessionId, input = {}) {
   const safeId = assertSessionId(sessionId)
   const manifest = requireManifest(dataDir, safeId)
-  if (manifest.phase !== 'blueprint') {
-    throw new Error(`Session ${safeId} is not in blueprint mode`)
+  if (!sessionAllowsPlacement(manifest)) {
+    throw new Error(`Session ${safeId} is not accepting blueprint edits`)
   }
-  assertBlueprintSessionAvailable(dataDir, safeId)
   const current = readBlueprint(dataDir, safeId)
-  writeBlueprint(dataDir, safeId, {
+  const next = {
     ...current,
-    enabled: true,
-    sent: false,
     userCreatedBlocks: input.userCreatedBlocks ?? current.userCreatedBlocks,
     userCreatedIslands: input.userCreatedIslands ?? current.userCreatedIslands,
     addedFunctions: input.addedFunctions ?? current.addedFunctions,
     addedVariables: input.addedVariables ?? current.addedVariables,
     addedImports: input.addedImports ?? current.addedImports,
+  }
+  writeBlueprint(dataDir, safeId, {
+    ...next,
+    enabled: current.enabled || blueprintHasContent(next),
+    sent: manifest.phase === 'blueprint' ? false : current.sent,
   })
   return readBlueprint(dataDir, safeId)
 }
@@ -831,7 +848,6 @@ export function sendBlueprint(dataDir, sessionId, input = {}) {
   if (manifest.phase !== 'blueprint') {
     throw new Error(`Session ${safeId} is not in blueprint mode`)
   }
-  assertBlueprintSessionAvailable(dataDir, safeId)
   const current = readBlueprint(dataDir, safeId)
   writeBlueprint(dataDir, safeId, {
     enabled: true,
@@ -919,8 +935,8 @@ export function invokeStep(dataDir, sessionId, step, targetRoot = null) {
     if (step !== expected) {
       throw new Error(
         last
-          ? `Run step ${active.step} to finish`
-          : `Run step ${expected} to continue`,
+          ? `Accept proposal on step ${active.step} to finish`
+          : `Accept proposal on step ${active.step} to continue`,
       )
     }
     applyUnresolved(dataDir, targetRoot, manifest, active.id)
@@ -1061,7 +1077,13 @@ export function continueDiff(dataDir, targetRoot, sessionId, diffId) {
   return autoAdvance(dataDir, sessionId, targetRoot)
 }
 
-export function requestReplan(dataDir, sessionId, diffId, instruction) {
+export function requestReplan(
+  dataDir,
+  sessionId,
+  diffId,
+  instruction,
+  targetRoot = null,
+) {
   const manifest = requireManifest(dataDir, sessionId)
   const active = pendingActive(manifest, diffId)
   const guidance = typeof instruction === 'string' ? instruction.trim() : ''
@@ -1073,6 +1095,7 @@ export function requestReplan(dataDir, sessionId, diffId, instruction) {
   manifest.pendingInstruction = guidance
   manifest.workStartedAt = new Date().toISOString()
   writeManifest(dataDir, manifest)
+  if (targetRoot) materializeDiff(dataDir, targetRoot, sessionId, active.id)
   return manifest
 }
 
@@ -1139,19 +1162,53 @@ export function discardInactiveDiffSessions(
   }
 
   for (const sessionId of listStoredSessionIds(dataDir)) {
-    const live = keep.has(sessionId) && Boolean(readManifest(dataDir, sessionId))
+    const manifest = readManifest(dataDir, sessionId)
+    if (!isTerminalSession(manifest)) continue
     const stopping = keep.has(sessionId) && isSessionStopped(dataDir, sessionId)
-    if (live || stopping) continue
+    if (stopping) continue
     discardStoredSession(dataDir, sessionId, targetRoot)
   }
 
-  const liveIds = [...keep].filter((id) => readManifest(dataDir, id))
+  const liveIds = listStoredSessionIds(dataDir).filter(
+    (id) => !isTerminalSession(readManifest(dataDir, id)),
+  )
   const active = readActiveSession(dataDir)
   if (active && !liveIds.includes(active)) writeActiveSession(dataDir, null)
   const locked = readBlueprintSession(dataDir)
   if (locked && !liveIds.includes(locked)) writeBlueprintSession(dataDir, null)
   unstageDiffSessionArtifacts(dataDir, targetRoot)
   return liveIds
+}
+
+export function recoverOpenDiffSessions(dataDir, targetRoot = null) {
+  const kept = []
+  for (const sessionId of listStoredSessionIds(dataDir)) {
+    const manifest = readManifest(dataDir, sessionId)
+    if (!isTerminalSession(manifest)) {
+      if (targetRoot && manifest.activeDiffId) {
+        try {
+          materializeDiff(dataDir, targetRoot, sessionId, manifest.activeDiffId)
+        } catch {
+          // Keep the stored diffs visible even if disk replay fails.
+        }
+      }
+      kept.push(sessionId)
+      continue
+    }
+    discardStoredSession(dataDir, sessionId, targetRoot, {
+      restore:
+        manifest?.phase === 'stopped' ||
+        manifest?.status === 'rejected' ||
+        !manifest,
+    })
+  }
+
+  const active = readActiveSession(dataDir)
+  if (active && !kept.includes(active)) writeActiveSession(dataDir, null)
+  const locked = readBlueprintSession(dataDir)
+  if (locked && !kept.includes(locked)) writeBlueprintSession(dataDir, null)
+  unstageDiffSessionArtifacts(dataDir, targetRoot)
+  return kept
 }
 
 export function clearDiffSessions(dataDir, targetRoot = null) {
@@ -1192,7 +1249,7 @@ export function decideDiff(
     return continueDiff(dataDir, targetRoot, sessionId, diffId)
   }
   if (decision === 'extend') {
-    return requestReplan(dataDir, sessionId, diffId, instruction)
+    return requestReplan(dataDir, sessionId, diffId, instruction, targetRoot)
   }
   return stopSession(dataDir, sessionId, targetRoot)
 }

@@ -46,6 +46,7 @@ export type DiffManifest = {
 export function assertSessionId(value: unknown): string
 export function readActiveSession(dataDir: string): string | null
 export function writeActiveSession(dataDir: string, sessionId: string | null): void
+export function focusSession(dataDir: string, sessionId: string): string
 export function touchSessionConnection(dataDir: string, sessionId: string): void
 export function isSessionConnected(
   dataDir: string,
@@ -61,6 +62,10 @@ export function discardInactiveDiffSessions(
   dataDir: string,
   targetRoot?: string | null,
   waiterIds?: Iterable<string>,
+): string[]
+export function recoverOpenDiffSessions(
+  dataDir: string,
+  targetRoot?: string | null,
 ): string[]
 export function clearDiffSessions(
   dataDir: string,
@@ -209,6 +214,7 @@ export function requestReplan(
   sessionId: string,
   diffId: string,
   instruction: string,
+  targetRoot?: string | null,
 ): DiffManifest
 export function stopSession(
   dataDir: string,

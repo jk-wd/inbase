@@ -106,6 +106,7 @@ export const emptyIntent: {
   phase: null
   working: boolean
   stalledWait: boolean
+  llmIdle: boolean
   creationMode: boolean
   canEnterBlueprint: boolean
   blueprintSessionId: string | null

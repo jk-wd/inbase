@@ -47,8 +47,8 @@ console.log(
       : `Waiting for the user to invoke step ${initial.currentStep}...`
     : initial.phase === 'review' && initialDiff
       ? initial.stepByStep === false
-        ? `Waiting for the finish step after ${initialDiff.id}...`
-        : `Waiting for the user to run the next step after ${initialDiff.id}...`
+        ? `Waiting for the user to accept the proposal after ${initialDiff.id}...`
+        : `Waiting for the user to accept the proposal on ${initialDiff.id}...`
       : `Waiting for the visual workflow in session ${sessionId}...`,
 )
 
@@ -75,7 +75,7 @@ while (Date.now() - started < timeoutMs) {
   if (manifest.phase === 'working') {
     const next = manifest.steps.find((step) => step.index === manifest.currentStep)
     console.log(
-      `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${next ? `: ${next.title}` : ''}. Implement only this step, publish its incremental diff with propose-patch.mjs --session ${sessionId}, then wait again.`,
+      `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${next ? `: ${next.title}` : ''}. Re-read this session's blueprint.json before implementing; the user can place files and islands on any step. Patch files are the source of truth: write only this step's unified diff against the current live files (baseline + accepted patches), publish it with propose-patch.mjs --session ${sessionId}, then wait again. Do not Write, StrReplace, or Delete example-target files.`,
     )
     process.exit(0)
   }
@@ -84,7 +84,7 @@ while (Date.now() - started < timeoutMs) {
       ? `\nVISUAL_CODER_INSTRUCTION_START\n${manifest.pendingInstruction}\nVISUAL_CODER_INSTRUCTION_END`
       : ''
     console.log(
-      `VISUAL_CODER_REPLAN Keep accepted steps before step ${manifest.currentStep}. Replace the plan from step ${manifest.currentStep} onward using the instruction below. The session blueprint remains leading; if this instruction would differ from it, ask the user before replacing the plan. Report the revised tail with report-plan.mjs, then wait for invocation.${instruction}`,
+      `VISUAL_CODER_REPLAN Keep accepted patch files before step ${manifest.currentStep}. Replace the withdrawn step with a new patch against those live files, not against the withdrawn proposal. Do not edit example-target files. The session blueprint remains leading; if this instruction would differ from it, ask the user before replacing the plan. Report the revised tail with report-plan.mjs, then wait for invocation.${instruction}`,
     )
     process.exit(4)
   }

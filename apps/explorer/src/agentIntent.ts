@@ -75,6 +75,7 @@ export const emptyIntent: AgentIntent = {
   phase: null,
   working: false,
   stalledWait: false,
+  llmIdle: false,
   creationMode: false,
   canEnterBlueprint: false,
   blueprintSessionId: null,
@@ -119,6 +120,7 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     phase: data?.phase ?? null,
     working: Boolean(data?.working),
     stalledWait: Boolean(data?.stalledWait),
+    llmIdle: Boolean(data?.llmIdle),
     creationMode: Boolean(data?.creationMode),
     canEnterBlueprint: Boolean(data?.canEnterBlueprint),
     blueprintSessionId:
@@ -219,6 +221,19 @@ export function persistSessionBlueprint(
     }),
   }).catch(() => {
     // Keep local drafts if the session handshake is no longer open.
+  })
+}
+
+export function persistSessionFocus(sessionId: string) {
+  fetch('/api/agent-intent', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'focus',
+      sessionId,
+    }),
+  }).catch(() => {
+    // Keep the local focused session if the server could not record it.
   })
 }
 

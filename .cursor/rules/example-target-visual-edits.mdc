@@ -1,7 +1,8 @@
 ---
 description: >-
   When changing example-target files, report a plan first, wait for the user to
-  invoke each step, and work only via incremental patch files.
+  invoke each step, and work only via incremental patch files. Patch files are
+  the single source of truth; never edit example-target directly.
 globs: apps/example-target/**
 alwaysApply: false
 ---
@@ -12,23 +13,30 @@ You are changing files in `apps/example-target`. Follow
 `.cursor/skills/example-target-visual-edits/SKILL.md`.
 
 Always report the plan before writing a patch. When Step by step is on, the
-visualizer invokes one step at a time and showcases its result. Run step on the
-following step applies that result and starts the next step. When Step by step
-is off, every remaining step is invoked without Run step; after the last patch,
-Complete finishes the feature. The user can still walk Previous/Next over the
-diffs. Do not modify example-target except through this workflow.
+visualizer invokes one step at a time and showcases its result. Accept proposal
+on that step applies the result and starts the next step. When Step by step
+is off, every remaining step is invoked without waiting; after the last patch,
+Accept proposal finishes the feature. The user can still walk Previous/Next over the
+diffs.
+
+**Patch files are the single source of truth.** Do not Write, StrReplace, or
+Delete `apps/example-target` files. Only write a unified diff and publish it
+with `propose-patch.mjs`, which stores the patch and applies the live chain on
+that step update.
 
 1. Read `apps/explorer/src/data/user-context.json`. Follow the user's viewpoint
    only when `followLook` is true.
 2. List every step to finish the feature.
 3. Use the current Cursor chat ID as the explicit `--session` value.
 4. Run `report-plan.mjs`, then `wait-for-approval.mjs`.
-5. Only after `VISUAL_CODER_EXECUTE`, write the invoked step's unified diff and
-   run `propose-patch.mjs`.
+5. Only after `VISUAL_CODER_EXECUTE`, write the invoked step's unified diff
+   against the current live files and run `propose-patch.mjs`.
 6. Run `wait-for-approval.mjs` with the same session ID and wait.
 7. Handshake from the wait script:
-   - Execute (exit 0): implement the already-invoked step.
+   - Execute (exit 0): implement the already-invoked step as a patch file.
    - Finished (exit 5): run `propose-patch.mjs --clear`, tell the user it is
      done, stop. Do not propose another patch.
    - Replan (exit 4): report a replacement plan tail, then wait for invocation.
+     Write the replacement patch against accepted live files, not the withdrawn
+     proposal.
    - Stopped or timed out: stop.

@@ -72,8 +72,8 @@ while (Date.now() - started < timeoutMs) {
     const islands = blueprint.userCreatedIslands ?? []
       console.log(
         blueprint.enabled
-          ? `VISUAL_CODER_BLUEPRINT_READY The user sent ${blocks.length} file(s) and ${islands.length} island(s) for this chat. The blueprint is leading: create those paths and honor addedFunctions, addedVariables, and addedImports even if they are not on disk. Do not omit, rename, relocate, or replace them. Extra new files not in the blueprint are a deviation. If you would differ from the blueprint, ask the user first; do not silently deviate.`
-          : 'VISUAL_CODER_BLUEPRINT_READY The user skipped the blueprint. Continue without user-placed files or islands.',
+          ? `VISUAL_CODER_BLUEPRINT_READY The user sent ${blocks.length} file(s) and ${islands.length} island(s) for this chat. The blueprint is leading: create those paths and honor addedFunctions, addedVariables, and addedImports even if they are not on disk. Do not omit, rename, relocate, or replace them. Extra new files not in the blueprint are a deviation. If you would differ from the blueprint, ask the user first; do not silently deviate. The user can still place files and islands on later steps; re-read this session's blueprint.json before each step.`
+          : 'VISUAL_CODER_BLUEPRINT_READY The user skipped the initial blueprint. They can still place files and islands on later steps; re-read this session\'s blueprint.json before each step. Continue without user-placed files until that file is enabled.',
       )
     console.log('VISUAL_CODER_BLUEPRINT_START')
     console.log(JSON.stringify(blueprint, null, 2))

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { emptyIntent, fetchAgentIntent, fetchAgentIntents, inspectTargetFile, performAgentAction, persistSessionBlueprint } from './agentIntent'
+import { emptyIntent, fetchAgentIntent, fetchAgentIntents, inspectTargetFile, performAgentAction, persistSessionBlueprint, persistSessionFocus } from './agentIntent'
 import { fetchCodebase, updateCodebase } from './codebase'
 import {
   layoutWorld,
@@ -52,6 +52,7 @@ function intentSignature(intent: AgentIntent) {
     status: intent.status,
     phase: intent.phase,
     stalledWait: intent.stalledWait,
+    llmIdle: intent.llmIdle,
     sessionId: intent.sessionId,
     creationMode: intent.creationMode,
     diffId: intent.diffId,
@@ -140,11 +141,7 @@ function Explorer({
     intents.find((item) => item.sessionId === focusedSessionId) ??
     intents[0] ??
     emptyIntent
-  const creationIntent =
-    intents.find((item) => item.creationMode) ??
-    intents.find((item) => item.status === 'blueprint') ??
-    null
-  const creationMode = Boolean(creationIntent?.creationMode)
+  const canPlace = Boolean(intent.sessionId && intent.creationMode)
   const previewing = intent.preview || isPatchPreview(intent.status)
   const plannedCreates = previewing ? intent.creates : []
   const [userBlocks, setUserBlocks] = useState<UserCreatedBlock[]>([])
@@ -273,6 +270,8 @@ function Explorer({
   const lastIntentSig = useRef<string | null>(null)
   const viewedDiffId = useRef<Record<string, string | null>>({})
   const browsingHistory = useRef<Record<string, boolean>>({})
+  const loadedBlueprintSession = useRef<string | null>(null)
+  const seenSessionIds = useRef<Set<string>>(new Set())
 
   const applyIntent = useCallback((next: AgentIntent, sessionId?: string) => {
     const targetId = next.sessionId ?? sessionId ?? null
@@ -295,6 +294,11 @@ function Explorer({
       return nextList
     })
     if (targetId && next.sessionId) viewedDiffId.current[targetId] = next.diffId
+  }, [])
+
+  const focusSessionPanel = useCallback((sessionId: string) => {
+    setFocusedSessionId(sessionId)
+    persistSessionFocus(sessionId)
   }, [])
 
   const rememberWalk = useCallback((x: number, z: number) => {
@@ -512,7 +516,8 @@ function Explorer({
   }, [])
 
   useEffect(() => {
-    if (!creationIntent?.sessionId) {
+    if (!intent.sessionId) {
+      loadedBlueprintSession.current = null
       setUserBlocks([])
       setUserIslands([])
       setBlueprintFunctions([])
@@ -522,13 +527,23 @@ function Explorer({
     }
     const knownFiles = new Set(graph.files.map((file) => file.id))
     const knownFolders = new Set(graph.folders.map((folder) => folder.path))
-    const nextBlocks = parseUserCreatedBlocks(creationIntent.userCreatedBlocks).filter(
+    const nextBlocks = parseUserCreatedBlocks(intent.userCreatedBlocks).filter(
       (block) => !knownFiles.has(block.id),
     )
-    const nextIslands = parseUserCreatedIslands(creationIntent.userCreatedIslands).filter(
+    const nextIslands = parseUserCreatedIslands(intent.userCreatedIslands).filter(
       (island) => !knownFolders.has(island.path),
     )
-    if (creationIntent.creationMode) {
+    const switched = loadedBlueprintSession.current !== intent.sessionId
+    if (switched) {
+      loadedBlueprintSession.current = intent.sessionId
+      setUserBlocks(nextBlocks)
+      setUserIslands(nextIslands)
+      setBlueprintFunctions(intent.blueprintFunctions)
+      setBlueprintVariables(intent.blueprintVariables)
+      setBlueprintImports(intent.blueprintImports)
+      return
+    }
+    if (intent.creationMode) {
       setUserBlocks((current) =>
         current.some((block) => block.naming) || current.length > 0
           ? current
@@ -540,29 +555,29 @@ function Explorer({
           : nextIslands,
       )
       setBlueprintFunctions((current) =>
-        current.length > 0 ? current : creationIntent.blueprintFunctions,
+        current.length > 0 ? current : intent.blueprintFunctions,
       )
       setBlueprintVariables((current) =>
-        current.length > 0 ? current : creationIntent.blueprintVariables,
+        current.length > 0 ? current : intent.blueprintVariables,
       )
       setBlueprintImports((current) =>
-        current.length > 0 ? current : creationIntent.blueprintImports,
+        current.length > 0 ? current : intent.blueprintImports,
       )
       return
     }
     setUserBlocks(nextBlocks)
     setUserIslands(nextIslands)
-    setBlueprintFunctions(creationIntent.blueprintFunctions)
-    setBlueprintVariables(creationIntent.blueprintVariables)
-    setBlueprintImports(creationIntent.blueprintImports)
+    setBlueprintFunctions(intent.blueprintFunctions)
+    setBlueprintVariables(intent.blueprintVariables)
+    setBlueprintImports(intent.blueprintImports)
   }, [
-    creationIntent?.blueprintFunctions,
-    creationIntent?.blueprintImports,
-    creationIntent?.blueprintVariables,
-    creationIntent?.creationMode,
-    creationIntent?.sessionId,
-    creationIntent?.userCreatedBlocks,
-    creationIntent?.userCreatedIslands,
+    intent.blueprintFunctions,
+    intent.blueprintImports,
+    intent.blueprintVariables,
+    intent.creationMode,
+    intent.sessionId,
+    intent.userCreatedBlocks,
+    intent.userCreatedIslands,
     graph,
   ])
 
@@ -574,8 +589,8 @@ function Explorer({
       variables: PatchSymbolAddition[] = blueprintVariables,
       imports: PatchImportAddition[] = blueprintImports,
     ) => {
-      if (!creationIntent?.sessionId || !creationIntent.creationMode) return
-      persistSessionBlueprint(creationIntent.sessionId, {
+      if (!intent.sessionId || !intent.creationMode) return
+      persistSessionBlueprint(intent.sessionId, {
         userCreatedBlocks: namedCreatedBlocks(blocks),
         userCreatedIslands: namedCreatedIslands(islands),
         addedFunctions: functions,
@@ -587,8 +602,8 @@ function Explorer({
       blueprintFunctions,
       blueprintImports,
       blueprintVariables,
-      creationIntent?.creationMode,
-      creationIntent?.sessionId,
+      intent.creationMode,
+      intent.sessionId,
       userBlocks,
       userIslands,
     ],
@@ -596,7 +611,7 @@ function Explorer({
 
   const placeBlock = useCallback(
     (spot: { x: number; z: number; folder: string }) => {
-      if (!creationMode) return
+      if (!canPlace) return
       setUserBlocks((current) => {
         if (current.some((block) => block.naming)) return current
         return [
@@ -614,12 +629,12 @@ function Explorer({
       })
       document.exitPointerLock()
     },
-    [creationMode],
+    [canPlace],
   )
 
   const placeBlockOnFolder = useCallback(
     (folderPath: string) => {
-      if (!creationMode) return
+      if (!canPlace) return
       const fileCount = displayGraph.files.filter(
         (file) => file.folder === folderPath,
       ).length
@@ -627,7 +642,7 @@ function Explorer({
       if (!spot) return
       placeBlock(spot)
     },
-    [displayGraph.files, creationMode, layout, placeBlock],
+    [displayGraph.files, canPlace, layout, placeBlock],
   )
 
   const commitBlockName = useCallback(
@@ -664,7 +679,7 @@ function Explorer({
 
   const placeIsland = useCallback(
     (parent: string) => {
-      if (!creationMode) return
+      if (!canPlace) return
       setUserIslands((current) => {
         if (current.some((island) => island.naming)) return current
         return [
@@ -680,15 +695,15 @@ function Explorer({
       })
       document.exitPointerLock()
     },
-    [creationMode],
+    [canPlace],
   )
 
   const placeIslandOnFolder = useCallback(
     (parent: string) => {
-      if (!creationMode) return
+      if (!canPlace) return
       placeIsland(parent)
     },
-    [creationMode, placeIsland],
+    [canPlace, placeIsland],
   )
 
   const commitIslandName = useCallback(
@@ -722,7 +737,7 @@ function Explorer({
   }, [])
 
   const deleteSelectedCreatedBlock = useCallback(() => {
-    if (!creationMode || !selectedId) return false
+    if (!canPlace || !selectedId) return false
     const selected = userBlocks.find((block) => block.id === selectedId)
     if (!selected || selected.naming) return false
     const next = userBlocks.filter((block) => block.id !== selectedId)
@@ -730,7 +745,7 @@ function Explorer({
     persistBlueprint(next, userIslands)
     setSelectedId(null)
     return true
-  }, [creationMode, persistBlueprint, selectedId, userBlocks, userIslands])
+  }, [canPlace, persistBlueprint, selectedId, userBlocks, userIslands])
 
   const selectFile = useCallback(
     (fileId: string | null) => {
@@ -739,9 +754,9 @@ function Explorer({
         setSelectedFolder(null)
         setSelectedTick((tick) => tick + 1)
       }
-      if (fileId && creationMode) document.exitPointerLock()
+      if (fileId && canPlace) document.exitPointerLock()
     },
-    [creationMode],
+    [canPlace],
   )
 
   const inspectBlock = useCallback(
@@ -779,7 +794,7 @@ function Explorer({
 
   const addBlueprintFunction = useCallback(
     (fileId: string, rawName: string) => {
-      if (!creationMode || fileId.startsWith('draft:')) return false
+      if (!canPlace || fileId.startsWith('draft:')) return false
       const name = rawName.trim()
       if (!isBlueprintSymbolName(name)) return false
       const exists =
@@ -802,7 +817,7 @@ function Explorer({
       blueprintImports,
       blueprintVariables,
       displayGraph.files,
-      creationMode,
+      canPlace,
       persistBlueprint,
       userBlocks,
       userIslands,
@@ -811,7 +826,7 @@ function Explorer({
 
   const addBlueprintVariable = useCallback(
     (fileId: string, rawName: string) => {
-      if (!creationMode || fileId.startsWith('draft:')) return false
+      if (!canPlace || fileId.startsWith('draft:')) return false
       const name = rawName.trim()
       if (!isBlueprintSymbolName(name)) return false
       const exists =
@@ -834,7 +849,7 @@ function Explorer({
       blueprintImports,
       blueprintVariables,
       displayGraph.files,
-      creationMode,
+      canPlace,
       persistBlueprint,
       userBlocks,
       userIslands,
@@ -843,7 +858,7 @@ function Explorer({
 
   const addBlueprintImport = useCallback(
     (fileId: string, raw: string) => {
-      if (!creationMode || fileId.startsWith('draft:')) return false
+      if (!canPlace || fileId.startsWith('draft:')) return false
       const parsed = parseBlueprintImport(
         raw,
         fileId,
@@ -873,7 +888,7 @@ function Explorer({
       blueprintImports,
       blueprintVariables,
       displayGraph.files,
-      creationMode,
+      canPlace,
       persistBlueprint,
       userBlocks,
       userIslands,
@@ -882,7 +897,7 @@ function Explorer({
 
   const removeBlueprintFunction = useCallback(
     (fileId: string, name: string) => {
-      if (!creationMode) return
+      if (!canPlace) return
       const next = blueprintFunctions.filter(
         (item) => !(item.file === fileId && item.name === name),
       )
@@ -893,7 +908,7 @@ function Explorer({
       blueprintFunctions,
       blueprintImports,
       blueprintVariables,
-      creationMode,
+      canPlace,
       persistBlueprint,
       userBlocks,
       userIslands,
@@ -902,7 +917,7 @@ function Explorer({
 
   const removeBlueprintVariable = useCallback(
     (fileId: string, name: string) => {
-      if (!creationMode) return
+      if (!canPlace) return
       const next = blueprintVariables.filter(
         (item) => !(item.file === fileId && item.name === name),
       )
@@ -913,7 +928,7 @@ function Explorer({
       blueprintFunctions,
       blueprintImports,
       blueprintVariables,
-      creationMode,
+      canPlace,
       persistBlueprint,
       userBlocks,
       userIslands,
@@ -922,7 +937,7 @@ function Explorer({
 
   const removeBlueprintImport = useCallback(
     (fileId: string, name: string, from: string) => {
-      if (!creationMode) return
+      if (!canPlace) return
       const next = blueprintImports.filter(
         (item) =>
           !(item.file === fileId && item.name === name && item.from === from),
@@ -940,7 +955,7 @@ function Explorer({
       blueprintFunctions,
       blueprintImports,
       blueprintVariables,
-      creationMode,
+      canPlace,
       persistBlueprint,
       userBlocks,
       userIslands,
@@ -1068,15 +1083,24 @@ function Explorer({
             viewedDiffId.current[next.sessionId] = next.diffId
           }
         }
+        const nextIds = new Set(
+          merged
+            .map((item) => item.sessionId)
+            .filter((id): id is string => Boolean(id)),
+        )
+        const serverFocus = bundle.focusedSessionId
+        const appeared =
+          serverFocus != null && !seenSessionIds.current.has(serverFocus)
+        seenSessionIds.current = nextIds
         setFocusedSessionId((current) => {
-          if (current && merged.some((item) => item.sessionId === current)) {
+          if (appeared && serverFocus && nextIds.has(serverFocus)) {
+            return serverFocus
+          }
+          if (current && nextIds.has(current)) {
             return current
           }
-          if (
-            bundle.focusedSessionId &&
-            merged.some((item) => item.sessionId === bundle.focusedSessionId)
-          ) {
-            return bundle.focusedSessionId
+          if (serverFocus && nextIds.has(serverFocus)) {
+            return serverFocus
           }
           return merged[0]?.sessionId ?? null
         })
@@ -1148,8 +1172,8 @@ function Explorer({
             importedBy={importedBy}
             namingId={namingId}
             namingIslandId={namingIslandId}
-            onPlaceBlock={creationMode ? placeBlock : undefined}
-            onPlaceIsland={creationMode ? placeIsland : undefined}
+            onPlaceBlock={canPlace ? placeBlock : undefined}
+            onPlaceIsland={canPlace ? placeIsland : undefined}
             onCommitName={commitBlockName}
             onCancelName={cancelBlockName}
             userCreatedBlocks={userBlocks}
@@ -1178,7 +1202,7 @@ function Explorer({
         intent={intent}
         intents={intents}
         focusedSessionId={focusedSessionId}
-        onFocusSession={setFocusedSessionId}
+        onFocusSession={focusSessionPanel}
         onWorkflowAction={runWorkflowAction}
         onNavigateDiff={navigateDiff}
         onOpenMap={openMap}

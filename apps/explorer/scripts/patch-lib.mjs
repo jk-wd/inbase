@@ -533,6 +533,7 @@ export const emptyIntent = {
   phase: null,
   working: false,
   stalledWait: false,
+  llmIdle: false,
   creationMode: false,
   canEnterBlueprint: false,
   blueprintSessionId: null,

@@ -10,7 +10,7 @@ import { dataDir, targetRoot } from './scripts/target-config.mjs'
 import { editorFileUri, openInEditor } from './scripts/open-editor.mjs'
 import {
   answerBlueprint,
-  clearDiffSessions,
+  recoverOpenDiffSessions,
   continueDiff,
   inspectTargetFile,
   invokeStep,
@@ -20,6 +20,7 @@ import {
   sendBlueprint,
   sessionIntent,
   setStepByStep,
+  focusSession,
   stopSession,
   updateBlueprint,
 } from './scripts/session-store.mjs'
@@ -84,8 +85,8 @@ function jsonFilePlugin(): Plugin {
   return {
     name: 'visual-coder-json-files',
     configureServer(server) {
-      clearDiffSessions(dataDir, targetRoot)
-      rescanTarget('after clearing diff sessions')
+      recoverOpenDiffSessions(dataDir, targetRoot)
+      rescanTarget('after recovering diff sessions')
       server.middlewares.use('/api/user-context', (req, res, next) => {
         if (req.method === 'GET') {
           sendJson(res, 200, readUserContext())
@@ -208,6 +209,7 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       action !== 'blueprint_no' &&
       action !== 'blueprint_send' &&
       action !== 'blueprint_update' &&
+      action !== 'focus' &&
       action !== 'set_step_by_step'
     ) {
       sendJson(res, 400, { error: 'invalid workflow action' })
@@ -249,7 +251,9 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
         body.sessionId,
         body.diffId,
         body.instruction ?? '',
+        targetRoot,
       )
+      rescanTarget('after withdrawing a patch')
     } else if (action === 'blueprint_yes') {
       answerBlueprint(dataDir, body.sessionId, true)
     } else if (action === 'blueprint_no') {
@@ -270,6 +274,8 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
         addedVariables: body.addedVariables,
         addedImports: body.addedImports,
       })
+    } else if (action === 'focus') {
+      focusSession(dataDir, body.sessionId)
     } else if (action === 'set_step_by_step') {
       if (typeof body.stepByStep !== 'boolean') {
         sendJson(res, 400, { error: 'stepByStep is required' })
