@@ -1,5 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Html, MapControls, OrthographicCamera } from '@react-three/drei'
 import * as THREE from 'three'
@@ -355,13 +354,40 @@ function MapFolderLabels({
   const camera = useThree((state) => state.camera)
   const gl = useThree((state) => state.gl)
   const size = useThree((state) => state.size)
-  const layerRef = useRef<HTMLDivElement>(null)
+  const layerRef = useRef<HTMLDivElement | null>(null)
   const items = useMemo(() => Object.values(folders), [folders])
-  const [host, setHost] = useState<HTMLElement | null>(null)
 
   useLayoutEffect(() => {
-    setHost(gl.domElement.parentElement)
-  }, [gl])
+    const parent = gl.domElement.parentElement
+    if (!parent) return
+    const layer = document.createElement('div')
+    layer.className = 'map-folder-label-layer'
+    layer.style.cssText =
+      'position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:80;background:transparent;'
+    for (const folder of items) {
+      const el = document.createElement('div')
+      el.className = folderLabelClass(folder, highlightedFolders, selectedFolder)
+      el.style.position = 'absolute'
+      el.style.top = '0'
+      el.style.left = '0'
+      el.style.visibility = 'hidden'
+      const name = document.createElement('span')
+      name.className = 'map-folder-name'
+      name.textContent = folderKindLabel(
+        folder.name,
+        highlightedFolders?.[folder.path] ?? null,
+        folder.added ?? false,
+      )
+      el.appendChild(name)
+      layer.appendChild(el)
+    }
+    parent.appendChild(layer)
+    layerRef.current = layer
+    return () => {
+      layer.remove()
+      layerRef.current = null
+    }
+  }, [gl, highlightedFolders, items, selectedFolder])
 
   useFrame(() => {
     const layer = layerRef.current
@@ -401,27 +427,7 @@ function MapFolderLabels({
     }
   })
 
-  if (!host) return null
-
-  return createPortal(
-    <div ref={layerRef} className="map-folder-label-layer">
-      {items.map((folder) => (
-        <div
-          key={folder.path}
-          className={folderLabelClass(folder, highlightedFolders, selectedFolder)}
-        >
-          <span className="map-folder-name">
-            {folderKindLabel(
-              folder.name,
-              highlightedFolders?.[folder.path] ?? null,
-              folder.added ?? false,
-            )}
-          </span>
-        </div>
-      ))}
-    </div>,
-    host,
-  )
+  return null
 }
 
 function folderKindLabel(

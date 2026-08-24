@@ -15,6 +15,10 @@ export class CanvasErrorBoundary extends Component<Props, State> {
     return { failed: true }
   }
 
+  componentDidCatch(error: Error) {
+    console.error('Visualizer canvas error', error)
+  }
+
   render() {
     if (this.state.failed) {
       return (

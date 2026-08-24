@@ -1,14 +1,56 @@
 {
-  "updatedAt": "2026-08-24T14:20:08.902Z",
+  "updatedAt": "2026-08-24T14:56:53.597Z",
   "mode": "map",
   "island": {
-    "path": null,
-    "name": "open ground"
+    "path": ".",
+    "name": "example-target"
   },
-  "lookingAt": null,
-  "lookingAtFiles": [],
-  "selected": null,
-  "filesOnIsland": [],
+  "lookingAt": {
+    "id": "package.json",
+    "name": "package.json",
+    "path": "package.json",
+    "folder": "."
+  },
+  "lookingAtFiles": [
+    {
+      "id": "package.json",
+      "name": "package.json",
+      "path": "package.json",
+      "folder": "."
+    }
+  ],
+  "selected": {
+    "id": "package.json",
+    "name": "package.json",
+    "path": "package.json",
+    "folder": "."
+  },
+  "filesOnIsland": [
+    {
+      "id": "index.html",
+      "name": "index.html",
+      "path": "index.html",
+      "folder": "."
+    },
+    {
+      "id": "package.json",
+      "name": "package.json",
+      "path": "package.json",
+      "folder": "."
+    },
+    {
+      "id": "tsconfig.json",
+      "name": "tsconfig.json",
+      "path": "tsconfig.json",
+      "folder": "."
+    },
+    {
+      "id": "vite.config.ts",
+      "name": "vite.config.ts",
+      "path": "vite.config.ts",
+      "folder": "."
+    }
+  ],
   "position": {
     "x": 0,
     "z": 40.93

@@ -14,6 +14,7 @@ import {
 } from './layout'
 import { World } from './scene/World'
 import { HUD } from './ui/HUD'
+import { CanvasErrorBoundary } from './ui/CanvasErrorBoundary'
 import {
   MapContextMenu,
   type MapContextMenuState,
@@ -1262,6 +1263,7 @@ function Explorer({
   return (
     <>
       <div className="stage">
+        <CanvasErrorBoundary>
         <Canvas
           shadows={false}
           dpr={[1, 1.5]}
@@ -1317,6 +1319,7 @@ function Explorer({
             }
           />
         </Canvas>
+        </CanvasErrorBoundary>
       </div>
       <HUD
         graph={displayGraph}
