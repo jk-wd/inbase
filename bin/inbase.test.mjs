@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
+import { EventEmitter } from 'node:events'
 import fs from 'node:fs'
 import path from 'node:path'
 import test from 'node:test'
@@ -13,6 +14,7 @@ import {
   skillTemplateDir,
   writeRunningInstance,
 } from './project.mjs'
+import { createManifestGate } from './session.mjs'
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -483,6 +485,118 @@ test('wait-for-approval returns as soon as accept invokes the next step', async 
     assert.equal(result.status, 0, result.stderr)
     assert.match(result.stdout, /VISUAL_CODER_ACK execute: step 2 — Bump again/)
     assert.match(result.stdout, /Continue immediately/)
+    assert.ok(elapsed < 400, `next step took ${elapsed}ms`)
+  } finally {
+    cleanup()
+  }
+})
+
+test('manifest gate keeps waiting after a watcher EMFILE error', async () => {
+  const watcher = new EventEmitter()
+  watcher.close = () => {}
+  const errors = []
+  const onError = (err) => errors.push(err)
+  process.on('uncaughtException', onError)
+  try {
+    const gate = createManifestGate('/tmp/manifest.json', () => watcher)
+    const started = Date.now()
+    const waiting = gate.wait(1000)
+    const err = new Error('EMFILE: too many open files, watch')
+    err.code = 'EMFILE'
+    watcher.emit('error', err)
+    await waiting
+    assert.ok(Date.now() - started < 200)
+    assert.equal(errors.length, 0)
+    gate.close()
+  } finally {
+    process.off('uncaughtException', onError)
+  }
+})
+
+test('wait-for-approval still returns after invoke when fs.watch emits EMFILE', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  const preload = path.join(root, 'emfile-watch.mjs')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  fs.writeFileSync(
+    preload,
+    `import fs from 'node:fs'
+import { EventEmitter } from 'node:events'
+fs.watch = () => {
+  const watcher = new EventEmitter()
+  watcher.close = () => {}
+  queueMicrotask(() => {
+    const err = new Error('EMFILE: too many open files, watch')
+    err.code = 'EMFILE'
+    watcher.emit('error', err)
+  })
+  return watcher
+}
+`,
+  )
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const started = runCli(
+      ['start-session', '--session', 'emfile-wait', '--name', 'EMFILE wait'],
+      { cwd: root, env },
+    )
+    assert.equal(started.status, 0, started.stderr)
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    store.answerBlueprint(dataDir, 'emfile-wait', false)
+    store.reportPlan(dataDir, {
+      sessionId: 'emfile-wait',
+      feature: 'EMFILE wait',
+      stepTitles: ['Bump value', 'Bump again'],
+      targetRoot: target,
+    })
+    store.invokeStep(dataDir, 'emfile-wait', 1, target)
+    store.appendDiff(dataDir, target, {
+      sessionId: 'emfile-wait',
+      patchText:
+        '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 2\n',
+    })
+
+    const child = spawn(
+      process.execPath,
+      [
+        '--import',
+        pathToFileURL(preload).href,
+        path.join(packageRoot, 'bin/inbase.mjs'),
+        'wait-for-approval',
+        '--session',
+        'emfile-wait',
+        '--timeout',
+        '5000',
+      ],
+      { cwd: root, env, encoding: 'utf8' },
+    )
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    const invokedAt = Date.now()
+    store.invokeStep(dataDir, 'emfile-wait', 2, target)
+    const result = await new Promise((resolve, reject) => {
+      let stdout = ''
+      let stderr = ''
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk
+      })
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk
+      })
+      child.on('error', reject)
+      child.on('close', (status) => resolve({ status, stdout, stderr }))
+    })
+    const elapsed = Date.now() - invokedAt
+    assert.equal(result.status, 0, result.stderr)
+    assert.doesNotMatch(result.stderr, /EMFILE/)
+    assert.match(result.stdout, /VISUAL_CODER_ACK execute: step 2 — Bump again/)
     assert.ok(elapsed < 400, `next step took ${elapsed}ms`)
   } finally {
     cleanup()

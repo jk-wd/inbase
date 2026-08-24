@@ -5,6 +5,7 @@ import type {
   FileNode,
   PatchImportAddition,
   PatchSymbolAddition,
+  PlacedFolder,
   UserCreatedBlock,
   UserCreatedIsland,
   WorldLayout,
@@ -193,6 +194,54 @@ export function withUserCreatedGraph(
   }
 }
 
+function placedFolderParent(
+  folder: PlacedFolder,
+  islands: UserCreatedIsland[],
+) {
+  const created = islands.find((item) => islandKey(item) === folder.path)
+  if (created) return created.parent
+  return folderParent(folder.path)
+}
+
+function expandParentsToChildren(
+  folders: Record<string, PlacedFolder>,
+  islands: UserCreatedIsland[],
+) {
+  const parentPaths = new Set<string>()
+  for (const island of islands) {
+    let current: string | null = island.parent
+    while (current) {
+      parentPaths.add(current)
+      current = folderParent(current)
+    }
+  }
+  const ordered = [...parentPaths].sort(
+    (left, right) =>
+      right.split('/').filter(Boolean).length -
+      left.split('/').filter(Boolean).length,
+  )
+  for (const parentPath of ordered) {
+    const parent = folders[parentPath]
+    if (!parent) continue
+    const children = Object.values(folders).filter(
+      (folder) =>
+        folder.path !== parentPath &&
+        placedFolderParent(folder, islands) === parentPath,
+    )
+    if (children.length === 0) continue
+    let extent = parent.width / 2
+    for (const child of children) {
+      extent = Math.max(
+        extent,
+        Math.abs(child.x - child.width / 2 - parent.x),
+        Math.abs(child.x + child.width / 2 - parent.x),
+      )
+    }
+    const width = extent * 2
+    if (width > parent.width) folders[parentPath] = { ...parent, width }
+  }
+}
+
 function overlayIslands(
   layout: WorldLayout,
   islands: UserCreatedIsland[],
@@ -245,6 +294,7 @@ function overlayIslands(
     })
   }
 
+  expandParentsToChildren(folders, islands)
   return { ...layout, folders, bridges }
 }
 

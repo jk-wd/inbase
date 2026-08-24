@@ -6,6 +6,12 @@ import { folderAt, worldBounds } from '../layout'
 import type { ChangeKind } from '../theme'
 import type { WorldLayout } from '../types'
 
+export type MapBlueprintMenu = {
+  x: number
+  y: number
+  folder: string
+}
+
 type MapViewProps = {
   layout: WorldLayout
   enabled: boolean
@@ -16,6 +22,7 @@ type MapViewProps = {
   onSelect: (fileId: string | null) => void
   onSelectFolder: (folderPath: string | null) => void
   onTravelTo: (fromId: string, toId: string) => void
+  onBlueprintMenu?: (menu: MapBlueprintMenu) => void
 }
 
 export function MapView({
@@ -28,6 +35,7 @@ export function MapView({
   onSelect,
   onSelectFolder,
   onTravelTo,
+  onBlueprintMenu,
 }: MapViewProps) {
   const size = useThree((state) => state.size)
   const { camera, gl, invalidate, scene } = useThree()
@@ -172,7 +180,28 @@ export function MapView({
     }
 
     const onContextMenu = (event: MouseEvent) => {
-      if (event.ctrlKey) event.preventDefault()
+      if (event.ctrlKey) {
+        event.preventDefault()
+        return
+      }
+      if (!onBlueprintMenu) return
+      event.preventDefault()
+      const pick = pickAt(event.clientX, event.clientY)
+      if (!pick) return
+      const hit = new THREE.Vector3()
+      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+      if (!pick.raycaster.ray.intersectPlane(plane, hit)) return
+      const folder =
+        folderAt(hit.x, hit.z, layout) ??
+        (selectedFolder ? layout.folders[selectedFolder] : undefined) ??
+        layout.folders['.']
+      if (!folder) return
+      onSelectFolder(folder.path)
+      onBlueprintMenu({
+        x: event.clientX,
+        y: event.clientY,
+        folder: folder.path,
+      })
     }
 
     const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
@@ -250,10 +279,12 @@ export function MapView({
     invalidate,
     layout,
     onLand,
+    onBlueprintMenu,
     onSelect,
     onSelectFolder,
     onTravelTo,
     scene,
+    selectedFolder,
   ])
 
   return (

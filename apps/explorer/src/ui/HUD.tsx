@@ -334,7 +334,7 @@ function HandshakeSetup({
         </h2>
         <p>
           Press <kbd>Space</kbd> for a file and <kbd>B</kbd> for an island.
-          Optional.
+          On the map, right-click to add a file or folder. Optional.
         </p>
       </section>
       <section className="hud-setup-section">
@@ -373,7 +373,7 @@ function sessionLiveStatus(intent: AgentIntent) {
     return { text: 'LLM wait timed out', busy: false }
   }
   if (intent.awaitingAttach) {
-    return { text: 'Waiting for /inbase in Cursor', busy: true }
+    return { text: 'Waiting for /inbase in Cursor', busy: false }
   }
   if (kind === 'execute') {
     return { text: `LLM received ${detail}`, busy: true }
@@ -606,11 +606,13 @@ function SessionPanel({
       />
       {!minimized && (
         <>
-          <LiveStatus
-            intent={intent}
-            showStop={showConnectedProgress || working}
-            onStop={() => act('stop')}
-          />
+          {!intent.awaitingAttach && (
+            <LiveStatus
+              intent={intent}
+              showStop={showConnectedProgress || working}
+              onStop={() => act('stop')}
+            />
+          )}
           <label className="hud-mode-switch">
             <span>Step by step</span>
             <button
@@ -700,8 +702,9 @@ function SessionPanel({
             <>
               {canPlace && !intent.working && (
                 <p>
-                  <kbd>Space</kbd> places a file, <kbd>B</kbd> an island for
-                  this session.
+                  On the map, right-click to add a file or folder.{' '}
+                  <kbd>Space</kbd> places a file, <kbd>B</kbd> an island while
+                  walking.
                 </p>
               )}
               {intent.steps?.length > 0 && (
@@ -1251,8 +1254,8 @@ function explorerInstructions({
               { id: 'select-island', keys: ['Click'], label: 'Select an island' },
               {
                 id: 'add-file-folder',
-                keys: [],
-                label: 'Add file / Add folder in panel',
+                keys: ['Right-click'],
+                label: 'Add file or folder',
               },
             ]
           : []),

@@ -15,6 +15,10 @@ import {
 import { World } from './scene/World'
 import { HUD } from './ui/HUD'
 import {
+  MapContextMenu,
+  type MapContextMenuState,
+} from './ui/MapContextMenu'
+import {
   fetchUserContext,
   persistFollowLook,
   persistShowBranchChanges,
@@ -222,7 +226,9 @@ function Explorer({
     ],
   )
   const layout = useMemo(() => {
-    const world = layoutWorld(previewGraph)
+    const world = layoutWorld(
+      withUserCreatedGraph(previewGraph, [], userIslands),
+    )
     if (previewing) markCreatedFolders(world, changeSet.createFolders ?? [])
     return withUserCreatedLayout(world, userBlocks, userIslands)
   }, [
@@ -294,6 +300,7 @@ function Explorer({
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedTick, setSelectedTick] = useState(0)
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null)
+  const [mapMenu, setMapMenu] = useState<MapContextMenuState | null>(null)
   const [aimedRelation, setAimedRelation] = useState<AimedRelation | null>(null)
   const [aimedFileId, setAimedFileId] = useState<string | null>(null)
   const [inspectTick, setInspectTick] = useState(0)
@@ -725,12 +732,14 @@ function Explorer({
   const placeIsland = useCallback(
     (parent: string) => {
       if (!canPlace) return
+      let placedId: string | null = null
       setUserIslands((current) => {
         if (current.some((island) => island.naming)) return current
+        placedId = `draft:${Date.now()}`
         return [
           ...current,
           {
-            id: `draft:${Date.now()}`,
+            id: placedId,
             name: '',
             path: '',
             parent,
@@ -738,6 +747,10 @@ function Explorer({
           },
         ]
       })
+      if (placedId) {
+        setSelectedFolder(placedId)
+        setSelectedId(null)
+      }
       document.exitPointerLock()
     },
     [canPlace],
@@ -772,14 +785,23 @@ function Explorer({
       )
       setUserIslands(next)
       persistBlueprint(userBlocks, next)
+      setSelectedFolder(resolved.path)
+      setSelectedId(null)
       return true
     },
     [graph.folders, persistBlueprint, userBlocks, userIslands],
   )
 
-  const cancelIslandName = useCallback((id: string) => {
-    setUserIslands((current) => current.filter((island) => island.id !== id))
-  }, [])
+  const cancelIslandName = useCallback(
+    (id: string) => {
+      const draft = userIslands.find((island) => island.id === id)
+      setUserIslands((current) => current.filter((island) => island.id !== id))
+      setSelectedFolder((selected) =>
+        selected === id ? draft?.parent ?? null : selected,
+      )
+    },
+    [userIslands],
+  )
 
   const deleteSelectedCreatedBlock = useCallback(() => {
     if (!canPlace || !selectedId) return false
@@ -1018,6 +1040,10 @@ function Explorer({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [cancelBlockName, cancelIslandName, namingId, namingIslandId])
+
+  useEffect(() => {
+    if (mode !== 'map' || naming) setMapMenu(null)
+  }, [mode, naming])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -1273,6 +1299,7 @@ function Explorer({
             namingIslandId={namingIslandId}
             onPlaceBlock={canPlace ? placeBlock : undefined}
             onPlaceIsland={canPlace ? placeIsland : undefined}
+            onBlueprintMenu={canPlace ? setMapMenu : undefined}
             onCommitName={commitBlockName}
             onCancelName={cancelBlockName}
             userCreatedBlocks={userBlocks}
@@ -1345,6 +1372,12 @@ function Explorer({
         plannedIds={plannedIds}
         createdIds={plannedCreates}
         deletedIds={deletedIds}
+      />
+      <MapContextMenu
+        menu={mapMenu}
+        onAddFile={placeBlockOnFolder}
+        onAddFolder={placeIslandOnFolder}
+        onClose={() => setMapMenu(null)}
       />
     </>
   )

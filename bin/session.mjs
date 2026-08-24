@@ -30,15 +30,31 @@ function printAck(kind, detail) {
   console.log(`VISUAL_CODER_ACK ${kind}: ${detail}`)
 }
 
-function createManifestGate(manifestPath) {
+export function createManifestGate(manifestPath, watch = fs.watch) {
   const dir = path.dirname(manifestPath)
   let wake = () => {}
   let watcher = null
-  try {
-    watcher = fs.watch(dir, () => wake())
-  } catch {
+
+  const dropWatcher = () => {
+    try {
+      watcher?.close()
+    } catch {
+      // Already closed after an error, or never opened.
+    }
     watcher = null
   }
+
+  try {
+    watcher = watch(dir, () => wake())
+    watcher?.on?.('error', () => {
+      // EMFILE and sandbox limits must not crash wait-for-approval. Poll instead.
+      dropWatcher()
+      wake()
+    })
+  } catch {
+    dropWatcher()
+  }
+
   return {
     wait(ms) {
       return new Promise((resolve) => {
@@ -50,7 +66,7 @@ function createManifestGate(manifestPath) {
       })
     },
     close() {
-      watcher?.close()
+      dropWatcher()
     },
   }
 }

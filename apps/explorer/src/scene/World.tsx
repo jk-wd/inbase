@@ -3,7 +3,7 @@ import { FileBlock } from './FileBlock'
 import { Bridge } from './Bridge'
 import { RelationLines } from './RelationLines'
 import { Player } from './Player'
-import { MapView } from './MapView'
+import { MapView, type MapBlueprintMenu } from './MapView'
 import { SelectionController } from './SelectionController'
 import { UserContextTracker } from './UserContextTracker'
 import { BlockPlacer } from './BlockPlacer'
@@ -60,6 +60,7 @@ type WorldProps = {
   namingId?: string | null
   onPlaceBlock?: (spot: { x: number; z: number; folder: string }) => void
   onPlaceIsland?: (parent: string) => void
+  onBlueprintMenu?: (menu: MapBlueprintMenu) => void
   onCommitName?: (id: string, name: string) => boolean
   onCancelName?: (id: string) => void
   userCreatedBlocks?: UserCreatedBlock[]
@@ -100,6 +101,7 @@ export function World({
   namingIslandId = null,
   onPlaceBlock,
   onPlaceIsland,
+  onBlueprintMenu,
   onCommitName,
   onCancelName,
   userCreatedBlocks = [],
@@ -171,6 +173,9 @@ export function World({
         onSelect={onSelect}
         onSelectFolder={onSelectFolder}
         onTravelTo={onTravelTo}
+        onBlueprintMenu={
+          mapping && !placing && onBlueprintMenu ? onBlueprintMenu : undefined
+        }
       />
 
       {Object.values(viewLayout.folders).map((folder) => (

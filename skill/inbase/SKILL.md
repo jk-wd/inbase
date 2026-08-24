@@ -144,11 +144,13 @@ npx inbase report-plan \
 npx inbase wait-for-approval --session "<session-id>"
 ```
 
-   Do not edit project files until this prints `VISUAL_CODER_ACK execute` /
-   `VISUAL_CODER_EXECUTE`. If Step by step is off, this returns immediately for
-   each remaining step. First reply in chat acknowledging the ack, then re-read
-   this session's `blueprint.json`; the user can place files and islands on any
-   step.
+   Describe this tool call as `inbase wait-for-approval`, not "waiting for the
+   user to invoke". The command keeps running until they invoke; when it
+   returns, they already did. Do not edit project files until this prints
+   `VISUAL_CODER_ACK execute` / `VISUAL_CODER_EXECUTE`. If Step by step is off,
+   this returns immediately for each remaining step. First reply in chat
+   acknowledging the ack, then re-read this session's `blueprint.json`; the
+   user can place files and islands on any step.
 9. Implement only the invoked step by editing the live project files (Write,
    StrReplace, Delete). Paths are the same ids as `codebase.json`. Then record
    the step — Inbase diffs the working tree against the snapshot taken at
