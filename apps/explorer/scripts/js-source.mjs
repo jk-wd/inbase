@@ -1,17 +1,3 @@
-export const FILE_EXTENSIONS = new Set([
-  '.ts',
-  '.tsx',
-  '.js',
-  '.jsx',
-  '.mjs',
-  '.cjs',
-  '.css',
-  '.scss',
-  '.json',
-  '.html',
-  '.md',
-])
-
 export const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'])
 
 export const RESOLVE_EXTENSIONS = [
@@ -147,16 +133,27 @@ export function extractImportBindings(source) {
   return bindings
 }
 
+function firstKnownWithPrefix(prefix, known) {
+  for (const id of known) {
+    if (!id.startsWith(prefix)) continue
+    if (id.slice(prefix.length).includes('/')) continue
+    return id
+  }
+  return null
+}
+
 export function resolveSpecifierAgainst(candidate, known) {
   if (known.has(candidate)) return candidate
   for (const ext of RESOLVE_EXTENSIONS) {
     if (known.has(candidate + ext)) return candidate + ext
   }
+  const withExt = firstKnownWithPrefix(`${candidate}.`, known)
+  if (withExt) return withExt
   for (const ext of RESOLVE_EXTENSIONS) {
     const indexFile = `${candidate}/index${ext}`
     if (known.has(indexFile)) return indexFile
   }
-  return null
+  return firstKnownWithPrefix(`${candidate}/index.`, known)
 }
 
 function destructuredNames(pattern, { importClause = false } = {}) {

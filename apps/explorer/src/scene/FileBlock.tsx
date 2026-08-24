@@ -1,5 +1,6 @@
-import { Suspense } from 'react'
+import { Suspense, useRef } from 'react'
 import { Billboard, Edges, Html, Text } from '@react-three/drei'
+import { useFrame, useThree } from '@react-three/fiber'
 import { CHANGE_HIGHLIGHT, CONFIG, dimColor, fileColor, FILE_SELECTION, MAP_SELECTION, type ChangeKind } from '../theme'
 import { NameInput } from '../ui/NameInput'
 import { MapSelectBorder } from './MapSelectBorder'
@@ -40,6 +41,50 @@ function fileLabel(name: string, changeKind: ChangeKind | null, added: boolean) 
   return name
 }
 
+function changeMark(changeKind: ChangeKind | null, added: boolean) {
+  if (changeKind === 'remove') return 'D'
+  if (changeKind === 'add' || added) return 'A'
+  if (changeKind === 'edit') return 'U'
+  return null
+}
+
+function MapChangeMark({
+  mark,
+  width,
+  depth,
+  height,
+}: {
+  mark: string
+  width: number
+  depth: number
+  height: number
+}) {
+  const camera = useThree((state) => state.camera)
+  const markRef = useRef<HTMLDivElement>(null)
+
+  useFrame(() => {
+    const el = markRef.current
+    if (!el) return
+    const zoom = 'zoom' in camera ? Number(camera.zoom) : 1
+    const px = Math.min(width, depth) * 0.78 * zoom
+    el.style.fontSize = `${Math.max(px, 1)}px`
+  })
+
+  return (
+    <Html
+      position={[0, height / 2 + 0.12, 0]}
+      center
+      occlude={false}
+      zIndexRange={[120, 100]}
+      style={{ pointerEvents: 'none' }}
+    >
+      <div ref={markRef} className="map-change-mark">
+        {mark}
+      </div>
+    </Html>
+  )
+}
+
 export function FileBlock({
   file,
   placed,
@@ -63,9 +108,11 @@ export function FileBlock({
     changeKind && highlightMapChange && !selected
       ? CHANGE_HIGHLIGHT[changeKind]
       : null
-  const color = added || file.userCreated ? '#7ec8e8' : fileColor(file.language)
+  const isAdded = added || Boolean(file.userCreated)
+  const color = isAdded ? '#7ec8e8' : fileColor(file.language)
   const muted = dimColor(color, 0.32)
-  const label = fileLabel(file.name, changeKind, added || Boolean(file.userCreated))
+  const label = fileLabel(file.name, changeKind, isAdded)
+  const mark = changeMark(changeKind, isAdded)
   const labelColor = aimed
     ? '#9ad8ff'
     : highlight
@@ -105,7 +152,7 @@ export function FileBlock({
                     ? FILE_SELECTION.emissive
                     : related
                       ? '#1f4a44'
-                      : added || file.userCreated
+                      : isAdded
                         ? '#2a5064'
                         : dimmed
                           ? muted
@@ -120,7 +167,7 @@ export function FileBlock({
                     ? 0.55
                     : related
                       ? 0.18
-                      : added || file.userCreated
+                      : isAdded
                         ? 0.22
                         : dimmed
                           ? 0.08
@@ -147,6 +194,9 @@ export function FileBlock({
           stroke={MAP_SELECTION.blockPad}
           userData={{ fileId: file.id }}
         />
+      )}
+      {mapMode && !naming && mark && (
+        <MapChangeMark mark={mark} width={width} depth={depth} height={height} />
       )}
       {naming && onCommitName && onCancelName && (
         <Html

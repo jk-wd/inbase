@@ -45,10 +45,26 @@ function normalizeImportAdditions(value: unknown): PatchImportAddition[] {
   })
 }
 
+function normalizeAck(
+  value: unknown,
+): AgentIntent['lastAck'] {
+  if (!value || typeof value !== 'object') return null
+  const kind = (value as { kind?: unknown }).kind
+  if (typeof kind !== 'string' || kind.trim() === '') return null
+  const detail = (value as { detail?: unknown }).detail
+  const at = (value as { at?: unknown }).at
+  return {
+    kind,
+    detail: typeof detail === 'string' ? detail : '',
+    at: typeof at === 'string' ? at : null,
+  }
+}
+
 export const emptyIntent: AgentIntent = {
   updatedAt: null,
   showMap: false,
   status: 'idle',
+  name: null,
   feature: null,
   steps: [],
   step: null,
@@ -76,6 +92,10 @@ export const emptyIntent: AgentIntent = {
   working: false,
   stalledWait: false,
   llmIdle: false,
+  awaitingAttach: false,
+  listening: false,
+  lastAck: null,
+  initialInstruction: null,
   creationMode: false,
   canEnterBlueprint: false,
   blueprintSessionId: null,
@@ -91,6 +111,7 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     updatedAt: data?.updatedAt ?? null,
     showMap: Boolean(data?.showMap),
     status: data?.status ?? 'idle',
+    name: data?.name ?? null,
     feature: data?.feature ?? null,
     steps: Array.isArray(data?.steps) ? data.steps : [],
     step: typeof data?.step === 'number' ? data.step : null,
@@ -121,6 +142,11 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     working: Boolean(data?.working),
     stalledWait: Boolean(data?.stalledWait),
     llmIdle: Boolean(data?.llmIdle),
+    awaitingAttach: Boolean(data?.awaitingAttach),
+    listening: Boolean(data?.listening),
+    lastAck: normalizeAck(data?.lastAck),
+    initialInstruction:
+      typeof data?.initialInstruction === 'string' ? data.initialInstruction : null,
     creationMode: Boolean(data?.creationMode),
     canEnterBlueprint: Boolean(data?.canEnterBlueprint),
     blueprintSessionId:
@@ -224,6 +250,20 @@ export function persistSessionBlueprint(
   })
 }
 
+export function persistInitialInstruction(sessionId: string, instruction: string) {
+  fetch('/api/agent-intent', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'set_initial_instruction',
+      sessionId,
+      instruction,
+    }),
+  }).catch(() => {
+    // Keep the local instruction if the session handshake is no longer open.
+  })
+}
+
 export function persistSessionFocus(sessionId: string) {
   fetch('/api/agent-intent', {
     method: 'POST',
@@ -235,6 +275,29 @@ export function persistSessionFocus(sessionId: string) {
   }).catch(() => {
     // Keep the local focused session if the server could not record it.
   })
+}
+
+export async function setupVisualizerSession(name?: string) {
+  const response = await fetch('/api/agent-intent', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'setup_session',
+      name,
+    }),
+  })
+  if (!response.ok) {
+    const detail = await response.text()
+    let message = detail || 'Could not set up the LLM session'
+    try {
+      const parsed = JSON.parse(detail) as { error?: string }
+      if (parsed?.error) message = parsed.error
+    } catch {
+      // Use the raw body when it is not JSON.
+    }
+    throw new Error(message)
+  }
+  return normalize((await response.json()) as AgentIntent)
 }
 
 export async function inspectTargetFile(payload: {

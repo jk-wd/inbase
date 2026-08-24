@@ -2,7 +2,6 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  FILE_EXTENSIONS,
   SOURCE_EXTENSIONS,
   RESOLVE_EXTENSIONS,
   collectImportSpecifiers,
@@ -25,9 +24,21 @@ const IGNORE_DIRS = new Set([
   '.inbase',
 ])
 const IGNORE_FILES = new Set(['package-lock.json'])
+const BINARY_PROBE_BYTES = 8000
 
 function toPosix(filePath) {
   return filePath.split(path.sep).join('/')
+}
+
+function isBinaryFile(filePath) {
+  const fd = fs.openSync(filePath, 'r')
+  try {
+    const buf = Buffer.alloc(BINARY_PROBE_BYTES)
+    const bytes = fs.readSync(fd, buf, 0, buf.length, 0)
+    return buf.subarray(0, bytes).includes(0)
+  } finally {
+    fs.closeSync(fd)
+  }
 }
 
 function walk(dir, acc = []) {
@@ -39,8 +50,9 @@ function walk(dir, acc = []) {
       continue
     }
     if (IGNORE_FILES.has(entry.name)) continue
-    if (!FILE_EXTENSIONS.has(path.extname(entry.name))) continue
-    acc.push(path.join(dir, entry.name))
+    const absolutePath = path.join(dir, entry.name)
+    if (isBinaryFile(absolutePath)) continue
+    acc.push(absolutePath)
   }
   return acc
 }
@@ -55,24 +67,40 @@ function extractSymbols(source, ext) {
   return extractJsSymbols(source)
 }
 
-function resolveExisting(candidate) {
-  if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-    return candidate
+function isUsableFile(filePath) {
+  return fs.existsSync(filePath) && fs.statSync(filePath).isFile() && !isBinaryFile(filePath)
+}
+
+function fileWithStem(dir, stem) {
+  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return null
+  for (const name of fs.readdirSync(dir)) {
+    if (name.startsWith('.')) continue
+    const parsed = path.parse(name)
+    if (parsed.name !== stem || !parsed.ext) continue
+    const full = path.join(dir, name)
+    if (isUsableFile(full)) return full
   }
+  return null
+}
+
+function resolveExisting(candidate) {
+  if (isUsableFile(candidate)) return candidate
 
   for (const ext of RESOLVE_EXTENSIONS) {
     const withExt = candidate + ext
-    if (fs.existsSync(withExt) && fs.statSync(withExt).isFile()) {
-      return withExt
-    }
+    if (isUsableFile(withExt)) return withExt
   }
 
-  const indexDir = candidate
-  if (fs.existsSync(indexDir) && fs.statSync(indexDir).isDirectory()) {
+  const sibling = fileWithStem(path.dirname(candidate), path.basename(candidate))
+  if (sibling) return sibling
+
+  if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
     for (const ext of RESOLVE_EXTENSIONS) {
-      const indexFile = path.join(indexDir, `index${ext}`)
-      if (fs.existsSync(indexFile)) return indexFile
+      const indexFile = path.join(candidate, `index${ext}`)
+      if (isUsableFile(indexFile)) return indexFile
     }
+    const indexFile = fileWithStem(candidate, 'index')
+    if (indexFile) return indexFile
   }
 
   return null
@@ -108,6 +136,11 @@ function ensureFolder(folders, folderPath, rootName) {
   })
 
   if (parent) ensureFolder(folders, parent, rootName)
+}
+
+export function listSourceFiles(root) {
+  if (!root || !fs.existsSync(root) || !fs.statSync(root).isDirectory()) return []
+  return walk(root).map((absolutePath) => toPosix(path.relative(root, absolutePath)))
 }
 
 export function scanTarget({

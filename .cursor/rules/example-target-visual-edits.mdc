@@ -1,42 +1,44 @@
 ---
 description: >-
-  When changing example-target files, report a plan first, wait for the user to
-  invoke each step, and work only via incremental patch files. Patch files are
-  the single source of truth; never edit example-target directly.
+  When changing example-target files, sessions start only from Setup LLM
+  session in the map, then /inbase in chat. Direct chat is blocked unless
+  /skipinbase. After EXECUTE, edit example-target files then record the step
+  with propose-patch (no patch file).
 globs: apps/example-target/**
 alwaysApply: false
 ---
 
-# Example-target patch review
+# Example-target visual edits
 
 You are changing files in `apps/example-target`. Follow
 `.cursor/skills/example-target-visual-edits/SKILL.md`.
 
-Always report the plan before writing a patch. When Step by step is on, the
-visualizer invokes one step at a time and showcases its result. Accept proposal
-on that step applies the result and starts the next step. When Step by step
-is off, every remaining step is invoked without waiting; after the last patch,
-Accept proposal finishes the feature. The user can still walk Previous/Next over the
-diffs.
+Sessions start only from **Setup LLM session** in the map. This chat cannot
+open a session.
 
-**Patch files are the single source of truth.** Do not Write, StrReplace, or
-Delete `apps/example-target` files. Only write a unified diff and publish it
-with `propose-patch.mjs`, which stores the patch and applies the live chain on
-that step update.
+- `/skipinbase`: do the request without Inbase.
+- `/inbase`, or this chat already has `VISUAL_CODER_SESSION`: follow the skill
+  from `wait-for-blueprint`.
+- Any other file-change request: do not edit files. Reply with exactly:
 
-1. Read `apps/explorer/src/data/user-context.json`. Follow the user's viewpoint
-   only when `followLook` is true.
-2. List every step to finish the feature.
-3. Use the current Cursor chat ID as the explicit `--session` value.
-4. Run `report-plan.mjs`, then `wait-for-approval.mjs`.
-5. Only after `VISUAL_CODER_EXECUTE`, write the invoked step's unified diff
-   against the current live files and run `propose-patch.mjs`.
-6. Run `wait-for-approval.mjs` with the same session ID and wait.
-7. Handshake from the wait script:
-   - Execute (exit 0): implement the already-invoked step as a patch file.
-   - Finished (exit 5): run `propose-patch.mjs --clear`, tell the user it is
-     done, stop. Do not propose another patch.
-   - Replan (exit 4): report a replacement plan tail, then wait for invocation.
-     Write the replacement patch against accepted live files, not the withdrawn
-     proposal.
-   - Stopped or timed out: stop.
+```
+direct chat interaction not allowed use /skipinbase [request] to bypass inbase.
+```
+
+Then **stop**.
+
+After `VISUAL_CODER_EXECUTE`, edit `apps/example-target` with Write / StrReplace /
+Delete, then `npx inbase propose-patch --session <id>` with **no patch file**.
+Do not write a unified diff yourself.
+
+1. `npx inbase attach` (no `--session`) if this chat is not already attached
+2. `npx inbase wait-for-blueprint --session <id>` (returns immediately with the optional blueprint)
+3. Read the running instance's `user-context.json` (viewpoint only if `followLook`)
+4. List every step, then `npx inbase report-plan`
+5. `npx inbase wait-for-approval --session <id>`
+6. Only after `VISUAL_CODER_EXECUTE`, edit live files for that step, then `npx inbase propose-patch --session <id>`
+7. Wait again. Handshake from the wait command:
+   - Execute (exit 0): edit live files for the invoked step, then propose-patch
+   - Finished (exit 5): optionally `--clear`, tell the user it is done, stop
+   - Replan (exit 4): report a replacement plan tail, then wait
+   - Stopped or timed out: stop

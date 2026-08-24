@@ -38,6 +38,16 @@ export function persistFollowLook(followLook: boolean) {
   })
 }
 
+export function persistShowBranchChanges(showBranchChanges: boolean) {
+  fetch('/api/user-context', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: `${JSON.stringify({ showBranchChanges })}\n`,
+  }).catch(() => {
+    lastWritten = ''
+  })
+}
+
 export function persistUserContext(context: UserContext) {
   pending = context
   if (timer !== null) return
@@ -51,6 +61,7 @@ function flushUserContext() {
   if (!context) return
   const {
     followLook: _followLook,
+    showBranchChanges: _showBranchChanges,
     userCreatedBlocks: _userCreatedBlocks,
     userCreatedIslands: _userCreatedIslands,
     ...gaze

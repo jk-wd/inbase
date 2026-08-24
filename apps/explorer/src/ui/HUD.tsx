@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { persistInitialInstruction } from '../agentIntent'
 import { NameInput } from './NameInput'
 import { SelectionThumbnail } from '../scene/SelectionThumbnail'
 import {
@@ -7,6 +8,7 @@ import {
   type AgentIntent,
   type AgentIntentStatus,
   type AimedRelation,
+  type BranchChanges,
   type CodebaseGraph,
   type PatchImportAddition,
   type PatchSymbolAddition,
@@ -29,10 +31,14 @@ function reviewTitle(status: AgentIntentStatus) {
   return 'Visual workflow'
 }
 
+function sessionLabel(intent: AgentIntent) {
+  return intent.name?.trim() || intent.feature?.trim() || ''
+}
+
 function sessionTabLabel(intent: AgentIntent, sessions: AgentIntent[]) {
-  const title = intent.feature?.trim() || reviewTitle(intent.status)
+  const title = sessionLabel(intent) || reviewTitle(intent.status)
   const same = sessions.filter(
-    (item) => (item.feature?.trim() || reviewTitle(item.status)) === title,
+    (item) => (sessionLabel(item) || reviewTitle(item.status)) === title,
   )
   if (same.length < 2) return title
   const id = intent.sessionId ?? ''
@@ -210,18 +216,29 @@ function AddIntentRow({
 
 function PanelChrome({
   title,
+  subtitle,
   minimized = false,
   onMinimize,
   onClose,
+  closeLabel = 'Close',
+  closeReject = false,
 }: {
   title: ReactNode
+  subtitle?: ReactNode
   minimized?: boolean
   onMinimize?: () => void
   onClose?: () => void
+  closeLabel?: string
+  closeReject?: boolean
 }) {
   return (
     <div className="hud-panel-chrome">
-      <div className="hud-panel-chrome-title">{title}</div>
+      <div className="hud-panel-chrome-heading">
+        <div className="hud-panel-chrome-title">{title}</div>
+        {subtitle ? (
+          <div className="hud-panel-chrome-subtitle">{subtitle}</div>
+        ) : null}
+      </div>
       <div className="hud-panel-controls">
         {onMinimize && (
           <button
@@ -235,9 +252,13 @@ function PanelChrome({
         )}
         {onClose && (
           <button
-            className="hud-button hud-icon-button hud-panel-control"
+            className={
+              closeReject
+                ? 'hud-button hud-icon-button hud-panel-control hud-button-reject'
+                : 'hud-button hud-icon-button hud-panel-control'
+            }
             type="button"
-            aria-label="Close"
+            aria-label={closeLabel}
             onClick={onClose}
           >
             ×
@@ -248,10 +269,200 @@ function PanelChrome({
   )
 }
 
+function InitialInstructionField({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <label className="hud-instruction">
+      <textarea
+        value={value}
+        maxLength={4000}
+        rows={4}
+        placeholder="What should the LLM build?"
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => event.stopPropagation()}
+      />
+    </label>
+  )
+}
+
+function blueprintIsDefined(intent: AgentIntent) {
+  return (
+    (intent.userCreatedBlocks?.length ?? 0) > 0 ||
+    (intent.userCreatedIslands?.length ?? 0) > 0 ||
+    (intent.blueprintFunctions?.length ?? 0) > 0 ||
+    (intent.blueprintVariables?.length ?? 0) > 0 ||
+    (intent.blueprintImports?.length ?? 0) > 0
+  )
+}
+
+function HandshakeSetup({
+  instruction,
+  onInstructionChange,
+  blueprintDefined,
+  awaitingAttach,
+  attachBlockedBy,
+}: {
+  instruction: string
+  onInstructionChange: (value: string) => void
+  blueprintDefined: boolean
+  awaitingAttach: boolean
+  attachBlockedBy: string | null
+}) {
+  return (
+    <div className="hud-setup">
+      <section className="hud-setup-section">
+        <h2 className="hud-setup-heading">Instructions</h2>
+        <InitialInstructionField
+          value={instruction}
+          onChange={onInstructionChange}
+        />
+      </section>
+      <section className="hud-setup-section">
+        <h2 className="hud-setup-heading">
+          Blueprint
+          <span
+            className="hud-setup-tag"
+            data-ready={blueprintDefined ? 'true' : 'false'}
+          >
+            {blueprintDefined ? 'blueprint defined' : 'no blueprint'}
+          </span>
+        </h2>
+        <p>
+          Press <kbd>Space</kbd> for a file and <kbd>B</kbd> for an island.
+          Optional.
+        </p>
+      </section>
+      <section className="hud-setup-section">
+        <h2 className="hud-setup-heading">Start</h2>
+        {attachBlockedBy ? (
+          <p>
+            An LLM is already attached to {attachBlockedBy}. Stop that session
+            before running <kbd>/inbase</kbd>.
+          </p>
+        ) : awaitingAttach ? (
+          <p>
+            Run <kbd>/inbase</kbd> in a Cursor chat to connect and start.
+          </p>
+        ) : (
+          <p>
+            Starting from <kbd>/inbase</kbd>…
+          </p>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function sessionLiveStatus(intent: AgentIntent) {
+  const ack = intent.lastAck
+  const kind = ack?.kind
+  const detail = ack?.detail?.trim() || ''
+
+  if (intent.status === 'finished' || kind === 'finished') {
+    return { text: 'Finished', busy: false }
+  }
+  if (kind === 'stopped' || intent.status === 'rejected') {
+    return { text: 'Stopped', busy: false }
+  }
+  if (kind === 'timeout') {
+    return { text: 'LLM wait timed out', busy: false }
+  }
+  if (intent.awaitingAttach) {
+    return { text: 'Waiting for /inbase in Cursor', busy: true }
+  }
+  if (kind === 'execute') {
+    return { text: `LLM received ${detail}`, busy: true }
+  }
+  if (kind === 'invoke') {
+    return { text: `Sent ${detail} — waiting for LLM`, busy: true }
+  }
+  if (kind === 'replan') {
+    return { text: 'LLM received a new instruction', busy: true }
+  }
+  if (intent.status === 'working') {
+    return {
+      text: intent.reason
+        ? `LLM is working on ${intent.reason}`
+        : 'LLM is working',
+      busy: true,
+    }
+  }
+  if (intent.status === 'replanning') {
+    return { text: 'LLM is revising the plan', busy: true }
+  }
+  if (intent.status === 'preparing' || kind === 'blueprint') {
+    return { text: 'LLM is drafting the plan', busy: true }
+  }
+  if (kind === 'plan' || intent.status === 'planned') {
+    return intent.listening
+      ? { text: 'LLM is listening — run the next step', busy: false }
+      : { text: 'Plan ready', busy: false }
+  }
+  if (intent.status === 'pending') {
+    return intent.listening
+      ? { text: 'LLM is listening — accept or send an instruction', busy: false }
+      : { text: 'Review this step', busy: false }
+  }
+  if (
+    kind === 'attached' ||
+    intent.status === 'blueprint' ||
+    intent.status === 'blueprint_ask'
+  ) {
+    return { text: 'LLM attached', busy: true }
+  }
+  if (intent.llmIdle) {
+    return { text: 'LLM is idle', busy: false }
+  }
+  return { text: 'LLM connected', busy: true }
+}
+
+function LiveStatus({
+  intent,
+  showStop = false,
+  onStop,
+}: {
+  intent: AgentIntent
+  showStop?: boolean
+  onStop?: () => void
+}) {
+  const status = sessionLiveStatus(intent)
+  const [flash, setFlash] = useState(false)
+  const lastAt = intent.lastAck?.at
+
+  useEffect(() => {
+    if (!lastAt) return
+    setFlash(true)
+    const timer = window.setTimeout(() => setFlash(false), 700)
+    return () => window.clearTimeout(timer)
+  }, [lastAt])
+
+  return (
+    <div className="hud-live" data-busy={status.busy} data-flash={flash}>
+      {status.busy ? <span className="hud-spinner" aria-hidden="true" /> : null}
+      <span>{status.text}</span>
+      {showStop && onStop ? (
+        <button
+          className="hud-button hud-button-reject"
+          type="button"
+          onClick={onStop}
+        >
+          Stop
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
 type SessionPanelProps = {
   intent: AgentIntent
   focused: boolean
   naming: boolean
+  attachedSession?: AgentIntent | null
   onFocus: () => void
   onWorkflowAction: (
     sessionId: string,
@@ -265,12 +476,16 @@ function SessionPanel({
   intent,
   focused,
   naming,
+  attachedSession = null,
   onFocus,
   onWorkflowAction,
   onNavigateDiff,
 }: SessionPanelProps) {
   const [minimized, setMinimized] = useState(false)
   const [instruction, setInstruction] = useState('')
+  const [initialInstruction, setInitialInstruction] = useState(
+    () => intent.initialInstruction ?? '',
+  )
   const sessionId = intent.sessionId
   const pending = intent.status === 'pending' && intent.isActiveDiff
   const askingBlueprint = intent.status === 'blueprint_ask'
@@ -330,7 +545,30 @@ function SessionPanel({
     setInstruction('')
   }, [intent.diffId])
 
+  useEffect(() => {
+    setInitialInstruction(intent.initialInstruction ?? '')
+  }, [sessionId])
+
   if (!sessionId || !isReviewingIntent(intent.status)) return null
+
+  const updateInitialInstruction = (value: string) => {
+    setInitialInstruction(value)
+    persistInitialInstruction(sessionId, value)
+  }
+
+  const showInitialInstruction =
+    Boolean(intent.awaitingAttach) &&
+    (askingBlueprint || sendingBlueprint || preparing)
+  const handshakeSetup = showInitialInstruction
+  const llmConnected = intent.awaitingAttach === false
+  const showConnectedProgress =
+    llmConnected && (askingBlueprint || sendingBlueprint || preparing)
+  const attachBlockedBy =
+    intent.awaitingAttach &&
+    attachedSession &&
+    attachedSession.sessionId !== sessionId
+      ? sessionLabel(attachedSession) || 'another session'
+      : null
 
   const act = (
     action: WorkflowAction,
@@ -349,12 +587,30 @@ function SessionPanel({
       onPointerDown={onFocus}
     >
       <PanelChrome
-        title={reviewTitle(intent.status)}
+        title={
+          sessionLabel(intent) ||
+          (showConnectedProgress ? 'LLM connected' : reviewTitle(intent.status))
+        }
+        subtitle={
+          sessionLabel(intent)
+            ? showConnectedProgress
+              ? 'LLM connected'
+              : reviewTitle(intent.status)
+            : undefined
+        }
         minimized={minimized}
         onMinimize={() => setMinimized((current) => !current)}
+        onClose={() => act('stop')}
+        closeLabel="Stop session"
+        closeReject
       />
       {!minimized && (
         <>
+          <LiveStatus
+            intent={intent}
+            showStop={showConnectedProgress || working}
+            onStop={() => act('stop')}
+          />
           <label className="hud-mode-switch">
             <span>Step by step</span>
             <button
@@ -373,13 +629,35 @@ function SessionPanel({
               Accept proposal.
             </p>
           )}
-          {intent.llmIdle && !working && !preparing && (
-            <p className="hud-mode-hint">
-              LLM is idle. Current changes stay on the map.
-            </p>
-          )}
-          {intent.feature && <p className="hud-feature">{intent.feature}</p>}
-          {askingBlueprint ? (
+          {handshakeSetup ? (
+            <HandshakeSetup
+              instruction={initialInstruction}
+              onInstructionChange={updateInitialInstruction}
+              blueprintDefined={blueprintIsDefined(intent)}
+              awaitingAttach={Boolean(intent.awaitingAttach)}
+              attachBlockedBy={attachBlockedBy || null}
+            />
+          ) : intent.awaitingAttach ? (
+            attachedSession &&
+            attachedSession.sessionId !== sessionId ? (
+              <p className="hud-mode-hint">
+                An LLM is already attached to{' '}
+                {sessionLabel(attachedSession) || 'another session'}. Stop that
+                session before running <kbd>/inbase</kbd>.
+              </p>
+            ) : (
+              <p className="hud-mode-hint">
+                No LLM is attached. Open a Cursor chat and run{' '}
+                <kbd>/inbase</kbd>. It connects to this focused session.
+              </p>
+            )
+          ) : null}
+          {intent.feature &&
+            !handshakeSetup &&
+            intent.feature.trim() !== sessionLabel(intent) && (
+              <p className="hud-feature">{intent.feature}</p>
+            )}
+          {askingBlueprint && !handshakeSetup && !showConnectedProgress ? (
             <>
               <p>
                 Place files and folders for this chat, then send them as a
@@ -410,64 +688,9 @@ function SessionPanel({
                 </button>
               </div>
             </>
-          ) : sendingBlueprint ? (
-            <>
-              <p>
-                Walk the map, press <kbd>Space</kbd> for a file and{' '}
-                <kbd>B</kbd> for an island. Send the blueprint when the layout
-                is ready. You can keep placing files after this handshake.
-              </p>
-              <div className="hud-decide">
-                <button
-                  className="hud-button hud-button-approve"
-                  type="button"
-                  disabled={naming}
-                  onClick={() => act('blueprint_send')}
-                >
-                  Send blueprint
-                </button>
-                <button
-                  className="hud-button hud-button-reject"
-                  type="button"
-                  onClick={() => act('stop')}
-                >
-                  Stop
-                </button>
-              </div>
-            </>
-          ) : intent.status === 'finished' ? (
+          ) : handshakeSetup ? null : intent.status === 'finished' ? (
             <p>All plan steps were applied.</p>
-          ) : preparing ? (
-            <div className="hud-working">
-              <span className="hud-spinner" aria-hidden="true" />
-              <span>LLM preparing…</span>
-              <button
-                className="hud-button hud-button-reject"
-                type="button"
-                onClick={() => act('stop')}
-              >
-                Stop
-              </button>
-            </div>
-          ) : working ? (
-            <div className="hud-working">
-              <span className="hud-spinner" aria-hidden="true" />
-              <span>
-                {intent.status === 'replanning'
-                  ? 'Updating the remaining plan from your instruction…'
-                  : intent.stalledWait
-                    ? 'The LLM is still waiting on this step…'
-                    : `Implementing ${stepLabel.toLowerCase()}…`}
-              </span>
-              <button
-                className="hud-button hud-button-reject"
-                type="button"
-                onClick={() => act('stop')}
-              >
-                Stop
-              </button>
-            </div>
-          ) : (
+          ) : showConnectedProgress || preparing ? null : (
             <p>
               {stepLabel}
               {intent.reason ? ` · ${intent.reason}` : ''}
@@ -475,7 +698,7 @@ function SessionPanel({
           )}
           {!askingBlueprint && !sendingBlueprint && (
             <>
-              {canPlace && (
+              {canPlace && !intent.working && (
                 <p>
                   <kbd>Space</kbd> places a file, <kbd>B</kbd> an island for
                   this session.
@@ -487,6 +710,11 @@ function SessionPanel({
                     const proposed = proposalStep === step.index
                     const processing = processingStep === step.index
                     const accepted = acceptedSteps.has(step.index)
+                    const creating = processing && !proposed
+                    const showStepAction =
+                      creating ||
+                      (canRunNext && invokeStep?.index === step.index) ||
+                      (canAcceptProposal && proposed)
                     return (
                       <li
                         key={step.index}
@@ -496,11 +724,12 @@ function SessionPanel({
                         <span className="hud-step-index">{step.index}.</span>
                         <span className="hud-step-main">
                           <span className="hud-step-title">{step.title}</span>
-                          {((canRunNext && invokeStep?.index === step.index) ||
-                            (canAcceptProposal && proposed)) && (
+                          {showStepAction && (
                             <button
                               className="hud-button hud-button-approve hud-run-step"
                               type="button"
+                              disabled={creating}
+                              aria-busy={creating}
                               onClick={() =>
                                 proposed
                                   ? lastStep
@@ -513,7 +742,11 @@ function SessionPanel({
                                     })
                               }
                             >
-                              {proposed ? 'Accept proposal' : 'Run step'}
+                              {proposed
+                                ? 'Accept proposal'
+                                : creating
+                                  ? 'Creating proposal…'
+                                  : 'Create proposal'}
                             </button>
                           )}
                         </span>
@@ -677,6 +910,7 @@ function SessionPanel({
                       rows={3}
                       placeholder="Describe what should change in the next diff…"
                       onChange={(event) => setInstruction(event.target.value)}
+                      onKeyDown={(event) => event.stopPropagation()}
                     />
                   </label>
                   <div className="hud-decide">
@@ -701,6 +935,131 @@ function SessionPanel({
                 </>
               )}
             </>
+          )}
+        </>
+      )}
+    </aside>
+  )
+}
+
+function BranchChangesPanel({
+  changes,
+}: {
+  changes: BranchChanges
+}) {
+  const [minimized, setMinimized] = useState(false)
+  const addedFunctions = changes.addedFunctions ?? []
+  const addedVariables = changes.addedVariables ?? []
+  const addedImports = changes.addedImports ?? []
+  const changedFunctions = changes.changedFunctions ?? []
+  const changedVariables = changes.changedVariables ?? []
+  const subtitle =
+    changes.branch && changes.base
+      ? `${changes.branch} vs ${changes.base}`
+      : changes.branch
+        ? changes.branch
+        : null
+  const hasContent =
+    changes.files.length > 0 ||
+    (changes.createFolders ?? []).length > 0 ||
+    changes.creates.length > 0 ||
+    changes.deletes.length > 0 ||
+    addedFunctions.length > 0 ||
+    addedVariables.length > 0 ||
+    addedImports.length > 0 ||
+    changedFunctions.length > 0 ||
+    changedVariables.length > 0 ||
+    (changes.imports ?? []).length > 0
+
+  return (
+    <aside
+      className="hud-panel hud-panel-planned hud-panel-done"
+      data-minimized={minimized}
+    >
+      <PanelChrome
+        title="Branch changes"
+        minimized={minimized}
+        onMinimize={() => setMinimized((current) => !current)}
+      />
+      {!minimized && (
+        <>
+          {subtitle && <p className="hud-feature">{subtitle}</p>}
+          {!hasContent ? (
+            <p>No file changes on this branch.</p>
+          ) : (
+            <MutationFold hasContent>
+              {changes.files.length > 0 && (
+                <>
+                  <div className="hud-section-title hud-section-title-edit">
+                    Changed
+                  </div>
+                  <ul>
+                    {changes.files.map((id) => (
+                      <li className="hud-file-edit" key={id}>
+                        {id}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {(changes.createFolders ?? []).length > 0 && (
+                <>
+                  <div className="hud-section-title hud-section-title-add">
+                    Added islands
+                  </div>
+                  <ul>
+                    {changes.createFolders.map((id) => (
+                      <li className="hud-file-add" key={id}>
+                        {id}/
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {changes.creates.length > 0 && (
+                <>
+                  <div className="hud-section-title hud-section-title-add">
+                    Added
+                  </div>
+                  <ul>
+                    {changes.creates.map((id) => (
+                      <li className="hud-file-add" key={id}>
+                        {id}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {changes.deletes.length > 0 && (
+                <>
+                  <div className="hud-section-title hud-section-title-remove">
+                    Removed
+                  </div>
+                  <ul>
+                    {changes.deletes.map((id) => (
+                      <li className="hud-file-remove" key={id}>
+                        {id}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              <PatchSymbolChanges
+                title="Functions"
+                added={addedFunctions}
+                changed={changedFunctions}
+              />
+              <PatchSymbolChanges
+                title="Vars"
+                added={addedVariables}
+                changed={changedVariables}
+              />
+              <PanelList
+                title="Imports"
+                items={importLabels(addedImports)}
+                tone="add"
+              />
+            </MutationFold>
           )}
         </>
       )}
@@ -751,6 +1110,8 @@ function explorerInstructions({
   importedBy,
   canStop,
   sessionCount,
+  showBranchChanges,
+  canShowBranchChanges,
 }: {
   canPlace: boolean
   hasChangeSet: boolean
@@ -761,6 +1122,8 @@ function explorerInstructions({
   importedBy: boolean
   canStop: boolean
   sessionCount: number
+  showBranchChanges: boolean
+  canShowBranchChanges: boolean
 }): ExplorerInstructionSection[] {
   const backspace: ExplorerInstruction[] =
     selectedUserCreated && canPlace
@@ -781,6 +1144,17 @@ function explorerInstructions({
     keys: ['K'],
     label: importedBy ? 'Show imports' : 'Show imported by',
   }
+  const branch: ExplorerInstruction[] = canShowBranchChanges
+    ? [
+        {
+          id: 'branch-changes',
+          keys: ['G'],
+          label: showBranchChanges
+            ? 'Hide branch changes'
+            : 'Show branch changes',
+        },
+      ]
+    : []
   const stop: ExplorerInstruction[] = canStop
     ? [
         {
@@ -821,10 +1195,16 @@ function explorerInstructions({
         { id: 'aim-line', keys: ['Click'], label: 'Aim a line to fly' },
         ...info,
         imported,
+        ...branch,
         {
           id: 'update-model',
           keys: ['Update model'],
           label: 'Rescan and rebuild the map',
+        },
+        {
+          id: 'setup-session',
+          keys: ['Setup LLM session'],
+          label: 'Open a session; /inbase connects the focused one',
         },
         { id: 'toggle-map', keys: ['M'], label: 'Toggle map' },
         {
@@ -902,10 +1282,16 @@ function explorerInstructions({
         ...info,
         thumbnail,
         imported,
+        ...branch,
         {
           id: 'update-model',
           keys: ['Update model'],
           label: 'Rescan and rebuild the map',
+        },
+        {
+          id: 'setup-session',
+          keys: ['Setup LLM session'],
+          label: 'Open a session; /inbase connects the focused one',
         },
         { id: 'map-walk', keys: ['M'], label: 'Back to walk' },
         ...stop,
@@ -930,6 +1316,7 @@ type HUDProps = {
   intents?: AgentIntent[]
   focusedSessionId?: string | null
   onFocusSession?: (sessionId: string) => void
+  onSetupSession?: () => Promise<unknown>
   onWorkflowAction: (
     sessionId: string,
     action: WorkflowAction,
@@ -940,6 +1327,11 @@ type HUDProps = {
   onWalk: () => void
   followLook: boolean
   onToggleFollowLook: () => void
+  showBranchChanges?: boolean
+  branchChanges?: BranchChanges
+  canShowBranchChanges?: boolean
+  llmMakingChanges?: boolean
+  onToggleShowBranchChanges?: () => void
   onUpdateModel: () => void
   updatingModel?: boolean
   importedBy: boolean
@@ -989,12 +1381,18 @@ export function HUD({
   intents,
   focusedSessionId = null,
   onFocusSession,
+  onSetupSession,
   onWorkflowAction,
   onNavigateDiff,
   onOpenMap,
   onWalk,
   followLook,
   onToggleFollowLook,
+  showBranchChanges = false,
+  branchChanges,
+  canShowBranchChanges = false,
+  llmMakingChanges = false,
+  onToggleShowBranchChanges,
   onUpdateModel,
   updatingModel = false,
   importedBy,
@@ -1043,9 +1441,13 @@ export function HUD({
     (item) => item.sessionId && isReviewingIntent(item.status),
   )
   const canStop = canStopSession(intent)
+  const attachedSession =
+    sessions.find((session) => session.awaitingAttach === false) ?? null
   const [walkIntro, setWalkIntro] = useState(false)
   const walkIntroSeen = useRef(false)
   const [instructionsOpen, setInstructionsOpen] = useState(false)
+  const [setupError, setSetupError] = useState<string | null>(null)
+  const [setupBusy, setSetupBusy] = useState(false)
   const [infoVisible, setInfoVisible] = useState(false)
   const [infoMinimized, setInfoMinimized] = useState(false)
   const [thumbnailVisible, setThumbnailVisible] = useState(true)
@@ -1053,12 +1455,13 @@ export function HUD({
   const [thumbnailMaximized, setThumbnailMaximized] = useState(false)
   const infoPanelRef = useRef<HTMLDivElement>(null)
   const canPlace = Boolean(intent.creationMode)
-  const previewing = intent.preview
-  const addedFunctions = intent.addedFunctions ?? []
-  const addedVariables = intent.addedVariables ?? []
-  const addedImports = intent.addedImports ?? []
-  const changedFunctions = intent.changedFunctions ?? []
-  const changedVariables = intent.changedVariables ?? []
+  const overlay = showBranchChanges && branchChanges ? branchChanges : intent
+  const previewing = intent.preview || showBranchChanges
+  const addedFunctions = overlay.addedFunctions ?? []
+  const addedVariables = overlay.addedVariables ?? []
+  const addedImports = overlay.addedImports ?? []
+  const changedFunctions = overlay.changedFunctions ?? []
+  const changedVariables = overlay.changedVariables ?? []
   const selectedAddedFunctions = selected
     ? addedFunctions.filter((item) => item.file === selected.id)
     : []
@@ -1285,6 +1688,8 @@ export function HUD({
     importedBy,
     canStop,
     sessionCount: sessions.length,
+    showBranchChanges,
+    canShowBranchChanges,
   })
   const currentInstructionView: InstructionView = mapping
     ? thumbnailMaximized
@@ -1368,7 +1773,7 @@ export function HUD({
         {selected && <div className="hud-chip">{selected.path}</div>}
       </div>
 
-      {sessions.length > 0 && (
+      {(sessions.length > 0 || showBranchChanges) && (
         <div className="hud-left-stack">
           {sessions.length > 1 && (
             <div className="hud-session-tabs" role="tablist" aria-label="LLM sessions">
@@ -1383,6 +1788,7 @@ export function HUD({
                     aria-selected={active}
                     data-active={active}
                     key={session.sessionId}
+                    title={sessionTabLabel(session, sessions)}
                     onClick={() => {
                       if (session.sessionId) onFocusSession?.(session.sessionId)
                     }}
@@ -1393,16 +1799,22 @@ export function HUD({
               })}
             </div>
           )}
-          <SessionPanel
-            intent={intent}
-            focused
-            naming={naming}
-            onFocus={() => {
-              if (intent.sessionId) onFocusSession?.(intent.sessionId)
-            }}
-            onWorkflowAction={onWorkflowAction}
-            onNavigateDiff={onNavigateDiff}
-          />
+          {sessions.length > 0 && (
+            <SessionPanel
+              intent={intent}
+              focused
+              naming={naming}
+              attachedSession={attachedSession}
+              onFocus={() => {
+                if (intent.sessionId) onFocusSession?.(intent.sessionId)
+              }}
+              onWorkflowAction={onWorkflowAction}
+              onNavigateDiff={onNavigateDiff}
+            />
+          )}
+          {showBranchChanges && branchChanges && (
+            <BranchChangesPanel changes={branchChanges} />
+          )}
         </div>
       )}
 
@@ -1444,7 +1856,7 @@ export function HUD({
               selectedAddedImports.length > 0) && (
               <>
                 <div className="hud-section-title hud-section-title-edit">
-                  LLM changes
+                  {showBranchChanges ? 'Branch changes' : 'LLM changes'}
                 </div>
                 <PatchSymbolChanges
                   title="Functions"
@@ -1823,6 +2235,31 @@ export function HUD({
           >
             {updatingModel ? 'Updating…' : 'Update model'}
           </button>
+          {onSetupSession && (
+            <button
+              className="hud-button"
+              type="button"
+              aria-label="Start an LLM session without attaching a chat yet"
+              title={setupError ?? 'Start an LLM session without attaching a chat yet'}
+              disabled={setupBusy}
+              onClick={() => {
+                setInstructionsOpen(false)
+                setSetupError(null)
+                setSetupBusy(true)
+                void onSetupSession()
+                  .catch((caught) => {
+                    setSetupError(
+                      caught instanceof Error
+                        ? caught.message
+                        : 'Could not set up the session',
+                    )
+                  })
+                  .finally(() => setSetupBusy(false))
+              }}
+            >
+              {setupBusy ? 'Starting…' : 'Setup LLM session'}
+            </button>
+          )}
         </div>
         <div className="hud-icon-row">
           {mapping && hasChangeSet && onToggleChangePathsOnly && (
@@ -1934,6 +2371,53 @@ export function HUD({
             </svg>
             <span className="hud-tooltip">
               {importedBy ? 'K show imports' : 'K show imported by'}
+            </span>
+          </button>
+          <button
+            className="hud-button hud-icon-button"
+            data-active={showBranchChanges}
+            aria-label={
+              llmMakingChanges
+                ? 'Show branch changes unavailable while the LLM is making changes'
+                : showBranchChanges
+                  ? 'Hide branch changes'
+                  : 'Show branch changes'
+            }
+            aria-keyshortcuts="G"
+            aria-pressed={showBranchChanges}
+            aria-disabled={!canShowBranchChanges}
+            type="button"
+            onClick={() => {
+              if (!canShowBranchChanges) return
+              onToggleShowBranchChanges?.()
+            }}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="6" cy="5" r="2.4" />
+              <circle cx="6" cy="19" r="2.4" />
+              <circle cx="18" cy="12" r="2.4" />
+              <path d="M6 7.4v9.2" />
+              <path d="M6 12h7.2" />
+              <path d="M13.2 12c2.2 0 2.2-4.6 4.4-4.6" />
+            </svg>
+            <span className="hud-tooltip">
+              {llmMakingChanges
+                ? 'Unavailable while the LLM is making changes'
+                : !canShowBranchChanges
+                  ? 'No git branch to show'
+                  : showBranchChanges
+                    ? 'G hide branch changes'
+                    : 'G show branch changes'}
             </span>
           </button>
           <button

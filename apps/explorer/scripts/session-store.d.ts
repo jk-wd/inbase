@@ -20,6 +20,7 @@ export type DiffEntry = {
 export type DiffManifest = {
   version: number
   sessionId: string
+  name: string
   feature: string
   steps: Array<{ index: number; title: string }>
   status: 'active' | 'finished' | 'rejected'
@@ -33,9 +34,11 @@ export type DiffManifest = {
     | 'replanning'
     | 'finished'
     | 'stopped'
+  awaitingAttach?: boolean
   currentStep: number
   activeDiffId: string | null
   pendingInstruction: string | null
+  initialInstruction?: string | null
   workStartedAt: string | null
   stepByStep: boolean
   createdAt: string
@@ -47,7 +50,26 @@ export function assertSessionId(value: unknown): string
 export function readActiveSession(dataDir: string): string | null
 export function writeActiveSession(dataDir: string, sessionId: string | null): void
 export function focusSession(dataDir: string, sessionId: string): string
+export function sessionPaths(
+  dataDir: string,
+  sessionId: string,
+): {
+  root: string
+  diffs: string
+  manifest: string
+  blueprint: string
+  baseline: string
+  baselineFiles: string
+  preStep: string
+  stopped: string
+}
 export function touchSessionConnection(dataDir: string, sessionId: string): void
+export function recordSessionAck(
+  dataDir: string,
+  sessionId: string,
+  kind: string,
+  detail?: string,
+): { kind: string; detail: string; at: string } | null
 export function isSessionConnected(
   dataDir: string,
   sessionId: string,
@@ -86,9 +108,28 @@ export function startSession(
   dataDir: string,
   input: {
     sessionId: string
+    name?: string
     feature?: string
   },
 ): DiffManifest
+export function setupSession(
+  dataDir: string,
+  input?: {
+    sessionId?: string
+    name?: string
+    feature?: string
+  },
+): DiffManifest
+export function attachSession(
+  dataDir: string,
+  sessionId?: string | null,
+): DiffManifest
+export function setInitialInstruction(
+  dataDir: string,
+  sessionId: string,
+  instruction: string | null | undefined,
+): DiffManifest
+export function readAttachedSession(dataDir: string): string | null
 export type SessionBlueprint = {
   enabled: boolean
   sent: boolean
@@ -132,12 +173,18 @@ export function sendBlueprint(
     addedImports?: unknown[]
   },
 ): DiffManifest
+export function maybeStartVisualizerHandshake(
+  dataDir: string,
+  sessionId: string,
+): DiffManifest
 export function reportPlan(
   dataDir: string,
   input: {
     sessionId: string
+    name?: string
     feature: string
     stepTitles: string[]
+    targetRoot?: string | null
   },
 ): DiffManifest
 export function isStepByStep(manifest: DiffManifest | null | undefined): boolean
@@ -186,6 +233,16 @@ export function materializeDiff(
   sessionId: string,
   diffId?: string | null,
 ): DiffManifest
+export function snapshotPreStep(
+  dataDir: string,
+  sessionId: string,
+  targetRoot: string,
+): string
+export function readLiveDiff(
+  dataDir: string,
+  sessionId: string,
+  targetRoot: string,
+): string
 export function inspectTargetFile(
   dataDir: string,
   targetRoot: string,
@@ -200,7 +257,7 @@ export function appendDiff(
   targetRoot: string,
   input: {
     sessionId: string
-    patchText: string
+    patchText?: string
   },
 ): { manifest: DiffManifest; entry: DiffEntry }
 export function continueDiff(

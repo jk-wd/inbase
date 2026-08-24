@@ -10,12 +10,14 @@ import {
   ensureGitignoreEntry,
   explorerRoot,
   skillTemplateDir,
+  commandTemplateDir,
   takeFlagValue,
 } from './project.mjs'
 import {
   proposePatch,
   reportPlan,
   startSession,
+  attachSession,
   waitForApproval,
   waitForBlueprint,
 } from './session.mjs'
@@ -28,11 +30,12 @@ Usage:
   inbase help              Show this help
 
 Agent commands (used by the Cursor skill):
-  inbase start-session --session <id> [--feature "name"]
+  inbase start-session --session <id> --name "short name"
+  inbase attach [--session <id>]
   inbase wait-for-blueprint --session <id>
   inbase report-plan --session <id> --feature "name" --steps "one" [--steps "two"]
   inbase wait-for-approval --session <id>
-  inbase propose-patch --session <id> <file.patch|->
+  inbase propose-patch --session <id> [file.patch|-]
   inbase propose-patch --session <id> --clear
 
 Options for run:
@@ -50,6 +53,10 @@ export function initProject(projectRoot = process.cwd()) {
   }
   const skillDir = path.join(projectRoot, '.cursor/skills/inbase')
   copyDir(skillTemplateDir, skillDir)
+  const commandDir = path.join(projectRoot, '.cursor/commands')
+  if (fs.existsSync(commandTemplateDir)) {
+    copyDir(commandTemplateDir, commandDir)
+  }
   const { dataDir } = applyHostEnv({
     cwd: projectRoot,
     target: projectRoot,
@@ -57,7 +64,7 @@ export function initProject(projectRoot = process.cwd()) {
   })
   ensureDataDir(dataDir)
   const gitignoreAdded = ensureGitignoreEntry(projectRoot)
-  return { skillDir, dataDir, gitignoreAdded }
+  return { skillDir, commandDir, dataDir, gitignoreAdded }
 }
 
 function explorerHref(relative) {
@@ -122,6 +129,9 @@ export async function main(argv = process.argv.slice(2)) {
   if (command === 'init') {
     const result = initProject()
     console.log(`Installed Cursor skill at ${result.skillDir}`)
+    if (fs.existsSync(path.join(result.commandDir, 'inbase.md'))) {
+      console.log(`Installed /inbase command at ${result.commandDir}`)
+    }
     if (result.gitignoreAdded) console.log('Added .inbase/ to .gitignore')
     console.log('Next: run `inbase run`, then ask Cursor to change source files.')
     return
@@ -132,11 +142,20 @@ export async function main(argv = process.argv.slice(2)) {
     return
   }
 
-  applyHostEnv()
+  const host = applyHostEnv()
   ensureDataDir(process.env.INBASE_DATA_DIR)
+  if (host.instance) {
+    console.log(
+      `INBASE_ATTACHED Using the running visualizer (${host.instance.dataDir}). Run wait-for-blueprint to read the optional blueprint; it does not wait.`,
+    )
+  }
 
   if (command === 'start-session') {
     await startSession(args)
+    return
+  }
+  if (command === 'attach') {
+    await attachSession(args)
     return
   }
   if (command === 'wait-for-blueprint') {

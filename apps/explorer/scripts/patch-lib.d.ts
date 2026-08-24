@@ -80,6 +80,7 @@ export const emptyIntent: {
   updatedAt: null
   showMap: boolean
   status: string
+  name: null
   feature: null
   steps: unknown[]
   step: null
@@ -107,6 +108,10 @@ export const emptyIntent: {
   working: boolean
   stalledWait: boolean
   llmIdle: boolean
+  awaitingAttach: boolean
+  listening: boolean
+  lastAck: { kind: string; detail: string; at: string | null } | null
+  initialInstruction: string | null
   creationMode: boolean
   canEnterBlueprint: boolean
   blueprintSessionId: string | null

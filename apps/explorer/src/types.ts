@@ -114,6 +114,7 @@ export type UserContext = {
     z: number
   }
   followLook?: boolean
+  showBranchChanges?: boolean
   userCreatedBlocks?: UserCreatedBlock[]
   userCreatedIslands?: UserCreatedIsland[]
 }
@@ -158,6 +159,40 @@ export function canStopSession(intent: {
   status: AgentIntentStatus
 }) {
   return Boolean(intent.sessionId) && intent.status !== 'idle'
+}
+
+export function llmIsMakingChanges(intent: {
+  working: boolean
+  preview: boolean
+  status: AgentIntentStatus
+}) {
+  return (
+    intent.working ||
+    intent.preview ||
+    intent.status === 'preparing' ||
+    intent.status === 'working' ||
+    intent.status === 'replanning' ||
+    intent.status === 'pending' ||
+    intent.status === 'extend' ||
+    intent.status === 'extended'
+  )
+}
+
+export type BranchChanges = {
+  available: boolean
+  branch: string | null
+  base: string | null
+  files: string[]
+  creates: string[]
+  deletes: string[]
+  createFolders: string[]
+  createLines: Record<string, number>
+  imports: PatchImport[]
+  addedFunctions: PatchSymbolAddition[]
+  addedVariables: PatchSymbolAddition[]
+  addedImports: PatchImportAddition[]
+  changedFunctions: PatchSymbolAddition[]
+  changedVariables: PatchSymbolAddition[]
 }
 
 export type PlanStep = {
@@ -227,6 +262,7 @@ export type AgentIntent = {
   updatedAt: string | null
   showMap: boolean
   status: AgentIntentStatus
+  name: string | null
   feature: string | null
   steps: PlanStep[]
   step: number | null
@@ -254,6 +290,14 @@ export type AgentIntent = {
   working: boolean
   stalledWait: boolean
   llmIdle?: boolean
+  awaitingAttach?: boolean
+  listening?: boolean
+  lastAck?: {
+    kind: string
+    detail: string
+    at: string | null
+  } | null
+  initialInstruction?: string | null
   creationMode: boolean
   canEnterBlueprint: boolean
   blueprintSessionId: string | null

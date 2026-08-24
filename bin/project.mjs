@@ -6,6 +6,7 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 export const packageRoot = path.resolve(here, '..')
 export const explorerRoot = path.join(packageRoot, 'apps/explorer')
 export const skillTemplateDir = path.join(packageRoot, 'skill/inbase')
+export const commandTemplateDir = path.join(packageRoot, 'skill/commands')
 
 export function resolveOptionalPath(value, fallback) {
   const raw = value?.trim()
@@ -13,19 +14,76 @@ export function resolveOptionalPath(value, fallback) {
   return path.isAbsolute(raw) ? path.normalize(raw) : path.resolve(process.cwd(), raw)
 }
 
+export const INSTANCE_FILE = 'instance.json'
+
+function isPidAlive(pid) {
+  if (!Number.isInteger(pid)) return true
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function instanceFile(dataDir) {
+  return path.join(dataDir, INSTANCE_FILE)
+}
+
+export function writeRunningInstance({ dataDir, targetRoot, port = null }) {
+  fs.mkdirSync(dataDir, { recursive: true })
+  const instance = {
+    dataDir: path.resolve(dataDir),
+    targetRoot: path.resolve(targetRoot),
+    port: port ?? null,
+    pid: process.pid,
+    updatedAt: new Date().toISOString(),
+  }
+  fs.writeFileSync(instanceFile(dataDir), `${JSON.stringify(instance, null, 2)}\n`)
+  return instance
+}
+
+export function readInstanceFile(file) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
+    if (!parsed?.dataDir || !parsed?.targetRoot) return null
+    if (!isPidAlive(parsed.pid)) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+export function readRunningInstance(cwd = process.cwd()) {
+  const files = [
+    path.join(cwd, '.inbase', INSTANCE_FILE),
+    path.join(explorerRoot, 'src/data', INSTANCE_FILE),
+  ]
+  const seen = new Set()
+  for (const file of files) {
+    const resolved = path.resolve(file)
+    if (seen.has(resolved) || !fs.existsSync(resolved)) continue
+    seen.add(resolved)
+    const instance = readInstanceFile(resolved)
+    if (instance) return instance
+  }
+  return null
+}
+
 export function applyHostEnv({
   cwd = process.cwd(),
   target = process.env.VISUAL_CODER_TARGET,
   dataDir = process.env.INBASE_DATA_DIR,
 } = {}) {
-  const targetRoot = resolveOptionalPath(target, cwd)
+  const running = !target && !dataDir ? readRunningInstance(cwd) : null
+  const targetRoot = resolveOptionalPath(target, running?.targetRoot ?? cwd)
   const resolvedDataDir = resolveOptionalPath(
     dataDir,
-    path.join(targetRoot, '.inbase'),
+    running?.dataDir ?? path.join(targetRoot, '.inbase'),
   )
   process.env.VISUAL_CODER_TARGET = targetRoot
   process.env.INBASE_DATA_DIR = resolvedDataDir
-  return { cwd, targetRoot, dataDir: resolvedDataDir }
+  return { cwd, targetRoot, dataDir: resolvedDataDir, instance: running }
 }
 
 export function ensureDataDir(dataDir) {
@@ -34,7 +92,7 @@ export function ensureDataDir(dataDir) {
   if (!fs.existsSync(userContextFile)) {
     fs.writeFileSync(
       userContextFile,
-      `${JSON.stringify({ followLook: false }, null, 2)}\n`,
+      `${JSON.stringify({ followLook: false, showBranchChanges: false }, null, 2)}\n`,
     )
   }
   return dataDir

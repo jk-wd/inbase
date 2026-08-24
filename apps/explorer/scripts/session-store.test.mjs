@@ -29,6 +29,10 @@ import {
   sessionIntent,
   setStepByStep,
   startSession,
+  setupSession,
+  attachSession,
+  setInitialInstruction,
+  maybeStartVisualizerHandshake,
   stopSession,
   touchSessionConnection,
   updateBlueprint,
@@ -91,6 +95,7 @@ test('starts a blueprint handshake before the LLM can prepare', () => {
   try {
     const started = startSession(env.dataDir, { sessionId: 'prep-chat' })
     assert.equal(started.phase, 'blueprint_ask')
+    assert.equal(started.name, '')
     assert.equal(readActiveSession(env.dataDir), 'prep-chat')
 
     const intent = sessionIntent(env.dataDir, 'prep-chat', ['src/a.ts'])
@@ -126,8 +131,131 @@ test('starts a blueprint handshake before the LLM can prepare', () => {
     const planned = sessionIntent(env.dataDir, 'prep-chat', ['src/a.ts'])
     assert.equal(planned.status, 'planned')
     assert.equal(planned.feature, 'Prepared feature')
+    assert.equal(planned.name, 'Prepared feature')
     assert.equal(planned.working, false)
     assert.equal(planned.steps.length, 1)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('setup session opens blueprint placement with no LLM attached', () => {
+  const env = fixture()
+  try {
+    const started = setupSession(env.dataDir)
+    assert.match(started.sessionId, /^viz-[0-9a-f]+$/)
+    assert.equal(started.phase, 'blueprint')
+    assert.equal(started.awaitingAttach, true)
+    assert.equal(readActiveSession(env.dataDir), started.sessionId)
+
+    const intent = sessionIntent(env.dataDir, started.sessionId, ['src/a.ts'])
+    assert.equal(intent.status, 'blueprint')
+    assert.equal(intent.creationMode, true)
+    assert.equal(intent.working, false)
+    assert.equal(intent.llmIdle, true)
+    assert.equal(intent.awaitingAttach, true)
+    assert.equal(intent.initialInstruction, null)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('stores an initial instruction for the LLM handshake', () => {
+  const env = fixture()
+  try {
+    const started = setupSession(env.dataDir)
+    assert.equal(started.initialInstruction, null)
+
+    const saved = setInitialInstruction(
+      env.dataDir,
+      started.sessionId,
+      'Add a settings page',
+    )
+    assert.equal(saved.initialInstruction, 'Add a settings page')
+    const intent = sessionIntent(env.dataDir, started.sessionId)
+    assert.equal(intent.initialInstruction, 'Add a settings page')
+
+    const cleared = setInitialInstruction(env.dataDir, started.sessionId, '  ')
+    assert.equal(cleared.initialInstruction, null)
+    assert.throws(
+      () =>
+        setInitialInstruction(
+          env.dataDir,
+          started.sessionId,
+          'x'.repeat(4001),
+        ),
+      /4000/,
+    )
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('/inbase starts without waiting for a blueprint', () => {
+  const env = fixture()
+  try {
+    const started = setupSession(env.dataDir)
+    const begun = maybeStartVisualizerHandshake(env.dataDir, started.sessionId)
+    assert.equal(begun.phase, 'preparing')
+    const empty = readBlueprint(env.dataDir, started.sessionId)
+    assert.equal(empty.sent, true)
+    assert.equal(empty.enabled, false)
+
+    startSession(env.dataDir, { sessionId: 'ask-chat', name: 'Ask' })
+    const fromAsk = maybeStartVisualizerHandshake(env.dataDir, 'ask-chat')
+    assert.equal(fromAsk.phase, 'preparing')
+    assert.equal(readBlueprint(env.dataDir, 'ask-chat').sent, true)
+
+    const withFiles = setupSession(env.dataDir)
+    updateBlueprint(env.dataDir, withFiles.sessionId, {
+      userCreatedBlocks: [
+        {
+          id: 'src/Widget.tsx',
+          name: 'Widget.tsx',
+          path: 'src/Widget.tsx',
+          folder: 'src',
+          x: 1,
+          z: 2,
+        },
+      ],
+    })
+    maybeStartVisualizerHandshake(env.dataDir, withFiles.sessionId)
+    assert.equal(readBlueprint(env.dataDir, withFiles.sessionId).enabled, true)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('attach without an id uses the focused visualizer session', () => {
+  const env = fixture()
+  try {
+    const first = setupSession(env.dataDir)
+    const second = setupSession(env.dataDir)
+    assert.equal(readActiveSession(env.dataDir), second.sessionId)
+
+    const attached = attachSession(env.dataDir)
+    assert.equal(attached.sessionId, second.sessionId)
+    assert.equal(attached.awaitingAttach, false)
+    assert.equal(attached.phase, 'preparing')
+    const intent = sessionIntent(env.dataDir, second.sessionId)
+    assert.equal(intent.awaitingAttach, false)
+    assert.equal(intent.llmIdle, false)
+    assert.equal(intent.lastAck.kind, 'attached')
+
+    const again = attachSession(env.dataDir, second.sessionId)
+    assert.equal(again.sessionId, second.sessionId)
+
+    assert.throws(() => attachSession(env.dataDir, first.sessionId), /already attached/)
+    assert.equal(readActiveSession(env.dataDir), second.sessionId)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('attach fails when no visualizer session is focused', () => {
+  const env = fixture()
+  try {
+    assert.throws(() => attachSession(env.dataDir), /focused/)
   } finally {
     env.cleanup()
   }
@@ -305,6 +433,44 @@ test('keeps accepting placed files after the blueprint handshake', () => {
   }
 })
 
+test('stores an LLM-generated name so concurrent sessions stay distinct', () => {
+  const env = fixture()
+  try {
+    const named = startSession(env.dataDir, {
+      sessionId: 'named-chat',
+      name: '  Clock on Home  ',
+    })
+    assert.equal(named.name, 'Clock on Home')
+    assert.equal(named.feature, 'Clock on Home')
+    assert.equal(
+      sessionIntent(env.dataDir, 'named-chat')?.name,
+      'Clock on Home',
+    )
+
+    const resumed = startSession(env.dataDir, {
+      sessionId: 'named-chat',
+      name: 'Home clock',
+    })
+    assert.equal(resumed.name, 'Home clock')
+    assert.equal(
+      sessionIntent(env.dataDir, 'named-chat')?.name,
+      'Home clock',
+    )
+
+    startSession(env.dataDir, {
+      sessionId: 'other-chat',
+      name: 'Login redirect',
+    })
+    const intents = listSessionIntents(env.dataDir)
+    assert.deepEqual(
+      intents.map((intent) => intent.name),
+      ['Home clock', 'Login redirect'],
+    )
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('lists every open LLM session so multiple prompts stay visible', () => {
   const env = fixture()
   try {
@@ -429,6 +595,8 @@ test('invokes, reviews, continues, and waits to run the next step', () => {
     })
     invokeStep(env.dataDir, 'happy-chat', 1)
     assert.equal(readManifest(env.dataDir, 'happy-chat').phase, 'working')
+    assert.equal(sessionIntent(env.dataDir, 'happy-chat').lastAck.kind, 'invoke')
+    assert.match(sessionIntent(env.dataDir, 'happy-chat').lastAck.detail, /step 1/)
 
     const first = appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'happy-chat',
@@ -1078,14 +1246,45 @@ test('last-step review stays on the map after the LLM waiter disappears', () => 
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
       'export const value = 4\n',
     )
+  } finally {
+    env.cleanup()
+  }
+})
 
-    fs.writeFileSync(path.join(env.targetRoot, 'src/a.ts'), 'export const value = 1\n')
-    recoverOpenDiffSessions(env.dataDir, env.targetRoot)
-    assert.equal(readManifest(env.dataDir, 'usecase-chat').phase, 'review')
-    assert.deepEqual(listOpenSessionIds(env.dataDir), ['usecase-chat'])
+test('visualizer startup discards leftover LLM sessions', () => {
+  const env = fixture()
+  try {
+    startSession(env.dataDir, { sessionId: 'boot-chat' })
+    setStepByStep(env.dataDir, 'boot-chat', false)
+    answerBlueprint(env.dataDir, 'boot-chat', false)
+    reportPlan(env.dataDir, {
+      sessionId: 'boot-chat',
+      feature: 'Leftover session',
+      stepTitles: ['Build value'],
+    })
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'boot-chat',
+      patchText: oneToTwo,
+    })
+    assert.equal(readActiveSession(env.dataDir), 'boot-chat')
+    assert.deepEqual(listOpenSessionIds(env.dataDir), ['boot-chat'])
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 4\n',
+      'export const value = 2\n',
+    )
+
+    assert.deepEqual(recoverOpenDiffSessions(env.dataDir, env.targetRoot), [])
+    assert.equal(readManifest(env.dataDir, 'boot-chat'), null)
+    assert.deepEqual(listOpenSessionIds(env.dataDir), [])
+    assert.equal(readActiveSession(env.dataDir), null)
+    assert.equal(readBlueprintSession(env.dataDir), null)
+    assert.equal(
+      fs.existsSync(path.join(env.dataDir, 'diff-sessions', 'boot-chat')),
+      false,
+    )
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 1\n',
     )
   } finally {
     env.cleanup()
@@ -1337,6 +1536,78 @@ test('flags a working session when the LLM is still waiting', () => {
       new Set(),
     )
     assert.equal(implementing.stalledWait, false)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('records live file edits against the invoke snapshot', () => {
+  const env = fixture()
+  try {
+    startSession(env.dataDir, { sessionId: 'live-chat', name: 'Live edits' })
+    answerBlueprint(env.dataDir, 'live-chat', false)
+    reportPlan(env.dataDir, {
+      sessionId: 'live-chat',
+      feature: 'Live edits',
+      stepTitles: ['Bump value', 'Add helper'],
+      targetRoot: env.targetRoot,
+    })
+    invokeStep(env.dataDir, 'live-chat', 1, env.targetRoot)
+    fs.writeFileSync(path.join(env.targetRoot, 'src/a.ts'), 'export const value = 2\n')
+
+    const first = appendDiff(env.dataDir, env.targetRoot, { sessionId: 'live-chat' })
+    assert.equal(first.entry.step, 1)
+    assert.equal(first.manifest.phase, 'review')
+    assert.match(readDiff(env.dataDir, 'live-chat', first.entry), /export const value = 2/)
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
+
+    invokeStep(env.dataDir, 'live-chat', 2, env.targetRoot)
+    fs.writeFileSync(
+      path.join(env.targetRoot, 'src/helper.ts'),
+      'export function helper() { return 2 }\n',
+    )
+    const second = appendDiff(env.dataDir, env.targetRoot, { sessionId: 'live-chat' })
+    assert.equal(second.entry.step, 2)
+    assert.match(readDiff(env.dataDir, 'live-chat', second.entry), /export function helper/)
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/helper.ts'), 'utf8'),
+      'export function helper() { return 2 }\n',
+    )
+
+    materializeDiff(env.dataDir, env.targetRoot, 'live-chat', first.entry.id)
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
+    assert.equal(fs.existsSync(path.join(env.targetRoot, 'src/helper.ts')), false)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('refuses to record a live step with no file changes', () => {
+  const env = fixture()
+  try {
+    startSession(env.dataDir, { sessionId: 'empty-live', name: 'Empty live' })
+    answerBlueprint(env.dataDir, 'empty-live', false)
+    reportPlan(env.dataDir, {
+      sessionId: 'empty-live',
+      feature: 'Empty live',
+      stepTitles: ['Do nothing'],
+      targetRoot: env.targetRoot,
+    })
+    invokeStep(env.dataDir, 'empty-live', 1, env.targetRoot)
+    assert.throws(
+      () => appendDiff(env.dataDir, env.targetRoot, { sessionId: 'empty-live' }),
+      /No file changes/,
+    )
   } finally {
     env.cleanup()
   }

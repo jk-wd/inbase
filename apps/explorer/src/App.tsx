@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { emptyIntent, fetchAgentIntent, fetchAgentIntents, inspectTargetFile, performAgentAction, persistSessionBlueprint, persistSessionFocus } from './agentIntent'
+import { emptyIntent, fetchAgentIntent, fetchAgentIntents, inspectTargetFile, performAgentAction, persistSessionBlueprint, persistSessionFocus, setupVisualizerSession } from './agentIntent'
+import { emptyBranchChanges, fetchBranchChanges } from './branchChanges'
 import { fetchCodebase, updateCodebase } from './codebase'
 import {
   layoutWorld,
@@ -16,6 +17,7 @@ import { HUD } from './ui/HUD'
 import {
   fetchUserContext,
   persistFollowLook,
+  persistShowBranchChanges,
   persistUserContext,
 } from './userContext'
 import {
@@ -34,6 +36,7 @@ import {
 } from './userCreated'
 import {
   isPatchPreview,
+  llmIsMakingChanges,
   type AgentIntent,
   type AimedRelation,
   type CodebaseGraph,
@@ -53,7 +56,12 @@ function intentSignature(intent: AgentIntent) {
     phase: intent.phase,
     stalledWait: intent.stalledWait,
     llmIdle: intent.llmIdle,
+    awaitingAttach: intent.awaitingAttach,
+    listening: intent.listening,
+    lastAck: intent.lastAck,
     sessionId: intent.sessionId,
+    name: intent.name,
+    feature: intent.feature,
     creationMode: intent.creationMode,
     diffId: intent.diffId,
     chain: intent.chain,
@@ -76,8 +84,15 @@ export default function App() {
   const [updatingModel, setUpdatingModel] = useState(false)
   const updatingModelRef = useRef(false)
 
+  const graphSig = useRef<string | null>(null)
   const applyGraph = useCallback((next: CodebaseGraph | null, failed: string) => {
     if (next) {
+      const signature = JSON.stringify(next)
+      if (signature === graphSig.current) {
+        setLoadError(null)
+        return true
+      }
+      graphSig.current = signature
       setGraph(next)
       setLoadError(null)
       return true
@@ -137,13 +152,27 @@ function Explorer({
 }) {
   const [intents, setIntents] = useState<AgentIntent[]>([])
   const [focusedSessionId, setFocusedSessionId] = useState<string | null>(null)
+  const [wantBranchChanges, setWantBranchChanges] = useState(false)
+  const [branchChanges, setBranchChanges] = useState(emptyBranchChanges)
   const intent =
     intents.find((item) => item.sessionId === focusedSessionId) ??
     intents[0] ??
     emptyIntent
   const canPlace = Boolean(intent.sessionId && intent.creationMode)
-  const previewing = intent.preview || isPatchPreview(intent.status)
-  const plannedCreates = previewing ? intent.creates : []
+  const llmBusy = intents.some(llmIsMakingChanges)
+  const llmPreviewing = intent.preview || isPatchPreview(intent.status)
+  const showingBranchChanges =
+    wantBranchChanges &&
+    !llmBusy &&
+    !llmPreviewing &&
+    branchChanges.available
+  const changeSet = llmPreviewing
+    ? intent
+    : showingBranchChanges
+      ? branchChanges
+      : emptyIntent
+  const previewing = llmPreviewing || showingBranchChanges
+  const plannedCreates = previewing ? changeSet.creates : []
   const [userBlocks, setUserBlocks] = useState<UserCreatedBlock[]>([])
   const [userIslands, setUserIslands] = useState<UserCreatedIsland[]>([])
   const [blueprintFunctions, setBlueprintFunctions] = useState<
@@ -163,15 +192,15 @@ function Explorer({
     return withPreviewGraph(
       graph,
       plannedCreates,
-      intent.createLines ?? {},
-      intent.createFolders ?? [],
-      intent.imports ?? [],
+      changeSet.createLines ?? {},
+      changeSet.createFolders ?? [],
+      changeSet.imports ?? [],
     )
   }, [
+    changeSet.createFolders,
+    changeSet.createLines,
+    changeSet.imports,
     graph,
-    intent.createFolders,
-    intent.createLines,
-    intent.imports,
     plannedCreates,
     previewing,
   ])
@@ -194,14 +223,20 @@ function Explorer({
   )
   const layout = useMemo(() => {
     const world = layoutWorld(previewGraph)
-    if (previewing) markCreatedFolders(world, intent.createFolders ?? [])
+    if (previewing) markCreatedFolders(world, changeSet.createFolders ?? [])
     return withUserCreatedLayout(world, userBlocks, userIslands)
-  }, [intent.createFolders, previewGraph, previewing, userBlocks, userIslands])
+  }, [
+    changeSet.createFolders,
+    previewGraph,
+    previewing,
+    userBlocks,
+    userIslands,
+  ])
   const changeFileIds = useMemo(() => {
     const ids = new Set<string>()
-    for (const id of intent.files) ids.add(id)
-    for (const id of intent.creates) ids.add(id)
-    for (const id of intent.deletes) ids.add(id)
+    for (const id of changeSet.files) ids.add(id)
+    for (const id of changeSet.creates) ids.add(id)
+    for (const id of changeSet.deletes) ids.add(id)
     for (const block of userBlocks) ids.add(block.id)
     for (const item of blueprintFunctions) ids.add(item.file)
     for (const item of blueprintVariables) ids.add(item.file)
@@ -211,20 +246,20 @@ function Explorer({
     blueprintFunctions,
     blueprintImports,
     blueprintVariables,
-    intent.creates,
-    intent.deletes,
-    intent.files,
+    changeSet.creates,
+    changeSet.deletes,
+    changeSet.files,
     userBlocks,
   ])
   const changeFolderPaths = useMemo(() => {
     const paths = new Set<string>()
-    for (const path of intent.createFolders ?? []) paths.add(path)
+    for (const path of changeSet.createFolders ?? []) paths.add(path)
     for (const island of userIslands) {
       if (island.path) paths.add(island.path)
       else if (island.id) paths.add(island.id)
     }
     return [...paths]
-  }, [intent.createFolders, userIslands])
+  }, [changeSet.createFolders, userIslands])
   const hasChangeSet =
     changeFileIds.length > 0 || changeFolderPaths.length > 0
   const changePathGraph = useMemo(() => {
@@ -239,14 +274,14 @@ function Explorer({
     if (!hasChangeSet) return layout
     const world = layoutWorld(changePathGraph)
     markCreatedFolders(world, [
-      ...(intent.createFolders ?? []),
+      ...(changeSet.createFolders ?? []),
       ...userIslands.map((island) => island.path || island.id),
     ])
     return world
   }, [
     changePathGraph,
+    changeSet.createFolders,
     hasChangeSet,
-    intent.createFolders,
     layout,
     userIslands,
   ])
@@ -300,6 +335,14 @@ function Explorer({
     setFocusedSessionId(sessionId)
     persistSessionFocus(sessionId)
   }, [])
+
+  const setupLlmSession = useCallback(async () => {
+    const next = await setupVisualizerSession()
+    lastIntentSig.current = null
+    applyIntent(next, next.sessionId ?? undefined)
+    if (next.sessionId) setFocusedSessionId(next.sessionId)
+    return next
+  }, [applyIntent])
 
   const rememberWalk = useCallback((x: number, z: number) => {
     walkPos.current = [x, z]
@@ -418,7 +461,6 @@ function Explorer({
         lastIntentSig.current = null
         applyIntent(next, sessionId)
         if (
-          action === 'invoke' ||
           action === 'continue' ||
           action === 'stop' ||
           action === 'set_step_by_step'
@@ -508,6 +550,9 @@ function Explorer({
       if (cancelled) return
       if (typeof context?.followLook === 'boolean') {
         setFollowLook(context.followLook)
+      }
+      if (typeof context?.showBranchChanges === 'boolean') {
+        setWantBranchChanges(context.showBranchChanges)
       }
     })
     return () => {
@@ -1002,6 +1047,18 @@ function Explorer({
     })
   }, [])
 
+  const canToggleBranchChanges = !llmBusy && (wantBranchChanges || branchChanges.available)
+
+  const toggleShowBranchChanges = useCallback(() => {
+    if (llmBusy) return
+    if (!wantBranchChanges && !branchChanges.available) return
+    setWantBranchChanges((current) => {
+      const next = !current
+      persistShowBranchChanges(next)
+      return next
+    })
+  }, [branchChanges.available, llmBusy, wantBranchChanges])
+
   const toggleImportedBy = useCallback(() => {
     setImportedBy((current) => !current)
   }, [])
@@ -1030,6 +1087,48 @@ function Explorer({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [toggleImportedBy])
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.repeat || event.code !== 'KeyG') return
+      const target = event.target
+      if (
+        target instanceof HTMLElement &&
+        (target.tagName === 'TEXTAREA' ||
+          target.tagName === 'INPUT' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return
+      }
+      if (!canToggleBranchChanges) return
+      event.preventDefault()
+      toggleShowBranchChanges()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [canToggleBranchChanges, toggleShowBranchChanges])
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      const next = await fetchBranchChanges()
+      if (!cancelled) setBranchChanges(next)
+    }
+    void load()
+    if (!wantBranchChanges || llmBusy) {
+      return () => {
+        cancelled = true
+      }
+    }
+    const timer = window.setInterval(() => {
+      void load()
+    }, 2000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [llmBusy, updatingModel, wantBranchChanges])
 
   useEffect(() => {
     if (mode !== 'map' || !hasChangeSet) return
@@ -1111,23 +1210,23 @@ function Explorer({
     void poll()
     const timer = window.setInterval(() => {
       void poll()
-    }, 700)
+    }, 250)
     return () => {
       cancelled = true
       window.clearInterval(timer)
     }
   }, [])
 
-  const plannedIds = previewing ? [...intent.files, ...intent.creates] : []
+  const plannedIds = previewing ? [...changeSet.files, ...changeSet.creates] : []
   const blueprintImportEdges = blueprintImports.flatMap((item) => {
     if (!displayGraph.files.some((file) => file.id === item.from)) return []
     return [{ from: item.file, to: item.from }]
   })
   const plannedImports = [
-    ...(previewing ? (intent.imports ?? []) : []),
+    ...(previewing ? (changeSet.imports ?? []) : []),
     ...blueprintImportEdges,
   ]
-  const deletedIds = previewing ? intent.deletes : []
+  const deletedIds = previewing ? changeSet.deletes : []
 
   return (
     <>
@@ -1162,7 +1261,7 @@ function Explorer({
             plannedImports={plannedImports}
             createdIds={plannedCreates}
             deletedIds={deletedIds}
-            createLines={intent.createLines ?? {}}
+            createLines={changeSet.createLines ?? {}}
             flyTo={flyTo}
             aimedRelation={aimedRelation}
             onAimRelation={setAimedRelation}
@@ -1203,12 +1302,18 @@ function Explorer({
         intents={intents}
         focusedSessionId={focusedSessionId}
         onFocusSession={focusSessionPanel}
+        onSetupSession={setupLlmSession}
         onWorkflowAction={runWorkflowAction}
         onNavigateDiff={navigateDiff}
         onOpenMap={openMap}
         onWalk={openWalk}
         followLook={followLook}
         onToggleFollowLook={toggleFollowLook}
+        showBranchChanges={showingBranchChanges}
+        branchChanges={branchChanges}
+        canShowBranchChanges={canToggleBranchChanges}
+        llmMakingChanges={llmBusy}
+        onToggleShowBranchChanges={toggleShowBranchChanges}
         onUpdateModel={onUpdateModel}
         updatingModel={updatingModel}
         importedBy={importedBy}

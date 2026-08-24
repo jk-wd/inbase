@@ -6,11 +6,13 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { emptyIntent } from './scripts/patch-lib.mjs'
+import { readBranchChanges } from './scripts/branch-changes.mjs'
+import { writeRunningInstance } from '../../bin/project.mjs'
 import { dataDir, targetRoot } from './scripts/target-config.mjs'
 import { editorFileUri, openInEditor } from './scripts/open-editor.mjs'
 import {
   answerBlueprint,
-  recoverOpenDiffSessions,
+  clearDiffSessions,
   continueDiff,
   inspectTargetFile,
   invokeStep,
@@ -19,7 +21,9 @@ import {
   requestReplan,
   sendBlueprint,
   sessionIntent,
+  setInitialInstruction,
   setStepByStep,
+  setupSession,
   focusSession,
   stopSession,
   updateBlueprint,
@@ -85,8 +89,14 @@ function jsonFilePlugin(): Plugin {
   return {
     name: 'visual-coder-json-files',
     configureServer(server) {
-      recoverOpenDiffSessions(dataDir, targetRoot)
-      rescanTarget('after recovering diff sessions')
+      writeRunningInstance({
+        dataDir,
+        targetRoot,
+        port: server.config.server.port ?? 5173,
+      })
+      // Always boot with no LLM session. Leftover diffs and pointers are not restored.
+      clearDiffSessions(dataDir, targetRoot)
+      rescanTarget('after discarding leftover LLM sessions')
       server.middlewares.use('/api/user-context', (req, res, next) => {
         if (req.method === 'GET') {
           sendJson(res, 200, readUserContext())
@@ -145,6 +155,14 @@ function jsonFilePlugin(): Plugin {
         next()
       })
 
+      server.middlewares.use('/api/branch-changes', (req, res, next) => {
+        if (req.method === 'GET') {
+          sendJson(res, 200, readBranchChanges(targetRoot, knownFileIds()))
+          return
+        }
+        next()
+      })
+
       server.middlewares.use('/api/inspect-file', (req, res, next) => {
         if (req.method === 'POST') {
           void inspectFile(req, res)
@@ -191,6 +209,7 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       sessionId?: string
       diffId?: string
       instruction?: string
+      name?: string
       step?: number
       stepByStep?: boolean
       userCreatedBlocks?: unknown[]
@@ -210,12 +229,14 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       action !== 'blueprint_send' &&
       action !== 'blueprint_update' &&
       action !== 'focus' &&
-      action !== 'set_step_by_step'
+      action !== 'set_step_by_step' &&
+      action !== 'set_initial_instruction' &&
+      action !== 'setup_session'
     ) {
       sendJson(res, 400, { error: 'invalid workflow action' })
       return
     }
-    if (!body.sessionId) {
+    if (action !== 'setup_session' && !body.sessionId) {
       sendJson(res, 400, { error: 'sessionId is required' })
       return
     }
@@ -227,13 +248,20 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       return
     }
 
+    if (
+      body.name !== undefined &&
+      (typeof body.name !== 'string' || body.name.length > 200)
+    ) {
+      sendJson(res, 400, { error: 'name must be a string up to 200 characters' })
+      return
+    }
+
     if (action === 'invoke') {
       if (!Number.isInteger(body.step)) {
         sendJson(res, 400, { error: 'step is required for invoke' })
         return
       }
       invokeStep(dataDir, body.sessionId, body.step as number, targetRoot)
-      rescanTarget('after invoking step')
     } else if (action === 'continue') {
       if (!body.diffId) {
         sendJson(res, 400, { error: 'diffId is required for continue' })
@@ -274,6 +302,16 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
         addedVariables: body.addedVariables,
         addedImports: body.addedImports,
       })
+    } else if (action === 'setup_session') {
+      const manifest = setupSession(dataDir, {
+        sessionId: body.sessionId,
+        name: body.name,
+      })
+      const next = sessionIntent(dataDir, manifest.sessionId, knownFileIds())
+      sendJson(res, 200, next ?? { ...emptyIntent })
+      return
+    } else if (action === 'set_initial_instruction') {
+      setInitialInstruction(dataDir, body.sessionId, body.instruction ?? '')
     } else if (action === 'focus') {
       focusSession(dataDir, body.sessionId)
     } else if (action === 'set_step_by_step') {
@@ -330,9 +368,10 @@ function readUserContext() {
     return {
       ...parsed,
       followLook: Boolean(parsed.followLook),
+      showBranchChanges: Boolean(parsed.showBranchChanges),
     }
   } catch {
-    return { followLook: false }
+    return { followLook: false, showBranchChanges: false }
   }
 }
 
@@ -347,6 +386,10 @@ async function writeUserContext(req: IncomingMessage, res: ServerResponse) {
         typeof incoming.followLook === 'boolean'
           ? incoming.followLook
           : Boolean(existing.followLook),
+      showBranchChanges:
+        typeof incoming.showBranchChanges === 'boolean'
+          ? incoming.showBranchChanges
+          : Boolean(existing.showBranchChanges),
     }
     delete next.userCreatedBlocks
     delete next.userCreatedIslands
@@ -360,10 +403,21 @@ async function writeUserContext(req: IncomingMessage, res: ServerResponse) {
   }
 }
 
+function isDataDirPath(filePath: string) {
+  const file = path.resolve(filePath)
+  const root = path.resolve(dataDir)
+  return file === root || file.startsWith(root + path.sep)
+}
+
 export default defineConfig({
   plugins: [react(), jsonFilePlugin()],
   server: {
     port: 5173,
+    watch: {
+      // Session snapshots copy target source into the data dir. If Vite
+      // watches those writes, Create proposal full-reloads the visualizer.
+      ignored: ['**/src/data/**', isDataDirPath],
+    },
     fs: {
       allow: [here, dataDir],
     },

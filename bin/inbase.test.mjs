@@ -1,10 +1,18 @@
 import assert from 'node:assert/strict'
+import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { initProject, isCliEntry, main } from './inbase.mjs'
-import { applyHostEnv, copyDir, ensureDataDir, ensureGitignoreEntry, skillTemplateDir } from './project.mjs'
+import {
+  applyHostEnv,
+  copyDir,
+  ensureDataDir,
+  ensureGitignoreEntry,
+  skillTemplateDir,
+  writeRunningInstance,
+} from './project.mjs'
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -32,10 +40,10 @@ test('copyDir installs the skill template', () => {
   try {
     const dest = path.join(root, 'skills/inbase')
     copyDir(skillTemplateDir, dest)
-    assert.match(
-      fs.readFileSync(path.join(dest, 'SKILL.md'), 'utf8'),
-      /npx inbase start-session/,
-    )
+    const skillText = fs.readFileSync(path.join(dest, 'SKILL.md'), 'utf8')
+    assert.match(skillText, /npx inbase attach/)
+    assert.match(skillText, /VISUAL_CODER_ACK/)
+    assert.match(skillText, /Direct response/)
   } finally {
     cleanup()
   }
@@ -49,7 +57,24 @@ test('init copies the Cursor skill and gitignores .inbase', () => {
     const skill = path.join(root, '.cursor/skills/inbase/SKILL.md')
     assert.equal(result.skillDir, path.join(root, '.cursor/skills/inbase'))
     assert.equal(fs.existsSync(skill), true)
-    assert.match(fs.readFileSync(skill, 'utf8'), /npx inbase start-session/)
+    const skillText = fs.readFileSync(skill, 'utf8')
+    assert.match(skillText, /npx inbase attach/)
+    assert.match(skillText, /VISUAL_CODER_ACK/)
+    assert.match(
+      skillText,
+      /direct chat interaction not allowed use \/skipinbase \[request\] to bypass inbase/,
+    )
+    assert.doesNotMatch(skillText, /npx inbase start-session/)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/inbase.md')), true)
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/inbase.md'), 'utf8'),
+      /npx inbase attach/,
+    )
+    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/skipinbase.md')), true)
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/skipinbase.md'), 'utf8'),
+      /\$ARGUMENTS/,
+    )
     assert.equal(fs.existsSync(path.join(root, '.inbase/user-context.json')), true)
     assert.match(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), /\.inbase\//)
   } finally {
@@ -96,13 +121,182 @@ test('start-session writes a manifest under .inbase', async () => {
     console.log = (message) => {
       output += String(message)
     }
-    await main(['start-session', '--session', 'cli-test-session'])
+    await main([
+      'start-session',
+      '--session',
+      'cli-test-session',
+      '--name',
+      'CLI test session',
+    ])
     const manifest = path.join(root, '.inbase/diff-sessions/cli-test-session/manifest.json')
     assert.equal(fs.existsSync(manifest), true)
+    const stored = JSON.parse(fs.readFileSync(manifest, 'utf8'))
+    assert.equal(stored.name, 'CLI test session')
     assert.match(output, /VISUAL_CODER_BLUEPRINT_WAIT/)
+    assert.match(output, /CLI test session/)
   } finally {
     console.log = log
     restoreEnv(env)
+    cleanup()
+  }
+})
+
+function runCli(args, { cwd, env } = {}) {
+  return spawnSync(process.execPath, [path.join(packageRoot, 'bin/inbase.mjs'), ...args], {
+    cwd: cwd ?? packageRoot,
+    encoding: 'utf8',
+    env,
+  })
+}
+
+test('start-session requires a generated session name', () => {
+  const { root, cleanup } = tempProject()
+  const dataDir = path.join(root, '.inbase')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: root,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const result = runCli(['start-session', '--session', 'no-name'], {
+      cwd: root,
+      env,
+    })
+    assert.notEqual(result.status, 0)
+    assert.match(result.stderr, /--name "short name"/)
+  } finally {
+    cleanup()
+  }
+})
+
+test('start-session still waits for blueprint on an existing session', async () => {
+  const { root, cleanup } = tempProject()
+  const dataDir = path.join(root, '.inbase')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: root,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const first = runCli(
+      ['start-session', '--session', 'resume-chat', '--name', 'Resume chat'],
+      { cwd: root, env },
+    )
+    assert.equal(first.status, 0, first.stderr)
+    assert.match(first.stdout, /VISUAL_CODER_BLUEPRINT_WAIT/)
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    store.answerBlueprint(dataDir, 'resume-chat', false)
+    const second = runCli(
+      ['start-session', '--session', 'resume-chat', '--name', 'Resume chat'],
+      { cwd: root, env },
+    )
+    assert.equal(second.status, 0, second.stderr)
+    assert.match(second.stdout, /VISUAL_CODER_BLUEPRINT_WAIT/)
+    assert.doesNotMatch(second.stdout, /VISUAL_CODER_PREPARING/)
+  } finally {
+    cleanup()
+  }
+})
+
+test('start-session attaches to a running visualizer instance', () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  try {
+    fs.mkdirSync(target)
+    writeRunningInstance({ dataDir, targetRoot: target })
+    ensureDataDir(dataDir)
+    const env = { ...process.env }
+    delete env.VISUAL_CODER_TARGET
+    delete env.INBASE_DATA_DIR
+    const result = runCli(
+      ['start-session', '--session', 'attach-chat', '--name', 'Attach chat'],
+      {
+        cwd: root,
+        env,
+      },
+    )
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /INBASE_ATTACHED/)
+    assert.match(result.stdout, /VISUAL_CODER_BLUEPRINT_WAIT/)
+    assert.equal(
+      fs.existsSync(path.join(dataDir, 'diff-sessions/attach-chat/manifest.json')),
+      true,
+    )
+  } finally {
+    cleanup()
+  }
+})
+
+test('attach without --session uses the focused visualizer session', async () => {
+  const { root, cleanup } = tempProject()
+  const dataDir = path.join(root, '.inbase')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: root,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    fs.mkdirSync(dataDir, { recursive: true })
+    const started = store.setupSession(dataDir)
+    const missing = runCli(['attach'], { cwd: root, env })
+    assert.equal(missing.status, 0, missing.stderr)
+    assert.match(missing.stdout, /VISUAL_CODER_ATTACHED/)
+    assert.match(missing.stdout, /VISUAL_CODER_ACK attached:/)
+    assert.match(missing.stdout, new RegExp(`VISUAL_CODER_SESSION ${started.sessionId}`))
+    assert.equal(store.readManifest(dataDir, started.sessionId).awaitingAttach, false)
+  } finally {
+    cleanup()
+  }
+})
+
+test('attach without a focused session fails', () => {
+  const { root, cleanup } = tempProject()
+  const dataDir = path.join(root, '.inbase')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: root,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    fs.mkdirSync(dataDir, { recursive: true })
+    const result = runCli(['attach'], { cwd: root, env })
+    assert.notEqual(result.status, 0)
+    assert.match(result.stderr, /focused/)
+  } finally {
+    cleanup()
+  }
+})
+
+test('attach refuses a second LLM session', async () => {
+  const { root, cleanup } = tempProject()
+  const dataDir = path.join(root, '.inbase')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: root,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    fs.mkdirSync(dataDir, { recursive: true })
+    const first = store.setupSession(dataDir)
+    store.setupSession(dataDir)
+    const attached = runCli(['attach'], { cwd: root, env })
+    assert.equal(attached.status, 0, attached.stderr)
+    const blocked = runCli(['attach', '--session', first.sessionId], {
+      cwd: root,
+      env,
+    })
+    assert.notEqual(blocked.status, 0)
+    assert.match(blocked.stderr, /already attached/)
+  } finally {
     cleanup()
   }
 })
@@ -116,6 +310,180 @@ test('CLI entry detection follows npm bin symlinks', () => {
     assert.equal(isCliEntry(shim), true)
     assert.equal(isCliEntry(bin), true)
     assert.equal(isCliEntry(fileURLToPath(import.meta.url)), false)
+  } finally {
+    cleanup()
+  }
+})
+
+test('propose-patch without a file records live edits', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const started = runCli(
+      ['start-session', '--session', 'live-cli', '--name', 'Live CLI'],
+      { cwd: root, env },
+    )
+    assert.equal(started.status, 0, started.stderr)
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    store.answerBlueprint(dataDir, 'live-cli', false)
+    store.reportPlan(dataDir, {
+      sessionId: 'live-cli',
+      feature: 'Live CLI',
+      stepTitles: ['Bump value'],
+      targetRoot: target,
+    })
+    store.invokeStep(dataDir, 'live-cli', 1, target)
+    fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 9\n')
+    const result = runCli(['propose-patch', '--session', 'live-cli'], {
+      cwd: root,
+      env,
+    })
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /VISUAL_CODER_STEP_READY/)
+    assert.match(result.stdout, /Recorded live edits/)
+    assert.equal(fs.readFileSync(path.join(target, 'src/a.ts'), 'utf8'), 'export const value = 9\n')
+  } finally {
+    cleanup()
+  }
+})
+
+test('wait-for-blueprint prints an ack for the handshake', async () => {
+  const { root, cleanup } = tempProject()
+  const dataDir = path.join(root, '.inbase')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: root,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const started = runCli(
+      ['start-session', '--session', 'ack-blueprint', '--name', 'Ack blueprint'],
+      { cwd: root, env },
+    )
+    assert.equal(started.status, 0, started.stderr)
+    const result = runCli(['wait-for-blueprint', '--session', 'ack-blueprint'], {
+      cwd: root,
+      env,
+    })
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /VISUAL_CODER_ACK blueprint: none/)
+    assert.match(result.stdout, /VISUAL_CODER_BLUEPRINT_READY/)
+  } finally {
+    cleanup()
+  }
+})
+
+test('wait-for-approval prints an execute ack without a waiting line', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const started = runCli(
+      ['start-session', '--session', 'ack-exec', '--name', 'Ack execute'],
+      { cwd: root, env },
+    )
+    assert.equal(started.status, 0, started.stderr)
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    store.answerBlueprint(dataDir, 'ack-exec', false)
+    store.reportPlan(dataDir, {
+      sessionId: 'ack-exec',
+      feature: 'Ack execute',
+      stepTitles: ['Bump value'],
+      targetRoot: target,
+    })
+    store.invokeStep(dataDir, 'ack-exec', 1, target)
+    const result = runCli(
+      ['wait-for-approval', '--session', 'ack-exec', '--timeout', '2000'],
+      { cwd: root, env },
+    )
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /VISUAL_CODER_ACK execute: step 1 — Bump value/)
+    assert.match(result.stdout, /VISUAL_CODER_EXECUTE Step 1 is invoked: Bump value/)
+    assert.doesNotMatch(result.stdout, /Waiting for/)
+    assert.equal(store.sessionIntent(dataDir, 'ack-exec').lastAck.kind, 'execute')
+  } finally {
+    cleanup()
+  }
+})
+
+test('wait-for-approval returns as soon as accept invokes the next step', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const started = runCli(
+      ['start-session', '--session', 'fast-next', '--name', 'Fast next'],
+      { cwd: root, env },
+    )
+    assert.equal(started.status, 0, started.stderr)
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    store.answerBlueprint(dataDir, 'fast-next', false)
+    store.reportPlan(dataDir, {
+      sessionId: 'fast-next',
+      feature: 'Fast next',
+      stepTitles: ['Bump value', 'Bump again'],
+      targetRoot: target,
+    })
+    store.invokeStep(dataDir, 'fast-next', 1, target)
+    store.appendDiff(dataDir, target, {
+      sessionId: 'fast-next',
+      patchText:
+        '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 2\n',
+    })
+
+    const child = spawn(
+      process.execPath,
+      [path.join(packageRoot, 'bin/inbase.mjs'), 'wait-for-approval', '--session', 'fast-next', '--timeout', '5000'],
+      { cwd: root, env, encoding: 'utf8' },
+    )
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    const invokedAt = Date.now()
+    store.invokeStep(dataDir, 'fast-next', 2, target)
+    const result = await new Promise((resolve, reject) => {
+      let stdout = ''
+      let stderr = ''
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk
+      })
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk
+      })
+      child.on('error', reject)
+      child.on('close', (status) => resolve({ status, stdout, stderr }))
+    })
+    const elapsed = Date.now() - invokedAt
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /VISUAL_CODER_ACK execute: step 2 — Bump again/)
+    assert.match(result.stdout, /Continue immediately/)
+    assert.ok(elapsed < 400, `next step took ${elapsed}ms`)
   } finally {
     cleanup()
   }

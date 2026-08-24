@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import crypto from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import {
   accumulatePatchAdditions,
@@ -10,6 +11,7 @@ import {
   foldersFromFileIds,
   parseUnifiedPatch,
 } from './patch-lib.mjs'
+import { diffSourceTrees, snapshotSourceTree } from './tree-diff.mjs'
 
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const CONNECTED_TTL_MS = 15_000
@@ -39,6 +41,19 @@ function atomicWrite(file, contents) {
   fs.renameSync(temporary, file)
 }
 
+function featureName(value) {
+  const trimmed = typeof value === 'string' ? value.trim() : ''
+  return trimmed
+}
+
+function sessionName(value) {
+  return featureName(value)
+}
+
+function resolvedSessionName(manifest) {
+  return sessionName(manifest?.name) || sessionName(manifest?.feature)
+}
+
 export function sessionPaths(dataDir, sessionId) {
   const safeId = assertSessionId(sessionId)
   const root = path.join(dataDir, 'diff-sessions', safeId)
@@ -49,6 +64,7 @@ export function sessionPaths(dataDir, sessionId) {
     blueprint: path.join(root, 'blueprint.json'),
     baseline: path.join(root, 'baseline.json'),
     baselineFiles: path.join(root, 'baseline'),
+    preStep: path.join(root, 'pre-step'),
     stopped: path.join(dataDir, 'diff-sessions', `${safeId}.stopped`),
   }
 }
@@ -124,6 +140,38 @@ function connectionFile(dataDir, sessionId) {
   return path.join(sessionPaths(dataDir, sessionId).root, 'connected.json')
 }
 
+function ackFile(dataDir, sessionId) {
+  return path.join(sessionPaths(dataDir, sessionId).root, 'ack.json')
+}
+
+export function recordSessionAck(dataDir, sessionId, kind, detail = '') {
+  const safeId = assertSessionId(sessionId)
+  if (isSessionStopped(dataDir, safeId) && kind !== 'stopped' && kind !== 'finished') {
+    return null
+  }
+  const payload = {
+    kind: String(kind),
+    detail: String(detail ?? ''),
+    at: new Date().toISOString(),
+  }
+  try {
+    atomicWrite(ackFile(dataDir, safeId), `${JSON.stringify(payload, null, 2)}\n`)
+  } catch {
+    return null
+  }
+  return payload
+}
+
+function readSessionAck(dataDir, sessionId) {
+  const value = readJson(ackFile(dataDir, sessionId), null)
+  if (!value || typeof value.kind !== 'string' || value.kind.trim() === '') return null
+  return {
+    kind: value.kind,
+    detail: typeof value.detail === 'string' ? value.detail : '',
+    at: typeof value.at === 'string' ? value.at : null,
+  }
+}
+
 function isFreshTimestamp(value, now = Date.now()) {
   if (typeof value !== 'string') return false
   const at = Date.parse(value)
@@ -137,6 +185,11 @@ export function touchSessionConnection(dataDir, sessionId) {
     connectionFile(dataDir, safeId),
     `${JSON.stringify({ sessionId: safeId, connectedAt: new Date().toISOString() }, null, 2)}\n`,
   )
+  const manifest = readManifest(dataDir, safeId)
+  if (manifest?.awaitingAttach) {
+    manifest.awaitingAttach = false
+    writeManifest(dataDir, manifest)
+  }
 }
 
 function waiterSessionIds() {
@@ -196,10 +249,12 @@ export function isSessionConnected(
   const safeId = assertSessionId(sessionId)
   const manifest = readManifest(dataDir, safeId)
   if (isTerminalSession(manifest)) return false
-  if (isGeneratingPhase(manifest.phase)) return true
-  if (waiterIds.has(safeId)) return true
   const connected = readJson(connectionFile(dataDir, safeId), null)
-  if (isFreshTimestamp(connected?.connectedAt)) return true
+  const heartbeat =
+    waiterIds.has(safeId) || isFreshTimestamp(connected?.connectedAt)
+  if (manifest.awaitingAttach) return heartbeat
+  if (isGeneratingPhase(manifest.phase)) return true
+  if (heartbeat) return true
   return isFreshTimestamp(manifest.updatedAt) || isFreshTimestamp(manifest.createdAt)
 }
 
@@ -327,6 +382,8 @@ export function readManifest(dataDir, sessionId) {
     value.workStartedAt ??= null
   }
   if (typeof value.stepByStep !== 'boolean') value.stepByStep = true
+  value.initialInstruction =
+    typeof value.initialInstruction === 'string' ? value.initialInstruction : null
   return value
 }
 
@@ -500,7 +557,12 @@ export function sessionIntent(
     showMap: previewVisible,
     status: activeView ? phaseStatus ?? historicalStatus : historicalStatus,
     phase: manifest.phase,
+    name: resolvedSessionName(manifest) || null,
     feature: manifest.feature,
+    initialInstruction:
+      typeof manifest.initialInstruction === 'string'
+        ? manifest.initialInstruction
+        : null,
     steps: manifest.steps,
     step: activeView ? manifest.currentStep : selected?.step ?? manifest.currentStep,
     stepByStep: isStepByStep(manifest),
@@ -519,11 +581,17 @@ export function sessionIntent(
     isActiveDiff: Boolean(selected && selected.id === manifest.activeDiffId),
     preview: previewVisible,
     working:
-      manifest.phase === 'preparing' ||
-      manifest.phase === 'working' ||
-      manifest.phase === 'replanning',
+      !manifest.awaitingAttach &&
+      (manifest.phase === 'preparing' ||
+        manifest.phase === 'working' ||
+        manifest.phase === 'replanning'),
     stalledWait: isStalledWorking(manifest, waiterIds, sessionId),
     llmIdle: !isSessionConnected(dataDir, sessionId, waiterIds),
+    awaitingAttach:
+      Boolean(manifest.awaitingAttach) &&
+      !isSessionConnected(dataDir, sessionId, waiterIds),
+    listening: waiterIds.has(sessionId),
+    lastAck: readSessionAck(dataDir, sessionId),
     creationMode: sessionAllowsPlacement(manifest),
     canEnterBlueprint,
     blueprintSessionId: null,
@@ -738,11 +806,6 @@ function planSteps(titles, startAt = 1) {
   })
 }
 
-function featureName(value) {
-  const trimmed = typeof value === 'string' ? value.trim() : ''
-  return trimmed
-}
-
 export function isStepByStep(manifest) {
   return manifest?.stepByStep !== false
 }
@@ -774,7 +837,12 @@ export function startSession(dataDir, input) {
   const sessionId = assertSessionId(input.sessionId)
   clearStoppedMarker(dataDir, sessionId)
   const existing = readManifest(dataDir, sessionId)
+  const name = sessionName(input.name) || sessionName(input.feature)
   if (existing) {
+    if (name && existing.name !== name) {
+      existing.name = name
+      writeManifest(dataDir, existing)
+    }
     focusSession(dataDir, sessionId)
     return existing
   }
@@ -783,7 +851,8 @@ export function startSession(dataDir, input) {
   const manifest = {
     version: 2,
     sessionId,
-    feature: featureName(input.feature),
+    name,
+    feature: featureName(input.feature) || name,
     steps: [],
     status: 'active',
     phase: 'blueprint_ask',
@@ -791,6 +860,7 @@ export function startSession(dataDir, input) {
     currentStep: 1,
     activeDiffId: null,
     pendingInstruction: null,
+    initialInstruction: null,
     workStartedAt: null,
     createdAt: now,
     updatedAt: now,
@@ -800,6 +870,115 @@ export function startSession(dataDir, input) {
   writeBlueprint(dataDir, sessionId, emptyBlueprint())
   focusSession(dataDir, sessionId)
   return manifest
+}
+
+export function setupSession(dataDir, input = {}) {
+  const sessionId = input.sessionId
+    ? assertSessionId(input.sessionId)
+    : generateVisualizerSessionId(dataDir)
+  const existing = readManifest(dataDir, sessionId)
+  if (existing && !isTerminalSession(existing)) {
+    throw new Error(`Session ${sessionId} already exists`)
+  }
+  if (existing) {
+    discardStoredSession(dataDir, sessionId, null, { restore: false })
+  }
+  clearStoppedMarker(dataDir, sessionId)
+  const now = new Date().toISOString()
+  const name = sessionName(input.name)
+  const manifest = {
+    version: 2,
+    sessionId,
+    name,
+    feature: featureName(input.feature) || name,
+    steps: [],
+    status: 'active',
+    phase: 'blueprint',
+    awaitingAttach: true,
+    stepByStep: true,
+    currentStep: 1,
+    activeDiffId: null,
+    pendingInstruction: null,
+    initialInstruction: null,
+    workStartedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    diffs: [],
+  }
+  writeManifest(dataDir, manifest)
+  writeBlueprint(dataDir, sessionId, {
+    ...emptyBlueprint(),
+    enabled: true,
+    sent: false,
+  })
+  focusSession(dataDir, sessionId)
+  return manifest
+}
+
+export function setInitialInstruction(dataDir, sessionId, instruction) {
+  const manifest = requireManifest(dataDir, sessionId)
+  if (isTerminalSession(manifest)) {
+    throw sessionStoppedError(sessionId)
+  }
+  const text = typeof instruction === 'string' ? instruction : ''
+  if (text.length > 4000) {
+    throw new Error('instruction must be a string up to 4000 characters')
+  }
+  const next = text.trim() === '' ? null : text
+  if ((manifest.initialInstruction ?? null) === next) return manifest
+  manifest.initialInstruction = next
+  writeManifest(dataDir, manifest)
+  return manifest
+}
+
+function generateVisualizerSessionId(dataDir) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const sessionId = `viz-${crypto.randomBytes(6).toString('hex')}`
+    if (!readManifest(dataDir, sessionId) && !isSessionStopped(dataDir, sessionId)) {
+      return sessionId
+    }
+  }
+  throw new Error('Could not allocate a visualizer session id')
+}
+
+export function readAttachedSession(dataDir) {
+  for (const sessionId of listOpenSessionIds(dataDir)) {
+    const manifest = readManifest(dataDir, sessionId)
+    if (manifest?.awaitingAttach === false) return sessionId
+  }
+  return null
+}
+
+export function attachSession(dataDir, sessionId) {
+  const safeId = sessionId
+    ? assertSessionId(sessionId)
+    : readActiveSession(dataDir)
+  if (!safeId) {
+    throw new Error(
+      'No visualizer session is focused. Click Setup LLM session in the map, then /inbase.',
+    )
+  }
+  const manifest = requireManifest(
+    dataDir,
+    safeId,
+    `No visualizer session ${safeId}. Click Setup LLM session in the map, then /inbase.`,
+  )
+  if (isTerminalSession(manifest)) {
+    throw sessionStoppedError(safeId)
+  }
+  const attached = readAttachedSession(dataDir)
+  if (attached && attached !== safeId) {
+    const other = readManifest(dataDir, attached)
+    const label = resolvedSessionName(other) || attached
+    throw new Error(
+      `An LLM is already attached to ${label}. Stop that session before attaching another.`,
+    )
+  }
+  focusSession(dataDir, safeId)
+  touchSessionConnection(dataDir, safeId)
+  recordSessionAck(dataDir, safeId, 'attached', resolvedSessionName(manifest) || safeId)
+  maybeStartVisualizerHandshake(dataDir, safeId)
+  return readManifest(dataDir, safeId) ?? manifest
 }
 
 export function answerBlueprint(dataDir, sessionId, enabled) {
@@ -849,14 +1028,36 @@ export function sendBlueprint(dataDir, sessionId, input = {}) {
     throw new Error(`Session ${safeId} is not in blueprint mode`)
   }
   const current = readBlueprint(dataDir, safeId)
-  writeBlueprint(dataDir, safeId, {
-    enabled: true,
-    sent: true,
+  const next = {
     userCreatedBlocks: input.userCreatedBlocks ?? current.userCreatedBlocks,
     userCreatedIslands: input.userCreatedIslands ?? current.userCreatedIslands,
     addedFunctions: input.addedFunctions ?? current.addedFunctions,
     addedVariables: input.addedVariables ?? current.addedVariables,
     addedImports: input.addedImports ?? current.addedImports,
+  }
+  writeBlueprint(dataDir, safeId, {
+    ...next,
+    enabled: blueprintHasContent(next),
+    sent: true,
+  })
+  manifest.phase = 'preparing'
+  manifest.workStartedAt = new Date().toISOString()
+  writeManifest(dataDir, manifest)
+  releaseBlueprintSession(dataDir, safeId)
+  return manifest
+}
+
+export function maybeStartVisualizerHandshake(dataDir, sessionId) {
+  const safeId = assertSessionId(sessionId)
+  const manifest = requireManifest(dataDir, safeId)
+  if (manifest.phase !== 'blueprint_ask' && manifest.phase !== 'blueprint') {
+    return manifest
+  }
+  const current = readBlueprint(dataDir, safeId)
+  writeBlueprint(dataDir, safeId, {
+    ...current,
+    enabled: blueprintHasContent(current),
+    sent: true,
   })
   manifest.phase = 'preparing'
   manifest.workStartedAt = new Date().toISOString()
@@ -883,6 +1084,7 @@ export function reportPlan(dataDir, input) {
     const manifest = existing ?? {
       version: 2,
       sessionId,
+      name: sessionName(input.name) || sessionName(input.feature),
       feature: input.feature,
       steps: [],
       status: 'active',
@@ -891,10 +1093,14 @@ export function reportPlan(dataDir, input) {
       currentStep: 1,
       activeDiffId: null,
       pendingInstruction: null,
+      initialInstruction: null,
       workStartedAt: null,
       createdAt: now,
       updatedAt: now,
       diffs: [],
+    }
+    if (!sessionName(manifest.name)) {
+      manifest.name = sessionName(input.feature)
     }
     manifest.feature = input.feature
     manifest.steps = planSteps(input.stepTitles)
@@ -904,7 +1110,13 @@ export function reportPlan(dataDir, input) {
     manifest.workStartedAt = null
     writeManifest(dataDir, manifest)
     focusSession(dataDir, sessionId)
-    return autoAdvance(dataDir, sessionId)
+    recordSessionAck(
+      dataDir,
+      sessionId,
+      'plan',
+      `${manifest.steps.length} step(s)`,
+    )
+    return autoAdvance(dataDir, sessionId, input.targetRoot)
   }
 
   if (existing.phase !== 'replanning') {
@@ -921,7 +1133,13 @@ export function reportPlan(dataDir, input) {
   existing.workStartedAt = null
   writeManifest(dataDir, existing)
   focusSession(dataDir, sessionId)
-  return autoAdvance(dataDir, sessionId)
+  recordSessionAck(
+    dataDir,
+    sessionId,
+    'plan',
+    `${existing.steps.filter((step) => step.index >= startAt).length} step(s)`,
+  )
+  return autoAdvance(dataDir, sessionId, input.targetRoot)
 }
 
 export function invokeStep(dataDir, sessionId, step, targetRoot = null) {
@@ -961,7 +1179,31 @@ export function invokeStep(dataDir, sessionId, step, targetRoot = null) {
   manifest.phase = 'working'
   manifest.workStartedAt = new Date().toISOString()
   writeManifest(dataDir, manifest)
+  const title = manifest.steps.find((item) => item.index === step)?.title
+  recordSessionAck(
+    dataDir,
+    sessionId,
+    'invoke',
+    title ? `step ${step} — ${title}` : `step ${step}`,
+  )
+  if (targetRoot) snapshotPreStep(dataDir, sessionId, targetRoot)
   return manifest
+}
+
+export function snapshotPreStep(dataDir, sessionId, targetRoot) {
+  const { preStep } = sessionPaths(dataDir, sessionId)
+  snapshotSourceTree(targetRoot, preStep)
+  return preStep
+}
+
+export function readLiveDiff(dataDir, sessionId, targetRoot) {
+  const { preStep } = sessionPaths(dataDir, sessionId)
+  if (!fs.existsSync(preStep)) {
+    throw new Error(
+      `Step ${sessionId} has no invoke snapshot. Wait for VISUAL_CODER_EXECUTE before recording file changes.`,
+    )
+  }
+  return diffSourceTrees(preStep, targetRoot)
 }
 
 export function appendDiff(dataDir, targetRoot, input) {
@@ -990,12 +1232,19 @@ export function appendDiff(dataDir, targetRoot, input) {
     throw new Error(`The next diff must implement step ${parent.step + 1}`)
   }
 
-  validateContinuation(dataDir, manifest, targetRoot, input.patchText)
+  const patchText = input.patchText ?? readLiveDiff(dataDir, sessionId, targetRoot)
+  if (!patchText.trim()) {
+    throw new Error('No file changes to record for this step')
+  }
+
+  const snapshotRoot = sessionPaths(dataDir, sessionId).preStep
+  const originRoot = fs.existsSync(snapshotRoot) ? snapshotRoot : targetRoot
+  validateContinuation(dataDir, manifest, originRoot, patchText)
   captureBaseline(
     dataDir,
     sessionId,
-    targetRoot,
-    parseUnifiedPatch(input.patchText).entries.map((entry) => entry.id),
+    originRoot,
+    parseUnifiedPatch(patchText).entries.map((entry) => entry.id),
   )
   if (parent?.status === 'extend') parent.status = 'extended'
 
@@ -1016,7 +1265,7 @@ export function appendDiff(dataDir, targetRoot, input) {
   fs.mkdirSync(paths.diffs, { recursive: true })
   atomicWrite(
     path.join(paths.root, file),
-    input.patchText.endsWith('\n') ? input.patchText : `${input.patchText}\n`,
+    patchText.endsWith('\n') ? patchText : `${patchText}\n`,
   )
   manifest.activeDiffId = id
   manifest.phase = 'review'
@@ -1180,37 +1429,6 @@ export function discardInactiveDiffSessions(
   return liveIds
 }
 
-export function recoverOpenDiffSessions(dataDir, targetRoot = null) {
-  const kept = []
-  for (const sessionId of listStoredSessionIds(dataDir)) {
-    const manifest = readManifest(dataDir, sessionId)
-    if (!isTerminalSession(manifest)) {
-      if (targetRoot && manifest.activeDiffId) {
-        try {
-          materializeDiff(dataDir, targetRoot, sessionId, manifest.activeDiffId)
-        } catch {
-          // Keep the stored diffs visible even if disk replay fails.
-        }
-      }
-      kept.push(sessionId)
-      continue
-    }
-    discardStoredSession(dataDir, sessionId, targetRoot, {
-      restore:
-        manifest?.phase === 'stopped' ||
-        manifest?.status === 'rejected' ||
-        !manifest,
-    })
-  }
-
-  const active = readActiveSession(dataDir)
-  if (active && !kept.includes(active)) writeActiveSession(dataDir, null)
-  const locked = readBlueprintSession(dataDir)
-  if (locked && !kept.includes(locked)) writeBlueprintSession(dataDir, null)
-  unstageDiffSessionArtifacts(dataDir, targetRoot)
-  return kept
-}
-
 export function clearDiffSessions(dataDir, targetRoot = null) {
   for (const sessionId of listStoredSessionIds(dataDir)) {
     discardStoredSession(dataDir, sessionId, targetRoot)
@@ -1225,6 +1443,12 @@ export function clearDiffSessions(dataDir, targetRoot = null) {
     fs.rmSync(path.join(root, entry.name), { recursive: true, force: true })
   }
   unstageDiffSessionArtifacts(dataDir, targetRoot)
+}
+
+export function recoverOpenDiffSessions(dataDir, targetRoot = null) {
+  // Visualizer startup never reopens an LLM session.
+  clearDiffSessions(dataDir, targetRoot)
+  return []
 }
 
 export function stopSession(dataDir, sessionId, targetRoot = null) {
