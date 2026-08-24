@@ -130,6 +130,8 @@ export function setInitialInstruction(
   instruction: string | null | undefined,
 ): DiffManifest
 export function readAttachedSession(dataDir: string): string | null
+export function listAttachQueue(dataDir: string): string[]
+export function nextAttachSessionId(dataDir: string): string | null
 export type SessionBlueprint = {
   enabled: boolean
   sent: boolean

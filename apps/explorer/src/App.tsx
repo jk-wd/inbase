@@ -156,6 +156,9 @@ function Explorer({
 }) {
   const [intents, setIntents] = useState<AgentIntent[]>([])
   const [focusedSessionId, setFocusedSessionId] = useState<string | null>(null)
+  const [nextAttachSessionId, setNextAttachSessionId] = useState<string | null>(
+    null,
+  )
   const [wantBranchChanges, setWantBranchChanges] = useState(false)
   const [branchChanges, setBranchChanges] = useState(emptyBranchChanges)
   const intent =
@@ -1182,6 +1185,8 @@ function Explorer({
     const poll = async () => {
       try {
         const bundle = await fetchAgentIntents()
+        if (cancelled) return
+        setNextAttachSessionId(bundle.nextAttachSessionId)
         const merged: AgentIntent[] = []
         for (const next of bundle.intents) {
           const sessionId = next.sessionId
@@ -1328,6 +1333,7 @@ function Explorer({
         intent={intent}
         intents={intents}
         focusedSessionId={focusedSessionId}
+        nextAttachSessionId={nextAttachSessionId}
         onFocusSession={focusSessionPanel}
         onSetupSession={setupLlmSession}
         onWorkflowAction={runWorkflowAction}

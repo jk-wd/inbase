@@ -425,16 +425,20 @@ function CameraRig({
 function ThumbnailLabelFilter({
   candidates,
   zoom,
+  frozenRef,
   onChange,
 }: {
   candidates: LabelCandidate[]
   zoom: number
+  frozenRef: { current: boolean }
   onChange: (ids: Set<string>) => void
 }) {
-  const { camera, size } = useThree()
+  const camera = useThree((state) => state.camera)
+  const size = useThree((state) => state.size)
   const visibleRef = useRef<Set<string>>(new Set())
 
   useFrame(() => {
+    if (frozenRef.current) return
     const next = visibleThumbnailLabels(
       candidates,
       camera,
@@ -464,6 +468,7 @@ function ThumbnailScene({
   panRef,
   orbitRef,
   cameraRef,
+  frozenRef,
   visibleLabelIds,
   onVisibleLabels,
 }: {
@@ -480,6 +485,7 @@ function ThumbnailScene({
   panRef: { current: Vec3 }
   orbitRef: { current: Orbit }
   cameraRef: { current: THREE.Camera | null }
+  frozenRef: { current: boolean }
   visibleLabelIds: Set<string>
   onVisibleLabels: (ids: Set<string>) => void
 }) {
@@ -541,6 +547,7 @@ function ThumbnailScene({
       <ThumbnailLabelFilter
         candidates={labelCandidates}
         zoom={zoom}
+        frozenRef={frozenRef}
         onChange={onVisibleLabels}
       />
       <FolderArea
@@ -977,6 +984,7 @@ export function SelectionThumbnail({
             panRef={panRef}
             orbitRef={orbitRef}
             cameraRef={cameraRef}
+            frozenRef={panningRef}
             visibleLabelIds={visibleLabelIds}
             onVisibleLabels={setVisibleLabelIds}
           />

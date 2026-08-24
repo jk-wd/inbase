@@ -18,6 +18,7 @@ type FolderAreaProps = {
   mapMode?: boolean
   highlightKind?: ChangeKind | null
   previewLabels?: boolean
+  labelVisible?: boolean
 }
 
 export function FolderArea({
@@ -27,6 +28,7 @@ export function FolderArea({
   mapMode = false,
   highlightKind = null,
   previewLabels = false,
+  labelVisible = true,
 }: FolderAreaProps) {
   const added = Boolean(folder.added)
   const highlight = highlightKind ? CHANGE_HIGHLIGHT[highlightKind] : null
@@ -87,7 +89,7 @@ export function FolderArea({
         </mesh>
       )}
       <Suspense fallback={null}>
-        {!naming && previewLabels && (
+        {!naming && previewLabels && labelVisible && (
           <Html
             position={[0, 1.35, -folder.depth / 2 + 1.6]}
             center
@@ -98,7 +100,7 @@ export function FolderArea({
             <div className="thumbnail-folder-label">{label}</div>
           </Html>
         )}
-        {!naming && !previewLabels && !mapMode && (
+        {!naming && !previewLabels && !mapMode && labelVisible && (
           <Text
             position={[0, 0.05, -folder.depth / 2 + 1.6]}
             rotation={[-Math.PI / 2, 0, 0]}

@@ -53,7 +53,7 @@ Sessions start in the map: click **Setup LLM session**, type an **initial instru
 
 A normal chat request does not open a session. Use `/inbase` after Setup LLM session, or `/skipinbase [request]` to work outside the map. `/inbase` starts the session immediately; `wait-for-blueprint` only reads the optional blueprint.
 
-If several sessions are open, only one session window is shown at a time. Switch tabs so the focused session is the one `/inbase` connects to.
+If several sessions are open, `/inbase` attaches the newest session that is still waiting. Sessions that already have an LLM are skipped, and the map window does not need to be focused.
 
 Turn on **Make LLM look where I look** if the agent should prefer the island you are standing on and the blocks you are facing. With **Step by step** on, click **Create proposal** to start a step, then **Accept proposal** when the patch is ready. With it off, the LLM implements the full plan; you can still walk Previous/Next over the diffs, then **Accept proposal**. Send an alternative instruction from the HUD to revise the remaining plan, or **Stop** to end the session.
 

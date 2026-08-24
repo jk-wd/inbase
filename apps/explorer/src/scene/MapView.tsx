@@ -1,10 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Html, MapControls, OrthographicCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import { folderAt, worldBounds } from '../layout'
 import type { ChangeKind } from '../theme'
-import type { WorldLayout } from '../types'
+import type { PlacedFolder, WorldLayout } from '../types'
 
 export type MapBlueprintMenu = {
   x: number
@@ -38,7 +39,10 @@ export function MapView({
   onBlueprintMenu,
 }: MapViewProps) {
   const size = useThree((state) => state.size)
-  const { camera, gl, invalidate, scene } = useThree()
+  const camera = useThree((state) => state.camera)
+  const gl = useThree((state) => state.gl)
+  const invalidate = useThree((state) => state.invalidate)
+  const scene = useThree((state) => state.scene)
   const bounds = useMemo(() => worldBounds(layout), [layout])
   const drag = useRef({ x: 0, y: 0, moved: false, active: false })
   const sized = size.width > 16 && size.height > 16
@@ -305,41 +309,118 @@ export function MapView({
           maxZoom={Math.max(fitZoom * 10, 20)}
         />
       )}
-      {enabled &&
-        Object.values(layout.folders).map((folder) => (
-          <Html
-            key={folder.path}
-            position={[folder.x, 14, folder.z + 1.35]}
-            center
-            zIndexRange={[80, 50]}
-            style={{ pointerEvents: 'none' }}
-          >
-            <div
-              className={[
-                'map-folder-label',
-                highlightedFolders?.[folder.path]
-                  ? `map-folder-label-${highlightedFolders[folder.path]}`
-                  : folder.added
-                    ? 'map-folder-label-added'
-                    : selectedFolder === folder.path
-                      ? 'map-folder-label-selected'
-                      : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-            >
-              <span className="map-folder-name">
-                {folderKindLabel(
-                  folder.name,
-                  highlightedFolders?.[folder.path] ?? null,
-                  folder.added ?? false,
-                )}
-              </span>
-            </div>
-          </Html>
-        ))}
+      {enabled && (
+        <MapFolderLabels
+          folders={layout.folders}
+          highlightedFolders={highlightedFolders}
+          selectedFolder={selectedFolder}
+        />
+      )}
       {enabled && marker && <LandMarker marker={marker} />}
     </>
+  )
+}
+
+const PROJECT = new THREE.Vector3()
+const MIN_FOLDER_LABEL_PX = 28
+
+function folderLabelClass(
+  folder: PlacedFolder,
+  highlightedFolders: Partial<Record<string, ChangeKind>> | undefined,
+  selectedFolder: string | null,
+) {
+  return [
+    'map-folder-label',
+    highlightedFolders?.[folder.path]
+      ? `map-folder-label-${highlightedFolders[folder.path]}`
+      : folder.added
+        ? 'map-folder-label-added'
+        : selectedFolder === folder.path
+          ? 'map-folder-label-selected'
+          : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
+
+function MapFolderLabels({
+  folders,
+  highlightedFolders,
+  selectedFolder,
+}: {
+  folders: Record<string, PlacedFolder>
+  highlightedFolders?: Partial<Record<string, ChangeKind>>
+  selectedFolder: string | null
+}) {
+  const camera = useThree((state) => state.camera)
+  const gl = useThree((state) => state.gl)
+  const size = useThree((state) => state.size)
+  const layerRef = useRef<HTMLDivElement>(null)
+  const items = useMemo(() => Object.values(folders), [folders])
+  const [host, setHost] = useState<HTMLElement | null>(null)
+
+  useLayoutEffect(() => {
+    setHost(gl.domElement.parentElement)
+  }, [gl])
+
+  useFrame(() => {
+    const layer = layerRef.current
+    if (!layer) return
+    const zoom = 'zoom' in camera ? Number(camera.zoom) : 1
+    const nodes = layer.children
+    for (let i = 0; i < items.length; i += 1) {
+      const el = nodes[i] as HTMLElement | undefined
+      const folder = items[i]
+      if (!el || !folder) continue
+      PROJECT.set(folder.x, 14, folder.z + 1.35).project(camera)
+      const x = (PROJECT.x * 0.5 + 0.5) * size.width
+      const y = (-PROJECT.y * 0.5 + 0.5) * size.height
+      const span = Math.max(folder.width, folder.depth) * zoom
+      const force =
+        selectedFolder === folder.path ||
+        Boolean(highlightedFolders?.[folder.path] || folder.added)
+      const onScreen =
+        PROJECT.z >= -1 &&
+        PROJECT.z <= 1 &&
+        x > -120 &&
+        x < size.width + 120 &&
+        y > -40 &&
+        y < size.height + 40
+      if (!onScreen || (!force && span < MIN_FOLDER_LABEL_PX)) {
+        if (el.style.visibility !== 'hidden') el.style.visibility = 'hidden'
+        continue
+      }
+      const tx = Math.round(x)
+      const ty = Math.round(y)
+      const next = `${tx},${ty}`
+      if (el.dataset.pos !== next) {
+        el.dataset.pos = next
+        el.style.transform = `translate3d(${tx}px, ${ty}px, 0) translate(-50%, -50%)`
+      }
+      if (el.style.visibility !== 'visible') el.style.visibility = 'visible'
+    }
+  })
+
+  if (!host) return null
+
+  return createPortal(
+    <div ref={layerRef} className="map-folder-label-layer">
+      {items.map((folder) => (
+        <div
+          key={folder.path}
+          className={folderLabelClass(folder, highlightedFolders, selectedFolder)}
+        >
+          <span className="map-folder-name">
+            {folderKindLabel(
+              folder.name,
+              highlightedFolders?.[folder.path] ?? null,
+              folder.added ?? false,
+            )}
+          </span>
+        </div>
+      ))}
+    </div>,
+    host,
   )
 }
 

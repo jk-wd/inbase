@@ -1,6 +1,5 @@
-import { Suspense, useRef } from 'react'
+import { memo, Suspense } from 'react'
 import { Billboard, Edges, Html, Text } from '@react-three/drei'
-import { useFrame, useThree } from '@react-three/fiber'
 import { CHANGE_HIGHLIGHT, CONFIG, dimColor, fileColor, FILE_SELECTION, MAP_SELECTION, type ChangeKind } from '../theme'
 import { NameInput } from '../ui/NameInput'
 import { MapSelectBorder } from './MapSelectBorder'
@@ -59,33 +58,27 @@ function MapChangeMark({
   depth: number
   height: number
 }) {
-  const camera = useThree((state) => state.camera)
-  const markRef = useRef<HTMLDivElement>(null)
-
-  useFrame(() => {
-    const el = markRef.current
-    if (!el) return
-    const zoom = 'zoom' in camera ? Number(camera.zoom) : 1
-    const px = Math.min(width, depth) * 0.78 * zoom
-    el.style.fontSize = `${Math.max(px, 1)}px`
-  })
-
+  const size = Math.min(width, depth) * 0.78
   return (
-    <Html
-      position={[0, height / 2 + 0.12, 0]}
-      center
-      occlude={false}
-      zIndexRange={[120, 100]}
-      style={{ pointerEvents: 'none' }}
-    >
-      <div ref={markRef} className="map-change-mark">
+    <Suspense fallback={null}>
+      <Text
+        position={[0, height / 2 + 0.12, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        fontSize={size}
+        color="#f4f7fb"
+        anchorX="center"
+        anchorY="middle"
+        outlineWidth={size * 0.09}
+        outlineColor="#11151c"
+        renderOrder={10}
+      >
         {mark}
-      </div>
-    </Html>
+      </Text>
+    </Suspense>
   )
 }
 
-export function FileBlock({
+export const FileBlock = memo(function FileBlock({
   file,
   placed,
   selected,
@@ -132,7 +125,7 @@ export function FileBlock({
             ? muted
             : color
 
-  const showLabels = !naming && !mapMode
+  const showLabels = !naming && !mapMode && labelVisible
 
   return (
     <group position={placed.position}>
@@ -216,17 +209,15 @@ export function FileBlock({
       {showLabels && (
         <Suspense fallback={null}>
           {previewLabels ? (
-            labelVisible && (
-              <Html
-                position={[0, height / 2 + 0.4, 0]}
-                center
-                occlude={false}
-                style={{ pointerEvents: 'none' }}
-                zIndexRange={[20, 0]}
-              >
-                <div className="thumbnail-block-label">{label}</div>
-              </Html>
-            )
+            <Html
+              position={[0, height / 2 + 0.4, 0]}
+              center
+              occlude={false}
+              style={{ pointerEvents: 'none' }}
+              zIndexRange={[20, 0]}
+            >
+              <div className="thumbnail-block-label">{label}</div>
+            </Html>
           ) : (
             <>
               <Billboard position={[0, height / 2 + (planned || highlight ? 0.55 : 0.38), 0]}>
@@ -272,4 +263,4 @@ export function FileBlock({
       )}
     </group>
   )
-}
+})

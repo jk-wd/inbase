@@ -57,7 +57,8 @@ If this chat is not yet attached, run:
 npx inbase attach
 ```
 
-That attaches this chat to the session currently focused in the map. No id is
+That attaches this chat to the next waiting visualizer session (newest first).
+Already-attached sessions are skipped. Window focus does not matter. No id is
 passed in; read `VISUAL_CODER_SESSION` from the output and use that
 `--session` value for every later command. Then continue from
 `wait-for-blueprint` below. Do **not** run `start-session`. Do **not** wait

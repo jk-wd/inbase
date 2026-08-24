@@ -341,6 +341,74 @@ export function focusSession(dataDir, sessionId) {
   return safeId
 }
 
+function attachQueueFile(dataDir) {
+  return path.join(dataDir, 'attach-queue.json')
+}
+
+function readStoredAttachQueue(dataDir) {
+  const value = readJson(attachQueueFile(dataDir), null)
+  const ids = Array.isArray(value?.sessionIds) ? value.sessionIds : []
+  const result = []
+  const seen = new Set()
+  for (const id of ids) {
+    try {
+      const safeId = assertSessionId(id)
+      if (seen.has(safeId)) continue
+      seen.add(safeId)
+      result.push(safeId)
+    } catch {
+      // Skip invalid ids.
+    }
+  }
+  return result
+}
+
+function writeAttachQueue(dataDir, sessionIds) {
+  atomicWrite(
+    attachQueueFile(dataDir),
+    `${JSON.stringify({ sessionIds }, null, 2)}\n`,
+  )
+}
+
+function sessionIsWaitingToAttach(manifest) {
+  return Boolean(manifest?.awaitingAttach)
+}
+
+export function listAttachQueue(dataDir) {
+  const recorded = readStoredAttachQueue(dataDir)
+  const waiting = new Set()
+  for (const sessionId of listOpenSessionIds(dataDir)) {
+    if (sessionIsWaitingToAttach(readManifest(dataDir, sessionId))) {
+      waiting.add(sessionId)
+    }
+  }
+  const queued = recorded.filter((sessionId) => waiting.has(sessionId))
+  const queuedSet = new Set(queued)
+  const missing = []
+  for (const sessionId of listOpenSessionIds(dataDir)) {
+    if (waiting.has(sessionId) && !queuedSet.has(sessionId)) {
+      missing.push(sessionId)
+    }
+  }
+  missing.reverse()
+  const next = [...queued, ...missing]
+  const unchanged =
+    next.length === recorded.length &&
+    next.every((sessionId, index) => sessionId === recorded[index])
+  if (!unchanged) writeAttachQueue(dataDir, next)
+  return next
+}
+
+export function nextAttachSessionId(dataDir) {
+  return listAttachQueue(dataDir)[0] ?? null
+}
+
+function enqueueAttachSession(dataDir, sessionId) {
+  const safeId = assertSessionId(sessionId)
+  const rest = listAttachQueue(dataDir).filter((id) => id !== safeId)
+  writeAttachQueue(dataDir, [safeId, ...rest])
+}
+
 function sessionAllowsPlacement(manifest) {
   return (
     manifest.phase !== 'blueprint_ask' &&
@@ -912,6 +980,7 @@ export function setupSession(dataDir, input = {}) {
     sent: false,
   })
   focusSession(dataDir, sessionId)
+  enqueueAttachSession(dataDir, sessionId)
   return manifest
 }
 
@@ -952,10 +1021,10 @@ export function readAttachedSession(dataDir) {
 export function attachSession(dataDir, sessionId) {
   const safeId = sessionId
     ? assertSessionId(sessionId)
-    : readActiveSession(dataDir)
+    : nextAttachSessionId(dataDir)
   if (!safeId) {
     throw new Error(
-      'No visualizer session is focused. Click Setup LLM session in the map, then /inbase.',
+      'No visualizer session is waiting to attach. Click Setup LLM session in the map, then /inbase.',
     )
   }
   const manifest = requireManifest(
@@ -965,14 +1034,6 @@ export function attachSession(dataDir, sessionId) {
   )
   if (isTerminalSession(manifest)) {
     throw sessionStoppedError(safeId)
-  }
-  const attached = readAttachedSession(dataDir)
-  if (attached && attached !== safeId) {
-    const other = readManifest(dataDir, attached)
-    const label = resolvedSessionName(other) || attached
-    throw new Error(
-      `An LLM is already attached to ${label}. Stop that session before attaching another.`,
-    )
   }
   focusSession(dataDir, safeId)
   touchSessionConnection(dataDir, safeId)
@@ -1435,6 +1496,7 @@ export function clearDiffSessions(dataDir, targetRoot = null) {
   }
   writeActiveSession(dataDir, null)
   writeBlueprintSession(dataDir, null)
+  writeAttachQueue(dataDir, [])
 
   const root = diffSessionsRoot(dataDir)
   fs.mkdirSync(root, { recursive: true })

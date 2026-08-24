@@ -214,9 +214,23 @@ function AddIntentRow({
   )
 }
 
+function AttachStateBadge({ attached }: { attached: boolean }) {
+  return (
+    <span
+      className="hud-attach-badge"
+      data-attached={attached}
+      aria-label={attached ? 'LLM attached' : 'Waiting for LLM'}
+    >
+      <span className="hud-attach-dot" aria-hidden="true" />
+      {attached ? 'Attached' : 'Waiting'}
+    </span>
+  )
+}
+
 function PanelChrome({
   title,
   subtitle,
+  badge,
   minimized = false,
   onMinimize,
   onClose,
@@ -225,6 +239,7 @@ function PanelChrome({
 }: {
   title: ReactNode
   subtitle?: ReactNode
+  badge?: ReactNode
   minimized?: boolean
   onMinimize?: () => void
   onClose?: () => void
@@ -234,7 +249,10 @@ function PanelChrome({
   return (
     <div className="hud-panel-chrome">
       <div className="hud-panel-chrome-heading">
-        <div className="hud-panel-chrome-title">{title}</div>
+        <div className="hud-panel-chrome-title-row">
+          <div className="hud-panel-chrome-title">{title}</div>
+          {badge}
+        </div>
         {subtitle ? (
           <div className="hud-panel-chrome-subtitle">{subtitle}</div>
         ) : null}
@@ -305,13 +323,13 @@ function HandshakeSetup({
   onInstructionChange,
   blueprintDefined,
   awaitingAttach,
-  attachBlockedBy,
+  nextAttachLabel,
 }: {
   instruction: string
   onInstructionChange: (value: string) => void
   blueprintDefined: boolean
   awaitingAttach: boolean
-  attachBlockedBy: string | null
+  nextAttachLabel: string | null
 }) {
   return (
     <div className="hud-setup">
@@ -339,10 +357,10 @@ function HandshakeSetup({
       </section>
       <section className="hud-setup-section">
         <h2 className="hud-setup-heading">Start</h2>
-        {attachBlockedBy ? (
+        {awaitingAttach && nextAttachLabel ? (
           <p>
-            An LLM is already attached to {attachBlockedBy}. Stop that session
-            before running <kbd>/inbase</kbd>.
+            <kbd>/inbase</kbd> attaches {nextAttachLabel} first. This session
+            stays in the queue.
           </p>
         ) : awaitingAttach ? (
           <p>
@@ -350,7 +368,7 @@ function HandshakeSetup({
           </p>
         ) : (
           <p>
-            Starting from <kbd>/inbase</kbd>…
+            This window is attached. Starting from <kbd>/inbase</kbd>…
           </p>
         )}
       </section>
@@ -462,7 +480,7 @@ type SessionPanelProps = {
   intent: AgentIntent
   focused: boolean
   naming: boolean
-  attachedSession?: AgentIntent | null
+  nextAttachSession?: AgentIntent | null
   onFocus: () => void
   onWorkflowAction: (
     sessionId: string,
@@ -476,7 +494,7 @@ function SessionPanel({
   intent,
   focused,
   naming,
-  attachedSession = null,
+  nextAttachSession = null,
   onFocus,
   onWorkflowAction,
   onNavigateDiff,
@@ -563,11 +581,11 @@ function SessionPanel({
   const llmConnected = intent.awaitingAttach === false
   const showConnectedProgress =
     llmConnected && (askingBlueprint || sendingBlueprint || preparing)
-  const attachBlockedBy =
+  const queuedBehind =
     intent.awaitingAttach &&
-    attachedSession &&
-    attachedSession.sessionId !== sessionId
-      ? sessionLabel(attachedSession) || 'another session'
+    nextAttachSession &&
+    nextAttachSession.sessionId !== sessionId
+      ? sessionLabel(nextAttachSession) || 'a newer session'
       : null
 
   const act = (
@@ -584,6 +602,7 @@ function SessionPanel({
       }
       data-minimized={minimized}
       data-focused={focused}
+      data-attached={llmConnected}
       onPointerDown={onFocus}
     >
       <PanelChrome
@@ -598,6 +617,7 @@ function SessionPanel({
               : reviewTitle(intent.status)
             : undefined
         }
+        badge={<AttachStateBadge attached={llmConnected} />}
         minimized={minimized}
         onMinimize={() => setMinimized((current) => !current)}
         onClose={() => act('stop')}
@@ -637,20 +657,18 @@ function SessionPanel({
               onInstructionChange={updateInitialInstruction}
               blueprintDefined={blueprintIsDefined(intent)}
               awaitingAttach={Boolean(intent.awaitingAttach)}
-              attachBlockedBy={attachBlockedBy || null}
+              nextAttachLabel={queuedBehind}
             />
           ) : intent.awaitingAttach ? (
-            attachedSession &&
-            attachedSession.sessionId !== sessionId ? (
+            queuedBehind ? (
               <p className="hud-mode-hint">
-                An LLM is already attached to{' '}
-                {sessionLabel(attachedSession) || 'another session'}. Stop that
-                session before running <kbd>/inbase</kbd>.
+                <kbd>/inbase</kbd> attaches {queuedBehind} first. This session
+                stays in the queue.
               </p>
             ) : (
               <p className="hud-mode-hint">
                 No LLM is attached. Open a Cursor chat and run{' '}
-                <kbd>/inbase</kbd>. It connects to this focused session.
+                <kbd>/inbase</kbd>. It connects to the next waiting session.
               </p>
             )
           ) : null}
@@ -1207,7 +1225,7 @@ function explorerInstructions({
         {
           id: 'setup-session',
           keys: ['Setup LLM session'],
-          label: 'Open a session; /inbase connects the focused one',
+          label: 'Open a session; /inbase attaches the newest waiting one',
         },
         { id: 'toggle-map', keys: ['M'], label: 'Toggle map' },
         {
@@ -1294,7 +1312,7 @@ function explorerInstructions({
         {
           id: 'setup-session',
           keys: ['Setup LLM session'],
-          label: 'Open a session; /inbase connects the focused one',
+          label: 'Open a session; /inbase attaches the newest waiting one',
         },
         { id: 'map-walk', keys: ['M'], label: 'Back to walk' },
         ...stop,
@@ -1318,6 +1336,7 @@ type HUDProps = {
   intent: AgentIntent
   intents?: AgentIntent[]
   focusedSessionId?: string | null
+  nextAttachSessionId?: string | null
   onFocusSession?: (sessionId: string) => void
   onSetupSession?: () => Promise<unknown>
   onWorkflowAction: (
@@ -1383,6 +1402,7 @@ export function HUD({
   intent,
   intents,
   focusedSessionId = null,
+  nextAttachSessionId = null,
   onFocusSession,
   onSetupSession,
   onWorkflowAction,
@@ -1444,8 +1464,10 @@ export function HUD({
     (item) => item.sessionId && isReviewingIntent(item.status),
   )
   const canStop = canStopSession(intent)
-  const attachedSession =
-    sessions.find((session) => session.awaitingAttach === false) ?? null
+  const nextAttachSession =
+    sessions.find((session) => session.sessionId === nextAttachSessionId) ??
+    [...sessions].reverse().find((session) => session.awaitingAttach) ??
+    null
   const [walkIntro, setWalkIntro] = useState(false)
   const walkIntroSeen = useRef(false)
   const [instructionsOpen, setInstructionsOpen] = useState(false)
@@ -1783,6 +1805,8 @@ export function HUD({
               {sessions.map((session) => {
                 const active =
                   session.sessionId === (focusedSessionId ?? intent.sessionId)
+                const attached = session.awaitingAttach === false
+                const label = sessionTabLabel(session, sessions)
                 return (
                   <button
                     className="hud-button hud-session-tab"
@@ -1790,13 +1814,15 @@ export function HUD({
                     role="tab"
                     aria-selected={active}
                     data-active={active}
+                    data-attached={attached}
                     key={session.sessionId}
-                    title={sessionTabLabel(session, sessions)}
+                    title={attached ? `${label} · Attached` : `${label} · Waiting`}
                     onClick={() => {
                       if (session.sessionId) onFocusSession?.(session.sessionId)
                     }}
                   >
-                    {sessionTabLabel(session, sessions)}
+                    <span className="hud-attach-dot" aria-hidden="true" />
+                    <span className="hud-session-tab-label">{label}</span>
                   </button>
                 )
               })}
@@ -1807,7 +1833,7 @@ export function HUD({
               intent={intent}
               focused
               naming={naming}
-              attachedSession={attachedSession}
+              nextAttachSession={nextAttachSession}
               onFocus={() => {
                 if (intent.sessionId) onFocusSession?.(intent.sessionId)
               }}

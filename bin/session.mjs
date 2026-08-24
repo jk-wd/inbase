@@ -179,7 +179,7 @@ export async function attachSession(args) {
   console.log(`VISUAL_CODER_SESSION ${manifest.sessionId}`)
   printAck('attached', manifest.name || manifest.sessionId)
   console.log(
-    `VISUAL_CODER_ATTACHED Attached to the focused visualizer session ${manifest.name || manifest.sessionId} (${manifest.phase}). Use --session ${manifest.sessionId} for every later command. Run inbase wait-for-blueprint --session ${manifest.sessionId} to read the optional blueprint and instruction; it does not wait.`,
+    `VISUAL_CODER_ATTACHED Attached to the next waiting visualizer session ${manifest.name || manifest.sessionId} (${manifest.phase}). Use --session ${manifest.sessionId} for every later command. Run inbase wait-for-blueprint --session ${manifest.sessionId} to read the optional blueprint and instruction; it does not wait.`,
   )
 }
 

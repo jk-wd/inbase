@@ -1,5 +1,7 @@
+import { useMemo, useState } from 'react'
 import { FolderArea } from './FolderArea'
 import { FileBlock } from './FileBlock'
+import { DistantFileBlocks } from './DistantFileBlocks'
 import { Bridge } from './Bridge'
 import { RelationLines } from './RelationLines'
 import { Player } from './Player'
@@ -8,6 +10,8 @@ import { SelectionController } from './SelectionController'
 import { UserContextTracker } from './UserContextTracker'
 import { BlockPlacer } from './BlockPlacer'
 import { IslandPlacer } from './IslandPlacer'
+import { WalkLodTracker } from './WalkLodTracker'
+import { computeWalkLod, type WalkLod } from './walkLod'
 import {
   fileChangeKind,
   filesImporting,
@@ -152,6 +156,59 @@ export function World({
     deleted,
     viewLayout.folders,
   )
+  const ghostKey = Object.keys(ghosts).join('|')
+  const keepFileIds = useMemo(() => {
+    const ids = new Set<string>()
+    if (selectedId) ids.add(selectedId)
+    if (namingId) ids.add(namingId)
+    if (aimedRelation?.flyTo) ids.add(aimedRelation.flyTo)
+    if (ghostKey) {
+      for (const id of ghostKey.split('|')) ids.add(id)
+    }
+    return ids
+  }, [aimedRelation?.flyTo, ghostKey, namingId, selectedId])
+  const keepFolderPaths = useMemo(() => {
+    const paths = new Set<string>()
+    if (selectedFolder) paths.add(selectedFolder)
+    if (namingIslandId) paths.add(namingIslandId)
+    return paths
+  }, [namingIslandId, selectedFolder])
+  const originLod = useMemo(() => {
+    if (mapping) return null
+    return computeWalkLod({
+      x: landAt[0],
+      z: landAt[1],
+      lookX: 0,
+      lookZ: 1,
+      files: layout.files,
+      folders: layout.folders,
+      bridges: layout.bridges,
+      keepFileIds,
+      keepFolderPaths,
+      prev: null,
+    })
+  }, [
+    keepFileIds,
+    keepFolderPaths,
+    landAt,
+    layout.bridges,
+    layout.files,
+    layout.folders,
+    mapping,
+  ])
+  const landSig = `${landAt[0]},${landAt[1]}`
+  const [lodLand, setLodLand] = useState(landSig)
+  const [walkLod, setWalkLod] = useState<WalkLod | null>(null)
+  if (lodLand !== landSig) {
+    setLodLand(landSig)
+    setWalkLod(null)
+  }
+  const lod = mapping ? null : (walkLod ?? originLod)
+  const distantFiles: {
+    file: FileNode
+    placed: PlacedFile
+    dimmed: boolean
+  }[] = []
 
   return (
     <>
@@ -178,21 +235,28 @@ export function World({
         }
       />
 
-      {Object.values(viewLayout.folders).map((folder) => (
-        <FolderArea
-          key={folder.path}
-          folder={folder}
-          naming={folder.path === namingIslandId}
-          selected={folder.path === selectedFolder}
-          mapMode={mapping}
-          highlightKind={
-            mapping ? highlightedFolders[folder.path] ?? null : null
-          }
-        />
-      ))}
-      {viewLayout.bridges.map((bridge) => (
-        <Bridge key={bridge.id} bridge={bridge} folders={viewLayout.folders} />
-      ))}
+      {Object.values(viewLayout.folders).map((folder) => {
+        if (lod && !lod.folders.has(folder.path)) return null
+        return (
+          <FolderArea
+            key={folder.path}
+            folder={folder}
+            naming={folder.path === namingIslandId}
+            selected={folder.path === selectedFolder}
+            mapMode={mapping}
+            highlightKind={
+              mapping ? highlightedFolders[folder.path] ?? null : null
+            }
+            labelVisible={!lod || lod.folderLabels.has(folder.path)}
+          />
+        )
+      })}
+      {viewLayout.bridges.map((bridge) => {
+        if (lod && !lod.bridges.has(bridge.id)) return null
+        return (
+          <Bridge key={bridge.id} bridge={bridge} folders={viewLayout.folders} />
+        )
+      })}
       {viewGraph.files.map((file) => {
         const placed = viewLayout.files[file.id]
         if (!placed) return null
@@ -201,6 +265,21 @@ export function World({
         const isPlanned = planned.has(file.id) || deleted.has(file.id)
         const changeKind = fileChangeKind(file.id, planned, created, deleted)
         const naming = file.id === namingId
+        const aimed = file.id === aimedRelation?.flyTo
+        const detailed =
+          selected || isRelated || isPlanned || naming || aimed || Boolean(changeKind)
+        if (lod && !lod.files.has(file.id)) return null
+        const dimmed =
+          hasFocus &&
+          !selected &&
+          !isRelated &&
+          !changeKind &&
+          !patchLinked.has(file.id) &&
+          !folderFileIds.has(file.id)
+        if (lod && !detailed && !lod.labels.has(file.id)) {
+          distantFiles.push({ file, placed, dimmed })
+          return null
+        }
         return (
           <FileBlock
             key={file.id}
@@ -211,17 +290,11 @@ export function World({
             planned={isPlanned}
             changeKind={changeKind}
             added={created.has(file.id) || file.userCreated}
-            aimed={file.id === aimedRelation?.flyTo}
-            dimmed={
-              hasFocus &&
-              !selected &&
-              !isRelated &&
-              !changeKind &&
-              !patchLinked.has(file.id) &&
-              !folderFileIds.has(file.id)
-            }
+            aimed={aimed}
+            dimmed={dimmed}
             naming={naming}
             mapMode={mapping}
+            labelVisible={!lod || lod.labels.has(file.id) || naming}
             onCommitName={
               naming && onCommitName
                 ? (name) => {
@@ -235,6 +308,7 @@ export function World({
           />
         )
       })}
+      <DistantFileBlocks items={distantFiles} />
       {Object.values(ghosts).map((placed) => {
         const file: FileNode = {
           id: placed.id,
@@ -283,6 +357,17 @@ export function World({
         onWalkPosition={onWalkPosition}
         flyTo={flyTo}
       />
+      {!mapping && (
+        <WalkLodTracker
+          files={layout.files}
+          folders={layout.folders}
+          bridges={layout.bridges}
+          keepFileIds={keepFileIds}
+          keepFolderPaths={keepFolderPaths}
+          origin={landAt}
+          onChange={setWalkLod}
+        />
+      )}
       {onPlaceBlock && (
         <BlockPlacer
           enabled={!mapping && !placing}

@@ -164,9 +164,10 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
 export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
   const query = new URLSearchParams({ t: String(Date.now()) })
   const response = await fetch(`/api/agent-intent?${query}`)
-  if (!response.ok) return { focusedSessionId: null, intents: [] }
+  if (!response.ok) return { focusedSessionId: null, nextAttachSessionId: null, intents: [] }
   const data = (await response.json()) as {
     focusedSessionId?: string | null
+    nextAttachSessionId?: string | null
     intents?: unknown
     sessionId?: string | null
   } & Partial<AgentIntent>
@@ -174,6 +175,10 @@ export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
     return {
       focusedSessionId:
         typeof data.focusedSessionId === 'string' ? data.focusedSessionId : null,
+      nextAttachSessionId:
+        typeof data.nextAttachSessionId === 'string'
+          ? data.nextAttachSessionId
+          : null,
       intents: data.intents
         .map((intent) => normalize(intent as Partial<AgentIntent>))
         .filter((intent) => Boolean(intent.sessionId)),
@@ -182,6 +187,7 @@ export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
   const intent = normalize(data)
   return {
     focusedSessionId: intent.sessionId,
+    nextAttachSessionId: intent.awaitingAttach ? intent.sessionId : null,
     intents: intent.sessionId ? [intent] : [],
   }
 }

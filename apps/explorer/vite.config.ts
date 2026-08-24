@@ -17,6 +17,7 @@ import {
   inspectTargetFile,
   invokeStep,
   listSessionIntents,
+  nextAttachSessionId,
   readActiveSession,
   requestReplan,
   sendBlueprint,
@@ -142,6 +143,7 @@ function jsonFilePlugin(): Plugin {
           }
           sendJson(res, 200, {
             focusedSessionId: readActiveSession(dataDir),
+            nextAttachSessionId: nextAttachSessionId(dataDir),
             intents: listSessionIntents(dataDir, knownFileIds()),
           })
           return

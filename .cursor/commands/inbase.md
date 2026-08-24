@@ -1,12 +1,12 @@
 ---
-description: Attach this chat to the focused Inbase visualizer session
+description: Attach this chat to the next waiting Inbase visualizer session
 ---
 
 The user invoked `/inbase`. This is how a chat joins the visualizer session that **Setup LLM session** already created.
 
 Do **not** ask for a session id. Do **not** run `inbase start-session`. Do **not** print the "direct chat interaction not allowed" message.
 
-1. Attach to the focused visualizer session:
+1. Attach to the next waiting visualizer session (newest first; skip sessions that already have an LLM):
 
 ```bash
 npx inbase attach

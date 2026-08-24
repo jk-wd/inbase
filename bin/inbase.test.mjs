@@ -232,7 +232,7 @@ test('start-session attaches to a running visualizer instance', () => {
   }
 })
 
-test('attach without --session uses the focused visualizer session', async () => {
+test('attach without --session uses the newest waiting visualizer session', async () => {
   const { root, cleanup } = tempProject()
   const dataDir = path.join(root, '.inbase')
   const env = {
@@ -245,19 +245,22 @@ test('attach without --session uses the focused visualizer session', async () =>
       pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
     )
     fs.mkdirSync(dataDir, { recursive: true })
+    const older = store.setupSession(dataDir)
     const started = store.setupSession(dataDir)
+    store.focusSession(dataDir, older.sessionId)
     const missing = runCli(['attach'], { cwd: root, env })
     assert.equal(missing.status, 0, missing.stderr)
     assert.match(missing.stdout, /VISUAL_CODER_ATTACHED/)
     assert.match(missing.stdout, /VISUAL_CODER_ACK attached:/)
     assert.match(missing.stdout, new RegExp(`VISUAL_CODER_SESSION ${started.sessionId}`))
     assert.equal(store.readManifest(dataDir, started.sessionId).awaitingAttach, false)
+    assert.equal(store.readManifest(dataDir, older.sessionId).awaitingAttach, true)
   } finally {
     cleanup()
   }
 })
 
-test('attach without a focused session fails', () => {
+test('attach without a waiting session fails', () => {
   const { root, cleanup } = tempProject()
   const dataDir = path.join(root, '.inbase')
   const env = {
@@ -269,13 +272,13 @@ test('attach without a focused session fails', () => {
     fs.mkdirSync(dataDir, { recursive: true })
     const result = runCli(['attach'], { cwd: root, env })
     assert.notEqual(result.status, 0)
-    assert.match(result.stderr, /focused/)
+    assert.match(result.stderr, /waiting to attach/)
   } finally {
     cleanup()
   }
 })
 
-test('attach refuses a second LLM session', async () => {
+test('attach skips an already attached session and takes the next in queue', async () => {
   const { root, cleanup } = tempProject()
   const dataDir = path.join(root, '.inbase')
   const env = {
@@ -289,15 +292,15 @@ test('attach refuses a second LLM session', async () => {
     )
     fs.mkdirSync(dataDir, { recursive: true })
     const first = store.setupSession(dataDir)
-    store.setupSession(dataDir)
+    const second = store.setupSession(dataDir)
     const attached = runCli(['attach'], { cwd: root, env })
     assert.equal(attached.status, 0, attached.stderr)
-    const blocked = runCli(['attach', '--session', first.sessionId], {
-      cwd: root,
-      env,
-    })
-    assert.notEqual(blocked.status, 0)
-    assert.match(blocked.stderr, /already attached/)
+    assert.match(attached.stdout, new RegExp(`VISUAL_CODER_SESSION ${second.sessionId}`))
+    store.focusSession(dataDir, second.sessionId)
+    const next = runCli(['attach'], { cwd: root, env })
+    assert.equal(next.status, 0, next.stderr)
+    assert.match(next.stdout, new RegExp(`VISUAL_CODER_SESSION ${first.sessionId}`))
+    assert.equal(store.readManifest(dataDir, first.sessionId).awaitingAttach, false)
   } finally {
     cleanup()
   }

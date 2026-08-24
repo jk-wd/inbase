@@ -31,6 +31,8 @@ import {
   startSession,
   setupSession,
   attachSession,
+  listAttachQueue,
+  nextAttachSessionId,
   setInitialInstruction,
   maybeStartVisualizerHandshake,
   stopSession,
@@ -226,12 +228,17 @@ test('/inbase starts without waiting for a blueprint', () => {
   }
 })
 
-test('attach without an id uses the focused visualizer session', () => {
+test('attach without an id uses the newest waiting session', () => {
   const env = fixture()
   try {
     const first = setupSession(env.dataDir)
     const second = setupSession(env.dataDir)
     assert.equal(readActiveSession(env.dataDir), second.sessionId)
+    assert.deepEqual(listAttachQueue(env.dataDir), [
+      second.sessionId,
+      first.sessionId,
+    ])
+    assert.equal(nextAttachSessionId(env.dataDir), second.sessionId)
 
     const attached = attachSession(env.dataDir)
     assert.equal(attached.sessionId, second.sessionId)
@@ -244,18 +251,59 @@ test('attach without an id uses the focused visualizer session', () => {
 
     const again = attachSession(env.dataDir, second.sessionId)
     assert.equal(again.sessionId, second.sessionId)
-
-    assert.throws(() => attachSession(env.dataDir, first.sessionId), /already attached/)
+    assert.deepEqual(listAttachQueue(env.dataDir), [first.sessionId])
     assert.equal(readActiveSession(env.dataDir), second.sessionId)
   } finally {
     env.cleanup()
   }
 })
 
-test('attach fails when no visualizer session is focused', () => {
+test('attach skips already attached sessions and ignores window focus', () => {
   const env = fixture()
   try {
-    assert.throws(() => attachSession(env.dataDir), /focused/)
+    const first = setupSession(env.dataDir)
+    const second = setupSession(env.dataDir)
+    attachSession(env.dataDir)
+    focusSession(env.dataDir, second.sessionId)
+    assert.equal(readActiveSession(env.dataDir), second.sessionId)
+    assert.deepEqual(listAttachQueue(env.dataDir), [first.sessionId])
+
+    const next = attachSession(env.dataDir)
+    assert.equal(next.sessionId, first.sessionId)
+    assert.equal(next.awaitingAttach, false)
+    assert.deepEqual(listAttachQueue(env.dataDir), [])
+    assert.equal(readActiveSession(env.dataDir), first.sessionId)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('a newly created session is first in the attach queue', () => {
+  const env = fixture()
+  try {
+    const first = setupSession(env.dataDir)
+    attachSession(env.dataDir, first.sessionId)
+    focusSession(env.dataDir, first.sessionId)
+    const newest = setupSession(env.dataDir)
+    assert.equal(nextAttachSessionId(env.dataDir), newest.sessionId)
+    assert.deepEqual(listAttachQueue(env.dataDir), [newest.sessionId])
+
+    const attached = attachSession(env.dataDir)
+    assert.equal(attached.sessionId, newest.sessionId)
+    assert.equal(readManifest(env.dataDir, first.sessionId).awaitingAttach, false)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('attach fails when no visualizer session is waiting', () => {
+  const env = fixture()
+  try {
+    assert.throws(() => attachSession(env.dataDir), /waiting to attach/)
+    const started = setupSession(env.dataDir)
+    attachSession(env.dataDir)
+    focusSession(env.dataDir, started.sessionId)
+    assert.throws(() => attachSession(env.dataDir), /waiting to attach/)
   } finally {
     env.cleanup()
   }

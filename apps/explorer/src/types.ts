@@ -255,6 +255,7 @@ export type WorkflowAction =
 
 export type AgentIntentBundle = {
   focusedSessionId: string | null
+  nextAttachSessionId: string | null
   intents: AgentIntent[]
 }
 
