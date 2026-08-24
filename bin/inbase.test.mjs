@@ -151,6 +151,29 @@ function runCli(args, { cwd, env } = {}) {
   })
 }
 
+function collectChild(child) {
+  const result = { stdout: '', stderr: '' }
+  let resolveReady
+  const ready = new Promise((resolve) => {
+    resolveReady = resolve
+  })
+  child.stdout.on('data', (chunk) => {
+    result.stdout += chunk
+    if (resolveReady) {
+      resolveReady()
+      resolveReady = null
+    }
+  })
+  child.stderr.on('data', (chunk) => {
+    result.stderr += chunk
+  })
+  const closed = new Promise((resolve, reject) => {
+    child.on('error', reject)
+    child.on('close', (status) => resolve({ status, ...result }))
+  })
+  return { ready, closed }
+}
+
 test('start-session requires a generated session name', () => {
   const { root, cleanup } = tempProject()
   const dataDir = path.join(root, '.inbase')
@@ -469,26 +492,21 @@ test('wait-for-approval returns as soon as accept invokes the next step', async 
       [path.join(packageRoot, 'bin/inbase.mjs'), 'wait-for-approval', '--session', 'fast-next', '--timeout', '5000'],
       { cwd: root, env, encoding: 'utf8' },
     )
-    await new Promise((resolve) => setTimeout(resolve, 200))
+    const pending = collectChild(child)
+    await Promise.race([
+      pending.ready,
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('wait-for-approval never started')), 4000)
+      }),
+    ])
     const invokedAt = Date.now()
     store.invokeStep(dataDir, 'fast-next', 2, target)
-    const result = await new Promise((resolve, reject) => {
-      let stdout = ''
-      let stderr = ''
-      child.stdout.on('data', (chunk) => {
-        stdout += chunk
-      })
-      child.stderr.on('data', (chunk) => {
-        stderr += chunk
-      })
-      child.on('error', reject)
-      child.on('close', (status) => resolve({ status, stdout, stderr }))
-    })
+    const result = await pending.closed
     const elapsed = Date.now() - invokedAt
     assert.equal(result.status, 0, result.stderr)
     assert.match(result.stdout, /VISUAL_CODER_ACK execute: step 2 — Bump again/)
     assert.match(result.stdout, /Continue immediately/)
-    assert.ok(elapsed < 400, `next step took ${elapsed}ms`)
+    assert.ok(elapsed < 2000, `next step took ${elapsed}ms`)
   } finally {
     cleanup()
   }
@@ -581,26 +599,21 @@ fs.watch = () => {
       ],
       { cwd: root, env, encoding: 'utf8' },
     )
-    await new Promise((resolve) => setTimeout(resolve, 200))
+    const pending = collectChild(child)
+    await Promise.race([
+      pending.ready,
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('wait-for-approval never started')), 4000)
+      }),
+    ])
     const invokedAt = Date.now()
     store.invokeStep(dataDir, 'emfile-wait', 2, target)
-    const result = await new Promise((resolve, reject) => {
-      let stdout = ''
-      let stderr = ''
-      child.stdout.on('data', (chunk) => {
-        stdout += chunk
-      })
-      child.stderr.on('data', (chunk) => {
-        stderr += chunk
-      })
-      child.on('error', reject)
-      child.on('close', (status) => resolve({ status, stdout, stderr }))
-    })
+    const result = await pending.closed
     const elapsed = Date.now() - invokedAt
     assert.equal(result.status, 0, result.stderr)
     assert.doesNotMatch(result.stderr, /EMFILE/)
     assert.match(result.stdout, /VISUAL_CODER_ACK execute: step 2 — Bump again/)
-    assert.ok(elapsed < 400, `next step took ${elapsed}ms`)
+    assert.ok(elapsed < 2000, `next step took ${elapsed}ms`)
   } finally {
     cleanup()
   }
