@@ -29,17 +29,22 @@ import {
 import {
   defaultBlockSpot,
   dropBlueprintFileNotes,
+  dropBlueprintFilePointers,
   dropBlueprintSymbolNote,
+  dropBlueprintSymbolPointer,
+  findBlueprintPointer,
   isBlueprintSymbolName,
   namedCreatedBlocks,
   namedCreatedIslands,
   parseBlueprintImport,
   parseBlueprintNotes,
+  parseBlueprintPointers,
   parseUserCreatedBlocks,
   parseUserCreatedIslands,
   resolveCreatedFile,
   resolveCreatedIsland,
   setBlueprintNote,
+  toggleBlueprintPointer,
   withBlueprintIntent,
   withUserCreatedGraph,
   withUserCreatedLayout,
@@ -51,6 +56,8 @@ import {
   type AimedRelation,
   type BlueprintNote,
   type BlueprintNoteKind,
+  type BlueprintPointer,
+  type BlueprintPointerKind,
   type CodebaseGraph,
   type FlyTo,
   type PatchImportAddition,
@@ -200,6 +207,9 @@ function Explorer({
     PatchImportAddition[]
   >([])
   const [blueprintNotes, setBlueprintNotes] = useState<BlueprintNote[]>([])
+  const [blueprintPointers, setBlueprintPointers] = useState<BlueprintPointer[]>(
+    [],
+  )
   const [blueprintHidden, setBlueprintHidden] = useState(false)
   const userBlocksRef = useRef(userBlocks)
   const userIslandsRef = useRef(userIslands)
@@ -207,6 +217,7 @@ function Explorer({
   const blueprintVariablesRef = useRef(blueprintVariables)
   const blueprintImportsRef = useRef(blueprintImports)
   const blueprintNotesRef = useRef(blueprintNotes)
+  const blueprintPointersRef = useRef(blueprintPointers)
   const notesDirty = useRef(false)
   const blueprintPersistGen = useRef(0)
   const notePersistTimer = useRef<number | null>(null)
@@ -216,6 +227,7 @@ function Explorer({
   blueprintVariablesRef.current = blueprintVariables
   blueprintImportsRef.current = blueprintImports
   blueprintNotesRef.current = blueprintNotes
+  blueprintPointersRef.current = blueprintPointers
   const namingId = userBlocks.find((block) => block.naming)?.id ?? null
   const namingIslandId = userIslands.find((island) => island.naming)?.id ?? null
   const naming = Boolean(namingId || namingIslandId)
@@ -296,11 +308,15 @@ function Explorer({
     for (const item of blueprintVariables) ids.add(item.file)
     for (const item of blueprintImports) ids.add(item.file)
     for (const note of blueprintNotes) ids.add(note.file)
+    for (const pointer of blueprintPointers) {
+      if (pointer.kind !== 'folder') ids.add(pointer.path)
+    }
     return [...ids]
   }, [
     blueprintFunctions,
     blueprintImports,
     blueprintNotes,
+    blueprintPointers,
     blueprintVariables,
     changeSet.creates,
     changeSet.deletes,
@@ -314,8 +330,11 @@ function Explorer({
       if (island.path) paths.add(island.path)
       else if (island.id) paths.add(island.id)
     }
+    for (const pointer of blueprintPointers) {
+      if (pointer.kind === 'folder') paths.add(pointer.path)
+    }
     return [...paths]
-  }, [changeSet.createFolders, userIslands])
+  }, [blueprintPointers, changeSet.createFolders, userIslands])
   const hasChangeSet =
     changeFileIds.length > 0 || changeFolderPaths.length > 0
   const changePathGraph = useMemo(() => {
@@ -511,6 +530,7 @@ function Explorer({
                   addedVariables: blueprintVariables,
                   addedImports: blueprintImports,
                   notes: blueprintNotes,
+                  pointers: blueprintPointers,
                 }
               : {}),
           },
@@ -534,6 +554,7 @@ function Explorer({
       blueprintFunctions,
       blueprintImports,
       blueprintNotes,
+      blueprintPointers,
       blueprintVariables,
       intents,
       onRefreshGraph,
@@ -618,6 +639,7 @@ function Explorer({
       variables: PatchSymbolAddition[] = blueprintVariablesRef.current,
       imports: PatchImportAddition[] = blueprintImportsRef.current,
       notes: BlueprintNote[] = blueprintNotesRef.current,
+      pointers: BlueprintPointer[] = blueprintPointersRef.current,
     ) => {
       if (notePersistTimer.current != null) {
         window.clearTimeout(notePersistTimer.current)
@@ -632,6 +654,7 @@ function Explorer({
         addedVariables: variables,
         addedImports: imports,
         notes,
+        pointers,
       }).finally(() => {
         if (gen !== blueprintPersistGen.current) return
         if (notePersistTimer.current != null) return
@@ -664,6 +687,7 @@ function Explorer({
         addedVariables: blueprintVariablesRef.current,
         addedImports: blueprintImportsRef.current,
         notes: blueprintNotesRef.current,
+        pointers: blueprintPointersRef.current,
       })
       notesDirty.current = false
     }
@@ -682,6 +706,28 @@ function Explorer({
       persistBlueprintSoon()
     },
     [persistBlueprintSoon],
+  )
+
+  const applyBlueprintPointer = useCallback(
+    (next: {
+      kind: BlueprintPointerKind
+      path: string
+      name?: string
+    }) => {
+      const pointers = toggleBlueprintPointer(blueprintPointersRef.current, next)
+      blueprintPointersRef.current = pointers
+      setBlueprintPointers(pointers)
+      persistBlueprint(
+        userBlocksRef.current,
+        userIslandsRef.current,
+        blueprintFunctionsRef.current,
+        blueprintVariablesRef.current,
+        blueprintImportsRef.current,
+        blueprintNotesRef.current,
+        pointers,
+      )
+    },
+    [persistBlueprint],
   )
 
   const placeBlock = useCallback(
@@ -832,10 +878,23 @@ function Explorer({
     if (!selected || selected.naming) return false
     const next = userBlocks.filter((block) => block.id !== selectedId)
     const notes = dropBlueprintFileNotes(blueprintNotesRef.current, [selectedId])
+    const pointers = dropBlueprintFilePointers(blueprintPointersRef.current, [
+      selectedId,
+    ])
     blueprintNotesRef.current = notes
+    blueprintPointersRef.current = pointers
     setUserBlocks(next)
     setBlueprintNotes(notes)
-    persistBlueprint(next, userIslands, undefined, undefined, undefined, notes)
+    setBlueprintPointers(pointers)
+    persistBlueprint(
+      next,
+      userIslands,
+      undefined,
+      undefined,
+      undefined,
+      notes,
+      pointers,
+    )
     setSelectedId(null)
     return true
   }, [canPlace, persistBlueprint, selectedId, userBlocks, userIslands])
@@ -1000,9 +1059,17 @@ function Explorer({
         'function',
         name,
       )
+      const pointers = dropBlueprintSymbolPointer(
+        blueprintPointersRef.current,
+        fileId,
+        'function',
+        name,
+      )
       blueprintNotesRef.current = notes
+      blueprintPointersRef.current = pointers
       setBlueprintFunctions(next)
       setBlueprintNotes(notes)
+      setBlueprintPointers(pointers)
       persistBlueprint(
         userBlocks,
         userIslands,
@@ -1010,6 +1077,7 @@ function Explorer({
         blueprintVariables,
         blueprintImports,
         notes,
+        pointers,
       )
     },
     [
@@ -1035,9 +1103,17 @@ function Explorer({
         'variable',
         name,
       )
+      const pointers = dropBlueprintSymbolPointer(
+        blueprintPointersRef.current,
+        fileId,
+        'variable',
+        name,
+      )
       blueprintNotesRef.current = notes
+      blueprintPointersRef.current = pointers
       setBlueprintVariables(next)
       setBlueprintNotes(notes)
+      setBlueprintPointers(pointers)
       persistBlueprint(
         userBlocks,
         userIslands,
@@ -1045,6 +1121,7 @@ function Explorer({
         next,
         blueprintImports,
         notes,
+        pointers,
       )
     },
     [
@@ -1222,6 +1299,11 @@ function Explorer({
         setBlueprintFunctions(bundle.blueprint.addedFunctions)
         setBlueprintVariables(bundle.blueprint.addedVariables)
         setBlueprintImports(bundle.blueprint.addedImports)
+        if (!notesDirty.current) {
+          const nextPointers = parseBlueprintPointers(bundle.blueprint.pointers)
+          blueprintPointersRef.current = nextPointers
+          setBlueprintPointers(nextPointers)
+        }
         if (!notesDirty.current && !isKeyboardIsolated()) {
           const nextNotes = parseBlueprintNotes(bundle.blueprint.notes)
           blueprintNotesRef.current = nextNotes
@@ -1305,7 +1387,8 @@ function Explorer({
     blueprintFunctions.length > 0 ||
     blueprintVariables.length > 0 ||
     blueprintImports.length > 0 ||
-    blueprintNotes.length > 0
+    blueprintNotes.length > 0 ||
+    blueprintPointers.length > 0
   const blueprintCanCleanup =
     userBlocks.some((block) => !block.naming && knownFileIds.has(block.id)) ||
     userIslands.some(
@@ -1325,7 +1408,9 @@ function Explorer({
     setBlueprintVariables([])
     setBlueprintImports([])
     blueprintNotesRef.current = []
+    blueprintPointersRef.current = []
     setBlueprintNotes([])
+    setBlueprintPointers([])
     void persistBlueprintClear()
   }, [])
 
@@ -1412,6 +1497,20 @@ function Explorer({
             userCreatedBlocks={visibleBlocks}
             userCreatedIslands={visibleIslands}
             overlayBlocks={overlayBlocks}
+            pointedFileIds={
+              blueprintHidden
+                ? undefined
+                : blueprintPointers.flatMap((item) =>
+                    item.kind === 'folder' ? [] : [item.path],
+                  )
+            }
+            pointedFolderPaths={
+              blueprintHidden
+                ? undefined
+                : blueprintPointers.flatMap((item) =>
+                    item.kind === 'folder' ? [item.path] : [],
+                  )
+            }
             mapGraph={
               changePathsOnly && hasChangeSet ? changePathGraph : null
             }
@@ -1470,6 +1569,7 @@ function Explorer({
         blueprintVariables={blueprintVariables}
         blueprintImports={blueprintImports}
         blueprintNotes={blueprintNotes}
+        blueprintPointers={blueprintPointers}
         onAddBlueprintFunction={addBlueprintFunction}
         onAddBlueprintVariable={addBlueprintVariable}
         onAddBlueprintImport={addBlueprintImport}
@@ -1477,6 +1577,7 @@ function Explorer({
         onRemoveBlueprintVariable={removeBlueprintVariable}
         onRemoveBlueprintImport={removeBlueprintImport}
         onSetBlueprintNote={applyBlueprintNote}
+        onToggleBlueprintPointer={applyBlueprintPointer}
         onMapAddFile={placeBlockOnFolder}
         onMapAddFolder={placeIslandOnFolder}
         onInspectFile={inspectFile}
@@ -1493,8 +1594,16 @@ function Explorer({
       />
       <MapContextMenu
         menu={mapMenu}
+        pointed={
+          mapMenu
+            ? findBlueprintPointer(blueprintPointers, 'folder', mapMenu.folder)
+            : false
+        }
         onAddFile={placeBlockOnFolder}
         onAddFolder={placeIslandOnFolder}
+        onPointToFolder={(folder) =>
+          applyBlueprintPointer({ kind: 'folder', path: folder })
+        }
         onClose={() => setMapMenu(null)}
       />
     </>

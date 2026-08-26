@@ -43,8 +43,8 @@ over the recorded diffs.
 live project files with Write, StrReplace, and Delete for that step only. Then
 run `inbase propose-patch` with no patch file. Inbase diffs the working tree
 against the snapshot taken at invoke and stores that patch. A later instruction
-replaces the withdrawn step; edit from the accepted live files, not from the
-withdrawn proposal. Do not write a unified diff yourself.
+updates that live proposal; edit those files, then propose-patch again. Wait
+for **Accept proposal** before the next step. Do not write a unified diff yourself.
 
 The visualizer stores immutable diffs under
 `.inbase/diff-sessions/<session-id>/diffs/`. Inbase must already be running
@@ -180,11 +180,15 @@ npx inbase wait-for-approval --session "<session-id>"
 12. Read the wait command output. Reply in chat with the `VISUAL_CODER_ACK`
     line first, then:
 
-   - Exit `0` (`VISUAL_CODER_ACK execute` / `VISUAL_CODER_EXECUTE`): the
-     highlighted step was invoked. If this is a later step, implement it now —
-     do not explore, re-plan, or run `wait-for-blueprint`. Re-read the shared
-     `blueprint.json` if you need placed files. Edit live files for that step
-     only, record with `inbase propose-patch` (no patch file), then wait again.
+   - Exit `0` (`VISUAL_CODER_ACK execute` / `VISUAL_CODER_EXECUTE`): follow
+     the printed `VISUAL_CODER_EXECUTE` line. If it says **Update the current
+     proposal**, edit those live files, record with `inbase propose-patch` (no
+     patch file), then wait again for **Accept proposal**. Do not start the
+     next step and do not report a new plan. Otherwise the highlighted step
+     was invoked: implement that step now — do not explore, re-plan, or run
+     `wait-for-blueprint`. Re-read the shared `blueprint.json` if you need
+     placed files. Edit live files for that step only, record with
+     `inbase propose-patch` (no patch file), then wait again.
    - Exit `6` (`VISUAL_CODER_ACK blueprint` / `VISUAL_CODER_BLUEPRINT`): the
      shared blueprint changed. Follow the latest files, islands, functions,
      variables, and imports. Do not omit, rename, relocate, or replace them.
@@ -195,19 +199,12 @@ npx inbase wait-for-approval --session "<session-id>"
      stored session diffs. The shared blueprint remains. Optionally run
      `--clear` if anything remains, tell the user the feature is done, and
      **stop**. Do not propose another patch.
-   - Exit `4` (`VISUAL_CODER_ACK replan` / `VISUAL_CODER_REPLAN`): do **not**
-     edit project files and do not rewrite an earlier accepted patch. The
-     withdrawn proposal is no longer live; disk is baseline + accepted patch
-     files. Follow the text between `VISUAL_CODER_INSTRUCTION_START` and
-     `VISUAL_CODER_INSTRUCTION_END`, read the shared `blueprint.json` when
-     it is enabled (files, islands, `addedFunctions`, `addedVariables`,
-     `addedImports`). The blueprint stays leading. If the new instruction would
-     differ from it, ask the user before replacing the plan. Read
-     `user-context.json` (follow the viewpoint only if `followLook` is true),
-     replace the plan from the current step onward using `inbase report-plan`,
-     then wait for the next `VISUAL_CODER_EXECUTE` before editing again. The
-     replacement edits must sit on the accepted live files, not the withdrawn
-     proposal.
+   - Exit `4` (`VISUAL_CODER_ACK replan` / `VISUAL_CODER_REPLAN`): live files
+     still contain the current proposal. Do not reset them and do not report a
+     new plan. Follow the text between `VISUAL_CODER_INSTRUCTION_START` and
+     `VISUAL_CODER_INSTRUCTION_END`, edit those live files, then
+     `inbase propose-patch`. Wait for **Accept proposal**. Do not start the
+     next step.
    - Exit `2` (`VISUAL_CODER_ACK stopped` / `VISUAL_CODER_STOPPED`) or `3`
      (`VISUAL_CODER_ACK timeout`): make no further project changes.
 

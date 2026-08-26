@@ -114,6 +114,7 @@ function blueprintIntentFields() {
     blueprintVariables: blueprint.addedVariables,
     blueprintImports: blueprint.addedImports,
     blueprintNotes: blueprint.notes,
+    blueprintPointers: blueprint.pointers,
   }
 }
 
@@ -267,6 +268,7 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       addedVariables?: unknown[]
       addedImports?: unknown[]
       notes?: unknown[]
+      pointers?: unknown[]
       files?: unknown[]
       fileId?: string
     }
@@ -360,6 +362,7 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
         addedVariables: body.addedVariables,
         addedImports: body.addedImports,
         notes: body.notes,
+        pointers: body.pointers,
       })
     } else if (action === 'blueprint_clear') {
       clearBlueprint(dataDir)
@@ -375,6 +378,7 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
         addedVariables: body.addedVariables,
         addedImports: body.addedImports,
         notes: body.notes,
+        pointers: body.pointers,
       })
     } else if (action === 'setup_session') {
       const manifest = setupSession(dataDir, {

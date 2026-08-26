@@ -225,6 +225,14 @@ export type BlueprintNote = {
   note: string
 }
 
+export type BlueprintPointerKind = 'file' | 'folder' | 'function' | 'variable'
+
+export type BlueprintPointer = {
+  kind: BlueprintPointerKind
+  path: string
+  name?: string
+}
+
 export type AimedRelation = {
   from: string
   to: string
@@ -275,6 +283,7 @@ export type SharedBlueprint = {
   addedVariables: PatchSymbolAddition[]
   addedImports: PatchImportAddition[]
   notes: BlueprintNote[]
+  pointers: BlueprintPointer[]
 }
 
 export type AgentIntentBundle = {
@@ -341,4 +350,5 @@ export type AgentIntent = {
   blueprintVariables: PatchSymbolAddition[]
   blueprintImports: PatchImportAddition[]
   blueprintNotes: BlueprintNote[]
+  blueprintPointers: BlueprintPointer[]
 }

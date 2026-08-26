@@ -2,6 +2,7 @@ import type {
   AgentIntent,
   AgentIntentBundle,
   BlueprintNote,
+  BlueprintPointer,
   PatchImport,
   PatchImportAddition,
   PatchSymbolAddition,
@@ -11,6 +12,7 @@ import type {
 } from './types'
 import {
   parseBlueprintNotes,
+  parseBlueprintPointers,
   parseUserCreatedBlocks,
   parseUserCreatedIslands,
 } from './userCreated'
@@ -133,6 +135,7 @@ export const emptyIntent: AgentIntent = {
   blueprintVariables: [],
   blueprintImports: [],
   blueprintNotes: [],
+  blueprintPointers: [],
 }
 
 function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
@@ -192,6 +195,7 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     blueprintVariables: normalizeSymbolAdditions(data?.blueprintVariables),
     blueprintImports: normalizeImportAdditions(data?.blueprintImports),
     blueprintNotes: parseBlueprintNotes(data?.blueprintNotes),
+    blueprintPointers: parseBlueprintPointers(data?.blueprintPointers),
   }
 }
 
@@ -206,6 +210,7 @@ function normalizeBlueprint(data: Partial<AgentIntentBundle['blueprint']> | null
     addedVariables: normalizeSymbolAdditions(data?.addedVariables),
     addedImports: normalizeImportAdditions(data?.addedImports),
     notes: parseBlueprintNotes(data?.notes),
+    pointers: parseBlueprintPointers(data?.pointers),
   }
 }
 
@@ -256,13 +261,15 @@ export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
         intent.blueprintFunctions.length > 0 ||
         intent.blueprintVariables.length > 0 ||
         intent.blueprintImports.length > 0 ||
-        intent.blueprintNotes.length > 0,
+        intent.blueprintNotes.length > 0 ||
+        intent.blueprintPointers.length > 0,
       userCreatedBlocks: intent.userCreatedBlocks,
       userCreatedIslands: intent.userCreatedIslands,
       addedFunctions: intent.blueprintFunctions,
       addedVariables: intent.blueprintVariables,
       addedImports: intent.blueprintImports,
       notes: intent.blueprintNotes,
+      pointers: intent.blueprintPointers,
     }),
   }
 }
@@ -295,6 +302,7 @@ export async function performAgentAction(
     addedVariables?: PatchSymbolAddition[]
     addedImports?: PatchImportAddition[]
     notes?: BlueprintNote[]
+    pointers?: BlueprintPointer[]
   } = {},
 ) {
   const response = await fetch('/api/agent-intent', {
@@ -318,6 +326,7 @@ export function persistSessionBlueprint(
     addedVariables?: PatchSymbolAddition[]
     addedImports?: PatchImportAddition[]
     notes?: BlueprintNote[]
+    pointers?: BlueprintPointer[]
   },
 ) {
   return fetch('/api/agent-intent', {

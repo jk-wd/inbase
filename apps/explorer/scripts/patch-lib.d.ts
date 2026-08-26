@@ -124,6 +124,7 @@ export const emptyIntent: {
   blueprintVariables: unknown[]
   blueprintImports: unknown[]
   blueprintNotes: unknown[]
+  blueprintPointers: unknown[]
 }
 
 export function isLastStep(intent: {

@@ -10,15 +10,19 @@ export type MapContextMenuState = {
 
 type MapContextMenuProps = {
   menu: MapContextMenuState | null
+  pointed?: boolean
   onAddFile: (folder: string) => void
   onAddFolder: (folder: string) => void
+  onPointToFolder?: (folder: string) => void
   onClose: () => void
 }
 
 export function MapContextMenu({
   menu,
+  pointed = false,
   onAddFile,
   onAddFolder,
+  onPointToFolder,
   onClose,
 }: MapContextMenuProps) {
   useEffect(() => {
@@ -48,7 +52,7 @@ export function MapContextMenu({
 
   const pad = 8
   const width = 176
-  const height = 84
+  const height = onPointToFolder ? 126 : 84
   const left = Math.min(
     Math.max(pad, menu.x),
     window.innerWidth - width - pad,
@@ -85,6 +89,19 @@ export function MapContextMenu({
       >
         Add folder
       </button>
+      {onPointToFolder && (
+        <button
+          type="button"
+          role="menuitem"
+          aria-pressed={pointed}
+          onClick={() => {
+            onPointToFolder(menu.folder)
+            onClose()
+          }}
+        >
+          {pointed ? 'Stop pointing' : 'Point to folder'}
+        </button>
+      )}
     </div>,
     document.body,
   )

@@ -3,6 +3,8 @@ import { folderOfFile, folderParent } from './layout'
 import type {
   BlueprintNote,
   BlueprintNoteKind,
+  BlueprintPointer,
+  BlueprintPointerKind,
   CodebaseGraph,
   FileNode,
   PatchImportAddition,
@@ -434,6 +436,101 @@ export function dropBlueprintSymbolNote(
   return notes.filter(
     (item) =>
       !(item.file === file && item.kind === kind && item.name === name),
+  )
+}
+
+export function blueprintPointerKey(
+  pointer: Pick<BlueprintPointer, 'kind' | 'path' | 'name'>,
+) {
+  return pointer.kind === 'file' || pointer.kind === 'folder'
+    ? `${pointer.kind}:${pointer.path}`
+    : `${pointer.kind}:${pointer.path}:${pointer.name ?? ''}`
+}
+
+function parseBlueprintPointer(value: unknown): BlueprintPointer | null {
+  if (!value || typeof value !== 'object') return null
+  const item = value as Partial<BlueprintPointer>
+  const path = typeof item.path === 'string' ? item.path.trim() : ''
+  if (!path) return null
+  if (item.kind === 'file' || item.kind === 'folder') {
+    return { kind: item.kind, path }
+  }
+  if (item.kind !== 'function' && item.kind !== 'variable') return null
+  const name = typeof item.name === 'string' ? item.name.trim() : ''
+  if (!name) return null
+  return { kind: item.kind, path, name }
+}
+
+export function parseBlueprintPointers(value: unknown): BlueprintPointer[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const pointers: BlueprintPointer[] = []
+  for (const item of value) {
+    const parsed = parseBlueprintPointer(item)
+    if (!parsed) continue
+    const key = blueprintPointerKey(parsed)
+    if (seen.has(key)) continue
+    seen.add(key)
+    pointers.push(parsed)
+  }
+  return pointers
+}
+
+export function findBlueprintPointer(
+  pointers: BlueprintPointer[],
+  kind: BlueprintPointerKind,
+  path: string,
+  name?: string,
+) {
+  return pointers.some((item) =>
+    kind === 'file' || kind === 'folder'
+      ? item.kind === kind && item.path === path
+      : item.kind === kind && item.path === path && item.name === name,
+  )
+}
+
+export function toggleBlueprintPointer(
+  pointers: BlueprintPointer[],
+  next: {
+    kind: BlueprintPointerKind
+    path: string
+    name?: string
+  },
+): BlueprintPointer[] {
+  const path = next.path.trim()
+  if (!path || path.startsWith('draft:')) return pointers
+  const key = blueprintPointerKey({ ...next, path })
+  const without = pointers.filter((item) => blueprintPointerKey(item) !== key)
+  if (without.length !== pointers.length) return without
+  if (next.kind === 'file' || next.kind === 'folder') {
+    return [...without, { kind: next.kind, path }]
+  }
+  const name = (next.name ?? '').trim()
+  if (!name) return without
+  return [...without, { kind: next.kind, path, name }]
+}
+
+export function dropBlueprintFilePointers(
+  pointers: BlueprintPointer[],
+  fileIds: Iterable<string>,
+  folderPaths: Iterable<string> = [],
+) {
+  const files = new Set(fileIds)
+  const folders = new Set(folderPaths)
+  return pointers.filter((item) =>
+    item.kind === 'folder' ? !folders.has(item.path) : !files.has(item.path),
+  )
+}
+
+export function dropBlueprintSymbolPointer(
+  pointers: BlueprintPointer[],
+  path: string,
+  kind: 'function' | 'variable',
+  name: string,
+) {
+  return pointers.filter(
+    (item) =>
+      !(item.kind === kind && item.path === path && item.name === name),
   )
 }
 

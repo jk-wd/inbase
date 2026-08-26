@@ -2,6 +2,7 @@ import { memo, Suspense } from 'react'
 import { Billboard, Edges, Html, Text } from '@react-three/drei'
 import { CHANGE_HIGHLIGHT, CONFIG, dimColor, fileColor, FILE_SELECTION, MAP_SELECTION, type ChangeKind } from '../theme'
 import { NameInput } from '../ui/NameInput'
+import { EyeIcon } from '../ui/EyeIcon'
 import { MapSelectBorder } from './MapSelectBorder'
 import type { FileNode } from '../types'
 import type { PlacedFile } from '../types'
@@ -30,6 +31,7 @@ type FileBlockProps = {
   highlightMapChange?: boolean
   previewLabels?: boolean
   labelVisible?: boolean
+  pointed?: boolean
   onCommitName?: (name: string) => void
   onCancelName?: () => void
 }
@@ -93,6 +95,7 @@ export const FileBlock = memo(function FileBlock({
   highlightMapChange = mapMode,
   previewLabels = false,
   labelVisible = true,
+  pointed = false,
   onCommitName,
   onCancelName,
 }: FileBlockProps) {
@@ -190,6 +193,30 @@ export const FileBlock = memo(function FileBlock({
       )}
       {mapMode && !naming && mark && (
         <MapChangeMark mark={mark} width={width} depth={depth} height={height} />
+      )}
+      {pointed && !naming && (
+        <Html
+          position={
+            mapMode
+              ? mark
+                ? [width * 0.28, height / 2 + 0.16, -depth * 0.28]
+                : [0, height / 2 + 0.12, 0]
+              : [0, height / 2 + (planned || highlight ? 0.92 : 0.74), 0]
+          }
+          center
+          occlude={false}
+          style={{ pointerEvents: 'none' }}
+          zIndexRange={[40, 0]}
+        >
+          <div
+            className="blueprint-eye"
+            data-map={mapMode ? 'true' : 'false'}
+            role="img"
+            aria-label="Keep in mind"
+          >
+            <EyeIcon size={mapMode ? 16 : 18} title="Keep in mind" />
+          </div>
+        </Html>
       )}
       {naming && onCommitName && onCancelName && (
         <Html

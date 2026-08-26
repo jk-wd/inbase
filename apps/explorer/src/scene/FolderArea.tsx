@@ -11,6 +11,7 @@ import {
 import type { PlacedFolder } from '../types'
 import { MapSelectBorder } from './MapSelectBorder'
 import { NameInput } from '../ui/NameInput'
+import { EyeIcon } from '../ui/EyeIcon'
 
 type FolderAreaProps = {
   folder: PlacedFolder
@@ -20,6 +21,7 @@ type FolderAreaProps = {
   highlightKind?: ChangeKind | null
   previewLabels?: boolean
   labelVisible?: boolean
+  pointed?: boolean
   onCommitName?: (name: string) => void
   onCancelName?: () => void
 }
@@ -32,6 +34,7 @@ export function FolderArea({
   highlightKind = null,
   previewLabels = false,
   labelVisible = true,
+  pointed = false,
   onCommitName,
   onCancelName,
 }: FolderAreaProps) {
@@ -92,6 +95,24 @@ export function FolderArea({
           <planeGeometry args={[folder.width, CONFIG.bridgeWidth]} />
           <meshBasicMaterial color={aisle} />
         </mesh>
+      )}
+      {pointed && !naming && (
+        <Html
+          position={[0, mapMode ? 1.15 : 1.45, -folder.depth / 2 + 2.2]}
+          center
+          occlude={false}
+          style={{ pointerEvents: 'none' }}
+          zIndexRange={[40, 0]}
+        >
+          <div
+            className="blueprint-eye"
+            data-map={mapMode ? 'true' : 'false'}
+            role="img"
+            aria-label="Keep in mind"
+          >
+            <EyeIcon size={mapMode ? 18 : 22} title="Keep in mind" />
+          </div>
+        </Html>
       )}
       {naming && mapMode && onCommitName && onCancelName && (
         <Html

@@ -73,6 +73,8 @@ type WorldProps = {
   userCreatedBlocks?: UserCreatedBlock[]
   userCreatedIslands?: UserCreatedIsland[]
   overlayBlocks?: UserCreatedBlock[]
+  pointedFileIds?: string[]
+  pointedFolderPaths?: string[]
   namingIslandId?: string | null
   mapGraph?: CodebaseGraph | null
   mapLayout?: WorldLayout | null
@@ -117,11 +119,15 @@ export function World({
   userCreatedBlocks = [],
   userCreatedIslands = [],
   overlayBlocks = [],
+  pointedFileIds = [],
+  pointedFolderPaths = [],
   mapGraph = null,
   mapLayout = null,
 }: WorldProps) {
   const created = new Set(createdIds)
   const deleted = new Set(deletedIds)
+  const pointedFiles = new Set(pointedFileIds)
+  const pointedFolders = new Set(pointedFolderPaths)
   const mapping = mode === 'map'
   const viewGraph = mapping && mapGraph ? mapGraph : graph
   const viewLayout = mapping && mapLayout ? mapLayout : layout
@@ -169,17 +175,19 @@ export function World({
     if (selectedId) ids.add(selectedId)
     if (namingId) ids.add(namingId)
     if (aimedRelation?.flyTo) ids.add(aimedRelation.flyTo)
+    for (const id of pointedFileIds) ids.add(id)
     if (ghostKey) {
       for (const id of ghostKey.split('|')) ids.add(id)
     }
     return ids
-  }, [aimedRelation?.flyTo, ghostKey, namingId, selectedId])
+  }, [aimedRelation?.flyTo, ghostKey, namingId, pointedFileIds, selectedId])
   const keepFolderPaths = useMemo(() => {
     const paths = new Set<string>()
     if (selectedFolder) paths.add(selectedFolder)
     if (namingIslandId) paths.add(namingIslandId)
+    for (const path of pointedFolderPaths) paths.add(path)
     return paths
-  }, [namingIslandId, selectedFolder])
+  }, [namingIslandId, pointedFolderPaths, selectedFolder])
   const originLod = useMemo(() => {
     if (mapping) return null
     return computeWalkLod({
@@ -254,6 +262,7 @@ export function World({
             highlightKind={
               mapping ? highlightedFolders[folder.path] ?? null : null
             }
+            pointed={pointedFolders.has(folder.path)}
             labelVisible={!lod || lod.folderLabels.has(folder.path)}
             onCommitName={
               folder.path === namingIslandId && onCommitIslandName
@@ -285,14 +294,22 @@ export function World({
         const changeKind = fileChangeKind(file.id, planned, created, deleted)
         const naming = file.id === namingId
         const aimed = file.id === aimedRelation?.flyTo
+        const pointed = pointedFiles.has(file.id)
         const detailed =
-          selected || isRelated || isPlanned || naming || aimed || Boolean(changeKind)
+          selected ||
+          isRelated ||
+          isPlanned ||
+          naming ||
+          aimed ||
+          pointed ||
+          Boolean(changeKind)
         if (lod && !lod.files.has(file.id)) return null
         const dimmed =
           hasFocus &&
           !selected &&
           !isRelated &&
           !changeKind &&
+          !pointed &&
           !patchLinked.has(file.id) &&
           !folderFileIds.has(file.id)
         if (lod && !detailed && !lod.labels.has(file.id)) {
@@ -310,6 +327,7 @@ export function World({
             changeKind={changeKind}
             added={created.has(file.id) || file.userCreated}
             aimed={aimed}
+            pointed={pointed}
             dimmed={dimmed}
             naming={naming}
             mapMode={mapping}
@@ -347,6 +365,7 @@ export function World({
             planned={false}
             changeKind="add"
             added
+            pointed={pointedFiles.has(file.id)}
             dimmed={false}
             mapMode={mapping}
             labelVisible

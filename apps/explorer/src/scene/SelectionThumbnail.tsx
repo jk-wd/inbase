@@ -30,6 +30,8 @@ type SelectionThumbnailProps = {
   plannedIds?: string[]
   createdIds?: string[]
   deletedIds?: string[]
+  pointedFileIds?: string[]
+  pointedFolderPaths?: string[]
   onMinimize?: () => void
   onMaximize?: () => void
   onHide: () => void
@@ -464,6 +466,8 @@ function ThumbnailScene({
   planned,
   created,
   deleted,
+  pointedFiles,
+  pointedFolders,
   zoom,
   zoomRef,
   panRef,
@@ -481,6 +485,8 @@ function ThumbnailScene({
   planned: Set<string>
   created: Set<string>
   deleted: Set<string>
+  pointedFiles: Set<string>
+  pointedFolders: Set<string>
   zoom: number
   zoomRef: { current: number }
   panRef: { current: Vec3 }
@@ -496,15 +502,18 @@ function ThumbnailScene({
         const selected = file.id === target.selectedFileId
         const related = target.relatedIds.has(file.id)
         const changeKind = fileChangeKind(file.id, planned, created, deleted)
+        const pointed = pointedFiles.has(file.id)
         const dimmed =
           Boolean(target.selectedFileId) &&
           !selected &&
           !related &&
-          !changeKind
+          !changeKind &&
+          !pointed
         let priority = placed.size[1]
         if (selected) priority += 1000
         else if (related) priority += 400
         else if (changeKind) priority += 300
+        else if (pointed) priority += 250
         else if (file.userCreated) priority += 80
         if (dimmed) priority -= 200
         return {
@@ -517,7 +526,7 @@ function ThumbnailScene({
           priority,
         }
       }),
-    [created, deleted, planned, target],
+      [created, deleted, planned, pointedFiles, target],
   )
 
   return (
@@ -554,12 +563,14 @@ function ThumbnailScene({
       <FolderArea
         folder={target.folder}
         highlightKind={highlightedFolders[target.folder.path] ?? null}
+        pointed={pointedFolders.has(target.folder.path)}
         previewLabels={zoom < 1.45}
       />
       {target.files.map(({ file, placed }) => {
         const selected = file.id === target.selectedFileId
         const related = target.relatedIds.has(file.id)
         const changeKind = fileChangeKind(file.id, planned, created, deleted)
+        const pointed = pointedFiles.has(file.id)
         return (
           <FileBlock
             key={file.id}
@@ -570,6 +581,7 @@ function ThumbnailScene({
             planned={Boolean(changeKind)}
             changeKind={changeKind}
             added={created.has(file.id) || file.userCreated}
+            pointed={pointed}
             highlightMapChange
             previewLabels
             labelVisible={visibleLabelIds.has(file.id)}
@@ -577,7 +589,8 @@ function ThumbnailScene({
               Boolean(target.selectedFileId) &&
               !selected &&
               !related &&
-              !changeKind
+              !changeKind &&
+              !pointed
             }
           />
         )

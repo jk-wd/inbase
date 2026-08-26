@@ -424,7 +424,8 @@ function blueprintHasContent(blueprint) {
     (blueprint.addedFunctions?.length ?? 0) > 0 ||
     (blueprint.addedVariables?.length ?? 0) > 0 ||
     (blueprint.addedImports?.length ?? 0) > 0 ||
-    (blueprint.notes?.length ?? 0) > 0
+    (blueprint.notes?.length ?? 0) > 0 ||
+    (blueprint.pointers?.length ?? 0) > 0
   )
 }
 
@@ -801,6 +802,7 @@ export function sessionIntent(
     blueprintVariables: blueprint.addedVariables,
     blueprintImports: blueprint.addedImports,
     blueprintNotes: blueprint.notes,
+    blueprintPointers: blueprint.pointers,
   }
 }
 
@@ -1020,9 +1022,19 @@ export function autoAdvance(dataDir, sessionId, targetRoot = null) {
     const active = manifest.diffs.at(-1)
     if (!active || active.status !== 'pending') return manifest
     if (active.step >= manifest.steps.length) return manifest
+    if (isRevisedProposal(manifest, active)) return manifest
     return invokeStep(dataDir, sessionId, active.step + 1, targetRoot)
   }
   return manifest
+}
+
+function isRevisedProposal(manifest, active) {
+  return manifest.diffs.some(
+    (entry) =>
+      entry.id !== active.id &&
+      entry.step === active.step &&
+      (entry.status === 'extended' || entry.status === 'extend'),
+  )
 }
 
 export function setStepByStep(dataDir, sessionId, enabled, targetRoot = null) {
@@ -1277,6 +1289,7 @@ export function updateBlueprint(dataDir, _sessionId, input = {}) {
     addedVariables: input.addedVariables ?? current.addedVariables,
     addedImports: input.addedImports ?? current.addedImports,
     notes: input.notes ?? current.notes,
+    pointers: input.pointers ?? current.pointers,
   }
   return writeBlueprint(dataDir, next)
 }
@@ -1293,7 +1306,8 @@ export function sendBlueprint(dataDir, sessionId, input = {}) {
     input.addedFunctions ||
     input.addedVariables ||
     input.addedImports ||
-    input.notes
+    input.notes ||
+    input.pointers
   ) {
     updateBlueprint(dataDir, safeId, input)
   }
@@ -1755,6 +1769,7 @@ export function emptyBlueprint() {
     addedVariables: [],
     addedImports: [],
     notes: [],
+    pointers: [],
   }
 }
 
@@ -1849,6 +1864,36 @@ function namedBlueprintNotes(value) {
   return notes
 }
 
+function namedBlueprintPointers(value) {
+  if (!Array.isArray(value)) return []
+  const seen = new Set()
+  const pointers = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const path = typeof item.path === 'string' ? item.path.trim() : ''
+    if (!path) continue
+    let stored = null
+    if (item.kind === 'file' || item.kind === 'folder') {
+      stored = { kind: item.kind, path }
+    } else if (
+      (item.kind === 'function' || item.kind === 'variable') &&
+      typeof item.name === 'string' &&
+      item.name.trim() !== ''
+    ) {
+      stored = { kind: item.kind, path, name: item.name.trim() }
+    }
+    if (!stored) continue
+    const key =
+      stored.kind === 'file' || stored.kind === 'folder'
+        ? `${stored.kind}:${stored.path}`
+        : `${stored.kind}:${stored.path}:${stored.name}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    pointers.push(stored)
+  }
+  return pointers
+}
+
 function blueprintContentEqual(left, right) {
   return (
     JSON.stringify({
@@ -1858,6 +1903,7 @@ function blueprintContentEqual(left, right) {
       addedVariables: left.addedVariables,
       addedImports: left.addedImports,
       notes: left.notes,
+      pointers: left.pointers,
     }) ===
     JSON.stringify({
       userCreatedBlocks: right.userCreatedBlocks,
@@ -1866,6 +1912,7 @@ function blueprintContentEqual(left, right) {
       addedVariables: right.addedVariables,
       addedImports: right.addedImports,
       notes: right.notes,
+      pointers: right.pointers,
     })
   )
 }
@@ -1877,6 +1924,7 @@ function normalizeBlueprint(value) {
   const addedVariables = namedBlueprintSymbols(value?.addedVariables)
   const addedImports = namedBlueprintImportAdditions(value?.addedImports)
   const notes = namedBlueprintNotes(value?.notes)
+  const pointers = namedBlueprintPointers(value?.pointers)
   const revision =
     Number.isInteger(value?.revision) && value.revision >= 0 ? value.revision : 0
   return {
@@ -1889,6 +1937,7 @@ function normalizeBlueprint(value) {
       addedVariables,
       addedImports,
       notes,
+      pointers,
     }),
     sent: true,
     userCreatedBlocks,
@@ -1897,6 +1946,7 @@ function normalizeBlueprint(value) {
     addedVariables,
     addedImports,
     notes,
+    pointers,
   }
 }
 
@@ -1935,6 +1985,7 @@ export function writeBlueprint(dataDir, sessionIdOrBlueprint, maybeBlueprint) {
         addedVariables: namedBlueprintSymbols(next.addedVariables),
         addedImports: namedBlueprintImportAdditions(next.addedImports),
         notes: namedBlueprintNotes(next.notes),
+        pointers: namedBlueprintPointers(next.pointers),
       },
       null,
       2,
@@ -1973,6 +2024,7 @@ export function cleanupBlueprint(dataDir, knownFileIds = [], knownFolderPaths = 
     addedVariables: current.addedVariables.filter((item) => !removedFiles.has(item.file)),
     addedImports: current.addedImports.filter((item) => !removedFiles.has(item.file)),
     notes: current.notes.filter((item) => !removedFiles.has(item.file)),
+    pointers: current.pointers,
   }
   return writeBlueprint(dataDir, next)
 }

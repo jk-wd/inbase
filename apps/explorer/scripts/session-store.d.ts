@@ -185,6 +185,7 @@ export type SessionBlueprint = {
   addedVariables: unknown[]
   addedImports: unknown[]
   notes: unknown[]
+  pointers: unknown[]
 }
 export function emptyBlueprint(): SessionBlueprint
 export function readBlueprint(dataDir: string, sessionId?: string): SessionBlueprint
@@ -224,6 +225,7 @@ export function updateBlueprint(
     addedVariables?: unknown[]
     addedImports?: unknown[]
     notes?: unknown[]
+    pointers?: unknown[]
   },
 ): SessionBlueprint
 export function sendBlueprint(
@@ -236,6 +238,7 @@ export function sendBlueprint(
     addedVariables?: unknown[]
     addedImports?: unknown[]
     notes?: unknown[]
+    pointers?: unknown[]
   },
 ): DiffManifest
 export function maybeStartVisualizerHandshake(

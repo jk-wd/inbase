@@ -55,7 +55,7 @@ A normal chat request does not open a session. Use `/inbase` after Setup LLM ses
 
 If several sessions are open, `/inbase` attaches the oldest session that is still waiting. Sessions that already have an LLM are skipped, and the map window does not need to be focused.
 
-Turn on **Make LLM look where I look** if the agent should prefer the island you are standing on and the blocks you are facing. With **Step by step** on, click **Create proposal** to start a step, then **Accept proposal** when the patch is ready. With it off, the LLM implements the full plan; you can still walk Previous/Next over the diffs, then **Accept proposal**. Send an alternative instruction from the HUD to revise the remaining plan, or **Stop** to end the session.
+Turn on **Make LLM look where I look** if the agent should prefer the island you are standing on and the blocks you are facing. With **Step by step** on, click **Create proposal** to start a step, then **Accept proposal** when the patch is ready. With it off, the LLM implements the full plan; you can still walk Previous/Next over the diffs, then **Accept proposal**. Send an alternative instruction from the HUD to update the current proposal, or **Stop** to end the session.
 
 When no LLM is currently making changes, turn on **Show branch changes** (or press **G**) to highlight the current git branch against its base — committed, unstaged, and untracked files — instead of LLM patch files. The control is disabled while an LLM session is writing or reviewing a patch.
 

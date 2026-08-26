@@ -10,6 +10,8 @@ import {
   type AimedRelation,
   type BlueprintNote,
   type BlueprintNoteKind,
+  type BlueprintPointer,
+  type BlueprintPointerKind,
   type BranchChanges,
   type CodebaseGraph,
   type PatchImportAddition,
@@ -18,7 +20,8 @@ import {
   type WorldLayout,
   type WorkflowAction,
 } from '../types'
-import { findBlueprintNote } from '../userCreated'
+import { findBlueprintNote, findBlueprintPointer } from '../userCreated'
+import { EyeIcon } from './EyeIcon'
 import { beginKeyboardIsolation, shouldIgnoreShortcut } from '../keyboard'
 
 function reviewTitle(status: AgentIntentStatus) {
@@ -311,25 +314,43 @@ function BlueprintSymbolRow({
   className,
   hasNote,
   noteOpen,
+  pointed,
   canEdit,
   canRemove,
   onRemove,
   onOpenNote,
+  onTogglePoint,
 }: {
   name: string
   className?: string
   hasNote: boolean
   noteOpen?: boolean
+  pointed?: boolean
   canEdit: boolean
   canRemove?: boolean
   onRemove?: () => void
   onOpenNote: () => void
+  onTogglePoint?: () => void
 }) {
   return (
     <li>
       <span className={className}>{name}</span>
       {canEdit && (
         <div className="hud-item-actions">
+          {onTogglePoint && (
+            <button
+              className="hud-item-point"
+              type="button"
+              data-pointed={pointed ? 'true' : 'false'}
+              aria-label={
+                pointed ? `Stop pointing to ${name}` : `Point to ${name}`
+              }
+              aria-pressed={Boolean(pointed)}
+              onClick={onTogglePoint}
+            >
+              <EyeIcon size={13} />
+            </button>
+          )}
           <button
             className="hud-item-note"
             type="button"
@@ -570,7 +591,8 @@ function blueprintIsDefined(intent: AgentIntent) {
     (intent.blueprintFunctions?.length ?? 0) > 0 ||
     (intent.blueprintVariables?.length ?? 0) > 0 ||
     (intent.blueprintImports?.length ?? 0) > 0 ||
-    (intent.blueprintNotes?.length ?? 0) > 0
+    (intent.blueprintNotes?.length ?? 0) > 0 ||
+    (intent.blueprintPointers?.length ?? 0) > 0
   )
 }
 
@@ -680,6 +702,11 @@ function sessionLiveStatus(intent: AgentIntent) {
   if (intent.awaitingAttach) {
     return { text: 'Waiting for /inbase in Cursor', busy: false }
   }
+  if (intent.status === 'pending') {
+    return intent.listening
+      ? { text: 'LLM is listening — accept or send an instruction', busy: false }
+      : { text: 'Review this step', busy: false }
+  }
   if (kind === 'execute') {
     return { text: `LLM received ${detail}`, busy: true }
   }
@@ -707,11 +734,6 @@ function sessionLiveStatus(intent: AgentIntent) {
     return intent.listening
       ? { text: 'LLM is listening — run the next step', busy: false }
       : { text: 'Plan ready', busy: false }
-  }
-  if (intent.status === 'pending') {
-    return intent.listening
-      ? { text: 'LLM is listening — accept or send an instruction', busy: false }
-      : { text: 'Review this step', busy: false }
   }
   if (
     kind === 'attached' ||
@@ -797,13 +819,16 @@ function SessionPanel({
   const [contextBusy, setContextBusy] = useState(false)
   const [contextError, setContextError] = useState<string | null>(null)
   const sessionId = intent.sessionId
-  const pending = intent.status === 'pending' && intent.isActiveDiff
+  const latestEntry = intent.isActiveDiff ? intent.chain.at(-1) : null
+  const pending =
+    latestEntry?.status === 'pending' ||
+    (intent.status === 'pending' && intent.isActiveDiff)
   const askingBlueprint = intent.status === 'blueprint_ask'
   const sendingBlueprint = intent.status === 'blueprint'
   const canPlace = Boolean(intent.creationMode)
   const preparing = intent.status === 'preparing'
-  const planReady = intent.status === 'planned'
   const working = intent.status === 'working' || intent.status === 'replanning'
+  const planReady = intent.status === 'planned' && !pending
   const previewing = intent.preview
   const chainIndex = intent.chainIndex ?? 0
   const previousDiff = intent.chain[chainIndex - 1]
@@ -812,10 +837,6 @@ function SessionPanel({
     intent.step && intent.steps?.length > 0
       ? `Step ${intent.step} of ${intent.steps.length}`
       : 'Patch'
-  const lastStep =
-    typeof intent.step === 'number' &&
-    intent.steps.length > 0 &&
-    intent.step >= intent.steps.length
   const stepByStep = intent.stepByStep !== false
   const addedFunctions = intent.addedFunctions ?? []
   const addedVariables = intent.addedVariables ?? []
@@ -826,25 +847,27 @@ function SessionPanel({
     intent.status === 'finished'
       ? intent.steps.map((step) => step.index)
       : intent.chain
-          .filter(
-            (entry) =>
-              entry.status === 'applied' || entry.status === 'extended',
-          )
+          .filter((entry) => entry.status === 'applied')
           .map((entry) => entry.step),
   )
   if (intent.status === 'approved' && typeof intent.step === 'number') {
     acceptedSteps.add(intent.step)
   }
-  const proposalStep =
-    pending && typeof intent.step === 'number' ? intent.step : null
+  const proposalStep = pending
+    ? (latestEntry?.status === 'pending' ? latestEntry.step : intent.step)
+    : null
   const processingStep =
     working && typeof intent.step === 'number' ? intent.step : null
   const invokeStep =
-    planReady && !working
+    planReady && !working && proposalStep === null
       ? (intent.steps.find((step) => !acceptedSteps.has(step.index)) ?? null)
       : null
   const canRunNext = stepByStep && Boolean(invokeStep)
   const canAcceptProposal = proposalStep !== null
+  const lastStep =
+    typeof proposalStep === 'number' &&
+    intent.steps.length > 0 &&
+    proposalStep >= intent.steps.length
   const panelDone =
     intent.status === 'finished' ||
     intent.status === 'approved' ||
@@ -1071,7 +1094,7 @@ function SessionPanel({
                   {intent.steps.map((step) => {
                     const proposed = proposalStep === step.index
                     const processing = processingStep === step.index
-                    const accepted = acceptedSteps.has(step.index)
+                    const accepted = acceptedSteps.has(step.index) && !proposed
                     const creating = processing && !proposed
                     const showStepAction =
                       creating ||
@@ -1270,7 +1293,7 @@ function SessionPanel({
                       value={instruction}
                       maxLength={4000}
                       rows={3}
-                      placeholder="Describe what should change in the next diff…"
+                      placeholder="Describe what should change in this proposal…"
                       onChange={(event) => setInstruction(event.target.value)}
                       onKeyDown={(event) => event.stopPropagation()}
                     />
@@ -1546,6 +1569,11 @@ function explorerInstructions({
           ? [
               { id: 'space', keys: ['Space'], label: 'Place file' },
               { id: 'b-island', keys: ['B'], label: 'Place island' },
+              {
+                id: 'point-to',
+                keys: ['Point to'],
+                label: 'Keep a file, folder, or function in mind',
+              },
             ]
           : []),
         ...backspace,
@@ -1629,7 +1657,7 @@ function explorerInstructions({
               {
                 id: 'add-file-folder',
                 keys: ['Right-click'],
-                label: 'Add file or folder',
+                label: 'Add file or folder, or point to a folder',
               },
             ]
           : []),
@@ -1739,6 +1767,7 @@ type HUDProps = {
   blueprintVariables?: PatchSymbolAddition[]
   blueprintImports?: PatchImportAddition[]
   blueprintNotes?: BlueprintNote[]
+  blueprintPointers?: BlueprintPointer[]
   onAddBlueprintFunction?: (fileId: string, name: string) => boolean
   onAddBlueprintVariable?: (fileId: string, name: string) => boolean
   onAddBlueprintImport?: (fileId: string, raw: string) => boolean
@@ -1754,6 +1783,11 @@ type HUDProps = {
     kind: BlueprintNoteKind
     name?: string
     note: string
+  }) => void
+  onToggleBlueprintPointer?: (next: {
+    kind: BlueprintPointerKind
+    path: string
+    name?: string
   }) => void
   onMapAddFile?: (folderPath: string) => void
   onMapAddFolder?: (folderPath: string) => void
@@ -1814,6 +1848,7 @@ export function HUD({
   blueprintVariables = [],
   blueprintImports = [],
   blueprintNotes = [],
+  blueprintPointers = [],
   onAddBlueprintFunction,
   onAddBlueprintVariable,
   onAddBlueprintImport,
@@ -1821,6 +1856,7 @@ export function HUD({
   onRemoveBlueprintVariable,
   onRemoveBlueprintImport,
   onSetBlueprintNote,
+  onToggleBlueprintPointer,
   onMapAddFile,
   onMapAddFolder,
   onInspectFile,
@@ -1950,6 +1986,16 @@ export function HUD({
   const selectedFileNote = selected
     ? findBlueprintNote(blueprintNotes, selected.id, 'file')
     : ''
+  const selectedFilePointed = selected
+    ? findBlueprintPointer(blueprintPointers, 'file', selected.id)
+    : false
+  const selectedFolderPointed = selectedFolderNode
+    ? findBlueprintPointer(
+        blueprintPointers,
+        'folder',
+        selectedFolderNode.path,
+      )
+    : false
   const openFileNote = () => {
     if (!selected || !onSetBlueprintNote) return
     setInstructionsOpen(false)
@@ -2282,6 +2328,20 @@ export function HUD({
               Inspect file
             </button>
           )}
+          {canEditBlueprint && onToggleBlueprintPointer && (
+            <button
+              className="hud-button hud-inspect hud-point"
+              type="button"
+              data-pointed={selectedFilePointed ? 'true' : 'false'}
+              aria-pressed={selectedFilePointed}
+              onClick={() =>
+                onToggleBlueprintPointer({ kind: 'file', path: selected.id })
+              }
+            >
+              <EyeIcon size={15} />
+              {selectedFilePointed ? 'Stop pointing' : 'Point to file'}
+            </button>
+          )}
           {canEditBlueprint && onSetBlueprintNote && (
             <button
               className="hud-button hud-inspect"
@@ -2373,10 +2433,26 @@ export function HUD({
                   }
                   canEdit={Boolean(canEditBlueprint && onSetBlueprintNote)}
                   canRemove={Boolean(canEditBlueprint && symbol.intended)}
+                  pointed={findBlueprintPointer(
+                    blueprintPointers,
+                    'function',
+                    selected.id,
+                    symbol.name,
+                  )}
                   onRemove={() =>
                     onRemoveBlueprintFunction?.(selected.id, symbol.name)
                   }
                   onOpenNote={() => openSymbolNote('function', symbol.name)}
+                  onTogglePoint={
+                    onToggleBlueprintPointer
+                      ? () =>
+                          onToggleBlueprintPointer({
+                            kind: 'function',
+                            path: selected.id,
+                            name: symbol.name,
+                          })
+                      : undefined
+                  }
                 />
               ))}
               {extraAddedFunctions.map((item) => (
@@ -2398,7 +2474,23 @@ export function HUD({
                     noteEditor.name === item.name
                   }
                   canEdit={Boolean(canEditBlueprint && onSetBlueprintNote)}
+                  pointed={findBlueprintPointer(
+                    blueprintPointers,
+                    'function',
+                    selected.id,
+                    item.name,
+                  )}
                   onOpenNote={() => openSymbolNote('function', item.name)}
+                  onTogglePoint={
+                    onToggleBlueprintPointer
+                      ? () =>
+                          onToggleBlueprintPointer({
+                            kind: 'function',
+                            path: selected.id,
+                            name: item.name,
+                          })
+                      : undefined
+                  }
                 />
               ))}
             </ul>
@@ -2439,10 +2531,26 @@ export function HUD({
                   }
                   canEdit={Boolean(canEditBlueprint && onSetBlueprintNote)}
                   canRemove={Boolean(canEditBlueprint && symbol.intended)}
+                  pointed={findBlueprintPointer(
+                    blueprintPointers,
+                    'variable',
+                    selected.id,
+                    symbol.name,
+                  )}
                   onRemove={() =>
                     onRemoveBlueprintVariable?.(selected.id, symbol.name)
                   }
                   onOpenNote={() => openSymbolNote('variable', symbol.name)}
+                  onTogglePoint={
+                    onToggleBlueprintPointer
+                      ? () =>
+                          onToggleBlueprintPointer({
+                            kind: 'variable',
+                            path: selected.id,
+                            name: symbol.name,
+                          })
+                      : undefined
+                  }
                 />
               ))}
               {extraAddedVariables.map((item) => (
@@ -2464,7 +2572,23 @@ export function HUD({
                     noteEditor.name === item.name
                   }
                   canEdit={Boolean(canEditBlueprint && onSetBlueprintNote)}
+                  pointed={findBlueprintPointer(
+                    blueprintPointers,
+                    'variable',
+                    selected.id,
+                    item.name,
+                  )}
                   onOpenNote={() => openSymbolNote('variable', item.name)}
+                  onTogglePoint={
+                    onToggleBlueprintPointer
+                      ? () =>
+                          onToggleBlueprintPointer({
+                            kind: 'variable',
+                            path: selected.id,
+                            name: item.name,
+                          })
+                      : undefined
+                  }
                 />
               ))}
             </ul>
@@ -2608,6 +2732,24 @@ export function HUD({
               ))}
             </ul>
           )}
+          {canPlace && onToggleBlueprintPointer && (
+            <button
+              className="hud-button hud-inspect hud-point"
+              type="button"
+              data-pointed={selectedFolderPointed ? 'true' : 'false'}
+              aria-pressed={selectedFolderPointed}
+              disabled={naming || selectedFolderNode.path.startsWith('draft:')}
+              onClick={() =>
+                onToggleBlueprintPointer({
+                  kind: 'folder',
+                  path: selectedFolderNode.path,
+                })
+              }
+            >
+              <EyeIcon size={15} />
+              {selectedFolderPointed ? 'Stop pointing' : 'Point to folder'}
+            </button>
+          )}
           {canPlace && mapping && onMapAddFile && onMapAddFolder && (
             <div className="hud-decide hud-map-blueprint">
               <button
@@ -2646,6 +2788,20 @@ export function HUD({
           plannedIds={plannedIds}
           createdIds={createdIds}
           deletedIds={deletedIds}
+          pointedFileIds={
+            blueprintHidden
+              ? []
+              : blueprintPointers.flatMap((item) =>
+                  item.kind === 'folder' ? [] : [item.path],
+                )
+          }
+          pointedFolderPaths={
+            blueprintHidden
+              ? []
+              : blueprintPointers.flatMap((item) =>
+                  item.kind === 'folder' ? [item.path] : [],
+                )
+          }
           onMinimize={() => {
             setThumbnailMaximized(false)
             setThumbnailMinimized((current) => !current)

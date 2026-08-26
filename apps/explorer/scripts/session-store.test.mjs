@@ -633,6 +633,30 @@ test('blueprint stays shared after a session finishes and can be cleaned up', ()
   }
 })
 
+test('pointers mark existing files for the LLM to keep in mind', () => {
+  const env = fixture()
+  try {
+    const pointers = [
+      { kind: 'file', path: 'src/a.ts' },
+      { kind: 'folder', path: 'src' },
+      { kind: 'function', path: 'src/a.ts', name: 'value' },
+    ]
+    const stored = updateBlueprint(env.dataDir, null, { pointers })
+    assert.equal(stored.enabled, true)
+    assert.deepEqual(stored.pointers, pointers)
+
+    const cleaned = cleanupBlueprint(env.dataDir, ['src/a.ts'], ['src', '.'])
+    assert.deepEqual(cleaned.pointers, pointers)
+    assert.equal(cleaned.enabled, true)
+
+    const cleared = clearBlueprint(env.dataDir)
+    assert.deepEqual(cleared.pointers, [])
+    assert.equal(cleared.enabled, false)
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('stores an LLM-generated name so concurrent sessions stay distinct', () => {
   const env = fixture()
   try {
@@ -1035,6 +1059,15 @@ test('alternative instruction keeps the current proposal on disk', () => {
     const replacement = sessionIntent(env.dataDir, 'replan-chat', ['src/a.ts'])
     assert.deepEqual(replacement.files, ['src/a.ts'])
     assert.equal(replacement.diffId, revised.entry.id)
+    assert.equal(replacement.status, 'pending')
+    assert.equal(replacement.phase, 'review')
+    assert.equal(replacement.step, 1)
+    assert.equal(replacement.chain.at(-1).status, 'pending')
+    assert.equal(replacement.chain.at(-1).step, 1)
+    assert.equal(
+      replacement.chain.filter((entry) => entry.status === 'applied').length,
+      0,
+    )
     materializeDiff(env.dataDir, env.targetRoot, 'replan-chat', '0001')
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
@@ -1058,6 +1091,48 @@ test('alternative instruction keeps the current proposal on disk', () => {
     })
     continueDiff(env.dataDir, env.targetRoot, 'replan-chat', '0003')
     assert.equal(readManifest(env.dataDir, 'replan-chat'), null)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('revised proposal stays on the same step instead of advancing', () => {
+  const env = fixture()
+  try {
+    reportPlan(env.dataDir, {
+      sessionId: 'revise-stay',
+      feature: 'Stay',
+      stepTitles: ['Build value', 'Finish value'],
+    })
+    invokeStep(env.dataDir, 'revise-stay', 1)
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'revise-stay',
+      patchText: oneToTwo,
+    })
+    requestReplan(
+      env.dataDir,
+      'revise-stay',
+      '0001',
+      'Use three instead',
+      env.targetRoot,
+    )
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'revise-stay',
+      patchText: oneToThree,
+    })
+    const intent = sessionIntent(env.dataDir, 'revise-stay', ['src/a.ts'])
+    assert.equal(intent.status, 'pending')
+    assert.equal(intent.step, 1)
+    assert.equal(intent.chain.at(-1).status, 'pending')
+
+    setStepByStep(env.dataDir, 'revise-stay', false, env.targetRoot)
+    const after = readManifest(env.dataDir, 'revise-stay')
+    assert.equal(after.phase, 'review')
+    assert.equal(after.currentStep, 1)
+    assert.equal(after.diffs.at(-1).status, 'pending')
+    const still = sessionIntent(env.dataDir, 'revise-stay', ['src/a.ts'])
+    assert.equal(still.status, 'pending')
+    assert.equal(still.step, 1)
   } finally {
     env.cleanup()
   }
