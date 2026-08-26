@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import {
   collectImportSpecifiers,
   extractImportBindings,
@@ -12,6 +13,8 @@ import {
 } from './js-source.mjs'
 import { shouldIgnoreRelativePath } from './scan-ignore.mjs'
 import { scanTarget } from './scan-target.mjs'
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
 
 function scanQuiet(options) {
   const log = console.log
@@ -196,7 +199,7 @@ test('skips nested junk directories when scanning a monorepo', () => {
 })
 
 test('honours a nested gitignore in a git monorepo', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'visual-coder-gitmono-'))
+  const root = fs.mkdtempSync(path.join(repoRoot, '.tmp-gitmono-'))
   const dest = path.join(root, 'codebase.json')
   try {
     fs.mkdirSync(path.join(root, 'apps/web/src'), { recursive: true })

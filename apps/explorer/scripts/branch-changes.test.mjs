@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { emptyBranchChanges, readBranchChanges } from './branch-changes.mjs'
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
 
 function runGit(cwd, args) {
   const result = spawnSync('git', args, {
@@ -25,7 +27,7 @@ function runGit(cwd, args) {
 }
 
 function fixture(nestedTarget = false) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'visual-coder-branch-'))
+  const root = fs.mkdtempSync(path.join(repoRoot, '.tmp-branch-'))
   const repo = path.join(root, 'repo')
   const targetRoot = nestedTarget ? path.join(repo, 'apps', 'demo') : repo
   fs.mkdirSync(path.join(targetRoot, 'src'), { recursive: true })
@@ -55,7 +57,7 @@ test('empty branch changes are unavailable', () => {
 })
 
 test('returns unavailable outside a git repo', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'visual-coder-nogit-'))
+  const root = fs.mkdtempSync(path.join(repoRoot, '.tmp-branch-nogit-'))
   try {
     const changes = readBranchChanges(root)
     assert.equal(changes.available, false)

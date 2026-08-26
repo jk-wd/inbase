@@ -3,7 +3,7 @@ dist
 .DS_Store
 *.local
 .inbase
-.tmp-cli-*
+.tmp-*
 *.tgz
 apps/explorer/src/data/instance.json
 apps/explorer/src/data/active-session.json
