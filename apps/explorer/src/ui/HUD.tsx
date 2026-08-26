@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { persistAddContextFiles, persistInitialInstruction, persistRemoveContextFile } from '../agentIntent'
 import { NameInput } from './NameInput'
 import { SelectionThumbnail } from '../scene/SelectionThumbnail'
+import { CanvasErrorBoundary } from './CanvasErrorBoundary'
 import {
   canStopSession,
   isReviewingIntent,
@@ -2776,7 +2777,8 @@ export function HUD({
       )}
 
       {mapping && thumbnailVisible && (
-        <SelectionThumbnail
+        <CanvasErrorBoundary fallback={null}>
+          <SelectionThumbnail
           graph={graph}
           layout={layout}
           selectedId={selectedId}
@@ -2816,6 +2818,7 @@ export function HUD({
             setThumbnailMaximized(false)
           }}
         />
+        </CanvasErrorBoundary>
       )}
       </div>
 

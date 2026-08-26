@@ -64,6 +64,15 @@ button {
   font-size: 15px;
 }
 
+.canvas-error {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  background: var(--vc-chrome);
+}
+
 .canvas-error .hud-button {
   margin-top: 12px;
 }

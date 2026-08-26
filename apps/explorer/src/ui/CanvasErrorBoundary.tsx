@@ -2,6 +2,7 @@ import { Component, type ReactNode } from 'react'
 
 type Props = {
   children: ReactNode
+  fallback?: ReactNode
 }
 
 type State = {
@@ -21,6 +22,7 @@ export class CanvasErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.failed) {
+      if (this.props.fallback !== undefined) return this.props.fallback
       return (
         <div className="canvas-error">
           <div className="hud-gate-card">

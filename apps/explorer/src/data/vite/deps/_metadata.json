@@ -1,0 +1,88 @@
+{
+  "hash": "080c17b7",
+  "configHash": "3d28501e",
+  "lockfileHash": "0c44423c",
+  "browserHash": "2c13929e",
+  "optimized": {
+    "react": {
+      "src": "../../../../../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "05c7fbb1",
+      "needsInterop": true
+    },
+    "react-dom": {
+      "src": "../../../../../../node_modules/react-dom/index.js",
+      "file": "react-dom.js",
+      "fileHash": "218964e3",
+      "needsInterop": true
+    },
+    "three": {
+      "src": "../../../../../../node_modules/three/build/three.module.js",
+      "file": "three.js",
+      "fileHash": "46dd6bab",
+      "needsInterop": false
+    },
+    "@react-three/fiber": {
+      "src": "../../../../../../node_modules/@react-three/fiber/dist/react-three-fiber.esm.js",
+      "file": "@react-three_fiber.js",
+      "fileHash": "d9426958",
+      "needsInterop": false
+    },
+    "@react-three/drei": {
+      "src": "../../../../../../node_modules/@react-three/drei/index.js",
+      "file": "@react-three_drei.js",
+      "fileHash": "27d70398",
+      "needsInterop": false
+    },
+    "react/jsx-dev-runtime": {
+      "src": "../../../../../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "7539c578",
+      "needsInterop": true
+    },
+    "react/jsx-runtime": {
+      "src": "../../../../../../node_modules/react/jsx-runtime.js",
+      "file": "react_jsx-runtime.js",
+      "fileHash": "7f83ab11",
+      "needsInterop": true
+    },
+    "react-dom/client": {
+      "src": "../../../../../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "8cb8eab4",
+      "needsInterop": true
+    }
+  },
+  "chunks": {
+    "hls-54HQICEW": {
+      "file": "hls-54HQICEW.js"
+    },
+    "vision_bundle-ETO7PL2C": {
+      "file": "vision_bundle-ETO7PL2C.js"
+    },
+    "chunk-LCC7DBJH": {
+      "file": "chunk-LCC7DBJH.js"
+    },
+    "chunk-ML4Q653B": {
+      "file": "chunk-ML4Q653B.js"
+    },
+    "chunk-NH26DDVZ": {
+      "file": "chunk-NH26DDVZ.js"
+    },
+    "chunk-3OXNYZDG": {
+      "file": "chunk-3OXNYZDG.js"
+    },
+    "chunk-PHGV3POH": {
+      "file": "chunk-PHGV3POH.js"
+    },
+    "chunk-4O2KNK3F": {
+      "file": "chunk-4O2KNK3F.js"
+    },
+    "chunk-JECH5NB3": {
+      "file": "chunk-JECH5NB3.js"
+    },
+    "chunk-G3PMV62Z": {
+      "file": "chunk-G3PMV62Z.js"
+    }
+  }
+}

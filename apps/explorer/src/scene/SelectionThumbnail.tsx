@@ -11,6 +11,7 @@ import {
 import { CONFIG, WORLD_VOID, type ChangeKind } from '../theme'
 import { shouldIgnoreShortcut } from '../keyboard'
 import type { CodebaseGraph, PlacedFile, PlacedFolder, WorldLayout } from '../types'
+import { CanvasErrorBoundary } from '../ui/CanvasErrorBoundary'
 import { FileBlock } from './FileBlock'
 import { FolderArea } from './FolderArea'
 import { RelationLines } from './RelationLines'
@@ -645,6 +646,7 @@ export function SelectionThumbnail({
   const [zoom, setZoom] = useState(1)
   const [panning, setPanning] = useState(false)
   const [orbiting, setOrbiting] = useState(false)
+  const [canvasReady, setCanvasReady] = useState(false)
   const [visibleLabelIds, setVisibleLabelIds] = useState<Set<string>>(
     () => new Set(),
   )
@@ -669,6 +671,11 @@ export function SelectionThumbnail({
   )
 
   const panningRef = useRef(false)
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setCanvasReady(true))
+    return () => window.cancelAnimationFrame(frame)
+  }, [])
 
   useEffect(() => {
     zoomRef.current = 1
@@ -973,37 +980,49 @@ export function SelectionThumbnail({
         data-panning={panning}
         data-orbiting={orbiting}
       >
-        <Canvas
-          shadows={false}
-          dpr={[1, 1.5]}
-          resize={{ offsetSize: true }}
-          gl={{ antialias: true, toneMappingExposure: 1.25 }}
-          camera={{
-            fov: 50,
-            near: 0.1,
-            far: 400,
-            position: target.camera.position,
-          }}
-        >
-          <ThumbnailScene
-            graph={graph}
-            layout={layout}
-            importedBy={importedBy}
-            target={target}
-            highlightedFolders={highlightedFolders}
-            planned={planned}
-            created={created}
-            deleted={deleted}
-            zoom={zoom}
-            zoomRef={zoomRef}
-            panRef={panRef}
-            orbitRef={orbitRef}
-            cameraRef={cameraRef}
-            frozenRef={panningRef}
-            visibleLabelIds={visibleLabelIds}
-            onVisibleLabels={setVisibleLabelIds}
-          />
-        </Canvas>
+        {canvasReady ? (
+          <CanvasErrorBoundary
+            fallback={
+              <div className="hud-thumbnail-hint">3D preview unavailable</div>
+            }
+          >
+            <Canvas
+              shadows={false}
+              dpr={[1, 1]}
+              resize={{ offsetSize: true }}
+              gl={{
+                antialias: false,
+                powerPreference: 'low-power',
+                toneMappingExposure: 1.25,
+              }}
+              camera={{
+                fov: 50,
+                near: 0.1,
+                far: 400,
+                position: target.camera.position,
+              }}
+            >
+              <ThumbnailScene
+                graph={graph}
+                layout={layout}
+                importedBy={importedBy}
+                target={target}
+                highlightedFolders={highlightedFolders}
+                planned={planned}
+                created={created}
+                deleted={deleted}
+                zoom={zoom}
+                zoomRef={zoomRef}
+                panRef={panRef}
+                orbitRef={orbitRef}
+                cameraRef={cameraRef}
+                frozenRef={panningRef}
+                visibleLabelIds={visibleLabelIds}
+                onVisibleLabels={setVisibleLabelIds}
+              />
+            </Canvas>
+          </CanvasErrorBoundary>
+        ) : null}
         <div className="hud-thumbnail-hint">
           Scroll zoom · drag pan · ⌘ drag rotate
         </div>

@@ -1451,6 +1451,13 @@ function Explorer({
           shadows={false}
           dpr={[1, 1.5]}
           gl={{ antialias: true, toneMappingExposure: 1.25 }}
+          onCreated={({ gl }) => {
+            gl.domElement.addEventListener(
+              'webglcontextlost',
+              (event) => event.preventDefault(),
+              { once: false },
+            )
+          }}
           camera={{
             position: layout.spawn,
             fov: 70,

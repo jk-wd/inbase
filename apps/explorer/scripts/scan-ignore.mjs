@@ -17,9 +17,18 @@ export function toPosix(filePath) {
   return filePath.split(path.sep).join('/')
 }
 
+function isViteDepCache(parts) {
+  const viteAt = parts.indexOf('vite')
+  if (viteAt < 0) return false
+  return parts
+    .slice(viteAt + 1)
+    .some((part) => part === 'deps' || part.startsWith('deps_temp'))
+}
+
 /** True when any path segment is ignored, e.g. apps/web/node_modules/pkg/index.js. */
 export function shouldIgnoreRelativePath(relative) {
   const parts = toPosix(relative).split('/').filter(Boolean)
+  if (isViteDepCache(parts)) return true
   if (
     parts.some(
       (part) =>

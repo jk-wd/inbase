@@ -147,6 +147,11 @@ test('ignores node_modules, dist, and lockfiles at any depth', () => {
   assert.equal(shouldIgnoreRelativePath('apps/web/.next/server.js'), true)
   assert.equal(shouldIgnoreRelativePath('apps/web/package-lock.json'), true)
   assert.equal(shouldIgnoreRelativePath('apps/web/src/app.ts'), false)
+  assert.equal(
+    shouldIgnoreRelativePath('apps/explorer/src/data/vite/deps/three.js'),
+    true,
+  )
+  assert.equal(shouldIgnoreRelativePath('apps/web/vite.config.ts'), false)
 })
 
 test('skips nested junk directories when scanning a monorepo', () => {
