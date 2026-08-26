@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -52,7 +51,7 @@ import {
   isSessionStopped,
   isWorkflowStopped,
 } from './session-store.mjs'
-import { initGitRepo } from './git-test.mjs'
+import { initGitRepo, runGit } from './git-test.mjs'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
 
@@ -71,24 +70,6 @@ function fixture({ git = false } = {}) {
     targetRoot,
     cleanup: () => fs.rmSync(root, { recursive: true, force: true }),
   }
-}
-
-function runGit(cwd, args) {
-  const result = spawnSync('git', args, {
-    cwd,
-    encoding: 'utf8',
-    env: {
-      ...process.env,
-      GIT_CONFIG_GLOBAL: '/dev/null',
-      GIT_CONFIG_SYSTEM: '/dev/null',
-      GIT_AUTHOR_NAME: 'Visualizer Test',
-      GIT_AUTHOR_EMAIL: 'visualizer-test@example.com',
-      GIT_COMMITTER_NAME: 'Visualizer Test',
-      GIT_COMMITTER_EMAIL: 'visualizer-test@example.com',
-    },
-  })
-  assert.equal(result.status, 0, result.stderr || result.stdout)
-  return result
 }
 
 const oneToTwo =
@@ -1002,7 +983,7 @@ test('preview keeps earlier diffs visible as later steps accumulate', () => {
   }
 })
 
-test('alternative instruction replaces the unfinished plan tail', () => {
+test('alternative instruction keeps the current proposal on disk', () => {
   const env = fixture()
   try {
     reportPlan(env.dataDir, {
@@ -1026,31 +1007,22 @@ test('alternative instruction replaces the unfinished plan tail', () => {
     )
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 1\n',
+      'export const value = 2\n',
     )
-    const withdrawn = sessionIntent(env.dataDir, 'replan-chat', ['src/a.ts'])
-    assert.equal(withdrawn.preview, false)
-    assert.deepEqual(withdrawn.files, [])
-    let manifest = readManifest(env.dataDir, 'replan-chat')
-    assert.equal(manifest.phase, 'replanning')
+    const kept = sessionIntent(env.dataDir, 'replan-chat', ['src/a.ts'])
+    assert.equal(kept.preview, true)
+    assert.deepEqual(kept.files, ['src/a.ts'])
+    const manifest = readManifest(env.dataDir, 'replan-chat')
+    assert.equal(manifest.phase, 'working')
     assert.equal(
       manifest.pendingInstruction,
       'Make the value configurable before finishing',
     )
-
-    reportPlan(env.dataDir, {
-      sessionId: 'replan-chat',
-      feature: 'Replan',
-      stepTitles: ['Revise value', 'Finish revised value'],
-    })
-    manifest = readManifest(env.dataDir, 'replan-chat')
-    assert.equal(manifest.phase, 'plan_ready')
     assert.deepEqual(
       manifest.steps.map((step) => step.title),
-      ['Revise value', 'Finish revised value'],
+      ['Build value', 'Old second step'],
     )
 
-    invokeStep(env.dataDir, 'replan-chat', 1)
     const revised = appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'replan-chat',
       patchText: oneToThree,
@@ -1117,14 +1089,16 @@ test('rejects stale actions and invalid virtual continuations', () => {
     )
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 1\n',
+      'export const value = 2\n',
     )
-    reportPlan(env.dataDir, {
-      sessionId: 'guard-chat',
-      feature: 'Guards',
-      stepTitles: ['Try another value'],
-    })
-    invokeStep(env.dataDir, 'guard-chat', 1)
+    assert.throws(() =>
+      reportPlan(env.dataDir, {
+        sessionId: 'guard-chat',
+        feature: 'Guards',
+        stepTitles: ['Try another value'],
+      }),
+    )
+    assert.throws(() => invokeStep(env.dataDir, 'guard-chat', 1))
     assert.throws(() =>
       appendDiff(env.dataDir, env.targetRoot, {
         sessionId: 'guard-chat',
@@ -1557,7 +1531,7 @@ test('stop unstages reverted files from git', () => {
     '--- /dev/null\n+++ b/src/b.ts\n@@ -0,0 +1,1 @@\n+export const extra = 1\n'
   try {
     runGit(env.root, ['add', 'target'])
-    runGit(env.root, ['-c', 'commit.gpgsign=false', 'commit', '-m', 'init'])
+    runGit(env.root, ['commit', '-m', 'init'])
 
     reportPlan(env.dataDir, {
       sessionId: 'stage-chat',
