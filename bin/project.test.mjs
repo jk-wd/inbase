@@ -5,8 +5,10 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import {
   applyHostEnv,
+  isolatedViteConfig,
   readInstanceFile,
   readRunningInstance,
+  resolveFromPackage,
   writeRunningInstance,
 } from './project.mjs'
 
@@ -116,4 +118,25 @@ test('readRunningInstance prefers cwd .inbase over a missing file', () => {
   } finally {
     cleanup()
   }
+})
+
+test('isolated Vite config does not use the host project', () => {
+  const dataDir = path.join(packageRoot, '.tmp-cli-vite-data')
+  const config = isolatedViteConfig(dataDir)
+  assert.equal(config.root, path.join(packageRoot, 'apps/explorer'))
+  assert.equal(config.envDir, config.root)
+  assert.equal(config.cacheDir, path.join(dataDir, 'vite'))
+  assert.equal(config.build.target, 'esnext')
+  assert.equal(config.esbuild.target, 'esnext')
+  assert.deepEqual(config.server.fs.allow, [config.root, packageRoot, dataDir])
+  assert.equal(
+    config.optimizeDeps.entries[0],
+    path.join(packageRoot, 'apps/explorer/index.html'),
+  )
+  const vitePath = resolveFromPackage('vite')
+  assert.match(vitePath, /node_modules[/\\]vite/)
+  assert.ok(
+    vitePath.startsWith(packageRoot + path.sep) ||
+      vitePath.includes(`${path.sep}node_modules${path.sep}vite`),
+  )
 })

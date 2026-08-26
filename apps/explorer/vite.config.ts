@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import { createRequire } from 'node:module'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -7,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { emptyIntent } from './scripts/patch-lib.mjs'
 import { readBranchChanges } from './scripts/branch-changes.mjs'
-import { writeRunningInstance } from '../../bin/project.mjs'
+import { writeRunningInstance, isolatedViteConfig, packageRoot } from '../../bin/project.mjs'
 import { dataDir, targetRoot } from './scripts/target-config.mjs'
 import { editorFileUri, openInEditor } from './scripts/open-editor.mjs'
 import {
@@ -35,6 +36,12 @@ import {
 } from './scripts/session-store.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
+const requireFromPackage = createRequire(path.join(packageRoot, 'package.json'))
+const isolation = isolatedViteConfig(dataDir)
+
+function pkgDir(name: string) {
+  return path.dirname(requireFromPackage.resolve(`${name}/package.json`))
+}
 const userContextFile = path.join(dataDir, 'user-context.json')
 const codebaseFile = path.join(dataDir, 'codebase.json')
 const scanScript = path.resolve(here, 'scripts/scan-target.mjs')
@@ -478,16 +485,35 @@ function isDataDirPath(filePath: string) {
 }
 
 export default defineConfig({
+  ...isolation,
   plugins: [react(), jsonFilePlugin()],
+  resolve: {
+    alias: {
+      react: pkgDir('react'),
+      'react-dom': pkgDir('react-dom'),
+      three: pkgDir('three'),
+      '@react-three/fiber': pkgDir('@react-three/fiber'),
+      '@react-three/drei': pkgDir('@react-three/drei'),
+    },
+    dedupe: ['react', 'react-dom', 'three', '@react-three/fiber', '@react-three/drei'],
+  },
+  optimizeDeps: {
+    ...isolation.optimizeDeps,
+    include: [
+      'react',
+      'react-dom',
+      'three',
+      '@react-three/fiber',
+      '@react-three/drei',
+    ],
+  },
   server: {
+    ...isolation.server,
     port: 5173,
     watch: {
       // Session snapshots copy target source into the data dir. If Vite
       // watches those writes, Create proposal full-reloads the visualizer.
       ignored: ['**/src/data/**', isDataDirPath],
-    },
-    fs: {
-      allow: [here, dataDir],
     },
   },
 })

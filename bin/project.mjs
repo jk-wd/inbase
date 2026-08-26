@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -7,6 +8,35 @@ export const packageRoot = path.resolve(here, '..')
 export const explorerRoot = path.join(packageRoot, 'apps/explorer')
 export const skillTemplateDir = path.join(packageRoot, 'skill/inbase')
 export const commandTemplateDir = path.join(packageRoot, 'skill/commands')
+
+const requireFromPackage = createRequire(path.join(packageRoot, 'package.json'))
+
+export function resolveFromPackage(specifier) {
+  return requireFromPackage.resolve(specifier)
+}
+
+/** Vite config that never uses the host project's cache, deps, or browser targets. */
+export function isolatedViteConfig(dataDir) {
+  return {
+    root: explorerRoot,
+    envDir: explorerRoot,
+    cacheDir: path.join(dataDir, 'vite'),
+    publicDir: false,
+    appType: 'spa',
+    build: { target: 'esnext' },
+    esbuild: { target: 'esnext' },
+    optimizeDeps: {
+      entries: [path.join(explorerRoot, 'index.html')],
+      esbuildOptions: { target: 'esnext' },
+    },
+    server: {
+      fs: {
+        strict: true,
+        allow: [explorerRoot, packageRoot, dataDir],
+      },
+    },
+  }
+}
 
 export function resolveOptionalPath(value, fallback) {
   const raw = value?.trim()

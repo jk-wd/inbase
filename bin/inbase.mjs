@@ -9,6 +9,8 @@ import {
   ensureDataDir,
   ensureGitignoreEntry,
   explorerRoot,
+  isolatedViteConfig,
+  resolveFromPackage,
   skillTemplateDir,
   commandTemplateDir,
   takeFlagValue,
@@ -95,16 +97,15 @@ async function runServer(args) {
     dest: path.join(dataDir, 'codebase.json'),
   })
 
-  const { createServer } = await import('vite')
+  const { createServer } = await import(pathToFileURL(resolveFromPackage('vite')).href)
+  const isolation = isolatedViteConfig(dataDir)
   const server = await createServer({
     configFile: path.join(explorerRoot, 'vite.config.ts'),
-    root: explorerRoot,
+    ...isolation,
     server: {
+      ...isolation.server,
       port,
       host: '127.0.0.1',
-      fs: {
-        allow: [explorerRoot, targetRoot, dataDir],
-      },
     },
   })
   await server.listen()
