@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import {
   applyHostEnv,
   isolatedViteConfig,
+  packageDirFromPackage,
   readInstanceFile,
   readRunningInstance,
   resolveFromPackage,
@@ -139,4 +140,7 @@ test('isolated Vite config does not use the host project', () => {
     vitePath.startsWith(packageRoot + path.sep) ||
       vitePath.includes(`${path.sep}node_modules${path.sep}vite`),
   )
+  const threeDir = packageDirFromPackage('three')
+  assert.equal(fs.existsSync(path.join(threeDir, 'package.json')), true)
+  assert.doesNotMatch(threeDir, /\/package\.json$/)
 })

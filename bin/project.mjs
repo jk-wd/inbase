@@ -15,6 +15,15 @@ export function resolveFromPackage(specifier) {
   return requireFromPackage.resolve(specifier)
 }
 
+export function packageDirFromPackage(name) {
+  let dir = path.dirname(resolveFromPackage(name))
+  while (dir !== path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, 'package.json'))) return dir
+    dir = path.dirname(dir)
+  }
+  return dir
+}
+
 /** Vite config that never uses the host project's cache, deps, or browser targets. */
 export function isolatedViteConfig(dataDir) {
   return {
