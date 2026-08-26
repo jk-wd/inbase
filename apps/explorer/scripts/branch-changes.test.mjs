@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { emptyBranchChanges, readBranchChanges } from './branch-changes.mjs'
+import { initGitRepo } from './git-test.mjs'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
 
@@ -36,9 +38,7 @@ function fixture(nestedTarget = false) {
     'export function greet() {\n  return 1\n}\n',
   )
   fs.writeFileSync(path.join(targetRoot, 'src/keep.ts'), 'export const keep = true\n')
-  runGit(repo, ['init', '-b', 'main'])
-  runGit(repo, ['config', 'user.name', 'Visualizer Test'])
-  runGit(repo, ['config', 'user.email', 'visualizer-test@example.com'])
+  initGitRepo(repo)
   runGit(repo, ['add', '.'])
   runGit(repo, ['commit', '-m', 'base'])
   return {
@@ -57,7 +57,7 @@ test('empty branch changes are unavailable', () => {
 })
 
 test('returns unavailable outside a git repo', () => {
-  const root = fs.mkdtempSync(path.join(repoRoot, '.tmp-branch-nogit-'))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'visual-coder-nogit-'))
   try {
     const changes = readBranchChanges(root)
     assert.equal(changes.available, false)

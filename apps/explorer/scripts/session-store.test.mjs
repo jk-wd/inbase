@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -45,15 +46,19 @@ import {
   isSessionStopped,
   isWorkflowStopped,
 } from './session-store.mjs'
+import { initGitRepo } from './git-test.mjs'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
 
-function fixture() {
-  const root = fs.mkdtempSync(path.join(repoRoot, '.tmp-session-'))
+function fixture({ git = false } = {}) {
+  const root = fs.mkdtempSync(
+    path.join(git ? repoRoot : os.tmpdir(), git ? '.tmp-session-' : 'visual-coder-test-'),
+  )
   const dataDir = path.join(root, 'data')
   const targetRoot = path.join(root, 'target')
   fs.mkdirSync(path.join(targetRoot, 'src'), { recursive: true })
   fs.writeFileSync(path.join(targetRoot, 'src/a.ts'), 'export const value = 1\n')
+  if (git) initGitRepo(root)
   return {
     root,
     dataDir,
@@ -1449,11 +1454,10 @@ test('stop reverts accepted diffs and the pending preview', () => {
 })
 
 test('stop unstages reverted files from git', () => {
-  const env = fixture()
+  const env = fixture({ git: true })
   const addB =
     '--- /dev/null\n+++ b/src/b.ts\n@@ -0,0 +1,1 @@\n+export const extra = 1\n'
   try {
-    runGit(env.root, ['init'])
     runGit(env.root, ['add', 'target'])
     runGit(env.root, ['-c', 'commit.gpgsign=false', 'commit', '-m', 'init'])
 

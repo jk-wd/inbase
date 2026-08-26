@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
 import {
   collectImportSpecifiers,
   extractImportBindings,
@@ -14,8 +12,6 @@ import {
 import { shouldIgnoreRelativePath } from './scan-ignore.mjs'
 import { scanTarget } from './scan-target.mjs'
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
-
 function scanQuiet(options) {
   const log = console.log
   console.log = () => {}
@@ -24,24 +20,6 @@ function scanQuiet(options) {
   } finally {
     console.log = log
   }
-}
-
-function runGit(cwd, args) {
-  const result = spawnSync('git', args, {
-    cwd,
-    encoding: 'utf8',
-    env: {
-      ...process.env,
-      GIT_CONFIG_GLOBAL: '/dev/null',
-      GIT_CONFIG_SYSTEM: '/dev/null',
-      GIT_AUTHOR_NAME: 'Visualizer Test',
-      GIT_AUTHOR_EMAIL: 'visualizer-test@example.com',
-      GIT_COMMITTER_NAME: 'Visualizer Test',
-      GIT_COMMITTER_EMAIL: 'visualizer-test@example.com',
-    },
-  })
-  assert.equal(result.status, 0, result.stderr || result.stdout)
-  return result
 }
 
 test('resolves specifiers to any known file, not only JS extensions', () => {
@@ -198,8 +176,8 @@ test('skips nested junk directories when scanning a monorepo', () => {
   }
 })
 
-test('honours a nested gitignore in a git monorepo', () => {
-  const root = fs.mkdtempSync(path.join(repoRoot, '.tmp-gitmono-'))
+test('honours nested gitignore files in a monorepo', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'visual-coder-gitignore-'))
   const dest = path.join(root, 'codebase.json')
   try {
     fs.mkdirSync(path.join(root, 'apps/web/src'), { recursive: true })
@@ -212,9 +190,6 @@ test('honours a nested gitignore in a git monorepo', () => {
       path.join(root, 'apps/web/node_modules/pkg/index.js'),
       'export default 1\n',
     )
-    runGit(root, ['init', '-b', 'main'])
-    runGit(root, ['config', 'user.name', 'Visualizer Test'])
-    runGit(root, ['config', 'user.email', 'visualizer-test@example.com'])
 
     const graph = scanQuiet({ root, dest })
     const ids = graph.files.map((file) => file.id).sort()
