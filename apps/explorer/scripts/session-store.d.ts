@@ -17,6 +17,22 @@ export type DiffEntry = {
   decidedAt: string | null
 }
 
+export type SessionContextFile = {
+  id: string
+  name: string
+  storedName: string
+  mimeType: string
+  size: number
+}
+
+export type SessionContextFileInfo = {
+  id: string
+  name: string
+  mimeType: string
+  size: number
+  path?: string
+}
+
 export type DiffManifest = {
   version: number
   sessionId: string
@@ -39,6 +55,7 @@ export type DiffManifest = {
   activeDiffId: string | null
   pendingInstruction: string | null
   initialInstruction?: string | null
+  contextFiles?: SessionContextFile[]
   workStartedAt: string | null
   stepByStep: boolean
   createdAt: string
@@ -61,6 +78,7 @@ export function sessionPaths(
   baseline: string
   baselineFiles: string
   preStep: string
+  context: string
   stopped: string
 }
 export function touchSessionConnection(dataDir: string, sessionId: string): void
@@ -128,6 +146,30 @@ export function setInitialInstruction(
   dataDir: string,
   sessionId: string,
   instruction: string | null | undefined,
+): DiffManifest
+export const MAX_CONTEXT_FILES: number
+export const MAX_CONTEXT_FILE_BYTES: number
+export const MAX_CONTEXT_TOTAL_BYTES: number
+export function listContextFiles(
+  dataDir: string,
+  sessionId: string,
+): Array<SessionContextFile & { path: string }>
+export function contextFileHandshake(
+  dataDir: string,
+  sessionId: string,
+): {
+  files: Array<{ name: string; path: string; mimeType: string; size: number }>
+  texts: Array<{ name: string; content: string }>
+}
+export function addContextFiles(
+  dataDir: string,
+  sessionId: string,
+  files: unknown,
+): DiffManifest
+export function removeContextFile(
+  dataDir: string,
+  sessionId: string,
+  fileId: string,
 ): DiffManifest
 export function readAttachedSession(dataDir: string): string | null
 export function listAttachQueue(dataDir: string): string[]

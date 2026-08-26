@@ -112,6 +112,7 @@ export const emptyIntent: {
   listening: boolean
   lastAck: { kind: string; detail: string; at: string | null } | null
   initialInstruction: string | null
+  contextFiles: unknown[]
   creationMode: boolean
   canEnterBlueprint: boolean
   blueprintHidden?: boolean

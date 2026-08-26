@@ -85,7 +85,7 @@ new plan.
 ## Required sequence
 
 1. **Read the current layout**. `/inbase` already started the session. Run
-   this once to load the optional blueprint and instruction — it returns
+   this once to load the optional blueprint, instruction, and attached files — it returns
    immediately. Do not wait for the user to send a blueprint. Then report a
    plan.
 
@@ -98,7 +98,11 @@ npx inbase wait-for-blueprint --session "<session-id>"
    keep placing at any time.
    If `wait-for-blueprint` prints `VISUAL_CODER_INSTRUCTION_START` /
    `VISUAL_CODER_INSTRUCTION_END`, that text is the user's request for this
-   session. Plan from that instruction and the blueprint together. The
+   session. If it prints `VISUAL_CODER_CONTEXT_FILES_START` /
+   `VISUAL_CODER_CONTEXT_FILES_END`, those are session-only files the user
+   dropped as initial context. Read each `path` (and any printed
+   `VISUAL_CODER_CONTEXT_FILE` contents). They are not project files to create.
+   Plan from that instruction, attached files, and the blueprint together. The
    instruction does not override an enabled blueprint; if they conflict,
    ask the user.
 3. Read the handshake output between `VISUAL_CODER_BLUEPRINT_START` and
@@ -220,7 +224,7 @@ npx inbase propose-patch --session "<session-id>" --clear
   from **Setup LLM session** in the map
 - Edit files on a direct chat request; reply with the `/skipinbase` line and stop
 - Invent a session id for `/inbase`; run `npx inbase attach` with no `--session`
-- Skip `inbase wait-for-blueprint`; it returns immediately and provides the optional blueprint and instruction
+- Skip `inbase wait-for-blueprint`; it returns immediately and provides the optional blueprint, instruction, and attached files
 - Treat the chat request, viewpoint, or your own plan as overriding an enabled blueprint
 - Skip, rename, relocate, or replace the shared `blueprint.json` files, islands, functions, variables, or imports when `enabled` is true
 - Silently differ from the blueprint; ask the user first

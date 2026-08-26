@@ -1133,6 +1133,71 @@ button {
   margin-top: 0;
 }
 
+.hud-context {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.hud-context-drop {
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 8px;
+  color: #8b95a5;
+  background: var(--vc-surface);
+  border: 1px dashed #3a4250;
+  cursor: pointer;
+  font: 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-align: center;
+}
+
+.hud-context-drop:hover,
+.hud-context-drop:focus-visible,
+.hud-context-drop[data-over='true'] {
+  color: #e7ebf2;
+  border-color: #d6b56a;
+  outline: none;
+}
+
+.hud-context-drop[data-busy='true'],
+.hud-context-drop:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.hud-context-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hud-context-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+  color: #e7ebf2;
+  font-size: 11px;
+}
+
+.hud-context-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-context-size {
+  color: #8b95a5;
+}
+
+.hud-context-error {
+  margin: 0;
+  color: #ff8a9b;
+  font-size: 11px;
+}
+
 .hud-instruction textarea {
   width: 100%;
   resize: vertical;

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { persistInitialInstruction } from '../agentIntent'
+import { persistAddContextFiles, persistInitialInstruction, persistRemoveContextFile } from '../agentIntent'
 import { NameInput } from './NameInput'
 import { SelectionThumbnail } from '../scene/SelectionThumbnail'
 import {
@@ -450,6 +450,119 @@ function InitialInstructionField({
   )
 }
 
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+async function fileToBase64(file: File) {
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  const chunk = 0x8000
+  let binary = ''
+  for (let offset = 0; offset < bytes.length; offset += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunk))
+  }
+  return btoa(binary)
+}
+
+type ContextFileInfo = {
+  id: string
+  name: string
+  mimeType: string
+  size: number
+}
+
+function ContextFileDrop({
+  files,
+  busy,
+  error,
+  onAdd,
+  onRemove,
+}: {
+  files: ContextFileInfo[]
+  busy: boolean
+  error: string | null
+  onAdd: (files: File[]) => void
+  onRemove: (fileId: string) => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [over, setOver] = useState(false)
+
+  const takeFiles = (list: FileList | File[] | null) => {
+    if (!list || busy) return
+    const next = [...list].filter((file) => file.size > 0)
+    if (next.length > 0) onAdd(next)
+  }
+
+  return (
+    <div className="hud-context">
+      <button
+        className="hud-context-drop"
+        type="button"
+        data-over={over}
+        data-busy={busy}
+        disabled={busy}
+        aria-label="Attach files for the LLM"
+        onDragEnter={(event) => {
+          event.preventDefault()
+          if (event.dataTransfer.types.includes('Files')) setOver(true)
+        }}
+        onDragOver={(event) => {
+          event.preventDefault()
+          event.dataTransfer.dropEffect = 'copy'
+        }}
+        onDragLeave={(event) => {
+          if (event.currentTarget.contains(event.relatedTarget as Node)) return
+          setOver(false)
+        }}
+        onDrop={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          setOver(false)
+          takeFiles(event.dataTransfer.files)
+        }}
+        onKeyDown={(event) => event.stopPropagation()}
+        onClick={() => inputRef.current?.click()}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          hidden
+          onChange={(event) => {
+            takeFiles(event.target.files)
+            event.target.value = ''
+          }}
+        />
+        {busy ? 'Attaching…' : 'Drop files or click to attach'}
+      </button>
+      {files.length > 0 && (
+        <ul className="hud-context-list">
+          {files.map((file) => (
+            <li key={file.id}>
+              <span className="hud-context-name" title={file.name}>
+                {file.name}
+              </span>
+              <span className="hud-context-size">{formatFileSize(file.size)}</span>
+              <button
+                className="hud-item-remove"
+                type="button"
+                aria-label={`Remove ${file.name}`}
+                disabled={busy}
+                onClick={() => onRemove(file.id)}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {error ? <p className="hud-context-error">{error}</p> : null}
+    </div>
+  )
+}
+
 function blueprintIsDefined(intent: AgentIntent) {
   return (
     (intent.userCreatedBlocks?.length ?? 0) > 0 ||
@@ -464,23 +577,52 @@ function blueprintIsDefined(intent: AgentIntent) {
 function HandshakeSetup({
   instruction,
   onInstructionChange,
+  contextFiles,
+  contextBusy,
+  contextError,
+  onAddContextFiles,
+  onRemoveContextFile,
   blueprintDefined,
   awaitingAttach,
   nextAttachLabel,
 }: {
   instruction: string
   onInstructionChange: (value: string) => void
+  contextFiles: ContextFileInfo[]
+  contextBusy: boolean
+  contextError: string | null
+  onAddContextFiles: (files: File[]) => void
+  onRemoveContextFile: (fileId: string) => void
   blueprintDefined: boolean
   awaitingAttach: boolean
   nextAttachLabel: string | null
 }) {
   return (
     <div className="hud-setup">
-      <section className="hud-setup-section">
+      <section
+        className="hud-setup-section"
+        onDragOver={(event) => {
+          if (event.dataTransfer.types.includes('Files')) event.preventDefault()
+        }}
+        onDrop={(event) => {
+          event.preventDefault()
+          const dropped = [...(event.dataTransfer.files ?? [])].filter(
+            (file) => file.size > 0,
+          )
+          if (dropped.length > 0) onAddContextFiles(dropped)
+        }}
+      >
         <h2 className="hud-setup-heading">Instructions</h2>
         <InitialInstructionField
           value={instruction}
           onChange={onInstructionChange}
+        />
+        <ContextFileDrop
+          files={contextFiles}
+          busy={contextBusy}
+          error={contextError}
+          onAdd={onAddContextFiles}
+          onRemove={onRemoveContextFile}
         />
       </section>
       <section className="hud-setup-section">
@@ -649,6 +791,11 @@ function SessionPanel({
   const [initialInstruction, setInitialInstruction] = useState(
     () => intent.initialInstruction ?? '',
   )
+  const [contextFiles, setContextFiles] = useState<ContextFileInfo[]>(
+    () => intent.contextFiles ?? [],
+  )
+  const [contextBusy, setContextBusy] = useState(false)
+  const [contextError, setContextError] = useState<string | null>(null)
   const sessionId = intent.sessionId
   const pending = intent.status === 'pending' && intent.isActiveDiff
   const askingBlueprint = intent.status === 'blueprint_ask'
@@ -710,13 +857,57 @@ function SessionPanel({
 
   useEffect(() => {
     setInitialInstruction(intent.initialInstruction ?? '')
+    setContextFiles(intent.contextFiles ?? [])
+    setContextError(null)
   }, [sessionId])
+
+  useEffect(() => {
+    if (contextBusy) return
+    setContextFiles(intent.contextFiles ?? [])
+  }, [contextBusy, intent.contextFiles])
 
   if (!sessionId || !isReviewingIntent(intent.status)) return null
 
   const updateInitialInstruction = (value: string) => {
     setInitialInstruction(value)
     persistInitialInstruction(sessionId, value)
+  }
+
+  const addContextFiles = (files: File[]) => {
+    setContextBusy(true)
+    setContextError(null)
+    void Promise.all(
+      files.map(async (file) => ({
+        name: file.name,
+        mimeType: file.type || 'application/octet-stream',
+        contentBase64: await fileToBase64(file),
+      })),
+    )
+      .then((payload) => persistAddContextFiles(sessionId, payload))
+      .then((next) => {
+        setContextFiles(next.contextFiles ?? [])
+      })
+      .catch((caught) => {
+        setContextError(
+          caught instanceof Error ? caught.message : 'Could not attach files',
+        )
+      })
+      .finally(() => setContextBusy(false))
+  }
+
+  const removeContextFile = (fileId: string) => {
+    setContextBusy(true)
+    setContextError(null)
+    void persistRemoveContextFile(sessionId, fileId)
+      .then((next) => {
+        setContextFiles(next.contextFiles ?? [])
+      })
+      .catch((caught) => {
+        setContextError(
+          caught instanceof Error ? caught.message : 'Could not remove file',
+        )
+      })
+      .finally(() => setContextBusy(false))
   }
 
   const showInitialInstruction =
@@ -800,6 +991,11 @@ function SessionPanel({
             <HandshakeSetup
               instruction={initialInstruction}
               onInstructionChange={updateInitialInstruction}
+              contextFiles={contextFiles}
+              contextBusy={contextBusy}
+              contextError={contextError}
+              onAddContextFiles={addContextFiles}
+              onRemoveContextFile={removeContextFile}
               blueprintDefined={blueprintIsDefined(intent)}
               awaitingAttach={Boolean(intent.awaitingAttach)}
               nextAttachLabel={queuedBehind}
@@ -1437,7 +1633,6 @@ function explorerInstructions({
               },
             ]
           : []),
-        { id: 'click-line', keys: ['Click'], label: 'A line to fly there' },
         {
           id: 'option-click-walk',
           keys: ['Option', 'Click'],

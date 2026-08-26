@@ -324,6 +324,12 @@ export type AgentIntent = {
     at: string | null
   } | null
   initialInstruction?: string | null
+  contextFiles?: Array<{
+    id: string
+    name: string
+    mimeType: string
+    size: number
+  }>
   creationMode: boolean
   canEnterBlueprint: boolean
   blueprintHidden?: boolean

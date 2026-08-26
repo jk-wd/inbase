@@ -22,7 +22,6 @@ type MapViewProps = {
   onLand: (x: number, z: number) => void
   onSelect: (fileId: string | null) => void
   onSelectFolder: (folderPath: string | null) => void
-  onTravelTo: (fromId: string, toId: string) => void
   onBlueprintMenu?: (menu: MapBlueprintMenu) => void
 }
 
@@ -36,7 +35,6 @@ export function MapView({
   onLand,
   onSelect,
   onSelectFolder,
-  onTravelTo,
   onBlueprintMenu,
 }: MapViewProps) {
   const size = useThree((state) => state.size)
@@ -157,16 +155,9 @@ export function MapView({
 
       const pick = pickAt(event.clientX, event.clientY)
       if (!pick) return
-      const { relationHit, fileHit } = pick
+      const { fileHit } = pick
       if (fileHit) {
         onSelect(fileHit.object.userData.fileId as string)
-        return
-      }
-      if (relationHit) {
-        onTravelTo(
-          relationHit.object.userData.relationFrom as string,
-          relationHit.object.userData.relationTo as string,
-        )
         return
       }
 
@@ -286,7 +277,6 @@ export function MapView({
     onBlueprintMenu,
     onSelect,
     onSelectFolder,
-    onTravelTo,
     scene,
     selectedFolder,
   ])

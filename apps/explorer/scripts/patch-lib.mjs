@@ -539,6 +539,7 @@ export const emptyIntent = {
   listening: false,
   lastAck: null,
   initialInstruction: null,
+  contextFiles: [],
   creationMode: false,
   canEnterBlueprint: false,
   blueprintHidden: false,

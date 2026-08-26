@@ -35,6 +35,12 @@ import {
   listAttachQueue,
   nextAttachSessionId,
   setInitialInstruction,
+  addContextFiles,
+  removeContextFile,
+  listContextFiles,
+  contextFileHandshake,
+  MAX_CONTEXT_FILES,
+  MAX_CONTEXT_FILE_BYTES,
   maybeStartVisualizerHandshake,
   stopSession,
   touchSessionConnection,
@@ -197,6 +203,98 @@ test('stores an initial instruction for the LLM handshake', () => {
           'x'.repeat(4001),
         ),
       /4000/,
+    )
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('stores session context files for the LLM handshake', () => {
+  const env = fixture()
+  try {
+    const started = setupSession(env.dataDir)
+    assert.deepEqual(started.contextFiles, [])
+
+    const saved = addContextFiles(env.dataDir, started.sessionId, {
+      name: 'notes.md',
+      mimeType: 'text/markdown',
+      bytes: Buffer.from('# Goal\nAdd a clock\n'),
+    })
+    assert.equal(saved.contextFiles.length, 1)
+    assert.equal(saved.contextFiles[0].name, 'notes.md')
+    assert.equal(saved.contextFiles[0].mimeType, 'text/markdown')
+    const listed = listContextFiles(env.dataDir, started.sessionId)
+    assert.equal(listed.length, 1)
+    assert.equal(
+      fs.readFileSync(listed[0].path, 'utf8'),
+      '# Goal\nAdd a clock\n',
+    )
+    const intent = sessionIntent(env.dataDir, started.sessionId)
+    assert.equal(intent.contextFiles.length, 1)
+    assert.equal(intent.contextFiles[0].name, 'notes.md')
+    assert.equal(intent.contextFiles[0].id, listed[0].id)
+    assert.equal(intent.contextFiles[0].storedName, undefined)
+
+    const handshake = contextFileHandshake(env.dataDir, started.sessionId)
+    assert.equal(handshake.files.length, 1)
+    assert.equal(handshake.files[0].name, 'notes.md')
+    assert.equal(handshake.files[0].path, listed[0].path)
+    assert.equal(handshake.texts.length, 1)
+    assert.equal(handshake.texts[0].content, '# Goal\nAdd a clock\n')
+
+    addContextFiles(env.dataDir, started.sessionId, {
+      name: '../escape.png',
+      mimeType: 'image/png',
+      bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 3]),
+    })
+    const withImage = listContextFiles(env.dataDir, started.sessionId)
+    assert.equal(withImage.length, 2)
+    assert.equal(withImage[1].name, 'escape.png')
+    assert.equal(path.basename(withImage[1].path), withImage[1].storedName)
+    assert.equal(
+      path.dirname(withImage[1].path).endsWith(`${path.sep}context`),
+      true,
+    )
+    const imageHandshake = contextFileHandshake(env.dataDir, started.sessionId)
+    assert.equal(imageHandshake.files.length, 2)
+    assert.equal(imageHandshake.texts.length, 1)
+
+    const removed = removeContextFile(
+      env.dataDir,
+      started.sessionId,
+      listed[0].id,
+    )
+    assert.equal(removed.contextFiles.length, 1)
+    assert.equal(removed.contextFiles[0].name, 'escape.png')
+    assert.equal(fs.existsSync(listed[0].path), false)
+
+    assert.throws(
+      () =>
+        addContextFiles(env.dataDir, started.sessionId, {
+          name: 'empty.txt',
+          bytes: Buffer.alloc(0),
+        }),
+      /empty/,
+    )
+    assert.throws(
+      () =>
+        addContextFiles(env.dataDir, started.sessionId, {
+          name: 'huge.bin',
+          bytes: Buffer.alloc(MAX_CONTEXT_FILE_BYTES + 1),
+        }),
+      /bytes or smaller/,
+    )
+    assert.throws(
+      () =>
+        addContextFiles(
+          env.dataDir,
+          started.sessionId,
+          Array.from({ length: MAX_CONTEXT_FILES }, (_, index) => ({
+            name: `file-${index}.txt`,
+            bytes: Buffer.from(`file ${index}`),
+          })),
+        ),
+      /at most/,
     )
   } finally {
     env.cleanup()

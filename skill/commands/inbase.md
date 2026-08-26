@@ -14,4 +14,4 @@ npx inbase attach
 
 2. Read `VISUAL_CODER_SESSION` from the output. That id is the session to use for every later `inbase` command.
 
-3. Continue the Inbase visual edits skill from `wait-for-blueprint` onward with that `--session` id. `/inbase` already started the session. `wait-for-blueprint` only reads the optional blueprint and instruction; it does not wait.
+3. Continue the Inbase visual edits skill from `wait-for-blueprint` onward with that `--session` id. `/inbase` already started the session. `wait-for-blueprint` only reads the optional blueprint, instruction, and attached files; it does not wait.

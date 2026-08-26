@@ -23,6 +23,8 @@ import {
   sendBlueprint,
   sessionIntent,
   setInitialInstruction,
+  addContextFiles,
+  removeContextFile,
   setStepByStep,
   setupSession,
   focusSession,
@@ -265,6 +267,8 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       addedVariables?: unknown[]
       addedImports?: unknown[]
       notes?: unknown[]
+      files?: unknown[]
+      fileId?: string
     }
     const action = body.action
     const blueprintActions = new Set([
@@ -288,6 +292,8 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       action !== 'focus' &&
       action !== 'set_step_by_step' &&
       action !== 'set_initial_instruction' &&
+      action !== 'add_context_files' &&
+      action !== 'remove_context_file' &&
       action !== 'setup_session'
     ) {
       sendJson(res, 400, { error: 'invalid workflow action' })
@@ -342,7 +348,6 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
         body.instruction ?? '',
         targetRoot,
       )
-      rescanTarget('after withdrawing a patch')
     } else if (action === 'blueprint_yes') {
       answerBlueprint(dataDir, body.sessionId, true)
     } else if (action === 'blueprint_no') {
@@ -381,6 +386,14 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       return
     } else if (action === 'set_initial_instruction') {
       setInitialInstruction(dataDir, body.sessionId, body.instruction ?? '')
+    } else if (action === 'add_context_files') {
+      addContextFiles(dataDir, body.sessionId, body.files ?? [])
+    } else if (action === 'remove_context_file') {
+      if (!body.fileId) {
+        sendJson(res, 400, { error: 'fileId is required' })
+        return
+      }
+      removeContextFile(dataDir, body.sessionId, body.fileId)
     } else if (action === 'focus') {
       focusSession(dataDir, body.sessionId)
     } else if (action === 'set_step_by_step') {

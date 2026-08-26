@@ -406,6 +406,44 @@ test('wait-for-blueprint prints an ack for the handshake', async () => {
     assert.equal(result.status, 0, result.stderr)
     assert.match(result.stdout, /VISUAL_CODER_ACK blueprint: none/)
     assert.match(result.stdout, /VISUAL_CODER_BLUEPRINT_READY/)
+    assert.doesNotMatch(result.stdout, /VISUAL_CODER_CONTEXT_FILES_START/)
+  } finally {
+    cleanup()
+  }
+})
+
+test('wait-for-blueprint prints attached context files', async () => {
+  const { root, cleanup } = tempProject()
+  const dataDir = path.join(root, '.inbase')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: root,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const started = runCli(
+      ['start-session', '--session', 'ack-files', '--name', 'Ack files'],
+      { cwd: root, env },
+    )
+    assert.equal(started.status, 0, started.stderr)
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    store.addContextFiles(dataDir, 'ack-files', {
+      name: 'brief.md',
+      mimeType: 'text/markdown',
+      bytes: Buffer.from('Build a timer widget'),
+    })
+    const result = runCli(['wait-for-blueprint', '--session', 'ack-files'], {
+      cwd: root,
+      env,
+    })
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /VISUAL_CODER_CONTEXT_FILES_START/)
+    assert.match(result.stdout, /brief\.md/)
+    assert.match(result.stdout, /VISUAL_CODER_CONTEXT_FILE_START brief.md/)
+    assert.match(result.stdout, /Build a timer widget/)
+    assert.match(result.stdout, /VISUAL_CODER_CONTEXT_FILE_END/)
   } finally {
     cleanup()
   }

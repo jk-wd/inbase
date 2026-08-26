@@ -237,7 +237,6 @@ export function World({
         onLand={onLand}
         onSelect={onSelect}
         onSelectFolder={onSelectFolder}
-        onTravelTo={onTravelTo}
         onBlueprintMenu={
           mapping && !placing && onBlueprintMenu ? onBlueprintMenu : undefined
         }

@@ -122,21 +122,37 @@ function emitApprovalHandshake(store, dataDir, sessionId, manifest, initialDiff)
   if (manifest.phase === 'working') {
     const next = manifest.steps.find((step) => step.index === manifest.currentStep)
     const title = next?.title
+    const guidance =
+      typeof manifest.pendingInstruction === 'string'
+        ? manifest.pendingInstruction.trim()
+        : ''
+    const updating = Boolean(guidance)
     signalAck(
       store,
       dataDir,
       sessionId,
       'execute',
-      title
-        ? `step ${manifest.currentStep} — ${title}`
-        : `step ${manifest.currentStep}`,
+      updating
+        ? 'a new instruction'
+        : title
+          ? `step ${manifest.currentStep} — ${title}`
+          : `step ${manifest.currentStep}`,
     )
+    const instruction = updating
+      ? `\nVISUAL_CODER_INSTRUCTION_START\n${guidance}\nVISUAL_CODER_INSTRUCTION_END`
+      : ''
     const continuing = (manifest.diffs?.length ?? 0) > 0
-    console.log(
-      continuing
-        ? `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Continue immediately: edit live files for this step only, then inbase propose-patch --session ${sessionId} with no patch file. Do not explore, re-plan, or run wait-for-blueprint.`
-        : `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Re-read the shared blueprint.json before implementing; the user can place files and islands at any time. Edit the live project files for this step only (Write, StrReplace, Delete). Then record the step with inbase propose-patch --session ${sessionId} — no patch file. Inbase diffs those edits against the invoke snapshot and stores the patch. Do not write a unified diff yourself.`,
-    )
+    if (updating) {
+      console.log(
+        `VISUAL_CODER_EXECUTE Update the current proposal for step ${manifest.currentStep}${title ? `: ${title}` : ''}. Live files already contain that proposal — do not reset them. Follow the instruction between VISUAL_CODER_INSTRUCTION_START and END, edit those live files, then inbase propose-patch --session ${sessionId} with no patch file. Do not report a new plan.${instruction}`,
+      )
+    } else {
+      console.log(
+        continuing
+          ? `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Continue immediately: edit live files for this step only, then inbase propose-patch --session ${sessionId} with no patch file. Do not explore, re-plan, or run wait-for-blueprint.`
+          : `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Re-read the shared blueprint.json before implementing; the user can place files and islands at any time. Edit the live project files for this step only (Write, StrReplace, Delete). Then record the step with inbase propose-patch --session ${sessionId} — no patch file. Inbase diffs those edits against the invoke snapshot and stores the patch. Do not write a unified diff yourself.`,
+      )
+    }
     process.exit(0)
   }
   if (manifest.phase === 'replanning') {
@@ -145,13 +161,13 @@ function emitApprovalHandshake(store, dataDir, sessionId, manifest, initialDiff)
       dataDir,
       sessionId,
       'replan',
-      `revise the plan from step ${manifest.currentStep}`,
+      `revise the current proposal for step ${manifest.currentStep}`,
     )
     const instruction = manifest.pendingInstruction
       ? `\nVISUAL_CODER_INSTRUCTION_START\n${manifest.pendingInstruction}\nVISUAL_CODER_INSTRUCTION_END`
       : ''
     console.log(
-      `VISUAL_CODER_REPLAN Keep accepted patch files before step ${manifest.currentStep}. Disk is baseline + accepted patches. Do not edit project files until the next EXECUTE. The shared blueprint remains leading; if this instruction would differ from it, ask the user before replacing the plan. Report the revised tail with inbase report-plan, then wait for invocation.${instruction}`,
+      `VISUAL_CODER_REPLAN Live files still contain the current proposal for step ${manifest.currentStep}. Do not reset them. Follow the instruction between VISUAL_CODER_INSTRUCTION_START and END, edit those live files, then inbase propose-patch. Do not report a new plan.${instruction}`,
     )
     process.exit(4)
   }
@@ -179,7 +195,7 @@ export async function attachSession(args) {
   console.log(`VISUAL_CODER_SESSION ${manifest.sessionId}`)
   printAck('attached', manifest.name || manifest.sessionId)
   console.log(
-    `VISUAL_CODER_ATTACHED Attached to the next waiting visualizer session ${manifest.name || manifest.sessionId} (${manifest.phase}). Use --session ${manifest.sessionId} for every later command. Run inbase wait-for-blueprint --session ${manifest.sessionId} to read the optional blueprint and instruction; it does not wait.`,
+    `VISUAL_CODER_ATTACHED Attached to the next waiting visualizer session ${manifest.name || manifest.sessionId} (${manifest.phase}). Use --session ${manifest.sessionId} for every later command. Run inbase wait-for-blueprint --session ${manifest.sessionId} to read the optional blueprint, instruction, and attached files; it does not wait.`,
   )
 }
 
@@ -242,6 +258,20 @@ export async function waitForBlueprint(args) {
     console.log('VISUAL_CODER_INSTRUCTION_START')
     console.log(instruction)
     console.log('VISUAL_CODER_INSTRUCTION_END')
+  }
+  const attached = store.contextFileHandshake(config.dataDir, sessionId)
+  if (attached.files.length > 0) {
+    console.log(
+      'Honor the user\'s attached context files. Read each path with your file tools before planning. They are session-only attachments, not project files to create. Use any printed VISUAL_CODER_CONTEXT_FILE contents directly.',
+    )
+    console.log('VISUAL_CODER_CONTEXT_FILES_START')
+    console.log(JSON.stringify(attached.files, null, 2))
+    console.log('VISUAL_CODER_CONTEXT_FILES_END')
+    for (const file of attached.texts) {
+      console.log(`VISUAL_CODER_CONTEXT_FILE_START ${file.name}`)
+      console.log(file.content)
+      console.log('VISUAL_CODER_CONTEXT_FILE_END')
+    }
   }
   process.exit(0)
 }

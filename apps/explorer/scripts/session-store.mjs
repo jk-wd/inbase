@@ -16,6 +16,10 @@ import { diffSourceTrees, snapshotSourceTree } from './tree-diff.mjs'
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const CONNECTED_TTL_MS = 15_000
 const STALLED_WAIT_MS = 2_000
+export const MAX_CONTEXT_FILES = 16
+export const MAX_CONTEXT_FILE_BYTES = 8 * 1024 * 1024
+export const MAX_CONTEXT_TOTAL_BYTES = 24 * 1024 * 1024
+const CONTEXT_TEXT_INLINE_BYTES = 100_000
 
 export function assertSessionId(value) {
   if (typeof value !== 'string' || !SESSION_ID.test(value) || value === '.' || value === '..') {
@@ -65,6 +69,7 @@ export function sessionPaths(dataDir, sessionId) {
     baseline: path.join(root, 'baseline.json'),
     baselineFiles: path.join(root, 'baseline'),
     preStep: path.join(root, 'pre-step'),
+    context: path.join(root, 'context'),
     stopped: path.join(dataDir, 'diff-sessions', `${safeId}.stopped`),
   }
 }
@@ -423,6 +428,129 @@ function blueprintHasContent(blueprint) {
   )
 }
 
+function normalizeContextFiles(value) {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    const id = typeof item.id === 'string' ? item.id.trim() : ''
+    const name = typeof item.name === 'string' ? item.name.trim() : ''
+    const storedName =
+      typeof item.storedName === 'string' ? item.storedName.trim() : ''
+    const size = item.size
+    if (!id || !name || !storedName || !Number.isFinite(size) || size < 0) {
+      return []
+    }
+    if (storedName.includes('..') || path.basename(storedName) !== storedName) {
+      return []
+    }
+    return [
+      {
+        id,
+        name,
+        storedName,
+        mimeType:
+          typeof item.mimeType === 'string' && item.mimeType.trim()
+            ? item.mimeType.trim()
+            : 'application/octet-stream',
+        size,
+      },
+    ]
+  })
+}
+
+function safeContextFileName(name) {
+  const base = path.basename(String(name || 'file')).replace(/[\u0000-\u001f]/g, '')
+  const cleaned = base
+    .replace(/[^\w.\- ()[\]]+/g, '_')
+    .replace(/^\.+/, '')
+    .trim()
+  return (cleaned || 'file').slice(0, 120)
+}
+
+function decodeContextFileBytes(file) {
+  if (Buffer.isBuffer(file?.bytes)) return file.bytes
+  if (typeof file?.contentBase64 === 'string' && file.contentBase64.trim()) {
+    if (!/^[A-Za-z0-9+/=\s]+$/.test(file.contentBase64)) {
+      throw new Error('context file content must be base64')
+    }
+    return Buffer.from(file.contentBase64, 'base64')
+  }
+  throw new Error('context file bytes are required')
+}
+
+function contextFileAbsolute(dir, storedName) {
+  const absolute = path.resolve(dir, storedName)
+  const prefix = dir.endsWith(path.sep) ? dir : `${dir}${path.sep}`
+  if (absolute !== dir && !absolute.startsWith(prefix)) {
+    throw new Error(`Invalid context file path ${storedName}`)
+  }
+  return absolute
+}
+
+function publicContextFile(item) {
+  return {
+    id: item.id,
+    name: item.name,
+    mimeType: item.mimeType,
+    size: item.size,
+  }
+}
+
+function isInlineContextText(mimeType, bytes) {
+  if (bytes.length === 0 || bytes.length > CONTEXT_TEXT_INLINE_BYTES) return false
+  if (bytes.includes(0)) return false
+  const mime = typeof mimeType === 'string' ? mimeType.toLowerCase() : ''
+  if (mime.startsWith('audio/') || mime.startsWith('video/')) return false
+  if (mime === 'application/pdf' || mime === 'application/zip') return false
+  if (mime.startsWith('image/') && mime !== 'image/svg+xml') return false
+  if (
+    mime.startsWith('text/') ||
+    mime === 'application/json' ||
+    mime === 'application/javascript' ||
+    mime === 'application/xml' ||
+    mime === 'image/svg+xml' ||
+    mime === 'application/octet-stream' ||
+    mime === ''
+  ) {
+    return true
+  }
+  return !mime.startsWith('image/')
+}
+
+export function listContextFiles(dataDir, sessionId) {
+  const manifest = requireManifest(dataDir, sessionId)
+  const dir = sessionPaths(dataDir, sessionId).context
+  return normalizeContextFiles(manifest.contextFiles).flatMap((item) => {
+    let absolute
+    try {
+      absolute = contextFileAbsolute(dir, item.storedName)
+    } catch {
+      return []
+    }
+    if (!fs.existsSync(absolute)) return []
+    return [{ ...item, path: absolute }]
+  })
+}
+
+export function contextFileHandshake(dataDir, sessionId) {
+  const files = listContextFiles(dataDir, sessionId)
+  const listed = []
+  const texts = []
+  for (const file of files) {
+    listed.push({
+      name: file.name,
+      path: file.path,
+      mimeType: file.mimeType,
+      size: file.size,
+    })
+    const bytes = fs.readFileSync(file.path)
+    if (isInlineContextText(file.mimeType, bytes)) {
+      texts.push({ name: file.name, content: bytes.toString('utf8') })
+    }
+  }
+  return { files: listed, texts }
+}
+
 export function readManifest(dataDir, sessionId) {
   const { manifest } = sessionPaths(dataDir, sessionId)
   const value = readJson(manifest, null)
@@ -448,6 +576,7 @@ export function readManifest(dataDir, sessionId) {
   if (typeof value.stepByStep !== 'boolean') value.stepByStep = true
   value.initialInstruction =
     typeof value.initialInstruction === 'string' ? value.initialInstruction : null
+  value.contextFiles = normalizeContextFiles(value.contextFiles)
   return value
 }
 
@@ -492,8 +621,11 @@ function liveEntries(manifest, diffId) {
   const browsingHistory = selected.id !== manifest.activeDiffId
   return chain.filter((entry) => {
     if (entry.status === 'rejected') return false
-    if (entry.status === 'extended' || entry.status === 'extend') {
+    if (entry.status === 'extended') {
       return browsingHistory && entry.id === selected.id
+    }
+    if (entry.status === 'extend') {
+      return entry.id === selected.id
     }
     return true
   })
@@ -627,6 +759,7 @@ export function sessionIntent(
       typeof manifest.initialInstruction === 'string'
         ? manifest.initialInstruction
         : null,
+    contextFiles: listContextFiles(dataDir, sessionId).map(publicContextFile),
     steps: manifest.steps,
     step: activeView ? manifest.currentStep : selected?.step ?? manifest.currentStep,
     stepByStep: isStepByStep(manifest),
@@ -928,6 +1061,7 @@ export function startSession(dataDir, input) {
     activeDiffId: null,
     pendingInstruction: null,
     initialInstruction: null,
+    contextFiles: [],
     workStartedAt: null,
     createdAt: now,
     updatedAt: now,
@@ -966,6 +1100,7 @@ export function setupSession(dataDir, input = {}) {
     activeDiffId: null,
     pendingInstruction: null,
     initialInstruction: null,
+    contextFiles: [],
     workStartedAt: null,
     createdAt: now,
     updatedAt: now,
@@ -989,6 +1124,92 @@ export function setInitialInstruction(dataDir, sessionId, instruction) {
   const next = text.trim() === '' ? null : text
   if ((manifest.initialInstruction ?? null) === next) return manifest
   manifest.initialInstruction = next
+  writeManifest(dataDir, manifest)
+  return manifest
+}
+
+export function addContextFiles(dataDir, sessionId, files) {
+  const manifest = requireManifest(dataDir, sessionId)
+  if (isTerminalSession(manifest)) {
+    throw sessionStoppedError(sessionId)
+  }
+  const incoming = Array.isArray(files) ? files : files ? [files] : []
+  if (incoming.length === 0) {
+    throw new Error('at least one context file is required')
+  }
+
+  const existing = listContextFiles(dataDir, sessionId)
+  if (existing.length + incoming.length > MAX_CONTEXT_FILES) {
+    throw new Error(`at most ${MAX_CONTEXT_FILES} context files can be attached`)
+  }
+
+  const dir = sessionPaths(dataDir, sessionId).context
+  fs.mkdirSync(dir, { recursive: true })
+  const existingBytes = existing.reduce((sum, item) => sum + item.size, 0)
+  const next = [...existing.map((item) => ({
+    id: item.id,
+    name: item.name,
+    storedName: item.storedName,
+    mimeType: item.mimeType,
+    size: item.size,
+  }))]
+  let addedBytes = 0
+
+  for (const file of incoming) {
+    const bytes = decodeContextFileBytes(file)
+    if (bytes.length === 0) {
+      throw new Error('context file is empty')
+    }
+    if (bytes.length > MAX_CONTEXT_FILE_BYTES) {
+      throw new Error(
+        `context file must be ${MAX_CONTEXT_FILE_BYTES} bytes or smaller`,
+      )
+    }
+    addedBytes += bytes.length
+    if (existingBytes + addedBytes > MAX_CONTEXT_TOTAL_BYTES) {
+      throw new Error(
+        `attached files must total ${MAX_CONTEXT_TOTAL_BYTES} bytes or less`,
+      )
+    }
+    const id = crypto.randomBytes(4).toString('hex')
+    const originalName =
+      typeof file?.name === 'string' ? path.basename(file.name.trim()) : ''
+    const storedName = `${id}-${safeContextFileName(originalName || 'file')}`
+    fs.writeFileSync(contextFileAbsolute(dir, storedName), bytes)
+    next.push({
+      id,
+      name: originalName || storedName,
+      storedName,
+      mimeType:
+        typeof file?.mimeType === 'string' && file.mimeType.trim()
+          ? file.mimeType.trim()
+          : 'application/octet-stream',
+      size: bytes.length,
+    })
+  }
+
+  manifest.contextFiles = next
+  writeManifest(dataDir, manifest)
+  return manifest
+}
+
+export function removeContextFile(dataDir, sessionId, fileId) {
+  const manifest = requireManifest(dataDir, sessionId)
+  if (isTerminalSession(manifest)) {
+    throw sessionStoppedError(sessionId)
+  }
+  const id = typeof fileId === 'string' ? fileId.trim() : ''
+  if (!id) throw new Error('fileId is required')
+  const existing = normalizeContextFiles(manifest.contextFiles)
+  const item = existing.find((file) => file.id === id)
+  if (!item) return manifest
+  const dir = sessionPaths(dataDir, sessionId).context
+  try {
+    fs.unlinkSync(contextFileAbsolute(dir, item.storedName))
+  } catch {
+    // Drop the manifest entry even if the file is already gone.
+  }
+  manifest.contextFiles = existing.filter((file) => file.id !== id)
   writeManifest(dataDir, manifest)
   return manifest
 }
@@ -1124,6 +1345,7 @@ export function reportPlan(dataDir, input) {
       activeDiffId: null,
       pendingInstruction: null,
       initialInstruction: null,
+      contextFiles: [],
       workStartedAt: null,
       createdAt: now,
       updatedAt: now,
@@ -1299,6 +1521,7 @@ export function appendDiff(dataDir, targetRoot, input) {
   )
   manifest.activeDiffId = id
   manifest.phase = 'review'
+  manifest.pendingInstruction = null
   manifest.workStartedAt = null
   manifest.diffs.push(entry)
   writeManifest(dataDir, manifest)
@@ -1370,11 +1593,12 @@ export function requestReplan(
   active.status = 'extend'
   active.instruction = guidance
   active.decidedAt = new Date().toISOString()
-  manifest.phase = 'replanning'
+  manifest.phase = 'working'
   manifest.pendingInstruction = guidance
   manifest.workStartedAt = new Date().toISOString()
   writeManifest(dataDir, manifest)
-  if (targetRoot) materializeDiff(dataDir, targetRoot, sessionId, active.id)
+  // Keep the current proposal on disk. The instruction updates that latest state.
+  void targetRoot
   return manifest
 }
 

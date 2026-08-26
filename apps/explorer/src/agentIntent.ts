@@ -65,6 +65,26 @@ function normalizeAck(
   }
 }
 
+function normalizeContextFiles(value: unknown): NonNullable<AgentIntent['contextFiles']> {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    const id = (item as { id?: unknown }).id
+    const name = (item as { name?: unknown }).name
+    const mimeType = (item as { mimeType?: unknown }).mimeType
+    const size = (item as { size?: unknown }).size
+    if (
+      typeof id !== 'string' ||
+      typeof name !== 'string' ||
+      typeof mimeType !== 'string' ||
+      typeof size !== 'number'
+    ) {
+      return []
+    }
+    return [{ id, name, mimeType, size }]
+  })
+}
+
 export const emptyIntent: AgentIntent = {
   updatedAt: null,
   showMap: false,
@@ -101,6 +121,7 @@ export const emptyIntent: AgentIntent = {
   listening: false,
   lastAck: null,
   initialInstruction: null,
+  contextFiles: [],
   creationMode: false,
   canEnterBlueprint: false,
   blueprintHidden: false,
@@ -155,6 +176,7 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     lastAck: normalizeAck(data?.lastAck),
     initialInstruction:
       typeof data?.initialInstruction === 'string' ? data.initialInstruction : null,
+    contextFiles: normalizeContextFiles(data?.contextFiles),
     creationMode: Boolean(data?.creationMode),
     canEnterBlueprint: Boolean(data?.canEnterBlueprint),
     blueprintHidden: Boolean(data?.blueprintHidden),
@@ -350,6 +372,50 @@ export function persistInitialInstruction(sessionId: string, instruction: string
   }).catch(() => {
     // Keep the local instruction if the session handshake is no longer open.
   })
+}
+
+export async function persistAddContextFiles(
+  sessionId: string,
+  files: Array<{ name: string; mimeType: string; contentBase64: string }>,
+) {
+  const response = await fetch('/api/agent-intent', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'add_context_files',
+      sessionId,
+      files,
+    }),
+  })
+  if (!response.ok) {
+    const detail = await response.text()
+    let message = detail || 'Could not attach files'
+    try {
+      const parsed = JSON.parse(detail) as { error?: string }
+      if (parsed?.error) message = parsed.error
+    } catch {
+      // Use the raw body when it is not JSON.
+    }
+    throw new Error(message)
+  }
+  return normalize((await response.json()) as AgentIntent)
+}
+
+export async function persistRemoveContextFile(sessionId: string, fileId: string) {
+  const response = await fetch('/api/agent-intent', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'remove_context_file',
+      sessionId,
+      fileId,
+    }),
+  })
+  if (!response.ok) {
+    const detail = await response.text()
+    throw new Error(detail || 'Could not remove file')
+  }
+  return normalize((await response.json()) as AgentIntent)
 }
 
 export function persistSessionFocus(sessionId: string) {

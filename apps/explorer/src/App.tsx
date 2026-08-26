@@ -475,10 +475,11 @@ function Explorer({
 
   const flyAlongRelation = useCallback(
     (fromId: string, toId: string) => {
+      if (mode !== 'walk') return
       const [x, z] = walkPos.current
       travelToFile(relationTravelTarget(fromId, toId, x, z, layout.files), true)
     },
-    [layout.files, travelToFile],
+    [layout.files, mode, travelToFile],
   )
 
   const runWorkflowAction = useCallback(
