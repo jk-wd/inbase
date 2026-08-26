@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -8,53 +9,140 @@ import {
   extractJsSymbols,
 } from './js-source.mjs'
 import {
+  gitExcludeArgs,
+  shouldIgnoreRelativePath,
+  toPosix,
+} from './scan-ignore.mjs'
+import {
   dataDir as defaultDataDir,
   targetName as defaultTargetName,
   targetRoot as defaultTargetRoot,
 } from './target-config.mjs'
 
 const defaultOutPath = path.join(defaultDataDir, 'codebase.json')
-const IGNORE_DIRS = new Set([
-  'node_modules',
-  'dist',
-  'build',
-  'out',
-  'coverage',
-  '.git',
-  '.inbase',
-])
-const IGNORE_FILES = new Set(['package-lock.json'])
 const BINARY_PROBE_BYTES = 8000
 
-function toPosix(filePath) {
-  return filePath.split(path.sep).join('/')
-}
-
 function isBinaryFile(filePath) {
-  const fd = fs.openSync(filePath, 'r')
   try {
-    const buf = Buffer.alloc(BINARY_PROBE_BYTES)
-    const bytes = fs.readSync(fd, buf, 0, buf.length, 0)
-    return buf.subarray(0, bytes).includes(0)
-  } finally {
-    fs.closeSync(fd)
+    const fd = fs.openSync(filePath, 'r')
+    try {
+      const buf = Buffer.alloc(BINARY_PROBE_BYTES)
+      const bytes = fs.readSync(fd, buf, 0, buf.length, 0)
+      return buf.subarray(0, bytes).includes(0)
+    } finally {
+      fs.closeSync(fd)
+    }
+  } catch {
+    return true
   }
 }
 
-function walk(dir, acc = []) {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name.startsWith('.')) continue
-    if (entry.isDirectory()) {
-      if (IGNORE_DIRS.has(entry.name)) continue
-      walk(path.join(dir, entry.name), acc)
+function isInsideRoot(filePath, root) {
+  let resolved
+  let base
+  try {
+    resolved = fs.realpathSync(filePath)
+    base = fs.realpathSync(root)
+  } catch {
+    resolved = path.resolve(filePath)
+    base = path.resolve(root)
+  }
+  return resolved === base || resolved.startsWith(base + path.sep)
+}
+
+function resolvesThroughIgnored(absolutePath, root) {
+  try {
+    const real = fs.realpathSync(absolutePath)
+    const realRoot = fs.realpathSync(root)
+    if (!(real === realRoot || real.startsWith(realRoot + path.sep))) return true
+    return shouldIgnoreRelativePath(path.relative(realRoot, real))
+  } catch {
+    return true
+  }
+}
+
+function walk(dir, root, acc = []) {
+  let entries
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return acc
+  }
+  for (const entry of entries) {
+    const absolutePath = path.join(dir, entry.name)
+    const relative = toPosix(path.relative(root, absolutePath))
+    if (shouldIgnoreRelativePath(relative) || resolvesThroughIgnored(absolutePath, root)) {
       continue
     }
-    if (IGNORE_FILES.has(entry.name)) continue
-    const absolutePath = path.join(dir, entry.name)
+    let stat = entry
+    if (entry.isSymbolicLink()) {
+      try {
+        stat = fs.statSync(absolutePath)
+      } catch {
+        continue
+      }
+    }
+    if (stat.isDirectory()) {
+      walk(absolutePath, root, acc)
+      continue
+    }
+    if (!stat.isFile()) continue
     if (isBinaryFile(absolutePath)) continue
     acc.push(absolutePath)
   }
   return acc
+}
+
+function isGitWorkTree(root) {
+  const result = spawnSync('git', ['rev-parse', '--is-inside-work-tree'], {
+    cwd: root,
+    encoding: 'utf8',
+  })
+  return result.status === 0 && result.stdout.trim() === 'true'
+}
+
+function listGitSourceFiles(root) {
+  if (!isGitWorkTree(root)) return null
+  const result = spawnSync(
+    'git',
+    [
+      'ls-files',
+      '-z',
+      '--cached',
+      '--others',
+      '--exclude-standard',
+      ...gitExcludeArgs(),
+      '--',
+      '.',
+    ],
+    {
+      cwd: root,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    },
+  )
+  if (result.status !== 0) return null
+  const files = []
+  for (const raw of result.stdout.split('\0')) {
+    const relative = toPosix(raw)
+    if (!relative || shouldIgnoreRelativePath(relative)) continue
+    const absolutePath = path.resolve(root, raw)
+    if (!isInsideRoot(absolutePath, root) || resolvesThroughIgnored(absolutePath, root)) {
+      continue
+    }
+    try {
+      if (!fs.statSync(absolutePath).isFile()) continue
+    } catch {
+      continue
+    }
+    if (isBinaryFile(absolutePath)) continue
+    files.push(absolutePath)
+  }
+  return files
+}
+
+function listSourceAbsolutes(root) {
+  return listGitSourceFiles(root) ?? walk(root, root)
 }
 
 function languageOf(filePath) {
@@ -140,7 +228,9 @@ function ensureFolder(folders, folderPath, rootName) {
 
 export function listSourceFiles(root) {
   if (!root || !fs.existsSync(root) || !fs.statSync(root).isDirectory()) return []
-  return walk(root).map((absolutePath) => toPosix(path.relative(root, absolutePath)))
+  return listSourceAbsolutes(root).map((absolutePath) =>
+    toPosix(path.relative(root, absolutePath)),
+  )
 }
 
 export function scanTarget({
@@ -154,7 +244,7 @@ export function scanTarget({
     )
   }
 
-  const absoluteFiles = walk(root)
+  const absoluteFiles = listSourceAbsolutes(root)
   const folders = new Map()
   ensureFolder(folders, '.', name)
 

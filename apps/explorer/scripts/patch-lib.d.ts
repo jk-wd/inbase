@@ -114,12 +114,15 @@ export const emptyIntent: {
   initialInstruction: string | null
   creationMode: boolean
   canEnterBlueprint: boolean
+  blueprintHidden?: boolean
+  blueprintRevision?: number
   blueprintSessionId: string | null
   userCreatedBlocks: unknown[]
   userCreatedIslands: unknown[]
   blueprintFunctions: unknown[]
   blueprintVariables: unknown[]
   blueprintImports: unknown[]
+  blueprintNotes: unknown[]
 }
 
 export function isLastStep(intent: {

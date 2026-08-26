@@ -1,6 +1,8 @@
 import { CONFIG, fileHeight } from './theme'
 import { folderOfFile, folderParent } from './layout'
 import type {
+  BlueprintNote,
+  BlueprintNoteKind,
   CodebaseGraph,
   FileNode,
   PatchImportAddition,
@@ -337,6 +339,102 @@ export function defaultBlockSpot(
 
 export function isBlueprintSymbolName(value: string) {
   return /^[A-Za-z_$][\w$]*$/.test(value.trim())
+}
+
+export function blueprintNoteKey(
+  note: Pick<BlueprintNote, 'file' | 'kind' | 'name'>,
+) {
+  return note.kind === 'file'
+    ? `file:${note.file}`
+    : `${note.kind}:${note.file}:${note.name ?? ''}`
+}
+
+function parseBlueprintNote(value: unknown): BlueprintNote | null {
+  if (!value || typeof value !== 'object') return null
+  const item = value as Partial<BlueprintNote>
+  const file = typeof item.file === 'string' ? item.file.trim() : ''
+  const note = typeof item.note === 'string' ? item.note : ''
+  if (!file || !note.trim()) return null
+  if (item.kind === 'file') return { file, kind: 'file', note }
+  if (item.kind !== 'function' && item.kind !== 'variable') return null
+  const name = typeof item.name === 'string' ? item.name.trim() : ''
+  if (!name) return null
+  return { file, kind: item.kind, name, note }
+}
+
+export function parseBlueprintNotes(value: unknown): BlueprintNote[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const notes: BlueprintNote[] = []
+  for (const item of value) {
+    const parsed = parseBlueprintNote(item)
+    if (!parsed) continue
+    const key = blueprintNoteKey(parsed)
+    if (seen.has(key)) continue
+    seen.add(key)
+    notes.push(parsed)
+  }
+  return notes
+}
+
+export function findBlueprintNote(
+  notes: BlueprintNote[],
+  file: string,
+  kind: BlueprintNoteKind,
+  name?: string,
+) {
+  return (
+    notes.find((item) =>
+      kind === 'file'
+        ? item.kind === 'file' && item.file === file
+        : item.kind === kind && item.file === file && item.name === name,
+    )?.note ?? ''
+  )
+}
+
+export function setBlueprintNote(
+  notes: BlueprintNote[],
+  next: {
+    file: string
+    kind: BlueprintNoteKind
+    name?: string
+    note: string
+  },
+): BlueprintNote[] {
+  const key = blueprintNoteKey(next)
+  const without = notes.filter((item) => blueprintNoteKey(item) !== key)
+  if (next.note === '') return without
+  const stored: BlueprintNote =
+    next.kind === 'file'
+      ? { file: next.file, kind: 'file', note: next.note }
+      : {
+          file: next.file,
+          kind: next.kind,
+          name: (next.name ?? '').trim(),
+          note: next.note,
+        }
+  if (stored.kind !== 'file' && !stored.name) return without
+  return [...without, stored]
+}
+
+export function dropBlueprintFileNotes(
+  notes: BlueprintNote[],
+  fileIds: Iterable<string>,
+) {
+  const removed = new Set(fileIds)
+  return notes.filter((item) => !removed.has(item.file))
+}
+
+export function dropBlueprintSymbolNote(
+  notes: BlueprintNote[],
+  file: string,
+  kind: 'function' | 'variable',
+  name: string,
+) {
+  return notes.filter(
+    (item) =>
+      !(item.file === file && item.kind === kind && item.name === name),
+  )
 }
 
 export function parseBlueprintImport(

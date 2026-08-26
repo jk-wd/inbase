@@ -216,6 +216,15 @@ export type PatchImportAddition = {
   file: string
 }
 
+export type BlueprintNoteKind = 'file' | 'function' | 'variable'
+
+export type BlueprintNote = {
+  file: string
+  kind: BlueprintNoteKind
+  name?: string
+  note: string
+}
+
 export type AimedRelation = {
   from: string
   to: string
@@ -250,13 +259,29 @@ export type WorkflowAction =
   | 'blueprint_no'
   | 'blueprint_send'
   | 'blueprint_update'
+  | 'blueprint_clear'
+  | 'blueprint_cleanup'
+  | 'blueprint_set_hidden'
   | 'focus'
   | 'set_step_by_step'
+
+export type SharedBlueprint = {
+  hidden: boolean
+  revision: number
+  enabled: boolean
+  userCreatedBlocks: UserCreatedBlock[]
+  userCreatedIslands: UserCreatedIsland[]
+  addedFunctions: PatchSymbolAddition[]
+  addedVariables: PatchSymbolAddition[]
+  addedImports: PatchImportAddition[]
+  notes: BlueprintNote[]
+}
 
 export type AgentIntentBundle = {
   focusedSessionId: string | null
   nextAttachSessionId: string | null
   intents: AgentIntent[]
+  blueprint: SharedBlueprint
 }
 
 export type AgentIntent = {
@@ -301,10 +326,13 @@ export type AgentIntent = {
   initialInstruction?: string | null
   creationMode: boolean
   canEnterBlueprint: boolean
+  blueprintHidden?: boolean
+  blueprintRevision?: number
   blueprintSessionId: string | null
   userCreatedBlocks: UserCreatedBlock[]
   userCreatedIslands: UserCreatedIsland[]
   blueprintFunctions: PatchSymbolAddition[]
   blueprintVariables: PatchSymbolAddition[]
   blueprintImports: PatchImportAddition[]
+  blueprintNotes: BlueprintNote[]
 }

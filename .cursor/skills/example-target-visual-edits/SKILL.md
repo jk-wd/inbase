@@ -56,7 +56,8 @@ If this chat is not yet attached, run:
 npx inbase attach
 ```
 
-That attaches this chat to the session currently focused in the map. No id is
+That attaches this chat to the next waiting visualizer session (oldest first).
+Already-attached sessions are skipped. Window focus does not matter. No id is
 passed in; read `VISUAL_CODER_SESSION` from the output and use that
 `--session` value for every later command. Then continue from
 `wait-for-blueprint` below. Do **not** run `start-session`. Do **not** wait
@@ -92,22 +93,22 @@ npx inbase wait-for-blueprint --session "<session-id>"
 ```
 
    The user may have placed files (`Space`) and islands (`B`), or left the
-   blueprint empty. That choice is already on the session. They can keep
-   placing on later steps. This chat's blueprint is stored only for this
-   session.
+   shared blueprint empty. That blueprint is shared across sessions. They can
+   keep placing at any time.
    If `wait-for-blueprint` prints `VISUAL_CODER_INSTRUCTION_START` /
    `VISUAL_CODER_INSTRUCTION_END`, that text is the user's request for this
    session. Plan from that instruction and the blueprint together. The
    instruction does not override an enabled blueprint; if they conflict,
    ask the user.
 3. Read the handshake output between `VISUAL_CODER_BLUEPRINT_START` and
-   `VISUAL_CODER_BLUEPRINT_END`, or read this session's `blueprint.json` in
-   the running instance's `diff-sessions/<session-id>/` folder.
+   `VISUAL_CODER_BLUEPRINT_END`, or read the shared `blueprint.json` in the
+   running instance data dir (path in `INBASE_ATTACHED`, otherwise
+   `.inbase/blueprint.json`).
    If `enabled` is true, **the blueprint is leading**. Treat
    `userCreatedBlocks`, `userCreatedIslands`, `addedFunctions`,
    `addedVariables`, and `addedImports` as the source of truth for this chat.
    Create those paths and add those symbols even if they are not on disk.
-   They belong to this chat only.
+   The same blueprint is shared with every session.
    Do not omit, rename, relocate, or replace a blueprint file, island, symbol,
    or import. Extra edits to existing files are allowed when needed to finish
    the feature. Extra new files that are not in the blueprint are a deviation.
@@ -123,8 +124,8 @@ npx inbase wait-for-blueprint --session "<session-id>"
    - `filesOnIsland` is the rest of that folder
    Prefer those files while `followLook` is true, unless the request clearly
    needs something else. If `followLook` is false or missing, ignore viewpoint
-   and choose files from the request itself. Viewpoint never overrides the
-   blueprint: still follow this session's blueprint when `enabled` is true.
+   and    choose files from the request itself. Viewpoint never overrides the
+   blueprint: still follow the shared blueprint when `enabled` is true.
 6. List **all** steps needed to finish the feature. Keep steps small enough that
    one recorded step is one landscape change (usually one new file, or a few
    related edits).
@@ -149,8 +150,8 @@ npx inbase wait-for-approval --session "<session-id>"
    returns, they already did. Do not edit example-target files until this
    prints `VISUAL_CODER_ACK execute` / `VISUAL_CODER_EXECUTE`. If Step by step
    is off, this returns immediately for each remaining step. First reply in
-   chat acknowledging the ack, then re-read this session's `blueprint.json`;
-   the user can place files and islands on any step.
+   chat acknowledging the ack, then re-read the shared `blueprint.json`;
+   the user can place files and islands at any time.
 9. Implement only the invoked step by editing live files under
    `apps/example-target` (Write, StrReplace, Delete). Paths are the same ids as
    `codebase.json`. Then record the step — Inbase diffs the working tree against
@@ -179,20 +180,24 @@ npx inbase wait-for-approval --session "<session-id>"
 
    - Exit `0` (`VISUAL_CODER_ACK execute` / `VISUAL_CODER_EXECUTE`): the
      highlighted step was invoked. If this is a later step, implement it now —
-     do not explore, re-plan, or run `wait-for-blueprint`. Re-read this
-     session's `blueprint.json` only if you need placed files. Edit live files
-     for that step only, record with `inbase propose-patch` (no patch file),
-     then wait again.
+     do not explore, re-plan, or run `wait-for-blueprint`. Re-read the shared
+     `blueprint.json` if you need placed files. Edit live files for that step
+     only, record with `inbase propose-patch` (no patch file), then wait again.
+   - Exit `6` (`VISUAL_CODER_ACK blueprint` / `VISUAL_CODER_BLUEPRINT`): the
+     shared blueprint changed. Follow the latest files, islands, functions,
+     variables, and imports. Do not omit, rename, relocate, or replace them.
+     If this would differ from the current plan, ask the user before replacing
+     the plan. Then run `wait-for-approval` again.
    - Exit `5` (`VISUAL_CODER_ACK finished` / `VISUAL_CODER_FINISHED`): that was
      the last step. The visualizer already applied the final patch and removed
-     stored session diffs and blueprint drafts. Optionally run `--clear` if
-     anything remains, tell the user the feature is done, and **stop**. Do not
-     propose another patch.
+     stored session diffs. The shared blueprint remains. Optionally run
+     `--clear` if anything remains, tell the user the feature is done, and
+     **stop**. Do not propose another patch.
    - Exit `4` (`VISUAL_CODER_ACK replan` / `VISUAL_CODER_REPLAN`): do **not**
      edit project files and do not rewrite an earlier accepted patch. The
      withdrawn proposal is no longer live; disk is baseline + accepted patch
      files. Follow the text between `VISUAL_CODER_INSTRUCTION_START` and
-     `VISUAL_CODER_INSTRUCTION_END`, read this session's `blueprint.json` when
+     `VISUAL_CODER_INSTRUCTION_END`, read the shared `blueprint.json` when
      it is enabled (files, islands, `addedFunctions`, `addedVariables`,
      `addedImports`). The blueprint stays leading. If the new instruction would
      differ from it, ask the user before replacing the plan. Read
@@ -205,7 +210,7 @@ npx inbase wait-for-approval --session "<session-id>"
      (`VISUAL_CODER_ACK timeout`): make no further example-target changes.
 
 13. After a finished handshake, the explorer already removed stored session
-    diffs and blueprint drafts. Optionally run:
+    diffs. The shared blueprint remains. Optionally run:
 
 ```bash
 npx inbase propose-patch --session "<session-id>" --clear
@@ -219,9 +224,9 @@ npx inbase propose-patch --session "<session-id>" --clear
 - Invent a session id for `/inbase`; run `npx inbase attach` with no `--session`
 - Skip `inbase wait-for-blueprint`; it returns immediately and provides the optional blueprint and instruction
 - Treat the chat request, viewpoint, or your own plan as overriding an enabled blueprint
-- Skip, rename, relocate, or replace this session's `blueprint.json` files, islands, functions, variables, or imports when `enabled` is true
+- Skip, rename, relocate, or replace the shared `blueprint.json` files, islands, functions, variables, or imports when `enabled` is true
 - Silently differ from the blueprint; ask the user first
-- Read global `user-context.json` for placed files; those live on the session blueprint
+- Read global `user-context.json` for placed files; those live on the shared blueprint
 - Follow the user's look when `followLook` is false
 - Edit `apps/example-target` files before `VISUAL_CODER_EXECUTE`
 - Keep editing after `inbase propose-patch` until the next `VISUAL_CODER_EXECUTE`

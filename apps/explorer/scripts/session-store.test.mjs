@@ -38,6 +38,9 @@ import {
   stopSession,
   touchSessionConnection,
   updateBlueprint,
+  clearBlueprint,
+  cleanupBlueprint,
+  setBlueprintHidden,
   writeManifest,
   isSessionStopped,
   isWorkflowStopped,
@@ -103,7 +106,7 @@ test('starts a blueprint handshake before the LLM can prepare', () => {
     const intent = sessionIntent(env.dataDir, 'prep-chat', ['src/a.ts'])
     assert.equal(intent.status, 'blueprint_ask')
     assert.equal(intent.working, false)
-    assert.equal(intent.creationMode, false)
+    assert.equal(intent.creationMode, true)
     assert.equal(intent.preview, false)
     assert.deepEqual(intent.steps, [])
     assert.equal(intent.diffId, null)
@@ -228,31 +231,31 @@ test('/inbase starts without waiting for a blueprint', () => {
   }
 })
 
-test('attach without an id uses the newest waiting session', () => {
+test('attach without an id uses the oldest waiting session', () => {
   const env = fixture()
   try {
     const first = setupSession(env.dataDir)
     const second = setupSession(env.dataDir)
     assert.equal(readActiveSession(env.dataDir), second.sessionId)
     assert.deepEqual(listAttachQueue(env.dataDir), [
-      second.sessionId,
       first.sessionId,
+      second.sessionId,
     ])
-    assert.equal(nextAttachSessionId(env.dataDir), second.sessionId)
+    assert.equal(nextAttachSessionId(env.dataDir), first.sessionId)
 
     const attached = attachSession(env.dataDir)
-    assert.equal(attached.sessionId, second.sessionId)
+    assert.equal(attached.sessionId, first.sessionId)
     assert.equal(attached.awaitingAttach, false)
     assert.equal(attached.phase, 'preparing')
-    const intent = sessionIntent(env.dataDir, second.sessionId)
+    const intent = sessionIntent(env.dataDir, first.sessionId)
     assert.equal(intent.awaitingAttach, false)
     assert.equal(intent.llmIdle, false)
     assert.equal(intent.lastAck.kind, 'attached')
 
-    const again = attachSession(env.dataDir, second.sessionId)
-    assert.equal(again.sessionId, second.sessionId)
-    assert.deepEqual(listAttachQueue(env.dataDir), [first.sessionId])
-    assert.equal(readActiveSession(env.dataDir), second.sessionId)
+    const again = attachSession(env.dataDir, first.sessionId)
+    assert.equal(again.sessionId, first.sessionId)
+    assert.deepEqual(listAttachQueue(env.dataDir), [second.sessionId])
+    assert.equal(readActiveSession(env.dataDir), first.sessionId)
   } finally {
     env.cleanup()
   }
@@ -264,33 +267,44 @@ test('attach skips already attached sessions and ignores window focus', () => {
     const first = setupSession(env.dataDir)
     const second = setupSession(env.dataDir)
     attachSession(env.dataDir)
-    focusSession(env.dataDir, second.sessionId)
-    assert.equal(readActiveSession(env.dataDir), second.sessionId)
-    assert.deepEqual(listAttachQueue(env.dataDir), [first.sessionId])
+    focusSession(env.dataDir, first.sessionId)
+    assert.equal(readActiveSession(env.dataDir), first.sessionId)
+    assert.deepEqual(listAttachQueue(env.dataDir), [second.sessionId])
 
     const next = attachSession(env.dataDir)
-    assert.equal(next.sessionId, first.sessionId)
+    assert.equal(next.sessionId, second.sessionId)
     assert.equal(next.awaitingAttach, false)
     assert.deepEqual(listAttachQueue(env.dataDir), [])
-    assert.equal(readActiveSession(env.dataDir), first.sessionId)
+    assert.equal(readActiveSession(env.dataDir), second.sessionId)
   } finally {
     env.cleanup()
   }
 })
 
-test('a newly created session is first in the attach queue', () => {
+test('a newly created session waits behind older sessions in the attach queue', () => {
   const env = fixture()
   try {
     const first = setupSession(env.dataDir)
+    const second = setupSession(env.dataDir)
+    const newest = setupSession(env.dataDir)
+    assert.equal(nextAttachSessionId(env.dataDir), first.sessionId)
+    assert.deepEqual(listAttachQueue(env.dataDir), [
+      first.sessionId,
+      second.sessionId,
+      newest.sessionId,
+    ])
+
     attachSession(env.dataDir, first.sessionId)
     focusSession(env.dataDir, first.sessionId)
-    const newest = setupSession(env.dataDir)
-    assert.equal(nextAttachSessionId(env.dataDir), newest.sessionId)
-    assert.deepEqual(listAttachQueue(env.dataDir), [newest.sessionId])
+    assert.equal(nextAttachSessionId(env.dataDir), second.sessionId)
+    assert.deepEqual(listAttachQueue(env.dataDir), [
+      second.sessionId,
+      newest.sessionId,
+    ])
 
     const attached = attachSession(env.dataDir)
-    assert.equal(attached.sessionId, newest.sessionId)
-    assert.equal(readManifest(env.dataDir, first.sessionId).awaitingAttach, false)
+    assert.equal(attached.sessionId, second.sessionId)
+    assert.equal(readManifest(env.dataDir, newest.sessionId).awaitingAttach, true)
   } finally {
     env.cleanup()
   }
@@ -374,7 +388,7 @@ test('shares user-placed files with the chat after Send blueprint', () => {
   }
 })
 
-test('stores a separate blueprint for each open LLM session', () => {
+test('sessions share one blueprint across LLM chats', () => {
   const env = fixture()
   try {
     startSession(env.dataDir, { sessionId: 'edit-a' })
@@ -409,14 +423,9 @@ test('stores a separate blueprint for each open LLM session', () => {
     const editingB = sessionIntent(env.dataDir, 'edit-b', ['src/a.ts'])
     assert.equal(editingA.creationMode, true)
     assert.equal(editingB.creationMode, true)
-    assert.deepEqual(editingA.userCreatedBlocks, [blockA])
+    assert.deepEqual(editingA.userCreatedBlocks, [blockB])
     assert.deepEqual(editingB.userCreatedBlocks, [blockB])
-    assert.deepEqual(readBlueprint(env.dataDir, 'edit-a').userCreatedBlocks, [
-      blockA,
-    ])
-    assert.deepEqual(readBlueprint(env.dataDir, 'edit-b').userCreatedBlocks, [
-      blockB,
-    ])
+    assert.deepEqual(readBlueprint(env.dataDir).userCreatedBlocks, [blockB])
 
     focusSession(env.dataDir, 'edit-a')
     assert.equal(readActiveSession(env.dataDir), 'edit-a')
@@ -455,9 +464,8 @@ test('keeps accepting placed files after the blueprint handshake', () => {
     assert.equal(readBlueprint(env.dataDir, 'later-chat').sent, true)
 
     startSession(env.dataDir, { sessionId: 'ask-chat' })
-    assert.throws(() =>
-      updateBlueprint(env.dataDir, 'ask-chat', { userCreatedBlocks: [afterSend] }),
-    )
+    updateBlueprint(env.dataDir, 'ask-chat', { userCreatedBlocks: [afterSend] })
+    assert.deepEqual(readBlueprint(env.dataDir).userCreatedBlocks, [afterSend])
 
     startSession(env.dataDir, { sessionId: 'skip-chat' })
     answerBlueprint(env.dataDir, 'skip-chat', false)
@@ -476,6 +484,64 @@ test('keeps accepting placed files after the blueprint handshake', () => {
     assert.equal(skipIntent.creationMode, true)
     assert.deepEqual(skipIntent.userCreatedBlocks, [skipped])
     assert.equal(readBlueprint(env.dataDir, 'skip-chat').enabled, true)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('blueprint stays shared after a session finishes and can be cleaned up', () => {
+  const env = fixture()
+  try {
+    const block = {
+      id: 'src/a.ts',
+      name: 'a.ts',
+      path: 'src/a.ts',
+      folder: 'src',
+      x: 1,
+      z: 2,
+    }
+    const pending = {
+      id: 'src/New.tsx',
+      name: 'New.tsx',
+      path: 'src/New.tsx',
+      folder: 'src',
+      x: 3,
+      z: 4,
+    }
+    const island = {
+      id: 'src',
+      name: 'src',
+      path: 'src',
+      parent: '.',
+    }
+    updateBlueprint(env.dataDir, null, {
+      userCreatedBlocks: [block, pending],
+      userCreatedIslands: [island],
+      addedFunctions: [
+        { name: 'Clock', file: 'src/New.tsx' },
+        { name: 'value', file: 'src/a.ts' },
+      ],
+    })
+    const cleaned = cleanupBlueprint(env.dataDir, ['src/a.ts'], ['src', '.'])
+    assert.deepEqual(
+      cleaned.userCreatedBlocks.map((item) => item.id),
+      ['src/New.tsx'],
+    )
+    assert.deepEqual(cleaned.userCreatedIslands, [])
+    assert.deepEqual(cleaned.addedFunctions, [
+      { name: 'Clock', file: 'src/New.tsx' },
+    ])
+    assert.equal(cleaned.hidden, false)
+
+    const hidden = setBlueprintHidden(env.dataDir, true)
+    assert.equal(hidden.hidden, true)
+    assert.equal(hidden.revision, cleaned.revision)
+
+    const cleared = clearBlueprint(env.dataDir)
+    assert.equal(cleared.enabled, false)
+    assert.equal(cleared.hidden, true)
+    assert.deepEqual(cleared.userCreatedBlocks, [])
+    assert.ok(cleared.revision > hidden.revision)
   } finally {
     env.cleanup()
   }

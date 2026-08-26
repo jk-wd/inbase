@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { emptyIntent, fetchAgentIntent, fetchAgentIntents, inspectTargetFile, performAgentAction, persistSessionBlueprint, persistSessionFocus, setupVisualizerSession } from './agentIntent'
+import { shouldIgnoreShortcut, isKeyboardIsolated } from './keyboard'
+import { emptyIntent, fetchAgentIntent, fetchAgentIntents, inspectTargetFile, performAgentAction, persistBlueprintCleanup, persistBlueprintClear, persistBlueprintHidden, persistSessionBlueprint, persistSessionFocus, setupVisualizerSession } from './agentIntent'
 import { emptyBranchChanges, fetchBranchChanges } from './branchChanges'
 import { fetchCodebase, updateCodebase } from './codebase'
 import {
@@ -27,14 +28,18 @@ import {
 } from './userContext'
 import {
   defaultBlockSpot,
+  dropBlueprintFileNotes,
+  dropBlueprintSymbolNote,
   isBlueprintSymbolName,
   namedCreatedBlocks,
   namedCreatedIslands,
   parseBlueprintImport,
+  parseBlueprintNotes,
   parseUserCreatedBlocks,
   parseUserCreatedIslands,
   resolveCreatedFile,
   resolveCreatedIsland,
+  setBlueprintNote,
   withBlueprintIntent,
   withUserCreatedGraph,
   withUserCreatedLayout,
@@ -44,6 +49,8 @@ import {
   llmIsMakingChanges,
   type AgentIntent,
   type AimedRelation,
+  type BlueprintNote,
+  type BlueprintNoteKind,
   type CodebaseGraph,
   type FlyTo,
   type PatchImportAddition,
@@ -166,7 +173,7 @@ function Explorer({
     intents.find((item) => item.sessionId === focusedSessionId) ??
     intents[0] ??
     emptyIntent
-  const canPlace = Boolean(intent.sessionId && intent.creationMode)
+  const canPlace = true
   const llmBusy = intents.some(llmIsMakingChanges)
   const llmPreviewing = intent.preview || isPatchPreview(intent.status)
   const showingBranchChanges =
@@ -192,6 +199,23 @@ function Explorer({
   const [blueprintImports, setBlueprintImports] = useState<
     PatchImportAddition[]
   >([])
+  const [blueprintNotes, setBlueprintNotes] = useState<BlueprintNote[]>([])
+  const [blueprintHidden, setBlueprintHidden] = useState(false)
+  const userBlocksRef = useRef(userBlocks)
+  const userIslandsRef = useRef(userIslands)
+  const blueprintFunctionsRef = useRef(blueprintFunctions)
+  const blueprintVariablesRef = useRef(blueprintVariables)
+  const blueprintImportsRef = useRef(blueprintImports)
+  const blueprintNotesRef = useRef(blueprintNotes)
+  const notesDirty = useRef(false)
+  const blueprintPersistGen = useRef(0)
+  const notePersistTimer = useRef<number | null>(null)
+  userBlocksRef.current = userBlocks
+  userIslandsRef.current = userIslands
+  blueprintFunctionsRef.current = blueprintFunctions
+  blueprintVariablesRef.current = blueprintVariables
+  blueprintImportsRef.current = blueprintImports
+  blueprintNotesRef.current = blueprintNotes
   const namingId = userBlocks.find((block) => block.naming)?.id ?? null
   const namingIslandId = userIslands.find((island) => island.naming)?.id ?? null
   const naming = Boolean(namingId || namingIslandId)
@@ -212,10 +236,30 @@ function Explorer({
     plannedCreates,
     previewing,
   ])
+  const knownFileIds = useMemo(
+    () => new Set(previewGraph.files.map((file) => file.id)),
+    [previewGraph],
+  )
+  const knownFolderPaths = useMemo(
+    () => new Set(previewGraph.folders.map((folder) => folder.path)),
+    [previewGraph],
+  )
+  const visibleBlocks = blueprintHidden
+    ? userBlocks.filter((block) => block.naming)
+    : userBlocks
+  const visibleIslands = blueprintHidden
+    ? userIslands.filter((island) => island.naming)
+    : userIslands
+  const pendingBlocks = visibleBlocks.filter(
+    (block) => block.naming || !knownFileIds.has(block.id),
+  )
+  const overlayBlocks = visibleBlocks.filter(
+    (block) => !block.naming && knownFileIds.has(block.id),
+  )
   const displayGraph = useMemo(
     () =>
       withBlueprintIntent(
-        withUserCreatedGraph(previewGraph, userBlocks, userIslands),
+        withUserCreatedGraph(previewGraph, pendingBlocks, visibleIslands),
         blueprintFunctions,
         blueprintVariables,
         blueprintImports,
@@ -224,23 +268,23 @@ function Explorer({
       blueprintFunctions,
       blueprintImports,
       blueprintVariables,
+      pendingBlocks,
       previewGraph,
-      userBlocks,
-      userIslands,
+      visibleIslands,
     ],
   )
   const layout = useMemo(() => {
     const world = layoutWorld(
-      withUserCreatedGraph(previewGraph, [], userIslands),
+      withUserCreatedGraph(previewGraph, [], visibleIslands),
     )
     if (previewing) markCreatedFolders(world, changeSet.createFolders ?? [])
-    return withUserCreatedLayout(world, userBlocks, userIslands)
+    return withUserCreatedLayout(world, pendingBlocks, visibleIslands)
   }, [
     changeSet.createFolders,
+    pendingBlocks,
     previewGraph,
     previewing,
-    userBlocks,
-    userIslands,
+    visibleIslands,
   ])
   const changeFileIds = useMemo(() => {
     const ids = new Set<string>()
@@ -251,10 +295,12 @@ function Explorer({
     for (const item of blueprintFunctions) ids.add(item.file)
     for (const item of blueprintVariables) ids.add(item.file)
     for (const item of blueprintImports) ids.add(item.file)
+    for (const note of blueprintNotes) ids.add(note.file)
     return [...ids]
   }, [
     blueprintFunctions,
     blueprintImports,
+    blueprintNotes,
     blueprintVariables,
     changeSet.creates,
     changeSet.deletes,
@@ -316,7 +362,6 @@ function Explorer({
   const lastIntentSig = useRef<string | null>(null)
   const viewedDiffId = useRef<Record<string, string | null>>({})
   const browsingHistory = useRef<Record<string, boolean>>({})
-  const loadedBlueprintSession = useRef<string | null>(null)
   const seenSessionIds = useRef<Set<string>>(new Set())
 
   const applyIntent = useCallback((next: AgentIntent, sessionId?: string) => {
@@ -464,6 +509,7 @@ function Explorer({
                   addedFunctions: blueprintFunctions,
                   addedVariables: blueprintVariables,
                   addedImports: blueprintImports,
+                  notes: blueprintNotes,
                 }
               : {}),
           },
@@ -486,6 +532,7 @@ function Explorer({
       applyIntent,
       blueprintFunctions,
       blueprintImports,
+      blueprintNotes,
       blueprintVariables,
       intents,
       onRefreshGraph,
@@ -538,16 +585,7 @@ function Explorer({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat || event.code !== 'KeyM') return
-      const target = event.target
-      if (
-        target instanceof HTMLElement &&
-        (target.tagName === 'TEXTAREA' ||
-          target.tagName === 'INPUT' ||
-          target.tagName === 'SELECT' ||
-          target.isContentEditable)
-      ) {
-        return
-      }
+      if (shouldIgnoreShortcut(event)) return
       event.preventDefault()
       toggleMap()
     }
@@ -571,98 +609,78 @@ function Explorer({
     }
   }, [])
 
-  useEffect(() => {
-    if (!intent.sessionId) {
-      loadedBlueprintSession.current = null
-      setUserBlocks([])
-      setUserIslands([])
-      setBlueprintFunctions([])
-      setBlueprintVariables([])
-      setBlueprintImports([])
-      return
-    }
-    const knownFiles = new Set(graph.files.map((file) => file.id))
-    const knownFolders = new Set(graph.folders.map((folder) => folder.path))
-    const nextBlocks = parseUserCreatedBlocks(intent.userCreatedBlocks).filter(
-      (block) => !knownFiles.has(block.id),
-    )
-    const nextIslands = parseUserCreatedIslands(intent.userCreatedIslands).filter(
-      (island) => !knownFolders.has(island.path),
-    )
-    const switched = loadedBlueprintSession.current !== intent.sessionId
-    if (switched) {
-      loadedBlueprintSession.current = intent.sessionId
-      setUserBlocks(nextBlocks)
-      setUserIslands(nextIslands)
-      setBlueprintFunctions(intent.blueprintFunctions)
-      setBlueprintVariables(intent.blueprintVariables)
-      setBlueprintImports(intent.blueprintImports)
-      return
-    }
-    if (intent.creationMode) {
-      setUserBlocks((current) =>
-        current.some((block) => block.naming) || current.length > 0
-          ? current
-          : nextBlocks,
-      )
-      setUserIslands((current) =>
-        current.some((island) => island.naming) || current.length > 0
-          ? current
-          : nextIslands,
-      )
-      setBlueprintFunctions((current) =>
-        current.length > 0 ? current : intent.blueprintFunctions,
-      )
-      setBlueprintVariables((current) =>
-        current.length > 0 ? current : intent.blueprintVariables,
-      )
-      setBlueprintImports((current) =>
-        current.length > 0 ? current : intent.blueprintImports,
-      )
-      return
-    }
-    setUserBlocks(nextBlocks)
-    setUserIslands(nextIslands)
-    setBlueprintFunctions(intent.blueprintFunctions)
-    setBlueprintVariables(intent.blueprintVariables)
-    setBlueprintImports(intent.blueprintImports)
-  }, [
-    intent.blueprintFunctions,
-    intent.blueprintImports,
-    intent.blueprintVariables,
-    intent.creationMode,
-    intent.sessionId,
-    intent.userCreatedBlocks,
-    intent.userCreatedIslands,
-    graph,
-  ])
-
   const persistBlueprint = useCallback(
     (
-      blocks: UserCreatedBlock[] = userBlocks,
-      islands: UserCreatedIsland[] = userIslands,
-      functions: PatchSymbolAddition[] = blueprintFunctions,
-      variables: PatchSymbolAddition[] = blueprintVariables,
-      imports: PatchImportAddition[] = blueprintImports,
+      blocks: UserCreatedBlock[] = userBlocksRef.current,
+      islands: UserCreatedIsland[] = userIslandsRef.current,
+      functions: PatchSymbolAddition[] = blueprintFunctionsRef.current,
+      variables: PatchSymbolAddition[] = blueprintVariablesRef.current,
+      imports: PatchImportAddition[] = blueprintImportsRef.current,
+      notes: BlueprintNote[] = blueprintNotesRef.current,
     ) => {
-      if (!intent.sessionId || !intent.creationMode) return
-      persistSessionBlueprint(intent.sessionId, {
+      if (notePersistTimer.current != null) {
+        window.clearTimeout(notePersistTimer.current)
+        notePersistTimer.current = null
+      }
+      const gen = ++blueprintPersistGen.current
+      notesDirty.current = true
+      void persistSessionBlueprint(intent.sessionId, {
         userCreatedBlocks: namedCreatedBlocks(blocks),
         userCreatedIslands: namedCreatedIslands(islands),
         addedFunctions: functions,
         addedVariables: variables,
         addedImports: imports,
+        notes,
+      }).finally(() => {
+        if (gen !== blueprintPersistGen.current) return
+        if (notePersistTimer.current != null) return
+        notesDirty.current = false
       })
     },
-    [
-      blueprintFunctions,
-      blueprintImports,
-      blueprintVariables,
-      intent.creationMode,
-      intent.sessionId,
-      userBlocks,
-      userIslands,
-    ],
+    [intent.sessionId],
+  )
+
+  const persistBlueprintSoon = useCallback(() => {
+    notesDirty.current = true
+    if (notePersistTimer.current != null) {
+      window.clearTimeout(notePersistTimer.current)
+    }
+    notePersistTimer.current = window.setTimeout(() => {
+      persistBlueprint()
+    }, 400)
+  }, [persistBlueprint])
+
+  useEffect(() => {
+    return () => {
+      if (notePersistTimer.current == null) return
+      window.clearTimeout(notePersistTimer.current)
+      notePersistTimer.current = null
+      if (!notesDirty.current) return
+      persistSessionBlueprint(intent.sessionId, {
+        userCreatedBlocks: namedCreatedBlocks(userBlocksRef.current),
+        userCreatedIslands: namedCreatedIslands(userIslandsRef.current),
+        addedFunctions: blueprintFunctionsRef.current,
+        addedVariables: blueprintVariablesRef.current,
+        addedImports: blueprintImportsRef.current,
+        notes: blueprintNotesRef.current,
+      })
+      notesDirty.current = false
+    }
+  }, [intent.sessionId])
+
+  const applyBlueprintNote = useCallback(
+    (next: {
+      file: string
+      kind: BlueprintNoteKind
+      name?: string
+      note: string
+    }) => {
+      const notes = setBlueprintNote(blueprintNotesRef.current, next)
+      blueprintNotesRef.current = notes
+      setBlueprintNotes(notes)
+      persistBlueprintSoon()
+    },
+    [persistBlueprintSoon],
   )
 
   const placeBlock = useCallback(
@@ -812,8 +830,11 @@ function Explorer({
     const selected = userBlocks.find((block) => block.id === selectedId)
     if (!selected || selected.naming) return false
     const next = userBlocks.filter((block) => block.id !== selectedId)
+    const notes = dropBlueprintFileNotes(blueprintNotesRef.current, [selectedId])
+    blueprintNotesRef.current = notes
     setUserBlocks(next)
-    persistBlueprint(next, userIslands)
+    setBlueprintNotes(notes)
+    persistBlueprint(next, userIslands, undefined, undefined, undefined, notes)
     setSelectedId(null)
     return true
   }, [canPlace, persistBlueprint, selectedId, userBlocks, userIslands])
@@ -972,8 +993,23 @@ function Explorer({
       const next = blueprintFunctions.filter(
         (item) => !(item.file === fileId && item.name === name),
       )
+      const notes = dropBlueprintSymbolNote(
+        blueprintNotesRef.current,
+        fileId,
+        'function',
+        name,
+      )
+      blueprintNotesRef.current = notes
       setBlueprintFunctions(next)
-      persistBlueprint(userBlocks, userIslands, next, blueprintVariables, blueprintImports)
+      setBlueprintNotes(notes)
+      persistBlueprint(
+        userBlocks,
+        userIslands,
+        next,
+        blueprintVariables,
+        blueprintImports,
+        notes,
+      )
     },
     [
       blueprintFunctions,
@@ -992,8 +1028,23 @@ function Explorer({
       const next = blueprintVariables.filter(
         (item) => !(item.file === fileId && item.name === name),
       )
+      const notes = dropBlueprintSymbolNote(
+        blueprintNotesRef.current,
+        fileId,
+        'variable',
+        name,
+      )
+      blueprintNotesRef.current = notes
       setBlueprintVariables(next)
-      persistBlueprint(userBlocks, userIslands, blueprintFunctions, next, blueprintImports)
+      setBlueprintNotes(notes)
+      persistBlueprint(
+        userBlocks,
+        userIslands,
+        blueprintFunctions,
+        next,
+        blueprintImports,
+        notes,
+      )
     },
     [
       blueprintFunctions,
@@ -1037,6 +1088,7 @@ function Explorer({
     if (!namingId && !namingIslandId) return
     const onKey = (event: KeyboardEvent) => {
       if (event.code !== 'Escape') return
+      if (shouldIgnoreShortcut(event)) return
       event.preventDefault()
       if (namingId) cancelBlockName(namingId)
       if (namingIslandId) cancelIslandName(namingIslandId)
@@ -1052,16 +1104,7 @@ function Explorer({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat || event.code !== 'Backspace') return
-      const target = event.target
-      if (
-        target instanceof HTMLElement &&
-        (target.tagName === 'TEXTAREA' ||
-          target.tagName === 'INPUT' ||
-          target.tagName === 'SELECT' ||
-          target.isContentEditable)
-      ) {
-        return
-      }
+      if (shouldIgnoreShortcut(event)) return
       if (!deleteSelectedCreatedBlock()) return
       event.preventDefault()
     }
@@ -1101,16 +1144,7 @@ function Explorer({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat || event.code !== 'KeyK') return
-      const target = event.target
-      if (
-        target instanceof HTMLElement &&
-        (target.tagName === 'TEXTAREA' ||
-          target.tagName === 'INPUT' ||
-          target.tagName === 'SELECT' ||
-          target.isContentEditable)
-      ) {
-        return
-      }
+      if (shouldIgnoreShortcut(event)) return
       event.preventDefault()
       toggleImportedBy()
     }
@@ -1121,16 +1155,7 @@ function Explorer({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat || event.code !== 'KeyG') return
-      const target = event.target
-      if (
-        target instanceof HTMLElement &&
-        (target.tagName === 'TEXTAREA' ||
-          target.tagName === 'INPUT' ||
-          target.tagName === 'SELECT' ||
-          target.isContentEditable)
-      ) {
-        return
-      }
+      if (shouldIgnoreShortcut(event)) return
       if (!canToggleBranchChanges) return
       event.preventDefault()
       toggleShowBranchChanges()
@@ -1164,16 +1189,7 @@ function Explorer({
     if (mode !== 'map' || !hasChangeSet) return
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat || event.code !== 'KeyC') return
-      const target = event.target
-      if (
-        target instanceof HTMLElement &&
-        (target.tagName === 'TEXTAREA' ||
-          target.tagName === 'INPUT' ||
-          target.tagName === 'SELECT' ||
-          target.isContentEditable)
-      ) {
-        return
-      }
+      if (shouldIgnoreShortcut(event)) return
       event.preventDefault()
       toggleChangePathsOnly()
     }
@@ -1187,6 +1203,29 @@ function Explorer({
       try {
         const bundle = await fetchAgentIntents()
         if (cancelled) return
+        setBlueprintHidden(Boolean(bundle.blueprint.hidden))
+        const nextBlocks = parseUserCreatedBlocks(bundle.blueprint.userCreatedBlocks)
+        const nextIslands = parseUserCreatedIslands(bundle.blueprint.userCreatedIslands)
+        setUserBlocks((current) => {
+          const drafts = current.filter((block) => block.naming)
+          if (drafts.length === 0) return nextBlocks
+          const namedIds = new Set(drafts.map((block) => block.id))
+          return [...nextBlocks.filter((block) => !namedIds.has(block.id)), ...drafts]
+        })
+        setUserIslands((current) => {
+          const drafts = current.filter((island) => island.naming)
+          if (drafts.length === 0) return nextIslands
+          const namedIds = new Set(drafts.map((island) => island.id))
+          return [...nextIslands.filter((island) => !namedIds.has(island.id)), ...drafts]
+        })
+        setBlueprintFunctions(bundle.blueprint.addedFunctions)
+        setBlueprintVariables(bundle.blueprint.addedVariables)
+        setBlueprintImports(bundle.blueprint.addedImports)
+        if (!notesDirty.current && !isKeyboardIsolated()) {
+          const nextNotes = parseBlueprintNotes(bundle.blueprint.notes)
+          blueprintNotesRef.current = nextNotes
+          setBlueprintNotes(nextNotes)
+        }
         setNextAttachSessionId(bundle.nextAttachSessionId)
         const merged: AgentIntent[] = []
         for (const next of bundle.intents) {
@@ -1259,6 +1298,64 @@ function Explorer({
     ...blueprintImportEdges,
   ]
   const deletedIds = previewing ? changeSet.deletes : []
+  const blueprintHasContent =
+    namedCreatedBlocks(userBlocks).length > 0 ||
+    namedCreatedIslands(userIslands).length > 0 ||
+    blueprintFunctions.length > 0 ||
+    blueprintVariables.length > 0 ||
+    blueprintImports.length > 0 ||
+    blueprintNotes.length > 0
+  const blueprintCanCleanup =
+    userBlocks.some((block) => !block.naming && knownFileIds.has(block.id)) ||
+    userIslands.some(
+      (island) => !island.naming && knownFolderPaths.has(island.path),
+    )
+
+  const toggleBlueprintHidden = useCallback(() => {
+    const next = !blueprintHidden
+    setBlueprintHidden(next)
+    void persistBlueprintHidden(next).catch(() => setBlueprintHidden(!next))
+  }, [blueprintHidden])
+
+  const clearSharedBlueprint = useCallback(() => {
+    setUserBlocks([])
+    setUserIslands([])
+    setBlueprintFunctions([])
+    setBlueprintVariables([])
+    setBlueprintImports([])
+    blueprintNotesRef.current = []
+    setBlueprintNotes([])
+    void persistBlueprintClear()
+  }, [])
+
+  const cleanupSharedBlueprint = useCallback(() => {
+    const files = knownFileIds
+    const folders = knownFolderPaths
+    const removed = new Set(
+      userBlocks
+        .filter((block) => !block.naming && files.has(block.id))
+        .map((block) => block.id),
+    )
+    setUserBlocks((current) =>
+      current.filter((block) => block.naming || !files.has(block.id)),
+    )
+    setUserIslands((current) =>
+      current.filter((island) => island.naming || !folders.has(island.path)),
+    )
+    setBlueprintFunctions((current) =>
+      current.filter((item) => !removed.has(item.file)),
+    )
+    setBlueprintVariables((current) =>
+      current.filter((item) => !removed.has(item.file)),
+    )
+    setBlueprintImports((current) =>
+      current.filter((item) => !removed.has(item.file)),
+    )
+    const notes = dropBlueprintFileNotes(blueprintNotesRef.current, removed)
+    blueprintNotesRef.current = notes
+    setBlueprintNotes(notes)
+    void persistBlueprintCleanup()
+  }, [knownFileIds, knownFolderPaths, userBlocks])
 
   return (
     <>
@@ -1309,8 +1406,11 @@ function Explorer({
             onBlueprintMenu={canPlace ? setMapMenu : undefined}
             onCommitName={commitBlockName}
             onCancelName={cancelBlockName}
-            userCreatedBlocks={userBlocks}
-            userCreatedIslands={userIslands}
+            onCommitIslandName={commitIslandName}
+            onCancelIslandName={cancelIslandName}
+            userCreatedBlocks={visibleBlocks}
+            userCreatedIslands={visibleIslands}
+            overlayBlocks={overlayBlocks}
             mapGraph={
               changePathsOnly && hasChangeSet ? changePathGraph : null
             }
@@ -1368,12 +1468,14 @@ function Explorer({
         blueprintFunctions={blueprintFunctions}
         blueprintVariables={blueprintVariables}
         blueprintImports={blueprintImports}
+        blueprintNotes={blueprintNotes}
         onAddBlueprintFunction={addBlueprintFunction}
         onAddBlueprintVariable={addBlueprintVariable}
         onAddBlueprintImport={addBlueprintImport}
         onRemoveBlueprintFunction={removeBlueprintFunction}
         onRemoveBlueprintVariable={removeBlueprintVariable}
         onRemoveBlueprintImport={removeBlueprintImport}
+        onSetBlueprintNote={applyBlueprintNote}
         onMapAddFile={placeBlockOnFolder}
         onMapAddFolder={placeIslandOnFolder}
         onInspectFile={inspectFile}
@@ -1381,6 +1483,12 @@ function Explorer({
         plannedIds={plannedIds}
         createdIds={plannedCreates}
         deletedIds={deletedIds}
+        blueprintHidden={blueprintHidden}
+        blueprintHasContent={blueprintHasContent}
+        blueprintCanCleanup={blueprintCanCleanup}
+        onToggleBlueprintHidden={toggleBlueprintHidden}
+        onClearBlueprint={clearSharedBlueprint}
+        onCleanupBlueprint={cleanupSharedBlueprint}
       />
       <MapContextMenu
         menu={mapMenu}

@@ -6,7 +6,7 @@ The user invoked `/inbase`. This is how a chat joins the visualizer session that
 
 Do **not** ask for a session id. Do **not** run `inbase start-session`. Do **not** print the "direct chat interaction not allowed" message.
 
-1. Attach to the next waiting visualizer session (newest first; skip sessions that already have an LLM):
+1. Attach to the next waiting visualizer session (oldest first; skip sessions that already have an LLM):
 
 ```bash
 npx inbase attach

@@ -8,6 +8,8 @@ import {
   type AgentIntent,
   type AgentIntentStatus,
   type AimedRelation,
+  type BlueprintNote,
+  type BlueprintNoteKind,
   type BranchChanges,
   type CodebaseGraph,
   type PatchImportAddition,
@@ -16,6 +18,8 @@ import {
   type WorldLayout,
   type WorkflowAction,
 } from '../types'
+import { findBlueprintNote } from '../userCreated'
+import { beginKeyboardIsolation, shouldIgnoreShortcut } from '../keyboard'
 
 function reviewTitle(status: AgentIntentStatus) {
   if (status === 'blueprint_ask') return 'Setup blueprint'
@@ -214,6 +218,144 @@ function AddIntentRow({
   )
 }
 
+function BlueprintNoteModal({
+  title,
+  subtitle,
+  value,
+  placeholder,
+  onChange,
+  onClose,
+}: {
+  title: string
+  subtitle: string
+  value: string
+  placeholder: string
+  onChange: (value: string) => void
+  onClose: () => void
+}) {
+  const fieldRef = useRef<HTMLTextAreaElement>(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
+  useEffect(() => {
+    const release = beginKeyboardIsolation()
+    document.exitPointerLock()
+    const field = fieldRef.current
+    field?.focus()
+    if (field) {
+      const end = field.value.length
+      field.setSelectionRange(end, end)
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code === 'Escape') {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        onCloseRef.current()
+        return
+      }
+      if (event.key !== 'Tab') return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      if (document.activeElement !== fieldRef.current) {
+        fieldRef.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+      release()
+    }
+  }, [])
+
+  return (
+    <div className="hud-note-overlay" onClick={onClose}>
+      <div
+        className="hud-note-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="hud-note-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="hud-note-header">
+          <div className="hud-note-heading">
+            <h1 id="hud-note-title">{title}</h1>
+            <p className="hud-note-subtitle">{subtitle}</p>
+          </div>
+          <button className="hud-button" type="button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <textarea
+          ref={fieldRef}
+          className="hud-note-field"
+          data-blueprint-note="true"
+          defaultValue={value}
+          maxLength={8000}
+          placeholder={placeholder}
+          aria-label={title}
+          spellCheck={false}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          autoFocus
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </div>
+    </div>
+  )
+}
+
+function BlueprintSymbolRow({
+  name,
+  className,
+  hasNote,
+  noteOpen,
+  canEdit,
+  canRemove,
+  onRemove,
+  onOpenNote,
+}: {
+  name: string
+  className?: string
+  hasNote: boolean
+  noteOpen?: boolean
+  canEdit: boolean
+  canRemove?: boolean
+  onRemove?: () => void
+  onOpenNote: () => void
+}) {
+  return (
+    <li>
+      <span className={className}>{name}</span>
+      {canEdit && (
+        <div className="hud-item-actions">
+          <button
+            className="hud-item-note"
+            type="button"
+            data-has-note={hasNote ? 'true' : 'false'}
+            data-open={noteOpen ? 'true' : 'false'}
+            aria-label={`Edit note for ${name}`}
+            onClick={onOpenNote}
+          >
+            Note
+          </button>
+          {canRemove && (
+            <button
+              className="hud-item-remove"
+              type="button"
+              aria-label={`Remove ${name}`}
+              onClick={onRemove}
+            >
+              ×
+            </button>
+          )}
+        </div>
+      )}
+    </li>
+  )
+}
+
 function AttachStateBadge({ attached }: { attached: boolean }) {
   return (
     <span
@@ -314,7 +456,8 @@ function blueprintIsDefined(intent: AgentIntent) {
     (intent.userCreatedIslands?.length ?? 0) > 0 ||
     (intent.blueprintFunctions?.length ?? 0) > 0 ||
     (intent.blueprintVariables?.length ?? 0) > 0 ||
-    (intent.blueprintImports?.length ?? 0) > 0
+    (intent.blueprintImports?.length ?? 0) > 0 ||
+    (intent.blueprintNotes?.length ?? 0) > 0
   )
 }
 
@@ -352,7 +495,9 @@ function HandshakeSetup({
         </h2>
         <p>
           Press <kbd>Space</kbd> for a file and <kbd>B</kbd> for an island.
-          On the map, right-click to add a file or folder. Optional.
+          On the map, right-click to add a file or folder. Open a file's info
+          panel to add functions, vars, and notes (instructions or pseudo
+          code). The blueprint is shared across sessions.
         </p>
       </section>
       <section className="hud-setup-section">
@@ -585,7 +730,7 @@ function SessionPanel({
     intent.awaitingAttach &&
     nextAttachSession &&
     nextAttachSession.sessionId !== sessionId
-      ? sessionLabel(nextAttachSession) || 'a newer session'
+      ? sessionLabel(nextAttachSession) || 'an earlier session'
       : null
 
   const act = (
@@ -680,9 +825,9 @@ function SessionPanel({
           {askingBlueprint && !handshakeSetup && !showConnectedProgress ? (
             <>
               <p>
-                Place files and folders for this chat, then send them as a
-                blueprint for the LLM? You can still add files and islands on
-                later steps.
+                A shared blueprint is already available on the map. Send this
+                session to the LLM, or skip and let it continue with the current
+                layout.
               </p>
               <div className="hud-decide">
                 <button
@@ -1225,7 +1370,22 @@ function explorerInstructions({
         {
           id: 'setup-session',
           keys: ['Setup LLM session'],
-          label: 'Open a session; /inbase attaches the newest waiting one',
+          label: 'Open a session; /inbase attaches the oldest waiting one',
+        },
+        {
+          id: 'blueprint-toggle',
+          keys: ['Hide/Show blueprint'],
+          label: 'Toggle the shared blueprint overlay',
+        },
+        {
+          id: 'blueprint-clear',
+          keys: ['Clear blueprint'],
+          label: 'Remove every planned file and folder',
+        },
+        {
+          id: 'blueprint-cleanup',
+          keys: ['Cleanup blueprint'],
+          label: 'Drop blueprint files and folders that already exist',
         },
         { id: 'toggle-map', keys: ['M'], label: 'Toggle map' },
         {
@@ -1279,8 +1439,8 @@ function explorerInstructions({
           : []),
         { id: 'click-line', keys: ['Click'], label: 'A line to fly there' },
         {
-          id: 'ctrl-click-walk',
-          keys: ['Ctrl', 'Click'],
+          id: 'option-click-walk',
+          keys: ['Option', 'Click'],
           label: 'An island to walk',
         },
         {
@@ -1312,7 +1472,22 @@ function explorerInstructions({
         {
           id: 'setup-session',
           keys: ['Setup LLM session'],
-          label: 'Open a session; /inbase attaches the newest waiting one',
+          label: 'Open a session; /inbase attaches the oldest waiting one',
+        },
+        {
+          id: 'blueprint-toggle',
+          keys: ['Hide/Show blueprint'],
+          label: 'Toggle the shared blueprint overlay',
+        },
+        {
+          id: 'blueprint-clear',
+          keys: ['Clear blueprint'],
+          label: 'Remove every planned file and folder',
+        },
+        {
+          id: 'blueprint-cleanup',
+          keys: ['Cleanup blueprint'],
+          label: 'Drop blueprint files and folders that already exist',
         },
         { id: 'map-walk', keys: ['M'], label: 'Back to walk' },
         ...stop,
@@ -1368,6 +1543,7 @@ type HUDProps = {
   blueprintFunctions?: PatchSymbolAddition[]
   blueprintVariables?: PatchSymbolAddition[]
   blueprintImports?: PatchImportAddition[]
+  blueprintNotes?: BlueprintNote[]
   onAddBlueprintFunction?: (fileId: string, name: string) => boolean
   onAddBlueprintVariable?: (fileId: string, name: string) => boolean
   onAddBlueprintImport?: (fileId: string, raw: string) => boolean
@@ -1378,6 +1554,12 @@ type HUDProps = {
     name: string,
     from: string,
   ) => void
+  onSetBlueprintNote?: (next: {
+    file: string
+    kind: BlueprintNoteKind
+    name?: string
+    note: string
+  }) => void
   onMapAddFile?: (folderPath: string) => void
   onMapAddFolder?: (folderPath: string) => void
   onInspectFile?: (fileId: string) => void
@@ -1385,6 +1567,12 @@ type HUDProps = {
   plannedIds?: string[]
   createdIds?: string[]
   deletedIds?: string[]
+  blueprintHidden?: boolean
+  blueprintHasContent?: boolean
+  blueprintCanCleanup?: boolean
+  onToggleBlueprintHidden?: () => void
+  onClearBlueprint?: () => void
+  onCleanupBlueprint?: () => void
 }
 
 export function HUD({
@@ -1430,12 +1618,14 @@ export function HUD({
   blueprintFunctions = [],
   blueprintVariables = [],
   blueprintImports = [],
+  blueprintNotes = [],
   onAddBlueprintFunction,
   onAddBlueprintVariable,
   onAddBlueprintImport,
   onRemoveBlueprintFunction,
   onRemoveBlueprintVariable,
   onRemoveBlueprintImport,
+  onSetBlueprintNote,
   onMapAddFile,
   onMapAddFolder,
   onInspectFile,
@@ -1443,6 +1633,12 @@ export function HUD({
   plannedIds = [],
   createdIds = [],
   deletedIds = [],
+  blueprintHidden = false,
+  blueprintHasContent = false,
+  blueprintCanCleanup = false,
+  onToggleBlueprintHidden,
+  onClearBlueprint,
+  onCleanupBlueprint,
 }: HUDProps) {
   const selected = graph.files.find((file) => file.id === selectedId)
   const selectedFolderNode = graph.folders.find(
@@ -1471,6 +1667,14 @@ export function HUD({
   const [walkIntro, setWalkIntro] = useState(false)
   const walkIntroSeen = useRef(false)
   const [instructionsOpen, setInstructionsOpen] = useState(false)
+  const [noteEditor, setNoteEditor] = useState<{
+    file: string
+    kind: BlueprintNoteKind
+    name?: string
+    title: string
+    subtitle: string
+    placeholder: string
+  } | null>(null)
   const [setupError, setSetupError] = useState<string | null>(null)
   const [setupBusy, setSetupBusy] = useState(false)
   const [infoVisible, setInfoVisible] = useState(false)
@@ -1479,7 +1683,7 @@ export function HUD({
   const [thumbnailMinimized, setThumbnailMinimized] = useState(false)
   const [thumbnailMaximized, setThumbnailMaximized] = useState(false)
   const infoPanelRef = useRef<HTMLDivElement>(null)
-  const canPlace = Boolean(intent.creationMode)
+  const canPlace = true
   const overlay = showBranchChanges && branchChanges ? branchChanges : intent
   const previewing = intent.preview || showBranchChanges
   const addedFunctions = overlay.addedFunctions ?? []
@@ -1548,6 +1752,35 @@ export function HUD({
   )
   const canEditBlueprint =
     canPlace && Boolean(selected) && !selected?.id.startsWith('draft:')
+  const selectedFileNote = selected
+    ? findBlueprintNote(blueprintNotes, selected.id, 'file')
+    : ''
+  const openFileNote = () => {
+    if (!selected || !onSetBlueprintNote) return
+    setInstructionsOpen(false)
+    setNoteEditor({
+      file: selected.id,
+      kind: 'file',
+      title: `Note · ${selected.name}`,
+      subtitle: selected.path,
+      placeholder: 'Extra instructions or pseudo code for this file',
+    })
+  }
+  const openSymbolNote = (
+    kind: 'function' | 'variable',
+    name: string,
+  ) => {
+    if (!selected || !onSetBlueprintNote) return
+    setInstructionsOpen(false)
+    setNoteEditor({
+      file: selected.id,
+      kind,
+      name,
+      title: `Note · ${name}`,
+      subtitle: `${kind} in ${selected.path}`,
+      placeholder: `Instructions or pseudo code for ${name}`,
+    })
+  }
   const canInspectFile = (fileId: string, userCreated = false) =>
     Boolean(onInspectFile) &&
     !fileId.startsWith('draft:') &&
@@ -1608,16 +1841,7 @@ export function HUD({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat || event.code !== 'KeyI') return
-      const target = event.target
-      if (
-        target instanceof HTMLElement &&
-        (target.tagName === 'TEXTAREA' ||
-          target.tagName === 'INPUT' ||
-          target.tagName === 'SELECT' ||
-          target.isContentEditable)
-      ) {
-        return
-      }
+      if (shouldIgnoreShortcut(event)) return
       event.preventDefault()
       if (infoVisible) {
         setInfoVisible(false)
@@ -1640,16 +1864,7 @@ export function HUD({
     if (!mapping) return
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat || event.code !== 'KeyT') return
-      const target = event.target
-      if (
-        target instanceof HTMLElement &&
-        (target.tagName === 'TEXTAREA' ||
-          target.tagName === 'INPUT' ||
-          target.tagName === 'SELECT' ||
-          target.isContentEditable)
-      ) {
-        return
-      }
+      if (shouldIgnoreShortcut(event)) return
       event.preventDefault()
       setThumbnailVisible((visible) => {
         if (!visible) {
@@ -1669,16 +1884,7 @@ export function HUD({
     if (!infoVisible || (!selectedId && !selectedFolder)) return
     const onKey = (event: KeyboardEvent) => {
       if (event.code !== 'ArrowUp' && event.code !== 'ArrowDown') return
-      const target = event.target
-      if (
-        target instanceof HTMLElement &&
-        (target.tagName === 'TEXTAREA' ||
-          target.tagName === 'INPUT' ||
-          target.tagName === 'SELECT' ||
-          target.isContentEditable)
-      ) {
-        return
-      }
+      if (shouldIgnoreShortcut(event)) return
       const panel = infoPanelRef.current
       if (!panel || panel.scrollHeight <= panel.clientHeight + 1) return
       event.preventDefault()
@@ -1695,6 +1901,7 @@ export function HUD({
     document.exitPointerLock()
     const onKey = (event: KeyboardEvent) => {
       if (event.code !== 'Escape') return
+      if (shouldIgnoreShortcut(event)) return
       event.preventDefault()
       event.stopPropagation()
       setInstructionsOpen(false)
@@ -1747,15 +1954,18 @@ export function HUD({
         </div>
       )}
 
-      {namingIsland && onCommitIslandName && onCancelIslandName && (
-        <div className="hud-name-gate">
-          <NameInput
-            placeholder="Folder name"
-            onCommit={onCommitIslandName}
-            onCancel={onCancelIslandName}
-          />
-        </div>
-      )}
+      {mode === 'walk' &&
+        namingIsland &&
+        onCommitIslandName &&
+        onCancelIslandName && (
+          <div className="hud-name-gate">
+            <NameInput
+              placeholder="Folder name"
+              onCommit={onCommitIslandName}
+              onCancel={onCancelIslandName}
+            />
+          </div>
+        )}
 
       {mode === 'walk' && locked && (
         <div className="crosshair" data-aim={Boolean(aimed)} />
@@ -1877,6 +2087,21 @@ export function HUD({
               Inspect file
             </button>
           )}
+          {canEditBlueprint && onSetBlueprintNote && (
+            <button
+              className="hud-button hud-inspect"
+              type="button"
+              data-has-note={selectedFileNote ? 'true' : 'false'}
+              data-open={
+                noteEditor?.kind === 'file' && noteEditor.file === selected.id
+                  ? 'true'
+                  : 'false'
+              }
+              onClick={openFileNote}
+            >
+              {selectedFileNote ? 'Edit file note' : 'Add file note'}
+            </button>
+          )}
           {previewing &&
             (selectedChangedFunctions.length > 0 ||
               selectedAddedFunctions.length > 0 ||
@@ -1931,33 +2156,55 @@ export function HUD({
           ) : (
             <ul>
               {selectedFunctions.map((symbol) => (
-                <li key={`fn-${symbol.name}`}>
-                  <span
-                    className={
-                      symbolChangeClass(functionChange.get(symbol.name)) ??
-                      (symbol.intended ? 'hud-intended' : undefined)
-                    }
-                  >
-                    {symbol.name}
-                  </span>
-                  {canEditBlueprint && symbol.intended && (
-                    <button
-                      className="hud-item-remove"
-                      type="button"
-                      aria-label={`Remove ${symbol.name}`}
-                      onClick={() =>
-                        onRemoveBlueprintFunction?.(selected.id, symbol.name)
-                      }
-                    >
-                      ×
-                    </button>
+                <BlueprintSymbolRow
+                  key={`fn-${symbol.name}`}
+                  name={symbol.name}
+                  className={
+                    symbolChangeClass(functionChange.get(symbol.name)) ??
+                    (symbol.intended ? 'hud-intended' : undefined)
+                  }
+                  hasNote={Boolean(
+                    findBlueprintNote(
+                      blueprintNotes,
+                      selected.id,
+                      'function',
+                      symbol.name,
+                    ),
                   )}
-                </li>
+                  noteOpen={
+                    noteEditor?.kind === 'function' &&
+                    noteEditor.file === selected.id &&
+                    noteEditor.name === symbol.name
+                  }
+                  canEdit={Boolean(canEditBlueprint && onSetBlueprintNote)}
+                  canRemove={Boolean(canEditBlueprint && symbol.intended)}
+                  onRemove={() =>
+                    onRemoveBlueprintFunction?.(selected.id, symbol.name)
+                  }
+                  onOpenNote={() => openSymbolNote('function', symbol.name)}
+                />
               ))}
               {extraAddedFunctions.map((item) => (
-                <li key={`fn-add-${item.name}`}>
-                  <span className="hud-file-add">{item.name}</span>
-                </li>
+                <BlueprintSymbolRow
+                  key={`fn-add-${item.name}`}
+                  name={item.name}
+                  className="hud-file-add"
+                  hasNote={Boolean(
+                    findBlueprintNote(
+                      blueprintNotes,
+                      selected.id,
+                      'function',
+                      item.name,
+                    ),
+                  )}
+                  noteOpen={
+                    noteEditor?.kind === 'function' &&
+                    noteEditor.file === selected.id &&
+                    noteEditor.name === item.name
+                  }
+                  canEdit={Boolean(canEditBlueprint && onSetBlueprintNote)}
+                  onOpenNote={() => openSymbolNote('function', item.name)}
+                />
               ))}
             </ul>
           )}
@@ -1975,33 +2222,55 @@ export function HUD({
           ) : (
             <ul>
               {selectedVariables.map((symbol) => (
-                <li key={`var-${symbol.name}`}>
-                  <span
-                    className={
-                      symbolChangeClass(variableChange.get(symbol.name)) ??
-                      (symbol.intended ? 'hud-intended' : undefined)
-                    }
-                  >
-                    {symbol.name}
-                  </span>
-                  {canEditBlueprint && symbol.intended && (
-                    <button
-                      className="hud-item-remove"
-                      type="button"
-                      aria-label={`Remove ${symbol.name}`}
-                      onClick={() =>
-                        onRemoveBlueprintVariable?.(selected.id, symbol.name)
-                      }
-                    >
-                      ×
-                    </button>
+                <BlueprintSymbolRow
+                  key={`var-${symbol.name}`}
+                  name={symbol.name}
+                  className={
+                    symbolChangeClass(variableChange.get(symbol.name)) ??
+                    (symbol.intended ? 'hud-intended' : undefined)
+                  }
+                  hasNote={Boolean(
+                    findBlueprintNote(
+                      blueprintNotes,
+                      selected.id,
+                      'variable',
+                      symbol.name,
+                    ),
                   )}
-                </li>
+                  noteOpen={
+                    noteEditor?.kind === 'variable' &&
+                    noteEditor.file === selected.id &&
+                    noteEditor.name === symbol.name
+                  }
+                  canEdit={Boolean(canEditBlueprint && onSetBlueprintNote)}
+                  canRemove={Boolean(canEditBlueprint && symbol.intended)}
+                  onRemove={() =>
+                    onRemoveBlueprintVariable?.(selected.id, symbol.name)
+                  }
+                  onOpenNote={() => openSymbolNote('variable', symbol.name)}
+                />
               ))}
               {extraAddedVariables.map((item) => (
-                <li key={`var-add-${item.name}`}>
-                  <span className="hud-file-add">{item.name}</span>
-                </li>
+                <BlueprintSymbolRow
+                  key={`var-add-${item.name}`}
+                  name={item.name}
+                  className="hud-file-add"
+                  hasNote={Boolean(
+                    findBlueprintNote(
+                      blueprintNotes,
+                      selected.id,
+                      'variable',
+                      item.name,
+                    ),
+                  )}
+                  noteOpen={
+                    noteEditor?.kind === 'variable' &&
+                    noteEditor.file === selected.id &&
+                    noteEditor.name === item.name
+                  }
+                  canEdit={Boolean(canEditBlueprint && onSetBlueprintNote)}
+                  onOpenNote={() => openSymbolNote('variable', item.name)}
+                />
               ))}
             </ul>
           )}
@@ -2199,6 +2468,30 @@ export function HUD({
       )}
       </div>
 
+      {noteEditor && onSetBlueprintNote && (
+        <BlueprintNoteModal
+          key={`${noteEditor.kind}:${noteEditor.file}:${noteEditor.name ?? ''}`}
+          title={noteEditor.title}
+          subtitle={noteEditor.subtitle}
+          value={findBlueprintNote(
+            blueprintNotes,
+            noteEditor.file,
+            noteEditor.kind,
+            noteEditor.name,
+          )}
+          placeholder={noteEditor.placeholder}
+          onChange={(note) =>
+            onSetBlueprintNote({
+              file: noteEditor.file,
+              kind: noteEditor.kind,
+              name: noteEditor.name,
+              note,
+            })
+          }
+          onClose={() => setNoteEditor(null)}
+        />
+      )}
+
       {instructionsOpen && (
         <div
           className="hud-instructions-overlay"
@@ -2251,7 +2544,10 @@ export function HUD({
             type="button"
             aria-haspopup="dialog"
             aria-expanded={instructionsOpen}
-            onClick={() => setInstructionsOpen((open) => !open)}
+            onClick={() => {
+              setNoteEditor(null)
+              setInstructionsOpen((open) => !open)
+            }}
           >
             Instructions
           </button>
@@ -2287,6 +2583,46 @@ export function HUD({
               }}
             >
               {setupBusy ? 'Starting…' : 'Setup LLM session'}
+            </button>
+          )}
+          {onToggleBlueprintHidden && (
+            <button
+              className="hud-button"
+              type="button"
+              data-active={!blueprintHidden}
+              aria-label={blueprintHidden ? 'Show blueprint' : 'Hide blueprint'}
+              title={
+                blueprintHidden
+                  ? 'Show the shared blueprint overlay'
+                  : 'Hide the shared blueprint overlay'
+              }
+              onClick={onToggleBlueprintHidden}
+            >
+              {blueprintHidden ? 'Show blueprint' : 'Hide blueprint'}
+            </button>
+          )}
+          {onClearBlueprint && (
+            <button
+              className="hud-button"
+              type="button"
+              aria-label="Clear blueprint"
+              title="Remove every planned file, folder, and symbol"
+              disabled={!blueprintHasContent}
+              onClick={onClearBlueprint}
+            >
+              Clear blueprint
+            </button>
+          )}
+          {onCleanupBlueprint && (
+            <button
+              className="hud-button"
+              type="button"
+              aria-label="Cleanup blueprint"
+              title="Remove blueprint files and folders that already exist"
+              disabled={!blueprintCanCleanup}
+              onClick={onCleanupBlueprint}
+            >
+              Cleanup blueprint
             </button>
           )}
         </div>

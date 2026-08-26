@@ -18,6 +18,7 @@ type MapViewProps = {
   marker: [number, number] | null
   highlightedFolders?: Partial<Record<string, ChangeKind>>
   selectedFolder?: string | null
+  namingFolderPath?: string | null
   onLand: (x: number, z: number) => void
   onSelect: (fileId: string | null) => void
   onSelectFolder: (folderPath: string | null) => void
@@ -31,6 +32,7 @@ export function MapView({
   marker,
   highlightedFolders,
   selectedFolder = null,
+  namingFolderPath = null,
   onLand,
   onSelect,
   onSelectFolder,
@@ -83,10 +85,9 @@ export function MapView({
     const element = gl.domElement
     element.style.cursor = 'grab'
 
-    const isWalkClick = (event: PointerEvent | MouseEvent) => event.ctrlKey
+    const isWalkClick = (event: PointerEvent | MouseEvent) => event.altKey
 
-    const isWalkButton = (event: PointerEvent) =>
-      event.button === 0 || (event.ctrlKey && event.button === 2)
+    const isWalkButton = (event: PointerEvent) => event.button === 0
 
     const onDown = (event: PointerEvent) => {
       if (!isWalkButton(event)) return
@@ -183,7 +184,7 @@ export function MapView({
     }
 
     const onContextMenu = (event: MouseEvent) => {
-      if (event.ctrlKey) {
+      if (event.altKey) {
         event.preventDefault()
         return
       }
@@ -313,6 +314,7 @@ export function MapView({
           folders={layout.folders}
           highlightedFolders={highlightedFolders}
           selectedFolder={selectedFolder}
+          namingFolderPath={namingFolderPath}
         />
       )}
       {enabled && marker && <LandMarker marker={marker} />}
@@ -322,6 +324,23 @@ export function MapView({
 
 const PROJECT = new THREE.Vector3()
 const MIN_FOLDER_LABEL_PX = 28
+const FOLDER_ENTRANCE_Z = 1.35
+
+function projectToScreen(
+  x: number,
+  y: number,
+  z: number,
+  camera: THREE.Camera,
+  width: number,
+  height: number,
+) {
+  PROJECT.set(x, y, z).project(camera)
+  return {
+    x: (PROJECT.x * 0.5 + 0.5) * width,
+    y: (-PROJECT.y * 0.5 + 0.5) * height,
+    behind: PROJECT.z < -1 || PROJECT.z > 1,
+  }
+}
 
 function folderLabelClass(
   folder: PlacedFolder,
@@ -346,10 +365,12 @@ function MapFolderLabels({
   folders,
   highlightedFolders,
   selectedFolder,
+  namingFolderPath,
 }: {
   folders: Record<string, PlacedFolder>
   highlightedFolders?: Partial<Record<string, ChangeKind>>
   selectedFolder: string | null
+  namingFolderPath: string | null
 }) {
   const camera = useThree((state) => state.camera)
   const gl = useThree((state) => state.gl)
@@ -398,21 +419,31 @@ function MapFolderLabels({
       const el = nodes[i] as HTMLElement | undefined
       const folder = items[i]
       if (!el || !folder) continue
-      PROJECT.set(folder.x, 14, folder.z + 1.35).project(camera)
-      const x = (PROJECT.x * 0.5 + 0.5) * size.width
-      const y = (-PROJECT.y * 0.5 + 0.5) * size.height
+      const screen = projectToScreen(
+        folder.x,
+        14,
+        folder.z + FOLDER_ENTRANCE_Z,
+        camera,
+        size.width,
+        size.height,
+      )
+      const x = screen.x
+      const y = screen.y
       const span = Math.max(folder.width, folder.depth) * zoom
       const force =
         selectedFolder === folder.path ||
         Boolean(highlightedFolders?.[folder.path] || folder.added)
       const onScreen =
-        PROJECT.z >= -1 &&
-        PROJECT.z <= 1 &&
+        !screen.behind &&
         x > -120 &&
         x < size.width + 120 &&
         y > -40 &&
         y < size.height + 40
-      if (!onScreen || (!force && span < MIN_FOLDER_LABEL_PX)) {
+      if (
+        folder.path === namingFolderPath ||
+        !onScreen ||
+        (!force && span < MIN_FOLDER_LABEL_PX)
+      ) {
         if (el.style.visibility !== 'hidden') el.style.visibility = 'hidden'
         continue
       }

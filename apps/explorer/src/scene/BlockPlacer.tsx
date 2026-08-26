@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { folderAt } from '../layout'
+import { shouldIgnoreShortcut } from '../keyboard'
 import type { WorldLayout } from '../types'
 
 type BlockPlacerProps = {
@@ -18,16 +19,6 @@ const forward = new THREE.Vector3()
 
 const PLACE_MIN = 3
 const PLACE_MAX = 22
-
-function typingInField(target: EventTarget | null) {
-  return (
-    target instanceof HTMLElement &&
-    (target.tagName === 'TEXTAREA' ||
-      target.tagName === 'INPUT' ||
-      target.tagName === 'SELECT' ||
-      target.isContentEditable)
-  )
-}
 
 function lookPoint(camera: THREE.Camera): { x: number; z: number } {
   raycaster.setFromCamera(ndc, camera)
@@ -70,7 +61,7 @@ export function BlockPlacer({ enabled, layout, onPlace }: BlockPlacerProps) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!enabled || event.repeat || event.code !== 'Space') return
-      if (typingInField(event.target)) return
+      if (shouldIgnoreShortcut(event)) return
       event.preventDefault()
       const { x, z } = lookPoint(camera)
       const island =

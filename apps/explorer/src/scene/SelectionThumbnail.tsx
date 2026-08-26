@@ -9,6 +9,7 @@ import {
   folderOfFile,
 } from '../layout'
 import { CONFIG, WORLD_VOID, type ChangeKind } from '../theme'
+import { shouldIgnoreShortcut } from '../keyboard'
 import type { CodebaseGraph, PlacedFile, PlacedFolder, WorldLayout } from '../types'
 import { FileBlock } from './FileBlock'
 import { FolderArea } from './FolderArea'
@@ -903,6 +904,7 @@ export function SelectionThumbnail({
     if (!maximized) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
+      if (shouldIgnoreShortcut(event)) return
       event.preventDefault()
       onMaximize?.()
     }

@@ -135,7 +135,7 @@ function emitApprovalHandshake(store, dataDir, sessionId, manifest, initialDiff)
     console.log(
       continuing
         ? `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Continue immediately: edit live files for this step only, then inbase propose-patch --session ${sessionId} with no patch file. Do not explore, re-plan, or run wait-for-blueprint.`
-        : `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Re-read this session's blueprint.json before implementing; the user can place files and islands on any step. Edit the live project files for this step only (Write, StrReplace, Delete). Then record the step with inbase propose-patch --session ${sessionId} — no patch file. Inbase diffs those edits against the invoke snapshot and stores the patch. Do not write a unified diff yourself.`,
+        : `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Re-read the shared blueprint.json before implementing; the user can place files and islands at any time. Edit the live project files for this step only (Write, StrReplace, Delete). Then record the step with inbase propose-patch --session ${sessionId} — no patch file. Inbase diffs those edits against the invoke snapshot and stores the patch. Do not write a unified diff yourself.`,
     )
     process.exit(0)
   }
@@ -151,7 +151,7 @@ function emitApprovalHandshake(store, dataDir, sessionId, manifest, initialDiff)
       ? `\nVISUAL_CODER_INSTRUCTION_START\n${manifest.pendingInstruction}\nVISUAL_CODER_INSTRUCTION_END`
       : ''
     console.log(
-      `VISUAL_CODER_REPLAN Keep accepted patch files before step ${manifest.currentStep}. Disk is baseline + accepted patches. Do not edit project files until the next EXECUTE. The session blueprint remains leading; if this instruction would differ from it, ask the user before replacing the plan. Report the revised tail with inbase report-plan, then wait for invocation.${instruction}`,
+      `VISUAL_CODER_REPLAN Keep accepted patch files before step ${manifest.currentStep}. Disk is baseline + accepted patches. Do not edit project files until the next EXECUTE. The shared blueprint remains leading; if this instruction would differ from it, ask the user before replacing the plan. Report the revised tail with inbase report-plan, then wait for invocation.${instruction}`,
     )
     process.exit(4)
   }
@@ -183,6 +183,19 @@ export async function attachSession(args) {
   )
 }
 
+function printBlueprintDump(blueprint) {
+  const blocks = blueprint.userCreatedBlocks ?? []
+  const islands = blueprint.userCreatedIslands ?? []
+  console.log(
+    blueprint.enabled
+      ? `VISUAL_CODER_BLUEPRINT_READY The shared blueprint has ${blocks.length} file(s) and ${islands.length} island(s). The blueprint is leading: create those paths and honor addedFunctions, addedVariables, addedImports, and notes even if they are not on disk. Notes are extra instructions or pseudo code for a file, function, or variable — follow them when implementing those items. Do not omit, rename, relocate, or replace them. Extra new files not in the blueprint are a deviation. If you would differ from the blueprint, ask the user first; do not silently deviate. The user can keep placing files and islands; re-read the shared blueprint.json when it is printed again.`
+      : 'VISUAL_CODER_BLUEPRINT_READY The shared blueprint is empty. The user can still place files and islands; re-read the shared blueprint.json when it is printed again. Continue without user-placed files until that file has content.',
+  )
+  console.log('VISUAL_CODER_BLUEPRINT_START')
+  console.log(JSON.stringify(blueprint, null, 2))
+  console.log('VISUAL_CODER_BLUEPRINT_END')
+}
+
 export async function waitForBlueprint(args) {
   const { store, config } = await loadExplorer()
   const sessionId = takeFlagValue(args, '--session')
@@ -204,7 +217,7 @@ export async function waitForBlueprint(args) {
     emitStopped(store, config.dataDir, sessionId)
   }
 
-  const blueprint = store.readBlueprint(config.dataDir, sessionId)
+  const blueprint = store.readBlueprint(config.dataDir)
   const blocks = blueprint.userCreatedBlocks ?? []
   const islands = blueprint.userCreatedIslands ?? []
   signalAck(
@@ -216,14 +229,8 @@ export async function waitForBlueprint(args) {
       ? `${blocks.length} file(s), ${islands.length} island(s)`
       : 'none',
   )
-  console.log(
-    blueprint.enabled
-      ? `VISUAL_CODER_BLUEPRINT_READY The session started with ${blocks.length} file(s) and ${islands.length} island(s). The blueprint is leading: create those paths and honor addedFunctions, addedVariables, and addedImports even if they are not on disk. Do not omit, rename, relocate, or replace them. Extra new files not in the blueprint are a deviation. If you would differ from the blueprint, ask the user first; do not silently deviate. The user can still place files and islands on later steps; re-read this session's blueprint.json before each step.`
-      : 'VISUAL_CODER_BLUEPRINT_READY The session started without a blueprint. They can still place files and islands on later steps; re-read this session\'s blueprint.json before each step. Continue without user-placed files until that file is enabled.',
-  )
-  console.log('VISUAL_CODER_BLUEPRINT_START')
-  console.log(JSON.stringify(blueprint, null, 2))
-  console.log('VISUAL_CODER_BLUEPRINT_END')
+  printBlueprintDump(blueprint)
+  store.markBlueprintSeen(config.dataDir, sessionId, blueprint.revision)
   const instruction =
     typeof manifest.initialInstruction === 'string'
       ? manifest.initialInstruction.trim()
@@ -296,6 +303,27 @@ export async function waitForApproval(args) {
       const manifest = store.readManifest(config.dataDir, sessionId)
       emitApprovalHandshake(store, config.dataDir, sessionId, manifest, initialDiff)
       if (!manifest) continue
+      const blueprint = store.readBlueprint(config.dataDir)
+      const seen = manifest.blueprintRevision ?? 0
+      if (blueprint.revision > seen) {
+        const blocks = blueprint.userCreatedBlocks ?? []
+        const islands = blueprint.userCreatedIslands ?? []
+        signalAck(
+          store,
+          config.dataDir,
+          sessionId,
+          'blueprint',
+          blueprint.enabled
+            ? `${blocks.length} file(s), ${islands.length} island(s)`
+            : 'none',
+        )
+        console.log(
+          'VISUAL_CODER_BLUEPRINT The shared blueprint changed. Follow the latest files, islands, functions, variables, imports, and notes. Do not omit, rename, relocate, or replace them. If this would differ from the current plan, ask the user before replacing the plan. Then run wait-for-approval again.',
+        )
+        printBlueprintDump(blueprint)
+        store.markBlueprintSeen(config.dataDir, sessionId, blueprint.revision)
+        process.exit(6)
+      }
       const waiting = waitingMessage(sessionId, manifest)
       if (waiting !== lastWaiting) {
         console.log(waiting)
@@ -325,7 +353,7 @@ export async function proposePatch(args) {
     if (!sessionId) usage('propose-patch', '--session <cursor-chat-id> --clear')
     store.stopSession(config.dataDir, sessionId, config.targetRoot)
     console.log(
-      `Cleared session ${sessionId}; stored diffs and blueprint drafts were removed.`,
+      `Cleared session ${sessionId}; stored diffs were removed. The shared blueprint remains.`,
     )
     process.exit(0)
   }

@@ -133,6 +133,8 @@ export function readAttachedSession(dataDir: string): string | null
 export function listAttachQueue(dataDir: string): string[]
 export function nextAttachSessionId(dataDir: string): string | null
 export type SessionBlueprint = {
+  hidden: boolean
+  revision: number
   enabled: boolean
   sent: boolean
   userCreatedBlocks: unknown[]
@@ -140,14 +142,31 @@ export type SessionBlueprint = {
   addedFunctions: unknown[]
   addedVariables: unknown[]
   addedImports: unknown[]
+  notes: unknown[]
 }
 export function emptyBlueprint(): SessionBlueprint
-export function readBlueprint(dataDir: string, sessionId: string): SessionBlueprint
+export function readBlueprint(dataDir: string, sessionId?: string): SessionBlueprint
+export function writeBlueprint(
+  dataDir: string,
+  blueprint: SessionBlueprint,
+): SessionBlueprint
 export function writeBlueprint(
   dataDir: string,
   sessionId: string,
   blueprint: SessionBlueprint,
-): void
+): SessionBlueprint
+export function setBlueprintHidden(dataDir: string, hidden: boolean): SessionBlueprint
+export function clearBlueprint(dataDir: string): SessionBlueprint
+export function cleanupBlueprint(
+  dataDir: string,
+  knownFileIds?: string[],
+  knownFolderPaths?: string[],
+): SessionBlueprint
+export function markBlueprintSeen(
+  dataDir: string,
+  sessionId: string,
+  revision: number,
+): DiffManifest | null
 export function answerBlueprint(
   dataDir: string,
   sessionId: string,
@@ -155,13 +174,14 @@ export function answerBlueprint(
 ): DiffManifest
 export function updateBlueprint(
   dataDir: string,
-  sessionId: string,
+  sessionId?: string | null,
   input?: {
     userCreatedBlocks?: unknown[]
     userCreatedIslands?: unknown[]
     addedFunctions?: unknown[]
     addedVariables?: unknown[]
     addedImports?: unknown[]
+    notes?: unknown[]
   },
 ): SessionBlueprint
 export function sendBlueprint(
@@ -173,6 +193,7 @@ export function sendBlueprint(
     addedFunctions?: unknown[]
     addedVariables?: unknown[]
     addedImports?: unknown[]
+    notes?: unknown[]
   },
 ): DiffManifest
 export function maybeStartVisualizerHandshake(

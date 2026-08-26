@@ -390,7 +390,6 @@ export function listAttachQueue(dataDir) {
       missing.push(sessionId)
     }
   }
-  missing.reverse()
   const next = [...queued, ...missing]
   const unchanged =
     next.length === recorded.length &&
@@ -406,15 +405,11 @@ export function nextAttachSessionId(dataDir) {
 function enqueueAttachSession(dataDir, sessionId) {
   const safeId = assertSessionId(sessionId)
   const rest = listAttachQueue(dataDir).filter((id) => id !== safeId)
-  writeAttachQueue(dataDir, [safeId, ...rest])
+  writeAttachQueue(dataDir, [...rest, safeId])
 }
 
-function sessionAllowsPlacement(manifest) {
-  return (
-    manifest.phase !== 'blueprint_ask' &&
-    manifest.phase !== 'finished' &&
-    manifest.phase !== 'stopped'
-  )
+function blueprintFile(dataDir) {
+  return path.join(dataDir, 'blueprint.json')
 }
 
 function blueprintHasContent(blueprint) {
@@ -423,7 +418,8 @@ function blueprintHasContent(blueprint) {
     (blueprint.userCreatedIslands?.length ?? 0) > 0 ||
     (blueprint.addedFunctions?.length ?? 0) > 0 ||
     (blueprint.addedVariables?.length ?? 0) > 0 ||
-    (blueprint.addedImports?.length ?? 0) > 0
+    (blueprint.addedImports?.length ?? 0) > 0 ||
+    (blueprint.notes?.length ?? 0) > 0
   )
 }
 
@@ -660,8 +656,10 @@ export function sessionIntent(
       !isSessionConnected(dataDir, sessionId, waiterIds),
     listening: waiterIds.has(sessionId),
     lastAck: readSessionAck(dataDir, sessionId),
-    creationMode: sessionAllowsPlacement(manifest),
+    creationMode: true,
     canEnterBlueprint,
+    blueprintHidden: Boolean(blueprint.hidden),
+    blueprintRevision: blueprint.revision,
     blueprintSessionId: null,
     userCreatedBlocks: blueprint.userCreatedBlocks,
     userCreatedIslands: blueprint.userCreatedIslands,
@@ -669,6 +667,7 @@ export function sessionIntent(
     blueprintFunctions: blueprint.addedFunctions,
     blueprintVariables: blueprint.addedVariables,
     blueprintImports: blueprint.addedImports,
+    blueprintNotes: blueprint.notes,
   }
 }
 
@@ -935,7 +934,6 @@ export function startSession(dataDir, input) {
     diffs: [],
   }
   writeManifest(dataDir, manifest)
-  writeBlueprint(dataDir, sessionId, emptyBlueprint())
   focusSession(dataDir, sessionId)
   return manifest
 }
@@ -974,11 +972,6 @@ export function setupSession(dataDir, input = {}) {
     diffs: [],
   }
   writeManifest(dataDir, manifest)
-  writeBlueprint(dataDir, sessionId, {
-    ...emptyBlueprint(),
-    enabled: true,
-    sent: false,
-  })
   focusSession(dataDir, sessionId)
   enqueueAttachSession(dataDir, sessionId)
   return manifest
@@ -1047,25 +1040,14 @@ export function answerBlueprint(dataDir, sessionId, enabled) {
   if (manifest.phase !== 'blueprint_ask') {
     throw new Error(`Session ${sessionId} is not asking for a blueprint`)
   }
-  const blueprint = {
-    ...emptyBlueprint(),
-    enabled: Boolean(enabled),
-    sent: !enabled,
-  }
-  writeBlueprint(dataDir, sessionId, blueprint)
   manifest.phase = enabled ? 'blueprint' : 'preparing'
   if (!enabled) manifest.workStartedAt = new Date().toISOString()
   writeManifest(dataDir, manifest)
   return manifest
 }
 
-export function updateBlueprint(dataDir, sessionId, input = {}) {
-  const safeId = assertSessionId(sessionId)
-  const manifest = requireManifest(dataDir, safeId)
-  if (!sessionAllowsPlacement(manifest)) {
-    throw new Error(`Session ${safeId} is not accepting blueprint edits`)
-  }
-  const current = readBlueprint(dataDir, safeId)
+export function updateBlueprint(dataDir, _sessionId, input = {}) {
+  const current = readBlueprint(dataDir)
   const next = {
     ...current,
     userCreatedBlocks: input.userCreatedBlocks ?? current.userCreatedBlocks,
@@ -1073,13 +1055,9 @@ export function updateBlueprint(dataDir, sessionId, input = {}) {
     addedFunctions: input.addedFunctions ?? current.addedFunctions,
     addedVariables: input.addedVariables ?? current.addedVariables,
     addedImports: input.addedImports ?? current.addedImports,
+    notes: input.notes ?? current.notes,
   }
-  writeBlueprint(dataDir, safeId, {
-    ...next,
-    enabled: current.enabled || blueprintHasContent(next),
-    sent: manifest.phase === 'blueprint' ? false : current.sent,
-  })
-  return readBlueprint(dataDir, safeId)
+  return writeBlueprint(dataDir, next)
 }
 
 export function sendBlueprint(dataDir, sessionId, input = {}) {
@@ -1088,19 +1066,16 @@ export function sendBlueprint(dataDir, sessionId, input = {}) {
   if (manifest.phase !== 'blueprint') {
     throw new Error(`Session ${safeId} is not in blueprint mode`)
   }
-  const current = readBlueprint(dataDir, safeId)
-  const next = {
-    userCreatedBlocks: input.userCreatedBlocks ?? current.userCreatedBlocks,
-    userCreatedIslands: input.userCreatedIslands ?? current.userCreatedIslands,
-    addedFunctions: input.addedFunctions ?? current.addedFunctions,
-    addedVariables: input.addedVariables ?? current.addedVariables,
-    addedImports: input.addedImports ?? current.addedImports,
+  if (
+    input.userCreatedBlocks ||
+    input.userCreatedIslands ||
+    input.addedFunctions ||
+    input.addedVariables ||
+    input.addedImports ||
+    input.notes
+  ) {
+    updateBlueprint(dataDir, safeId, input)
   }
-  writeBlueprint(dataDir, safeId, {
-    ...next,
-    enabled: blueprintHasContent(next),
-    sent: true,
-  })
   manifest.phase = 'preparing'
   manifest.workStartedAt = new Date().toISOString()
   writeManifest(dataDir, manifest)
@@ -1114,12 +1089,6 @@ export function maybeStartVisualizerHandshake(dataDir, sessionId) {
   if (manifest.phase !== 'blueprint_ask' && manifest.phase !== 'blueprint') {
     return manifest
   }
-  const current = readBlueprint(dataDir, safeId)
-  writeBlueprint(dataDir, safeId, {
-    ...current,
-    enabled: blueprintHasContent(current),
-    sent: true,
-  })
   manifest.phase = 'preparing'
   manifest.workStartedAt = new Date().toISOString()
   writeManifest(dataDir, manifest)
@@ -1552,13 +1521,16 @@ export function finalizeFinishedSession(dataDir, sessionId) {
 
 export function emptyBlueprint() {
   return {
+    hidden: false,
+    revision: 0,
     enabled: false,
-    sent: false,
+    sent: true,
     userCreatedBlocks: [],
     userCreatedIslands: [],
     addedFunctions: [],
     addedVariables: [],
     addedImports: [],
+    notes: [],
   }
 }
 
@@ -1622,36 +1594,170 @@ function namedBlueprintImportAdditions(value) {
   })
 }
 
-export function readBlueprint(dataDir, sessionId) {
-  const { blueprint } = sessionPaths(dataDir, sessionId)
-  const value = readJson(blueprint, emptyBlueprint())
+function namedBlueprintNotes(value) {
+  if (!Array.isArray(value)) return []
+  const seen = new Set()
+  const notes = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const file = typeof item.file === 'string' ? item.file.trim() : ''
+    const note = typeof item.note === 'string' ? item.note : ''
+    if (!file || !note.trim()) continue
+    let stored = null
+    if (item.kind === 'file') {
+      stored = { file, kind: 'file', note }
+    } else if (
+      (item.kind === 'function' || item.kind === 'variable') &&
+      typeof item.name === 'string' &&
+      item.name.trim() !== ''
+    ) {
+      stored = { file, kind: item.kind, name: item.name.trim(), note }
+    }
+    if (!stored) continue
+    const key =
+      stored.kind === 'file'
+        ? `file:${stored.file}`
+        : `${stored.kind}:${stored.file}:${stored.name}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    notes.push(stored)
+  }
+  return notes
+}
+
+function blueprintContentEqual(left, right) {
+  return (
+    JSON.stringify({
+      userCreatedBlocks: left.userCreatedBlocks,
+      userCreatedIslands: left.userCreatedIslands,
+      addedFunctions: left.addedFunctions,
+      addedVariables: left.addedVariables,
+      addedImports: left.addedImports,
+      notes: left.notes,
+    }) ===
+    JSON.stringify({
+      userCreatedBlocks: right.userCreatedBlocks,
+      userCreatedIslands: right.userCreatedIslands,
+      addedFunctions: right.addedFunctions,
+      addedVariables: right.addedVariables,
+      addedImports: right.addedImports,
+      notes: right.notes,
+    })
+  )
+}
+
+function normalizeBlueprint(value) {
+  const userCreatedBlocks = namedBlueprintBlocks(value?.userCreatedBlocks)
+  const userCreatedIslands = namedBlueprintIslands(value?.userCreatedIslands)
+  const addedFunctions = namedBlueprintSymbols(value?.addedFunctions)
+  const addedVariables = namedBlueprintSymbols(value?.addedVariables)
+  const addedImports = namedBlueprintImportAdditions(value?.addedImports)
+  const notes = namedBlueprintNotes(value?.notes)
+  const revision =
+    Number.isInteger(value?.revision) && value.revision >= 0 ? value.revision : 0
   return {
-    enabled: Boolean(value?.enabled),
-    sent: Boolean(value?.sent),
-    userCreatedBlocks: namedBlueprintBlocks(value?.userCreatedBlocks),
-    userCreatedIslands: namedBlueprintIslands(value?.userCreatedIslands),
-    addedFunctions: namedBlueprintSymbols(value?.addedFunctions),
-    addedVariables: namedBlueprintSymbols(value?.addedVariables),
-    addedImports: namedBlueprintImportAdditions(value?.addedImports),
+    hidden: Boolean(value?.hidden),
+    revision,
+    enabled: blueprintHasContent({
+      userCreatedBlocks,
+      userCreatedIslands,
+      addedFunctions,
+      addedVariables,
+      addedImports,
+      notes,
+    }),
+    sent: true,
+    userCreatedBlocks,
+    userCreatedIslands,
+    addedFunctions,
+    addedVariables,
+    addedImports,
+    notes,
   }
 }
 
-export function writeBlueprint(dataDir, sessionId, blueprint) {
-  const paths = sessionPaths(dataDir, sessionId)
+export function readBlueprint(dataDir, _sessionId) {
+  return normalizeBlueprint(readJson(blueprintFile(dataDir), emptyBlueprint()))
+}
+
+export function writeBlueprint(dataDir, sessionIdOrBlueprint, maybeBlueprint) {
+  const current = readBlueprint(dataDir)
+  const incoming =
+    maybeBlueprint === undefined ? sessionIdOrBlueprint : maybeBlueprint
+  const next = normalizeBlueprint({
+    ...current,
+    ...incoming,
+    hidden:
+      incoming?.hidden !== undefined ? incoming.hidden : current.hidden,
+  })
+  if (!blueprintContentEqual(current, next)) {
+    next.revision = current.revision + 1
+  } else {
+    next.revision = current.revision
+  }
+  next.enabled = blueprintHasContent(next)
+  next.sent = true
   atomicWrite(
-    paths.blueprint,
+    blueprintFile(dataDir),
     `${JSON.stringify(
       {
-        enabled: Boolean(blueprint.enabled),
-        sent: Boolean(blueprint.sent),
-        userCreatedBlocks: namedBlueprintBlocks(blueprint.userCreatedBlocks),
-        userCreatedIslands: namedBlueprintIslands(blueprint.userCreatedIslands),
-        addedFunctions: namedBlueprintSymbols(blueprint.addedFunctions),
-        addedVariables: namedBlueprintSymbols(blueprint.addedVariables),
-        addedImports: namedBlueprintImportAdditions(blueprint.addedImports),
+        hidden: Boolean(next.hidden),
+        revision: next.revision,
+        enabled: next.enabled,
+        sent: true,
+        userCreatedBlocks: namedBlueprintBlocks(next.userCreatedBlocks),
+        userCreatedIslands: namedBlueprintIslands(next.userCreatedIslands),
+        addedFunctions: namedBlueprintSymbols(next.addedFunctions),
+        addedVariables: namedBlueprintSymbols(next.addedVariables),
+        addedImports: namedBlueprintImportAdditions(next.addedImports),
+        notes: namedBlueprintNotes(next.notes),
       },
       null,
       2,
     )}\n`,
   )
+  return readBlueprint(dataDir)
+}
+
+export function setBlueprintHidden(dataDir, hidden) {
+  return writeBlueprint(dataDir, { ...readBlueprint(dataDir), hidden: Boolean(hidden) })
+}
+
+export function clearBlueprint(dataDir) {
+  const current = readBlueprint(dataDir)
+  return writeBlueprint(dataDir, {
+    ...emptyBlueprint(),
+    hidden: current.hidden,
+    revision: current.revision,
+  })
+}
+
+export function cleanupBlueprint(dataDir, knownFileIds = [], knownFolderPaths = []) {
+  const current = readBlueprint(dataDir)
+  const files = new Set(knownFileIds)
+  const folders = new Set(knownFolderPaths)
+  const removedFiles = new Set(
+    current.userCreatedBlocks.filter((block) => files.has(block.id)).map((block) => block.id),
+  )
+  const next = {
+    ...current,
+    userCreatedBlocks: current.userCreatedBlocks.filter((block) => !files.has(block.id)),
+    userCreatedIslands: current.userCreatedIslands.filter(
+      (island) => !folders.has(island.path),
+    ),
+    addedFunctions: current.addedFunctions.filter((item) => !removedFiles.has(item.file)),
+    addedVariables: current.addedVariables.filter((item) => !removedFiles.has(item.file)),
+    addedImports: current.addedImports.filter((item) => !removedFiles.has(item.file)),
+    notes: current.notes.filter((item) => !removedFiles.has(item.file)),
+  }
+  return writeBlueprint(dataDir, next)
+}
+
+export function markBlueprintSeen(dataDir, sessionId, revision) {
+  const manifest = readManifest(dataDir, sessionId)
+  if (!manifest) return null
+  if (manifest.blueprintRevision === revision) return manifest
+  manifest.blueprintRevision = revision
+  writeManifest(dataDir, manifest)
+  return manifest
 }

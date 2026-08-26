@@ -8,22 +8,9 @@ import {
   foldersFromFileIds,
   parseUnifiedPatch,
 } from './patch-lib.mjs'
+import { shouldIgnoreRelativePath, toPosix } from './scan-ignore.mjs'
 
-const SKIP_DIRS = new Set([
-  'node_modules',
-  'dist',
-  'build',
-  'out',
-  'coverage',
-  '.git',
-  '.inbase',
-])
-const SKIP_FILES = new Set(['package-lock.json'])
 const BINARY_PROBE_BYTES = 8000
-
-function toPosix(filePath) {
-  return filePath.split(path.sep).join('/')
-}
 
 function unique(ids) {
   return [...new Set(ids)]
@@ -64,11 +51,7 @@ function isBinaryFile(filePath) {
 }
 
 function shouldSkipPath(fileId) {
-  const parts = fileId.split('/').filter(Boolean)
-  if (parts.some((part) => part.startsWith('.') || SKIP_DIRS.has(part))) {
-    return true
-  }
-  return SKIP_FILES.has(parts.at(-1) ?? '')
+  return shouldIgnoreRelativePath(fileId)
 }
 
 function currentBranch(cwd) {

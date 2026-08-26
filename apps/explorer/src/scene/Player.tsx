@@ -4,6 +4,7 @@ import { PerspectiveCamera, PointerLockControls } from '@react-three/drei'
 import type { PointerLockControls as PointerLockControlsImpl } from 'three-stdlib'
 import * as THREE from 'three'
 import { CONFIG } from '../theme'
+import { isKeyboardIsolated, shouldIgnoreShortcut } from '../keyboard'
 import type { FlyTo, ViewMode, WorldLayout } from '../types'
 
 const lookDir = new THREE.Vector3()
@@ -143,15 +144,7 @@ export function Player({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent, down: boolean) => {
-      if (
-        event.target instanceof HTMLElement &&
-        (event.target.tagName === 'TEXTAREA' ||
-          event.target.tagName === 'INPUT' ||
-          event.target.tagName === 'SELECT' ||
-          event.target.isContentEditable)
-      ) {
-        return
-      }
+      if (shouldIgnoreShortcut(event)) return
       if (event.code === 'KeyW' || event.code === 'ArrowUp') keys.current.forward = down
       if (event.code === 'KeyS' || event.code === 'ArrowDown') keys.current.back = down
       if (event.code === 'KeyA' || event.code === 'ArrowLeft') keys.current.left = down
@@ -235,6 +228,13 @@ export function Player({
           setSteering(true)
         }
       } else if (walking && locked) {
+        if (isKeyboardIsolated()) {
+          keys.current.forward = false
+          keys.current.back = false
+          keys.current.left = false
+          keys.current.right = false
+          keys.current.sprint = false
+        }
         camera.getWorldDirection(front.current)
         front.current.y = 0
         front.current.normalize()

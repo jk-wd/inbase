@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -9,7 +10,36 @@ import {
   extractJsSymbols,
   resolveSpecifierAgainst,
 } from './js-source.mjs'
+import { shouldIgnoreRelativePath } from './scan-ignore.mjs'
 import { scanTarget } from './scan-target.mjs'
+
+function scanQuiet(options) {
+  const log = console.log
+  console.log = () => {}
+  try {
+    return scanTarget(options)
+  } finally {
+    console.log = log
+  }
+}
+
+function runGit(cwd, args) {
+  const result = spawnSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_CONFIG_SYSTEM: '/dev/null',
+      GIT_AUTHOR_NAME: 'Visualizer Test',
+      GIT_AUTHOR_EMAIL: 'visualizer-test@example.com',
+      GIT_COMMITTER_NAME: 'Visualizer Test',
+      GIT_COMMITTER_EMAIL: 'visualizer-test@example.com',
+    },
+  })
+  assert.equal(result.status, 0, result.stderr || result.stdout)
+  return result
+}
 
 test('resolves specifiers to any known file, not only JS extensions', () => {
   const known = new Set(['src/Header.astro', 'src/lib/index.vue'])
@@ -93,10 +123,7 @@ test('scans every text file and language-specific extras', () => {
     )
     fs.writeFileSync(path.join(root, 'photo.bin'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x0d]))
 
-    const log = console.log
-    console.log = () => {}
-    const graph = scanTarget({ root, dest })
-    console.log = log
+    const graph = scanQuiet({ root, dest })
 
     const byId = Object.fromEntries(graph.files.map((file) => [file.id, file]))
     assert.equal(graph.targetName, path.basename(root))
@@ -124,6 +151,71 @@ test('scans every text file and language-specific extras', () => {
     assert.equal(byId['styles.scss'].language, 'scss')
     assert.equal(byId['Header.astro'].language, 'astro')
     assert.equal(byId['Dockerfile'].language, 'txt')
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('ignores node_modules, dist, and lockfiles at any depth', () => {
+  assert.equal(shouldIgnoreRelativePath('node_modules/three/index.js'), true)
+  assert.equal(
+    shouldIgnoreRelativePath('apps/web/node_modules/@react-three/fiber/index.js'),
+    true,
+  )
+  assert.equal(shouldIgnoreRelativePath('packages/ui/dist/index.js'), true)
+  assert.equal(shouldIgnoreRelativePath('apps/web/.next/server.js'), true)
+  assert.equal(shouldIgnoreRelativePath('apps/web/package-lock.json'), true)
+  assert.equal(shouldIgnoreRelativePath('apps/web/src/app.ts'), false)
+})
+
+test('skips nested junk directories when scanning a monorepo', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'visual-coder-mono-'))
+  const dest = path.join(root, 'codebase.json')
+  try {
+    fs.mkdirSync(path.join(root, 'apps/web/src'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'apps/web/node_modules/pkg'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'packages/ui/src'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'packages/ui/dist'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'node_modules/three'), { recursive: true })
+    fs.writeFileSync(path.join(root, 'apps/web/src/app.ts'), 'export const app = 1\n')
+    fs.writeFileSync(
+      path.join(root, 'apps/web/node_modules/pkg/index.js'),
+      'export default 1\n',
+    )
+    fs.writeFileSync(path.join(root, 'apps/web/package-lock.json'), '{}\n')
+    fs.writeFileSync(path.join(root, 'packages/ui/src/index.ts'), 'export const ui = 1\n')
+    fs.writeFileSync(path.join(root, 'packages/ui/dist/index.js'), 'export const ui = 1\n')
+    fs.writeFileSync(path.join(root, 'node_modules/three/index.js'), 'export default {}\n')
+
+    const graph = scanQuiet({ root, dest })
+    const ids = graph.files.map((file) => file.id).sort()
+    assert.deepEqual(ids, ['apps/web/src/app.ts', 'packages/ui/src/index.ts'])
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('honours a nested gitignore in a git monorepo', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'visual-coder-gitmono-'))
+  const dest = path.join(root, 'codebase.json')
+  try {
+    fs.mkdirSync(path.join(root, 'apps/web/src'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'apps/web/generated'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'apps/web/node_modules/pkg'), { recursive: true })
+    fs.writeFileSync(path.join(root, 'apps/web/.gitignore'), 'generated/\n')
+    fs.writeFileSync(path.join(root, 'apps/web/src/ok.ts'), 'export const ok = 1\n')
+    fs.writeFileSync(path.join(root, 'apps/web/generated/skip.ts'), 'export const skip = 1\n')
+    fs.writeFileSync(
+      path.join(root, 'apps/web/node_modules/pkg/index.js'),
+      'export default 1\n',
+    )
+    runGit(root, ['init', '-b', 'main'])
+    runGit(root, ['config', 'user.name', 'Visualizer Test'])
+    runGit(root, ['config', 'user.email', 'visualizer-test@example.com'])
+
+    const graph = scanQuiet({ root, dest })
+    const ids = graph.files.map((file) => file.id).sort()
+    assert.deepEqual(ids, ['apps/web/src/ok.ts'])
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }

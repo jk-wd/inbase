@@ -28,6 +28,10 @@ import {
   focusSession,
   stopSession,
   updateBlueprint,
+  readBlueprint,
+  setBlueprintHidden,
+  clearBlueprint,
+  cleanupBlueprint,
 } from './scripts/session-store.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -78,6 +82,44 @@ function knownFileIds() {
   } catch {
     return []
   }
+}
+
+function knownFolderPaths() {
+  try {
+    const graph = JSON.parse(fs.readFileSync(codebaseFile, 'utf8')) as {
+      folders?: Array<{ path?: string }>
+    }
+    return Array.isArray(graph.folders)
+      ? graph.folders
+          .map((folder) => folder.path)
+          .filter((path): path is string => Boolean(path))
+      : []
+  } catch {
+    return []
+  }
+}
+
+function blueprintIntentFields() {
+  const blueprint = readBlueprint(dataDir)
+  return {
+    creationMode: true,
+    blueprintHidden: Boolean(blueprint.hidden),
+    blueprintRevision: blueprint.revision,
+    userCreatedBlocks: blueprint.userCreatedBlocks,
+    userCreatedIslands: blueprint.userCreatedIslands,
+    blueprintFunctions: blueprint.addedFunctions,
+    blueprintVariables: blueprint.addedVariables,
+    blueprintImports: blueprint.addedImports,
+    blueprintNotes: blueprint.notes,
+  }
+}
+
+function intentResponse(sessionId?: string) {
+  const base =
+    sessionId !== undefined && sessionId !== ''
+      ? (sessionIntent(dataDir, sessionId, knownFileIds()) ?? { ...emptyIntent })
+      : { ...emptyIntent }
+  return { ...base, ...blueprintIntentFields() }
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown) {
@@ -145,6 +187,7 @@ function jsonFilePlugin(): Plugin {
             focusedSessionId: readActiveSession(dataDir),
             nextAttachSessionId: nextAttachSessionId(dataDir),
             intents: listSessionIntents(dataDir, knownFileIds()),
+            blueprint: readBlueprint(dataDir),
           })
           return
         }
@@ -214,13 +257,21 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       name?: string
       step?: number
       stepByStep?: boolean
+      hidden?: boolean
       userCreatedBlocks?: unknown[]
       userCreatedIslands?: unknown[]
       addedFunctions?: unknown[]
       addedVariables?: unknown[]
       addedImports?: unknown[]
+      notes?: unknown[]
     }
     const action = body.action
+    const blueprintActions = new Set([
+      'blueprint_update',
+      'blueprint_clear',
+      'blueprint_cleanup',
+      'blueprint_set_hidden',
+    ])
     if (
       action !== 'invoke' &&
       action !== 'continue' &&
@@ -230,6 +281,9 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       action !== 'blueprint_no' &&
       action !== 'blueprint_send' &&
       action !== 'blueprint_update' &&
+      action !== 'blueprint_clear' &&
+      action !== 'blueprint_cleanup' &&
+      action !== 'blueprint_set_hidden' &&
       action !== 'focus' &&
       action !== 'set_step_by_step' &&
       action !== 'set_initial_instruction' &&
@@ -238,7 +292,11 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       sendJson(res, 400, { error: 'invalid workflow action' })
       return
     }
-    if (action !== 'setup_session' && !body.sessionId) {
+    if (
+      action !== 'setup_session' &&
+      !blueprintActions.has(action ?? '') &&
+      !body.sessionId
+    ) {
       sendJson(res, 400, { error: 'sessionId is required' })
       return
     }
@@ -295,7 +353,14 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
         addedFunctions: body.addedFunctions,
         addedVariables: body.addedVariables,
         addedImports: body.addedImports,
+        notes: body.notes,
       })
+    } else if (action === 'blueprint_clear') {
+      clearBlueprint(dataDir)
+    } else if (action === 'blueprint_cleanup') {
+      cleanupBlueprint(dataDir, knownFileIds(), knownFolderPaths())
+    } else if (action === 'blueprint_set_hidden') {
+      setBlueprintHidden(dataDir, Boolean(body.hidden))
     } else if (action === 'blueprint_send') {
       sendBlueprint(dataDir, body.sessionId, {
         userCreatedBlocks: body.userCreatedBlocks,
@@ -303,14 +368,15 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
         addedFunctions: body.addedFunctions,
         addedVariables: body.addedVariables,
         addedImports: body.addedImports,
+        notes: body.notes,
       })
     } else if (action === 'setup_session') {
       const manifest = setupSession(dataDir, {
         sessionId: body.sessionId,
         name: body.name,
       })
-      const next = sessionIntent(dataDir, manifest.sessionId, knownFileIds())
-      sendJson(res, 200, next ?? { ...emptyIntent })
+      const next = intentResponse(manifest.sessionId)
+      sendJson(res, 200, next ?? { ...emptyIntent, ...blueprintIntentFields() })
       return
     } else if (action === 'set_initial_instruction') {
       setInitialInstruction(dataDir, body.sessionId, body.instruction ?? '')
@@ -327,8 +393,8 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       stopSession(dataDir, body.sessionId, targetRoot)
       rescanTarget('after stopping session')
     }
-    const next = sessionIntent(dataDir, body.sessionId, knownFileIds())
-    sendJson(res, 200, next ?? { ...emptyIntent })
+    const next = intentResponse(body.sessionId)
+    sendJson(res, 200, next ?? { ...emptyIntent, ...blueprintIntentFields() })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'invalid request'
     sendJson(res, 400, { error: message })

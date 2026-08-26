@@ -193,11 +193,19 @@ export const FileBlock = memo(function FileBlock({
       )}
       {naming && onCommitName && onCancelName && (
         <Html
-          position={[0, height / 2 + 0.42, 0]}
-          center
+          position={
+            mapMode
+              ? [0, height / 2 + 0.04, -depth / 2]
+              : [0, height / 2 + 0.42, 0]
+          }
+          center={!mapMode}
           occlude={false}
-          wrapperClass="block-name-overlay"
-          zIndexRange={[100, 0]}
+          wrapperClass={
+            mapMode
+              ? 'block-name-overlay block-name-overlay-map'
+              : 'block-name-overlay'
+          }
+          zIndexRange={[120, 0]}
         >
           <NameInput
             placeholder="File name"

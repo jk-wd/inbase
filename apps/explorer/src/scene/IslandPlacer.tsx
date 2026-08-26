@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useThree } from '@react-three/fiber'
 import { folderAt } from '../layout'
+import { shouldIgnoreShortcut } from '../keyboard'
 import type { WorldLayout } from '../types'
 
 type IslandPlacerProps = {
@@ -9,23 +10,13 @@ type IslandPlacerProps = {
   onPlace: (parent: string) => void
 }
 
-function typingInField(target: EventTarget | null) {
-  return (
-    target instanceof HTMLElement &&
-    (target.tagName === 'TEXTAREA' ||
-      target.tagName === 'INPUT' ||
-      target.tagName === 'SELECT' ||
-      target.isContentEditable)
-  )
-}
-
 export function IslandPlacer({ enabled, layout, onPlace }: IslandPlacerProps) {
   const { camera } = useThree()
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!enabled || event.repeat || event.code !== 'KeyB') return
-      if (typingInField(event.target)) return
+      if (shouldIgnoreShortcut(event)) return
       const island = folderAt(camera.position.x, camera.position.z, layout)
       if (!island) return
       event.preventDefault()

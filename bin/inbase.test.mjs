@@ -255,7 +255,7 @@ test('start-session attaches to a running visualizer instance', () => {
   }
 })
 
-test('attach without --session uses the newest waiting visualizer session', async () => {
+test('attach without --session uses the oldest waiting visualizer session', async () => {
   const { root, cleanup } = tempProject()
   const dataDir = path.join(root, '.inbase')
   const env = {
@@ -270,14 +270,14 @@ test('attach without --session uses the newest waiting visualizer session', asyn
     fs.mkdirSync(dataDir, { recursive: true })
     const older = store.setupSession(dataDir)
     const started = store.setupSession(dataDir)
-    store.focusSession(dataDir, older.sessionId)
+    store.focusSession(dataDir, started.sessionId)
     const missing = runCli(['attach'], { cwd: root, env })
     assert.equal(missing.status, 0, missing.stderr)
     assert.match(missing.stdout, /VISUAL_CODER_ATTACHED/)
     assert.match(missing.stdout, /VISUAL_CODER_ACK attached:/)
-    assert.match(missing.stdout, new RegExp(`VISUAL_CODER_SESSION ${started.sessionId}`))
-    assert.equal(store.readManifest(dataDir, started.sessionId).awaitingAttach, false)
-    assert.equal(store.readManifest(dataDir, older.sessionId).awaitingAttach, true)
+    assert.match(missing.stdout, new RegExp(`VISUAL_CODER_SESSION ${older.sessionId}`))
+    assert.equal(store.readManifest(dataDir, older.sessionId).awaitingAttach, false)
+    assert.equal(store.readManifest(dataDir, started.sessionId).awaitingAttach, true)
   } finally {
     cleanup()
   }
@@ -318,12 +318,12 @@ test('attach skips an already attached session and takes the next in queue', asy
     const second = store.setupSession(dataDir)
     const attached = runCli(['attach'], { cwd: root, env })
     assert.equal(attached.status, 0, attached.stderr)
-    assert.match(attached.stdout, new RegExp(`VISUAL_CODER_SESSION ${second.sessionId}`))
-    store.focusSession(dataDir, second.sessionId)
+    assert.match(attached.stdout, new RegExp(`VISUAL_CODER_SESSION ${first.sessionId}`))
+    store.focusSession(dataDir, first.sessionId)
     const next = runCli(['attach'], { cwd: root, env })
     assert.equal(next.status, 0, next.stderr)
-    assert.match(next.stdout, new RegExp(`VISUAL_CODER_SESSION ${first.sessionId}`))
-    assert.equal(store.readManifest(dataDir, first.sessionId).awaitingAttach, false)
+    assert.match(next.stdout, new RegExp(`VISUAL_CODER_SESSION ${second.sessionId}`))
+    assert.equal(store.readManifest(dataDir, second.sessionId).awaitingAttach, false)
   } finally {
     cleanup()
   }
@@ -406,6 +406,58 @@ test('wait-for-blueprint prints an ack for the handshake', async () => {
     assert.equal(result.status, 0, result.stderr)
     assert.match(result.stdout, /VISUAL_CODER_ACK blueprint: none/)
     assert.match(result.stdout, /VISUAL_CODER_BLUEPRINT_READY/)
+  } finally {
+    cleanup()
+  }
+})
+
+test('wait-for-approval returns when the shared blueprint changes', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const started = runCli(
+      ['start-session', '--session', 'ack-blue-update', '--name', 'Ack blueprint update'],
+      { cwd: root, env },
+    )
+    assert.equal(started.status, 0, started.stderr)
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    store.answerBlueprint(dataDir, 'ack-blue-update', false)
+    store.reportPlan(dataDir, {
+      sessionId: 'ack-blue-update',
+      feature: 'Ack blueprint update',
+      stepTitles: ['Bump value'],
+      targetRoot: target,
+    })
+    store.updateBlueprint(dataDir, null, {
+      userCreatedBlocks: [
+        {
+          id: 'src/New.tsx',
+          name: 'New.tsx',
+          path: 'src/New.tsx',
+          folder: 'src',
+          x: 1,
+          z: 2,
+        },
+      ],
+    })
+    const result = runCli(
+      ['wait-for-approval', '--session', 'ack-blue-update', '--timeout', '2000'],
+      { cwd: root, env },
+    )
+    assert.equal(result.status, 6, result.stderr)
+    assert.match(result.stdout, /VISUAL_CODER_ACK blueprint:/)
+    assert.match(result.stdout, /VISUAL_CODER_BLUEPRINT The shared blueprint changed/)
+    assert.match(result.stdout, /VISUAL_CODER_BLUEPRINT_START/)
   } finally {
     cleanup()
   }

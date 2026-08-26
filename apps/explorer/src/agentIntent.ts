@@ -1,6 +1,7 @@
 import type {
   AgentIntent,
   AgentIntentBundle,
+  BlueprintNote,
   PatchImport,
   PatchImportAddition,
   PatchSymbolAddition,
@@ -8,7 +9,11 @@ import type {
   UserCreatedIsland,
   WorkflowAction,
 } from './types'
-import { parseUserCreatedBlocks, parseUserCreatedIslands } from './userCreated'
+import {
+  parseBlueprintNotes,
+  parseUserCreatedBlocks,
+  parseUserCreatedIslands,
+} from './userCreated'
 
 function normalizeImports(value: unknown): PatchImport[] {
   if (!Array.isArray(value)) return []
@@ -98,12 +103,15 @@ export const emptyIntent: AgentIntent = {
   initialInstruction: null,
   creationMode: false,
   canEnterBlueprint: false,
+  blueprintHidden: false,
+  blueprintRevision: 0,
   blueprintSessionId: null,
   userCreatedBlocks: [],
   userCreatedIslands: [],
   blueprintFunctions: [],
   blueprintVariables: [],
   blueprintImports: [],
+  blueprintNotes: [],
 }
 
 function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
@@ -149,6 +157,9 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
       typeof data?.initialInstruction === 'string' ? data.initialInstruction : null,
     creationMode: Boolean(data?.creationMode),
     canEnterBlueprint: Boolean(data?.canEnterBlueprint),
+    blueprintHidden: Boolean(data?.blueprintHidden),
+    blueprintRevision:
+      typeof data?.blueprintRevision === 'number' ? data.blueprintRevision : 0,
     blueprintSessionId:
       typeof data?.blueprintSessionId === 'string'
         ? data.blueprintSessionId
@@ -158,18 +169,42 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     blueprintFunctions: normalizeSymbolAdditions(data?.blueprintFunctions),
     blueprintVariables: normalizeSymbolAdditions(data?.blueprintVariables),
     blueprintImports: normalizeImportAdditions(data?.blueprintImports),
+    blueprintNotes: parseBlueprintNotes(data?.blueprintNotes),
+  }
+}
+
+function normalizeBlueprint(data: Partial<AgentIntentBundle['blueprint']> | null | undefined) {
+  return {
+    hidden: Boolean(data?.hidden),
+    revision: typeof data?.revision === 'number' ? data.revision : 0,
+    enabled: Boolean(data?.enabled),
+    userCreatedBlocks: parseUserCreatedBlocks(data?.userCreatedBlocks),
+    userCreatedIslands: parseUserCreatedIslands(data?.userCreatedIslands),
+    addedFunctions: normalizeSymbolAdditions(data?.addedFunctions),
+    addedVariables: normalizeSymbolAdditions(data?.addedVariables),
+    addedImports: normalizeImportAdditions(data?.addedImports),
+    notes: parseBlueprintNotes(data?.notes),
   }
 }
 
 export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
   const query = new URLSearchParams({ t: String(Date.now()) })
   const response = await fetch(`/api/agent-intent?${query}`)
-  if (!response.ok) return { focusedSessionId: null, nextAttachSessionId: null, intents: [] }
+  const emptyBlueprint = normalizeBlueprint(null)
+  if (!response.ok) {
+    return {
+      focusedSessionId: null,
+      nextAttachSessionId: null,
+      intents: [],
+      blueprint: emptyBlueprint,
+    }
+  }
   const data = (await response.json()) as {
     focusedSessionId?: string | null
     nextAttachSessionId?: string | null
     intents?: unknown
     sessionId?: string | null
+    blueprint?: Partial<AgentIntentBundle['blueprint']>
   } & Partial<AgentIntent>
   if (Array.isArray(data.intents)) {
     return {
@@ -182,6 +217,7 @@ export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
       intents: data.intents
         .map((intent) => normalize(intent as Partial<AgentIntent>))
         .filter((intent) => Boolean(intent.sessionId)),
+      blueprint: normalizeBlueprint(data.blueprint),
     }
   }
   const intent = normalize(data)
@@ -189,6 +225,23 @@ export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
     focusedSessionId: intent.sessionId,
     nextAttachSessionId: intent.awaitingAttach ? intent.sessionId : null,
     intents: intent.sessionId ? [intent] : [],
+    blueprint: normalizeBlueprint(data.blueprint ?? {
+      hidden: intent.blueprintHidden,
+      revision: intent.blueprintRevision,
+      enabled:
+        intent.userCreatedBlocks.length > 0 ||
+        intent.userCreatedIslands.length > 0 ||
+        intent.blueprintFunctions.length > 0 ||
+        intent.blueprintVariables.length > 0 ||
+        intent.blueprintImports.length > 0 ||
+        intent.blueprintNotes.length > 0,
+      userCreatedBlocks: intent.userCreatedBlocks,
+      userCreatedIslands: intent.userCreatedIslands,
+      addedFunctions: intent.blueprintFunctions,
+      addedVariables: intent.blueprintVariables,
+      addedImports: intent.blueprintImports,
+      notes: intent.blueprintNotes,
+    }),
   }
 }
 
@@ -219,6 +272,7 @@ export async function performAgentAction(
     addedFunctions?: PatchSymbolAddition[]
     addedVariables?: PatchSymbolAddition[]
     addedImports?: PatchImportAddition[]
+    notes?: BlueprintNote[]
   } = {},
 ) {
   const response = await fetch('/api/agent-intent', {
@@ -234,16 +288,17 @@ export async function performAgentAction(
 }
 
 export function persistSessionBlueprint(
-  sessionId: string,
+  sessionId: string | null | undefined,
   payload: {
     userCreatedBlocks: UserCreatedBlock[]
     userCreatedIslands: UserCreatedIsland[]
     addedFunctions?: PatchSymbolAddition[]
     addedVariables?: PatchSymbolAddition[]
     addedImports?: PatchImportAddition[]
+    notes?: BlueprintNote[]
   },
 ) {
-  fetch('/api/agent-intent', {
+  return fetch('/api/agent-intent', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -252,7 +307,34 @@ export function persistSessionBlueprint(
       ...payload,
     }),
   }).catch(() => {
-    // Keep local drafts if the session handshake is no longer open.
+    // Keep local drafts if the visualizer could not save the shared blueprint.
+  })
+}
+
+export function persistBlueprintHidden(hidden: boolean) {
+  return fetch('/api/agent-intent', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'blueprint_set_hidden',
+      hidden,
+    }),
+  })
+}
+
+export function persistBlueprintClear() {
+  return fetch('/api/agent-intent', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'blueprint_clear' }),
+  })
+}
+
+export function persistBlueprintCleanup() {
+  return fetch('/api/agent-intent', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'blueprint_cleanup' }),
   })
 }
 

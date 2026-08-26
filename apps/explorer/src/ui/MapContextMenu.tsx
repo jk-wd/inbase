@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { shouldIgnoreShortcut } from '../keyboard'
 
 export type MapContextMenuState = {
   x: number
@@ -24,6 +25,7 @@ export function MapContextMenu({
     if (!menu) return
     const onKey = (event: KeyboardEvent) => {
       if (event.code !== 'Escape') return
+      if (shouldIgnoreShortcut(event)) return
       event.preventDefault()
       onClose()
     }

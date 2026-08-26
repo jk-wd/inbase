@@ -10,6 +10,7 @@ import {
 } from '../theme'
 import type { PlacedFolder } from '../types'
 import { MapSelectBorder } from './MapSelectBorder'
+import { NameInput } from '../ui/NameInput'
 
 type FolderAreaProps = {
   folder: PlacedFolder
@@ -19,6 +20,8 @@ type FolderAreaProps = {
   highlightKind?: ChangeKind | null
   previewLabels?: boolean
   labelVisible?: boolean
+  onCommitName?: (name: string) => void
+  onCancelName?: () => void
 }
 
 export function FolderArea({
@@ -29,6 +32,8 @@ export function FolderArea({
   highlightKind = null,
   previewLabels = false,
   labelVisible = true,
+  onCommitName,
+  onCancelName,
 }: FolderAreaProps) {
   const added = Boolean(folder.added)
   const highlight = highlightKind ? CHANGE_HIGHLIGHT[highlightKind] : null
@@ -87,6 +92,21 @@ export function FolderArea({
           <planeGeometry args={[folder.width, CONFIG.bridgeWidth]} />
           <meshBasicMaterial color={aisle} />
         </mesh>
+      )}
+      {naming && mapMode && onCommitName && onCancelName && (
+        <Html
+          position={[0, 1.35, -folder.depth / 2 + 1.35]}
+          center
+          occlude={false}
+          wrapperClass="block-name-overlay"
+          zIndexRange={[120, 0]}
+        >
+          <NameInput
+            placeholder="Folder name"
+            onCommit={onCommitName}
+            onCancel={onCancelName}
+          />
+        </Html>
       )}
       <Suspense fallback={null}>
         {!naming && previewLabels && labelVisible && (

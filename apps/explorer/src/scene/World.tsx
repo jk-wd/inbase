@@ -19,7 +19,7 @@ import {
   folderOfFile,
   mapPointOntoFolder,
 } from '../layout'
-import { WORLD_VOID } from '../theme'
+import { WORLD_VOID, CONFIG, fileHeight } from '../theme'
 import type {
   CodebaseGraph,
   FileNode,
@@ -33,6 +33,7 @@ import type {
   ViewMode,
   WorldLayout,
 } from '../types'
+import { toCreatedFile } from '../userCreated'
 
 type WorldProps = {
   graph: CodebaseGraph
@@ -67,8 +68,11 @@ type WorldProps = {
   onBlueprintMenu?: (menu: MapBlueprintMenu) => void
   onCommitName?: (id: string, name: string) => boolean
   onCancelName?: (id: string) => void
+  onCommitIslandName?: (id: string, name: string) => boolean
+  onCancelIslandName?: (id: string) => void
   userCreatedBlocks?: UserCreatedBlock[]
   userCreatedIslands?: UserCreatedIsland[]
+  overlayBlocks?: UserCreatedBlock[]
   namingIslandId?: string | null
   mapGraph?: CodebaseGraph | null
   mapLayout?: WorldLayout | null
@@ -108,8 +112,11 @@ export function World({
   onBlueprintMenu,
   onCommitName,
   onCancelName,
+  onCommitIslandName,
+  onCancelIslandName,
   userCreatedBlocks = [],
   userCreatedIslands = [],
+  overlayBlocks = [],
   mapGraph = null,
   mapLayout = null,
 }: WorldProps) {
@@ -226,6 +233,7 @@ export function World({
         marker={mapMarker}
         highlightedFolders={highlightedFolders}
         selectedFolder={selectedFolder}
+        namingFolderPath={namingIslandId}
         onLand={onLand}
         onSelect={onSelect}
         onSelectFolder={onSelectFolder}
@@ -248,6 +256,18 @@ export function World({
               mapping ? highlightedFolders[folder.path] ?? null : null
             }
             labelVisible={!lod || lod.folderLabels.has(folder.path)}
+            onCommitName={
+              folder.path === namingIslandId && onCommitIslandName
+                ? (name) => {
+                    onCommitIslandName(folder.path, name)
+                  }
+                : undefined
+            }
+            onCancelName={
+              folder.path === namingIslandId && onCancelIslandName
+                ? () => onCancelIslandName(folder.path)
+                : undefined
+            }
           />
         )
       })}
@@ -309,6 +329,31 @@ export function World({
         )
       })}
       <DistantFileBlocks items={distantFiles} />
+      {overlayBlocks.map((block) => {
+        const file = toCreatedFile(block)
+        const height = fileHeight(12)
+        const placed: PlacedFile = {
+          id: block.id,
+          position: [block.x, height / 2 + 0.42, block.z],
+          size: [CONFIG.fileWidth, height, CONFIG.fileDepth],
+          aisleFace: 1,
+        }
+        return (
+          <FileBlock
+            key={`blueprint:${block.id}`}
+            file={file}
+            placed={placed}
+            selected={file.id === selectedId}
+            related={false}
+            planned={false}
+            changeKind="add"
+            added
+            dimmed={false}
+            mapMode={mapping}
+            labelVisible
+          />
+        )
+      })}
       {Object.values(ghosts).map((placed) => {
         const file: FileNode = {
           id: placed.id,

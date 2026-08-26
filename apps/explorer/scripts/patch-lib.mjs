@@ -541,12 +541,15 @@ export const emptyIntent = {
   initialInstruction: null,
   creationMode: false,
   canEnterBlueprint: false,
+  blueprintHidden: false,
+  blueprintRevision: 0,
   blueprintSessionId: null,
   userCreatedBlocks: [],
   userCreatedIslands: [],
   blueprintFunctions: [],
   blueprintVariables: [],
   blueprintImports: [],
+  blueprintNotes: [],
 }
 
 export function isLastStep(intent) {
