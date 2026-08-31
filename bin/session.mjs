@@ -117,6 +117,7 @@ function emitTargetExplain(store, explain, dataDir, sessionId) {
 }
 
 function emitApprovalHandshake(store, explain, dataDir, sessionId, manifest, initialDiff, pendingStart) {
+  manifest = store.readManifest(dataDir, sessionId) ?? manifest
   const current = initialDiff
     ? manifest?.diffs.find((entry) => entry.id === initialDiff.id)
     : null

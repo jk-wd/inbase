@@ -1367,6 +1367,30 @@ test('explain proposal keeps the pending review and records an ack', () => {
   }
 })
 
+test('explain proposal uses the live pending diff when the client diff id is stale', () => {
+  const env = fixture()
+  try {
+    reportPlan(env.dataDir, {
+      sessionId: 'explain-stale',
+      feature: 'Explain',
+      stepTitles: ['Build value', 'Finish value'],
+    })
+    invokeStep(env.dataDir, 'explain-stale', 1)
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'explain-stale',
+      patchText: oneToTwo,
+    })
+    requestExplainProposal(env.dataDir, 'explain-stale', 'missing')
+    const manifest = readManifest(env.dataDir, 'explain-stale')
+    assert.equal(manifest.pendingExplain, true)
+    assert.equal(manifest.phase, 'review')
+    requestExplainProposal(env.dataDir, 'explain-stale')
+    assert.equal(readManifest(env.dataDir, 'explain-stale').pendingExplain, true)
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('explain proposal from plan ready does not require a pending diff', () => {
   const env = fixture()
   try {

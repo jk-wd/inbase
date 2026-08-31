@@ -3019,7 +3019,7 @@
       "name": "session-store.mjs",
       "path": "apps/explorer/scripts/session-store.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 2353,
+      "lines": 2366,
       "language": "mjs",
       "symbols": [
         {
@@ -3643,6 +3643,10 @@
           "kind": "function"
         },
         {
+          "name": "active",
+          "kind": "function"
+        },
+        {
           "name": "SESSION_ID",
           "kind": "variable"
         },
@@ -3896,10 +3900,6 @@
         },
         {
           "name": "bytes",
-          "kind": "variable"
-        },
-        {
-          "name": "active",
           "kind": "variable"
         },
         {
@@ -4269,7 +4269,7 @@
       "name": "session-store.test.mjs",
       "path": "apps/explorer/scripts/session-store.test.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 2238,
+      "lines": 2262,
       "language": "mjs",
       "symbols": [
         {
@@ -5181,7 +5181,7 @@
       "name": "App.tsx",
       "path": "apps/explorer/src/App.tsx",
       "folder": "apps/explorer/src",
-      "lines": 2534,
+      "lines": 2535,
       "language": "tsx",
       "symbols": [
         {
@@ -6927,7 +6927,7 @@
       "name": "index.css",
       "path": "apps/explorer/src/index.css",
       "folder": "apps/explorer/src",
-      "lines": 2302,
+      "lines": 2317,
       "language": "css",
       "symbols": [],
       "imports": []
@@ -10630,7 +10630,7 @@
       "name": "HUD.tsx",
       "path": "apps/explorer/src/ui/HUD.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 3443,
+      "lines": 3471,
       "language": "tsx",
       "symbols": [
         {
@@ -11126,6 +11126,10 @@
           "kind": "variable"
         },
         {
+          "name": "target",
+          "kind": "variable"
+        },
+        {
           "name": "it",
           "kind": "variable"
         },
@@ -11327,10 +11331,6 @@
         },
         {
           "name": "step",
-          "kind": "variable"
-        },
-        {
-          "name": "target",
           "kind": "variable"
         },
         {
@@ -12982,7 +12982,7 @@
       "name": "session.mjs",
       "path": "bin/session.mjs",
       "folder": "bin",
-      "lines": 681,
+      "lines": 682,
       "language": "mjs",
       "symbols": [
         {

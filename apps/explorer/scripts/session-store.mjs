@@ -1792,7 +1792,20 @@ export function requestExplainProposal(dataDir, sessionId, diffId) {
   const manifest = requireManifest(dataDir, sessionId)
   let title
   if (manifest.phase === 'review') {
-    const active = pendingActive(manifest, diffId)
+    const active =
+      (diffId &&
+        manifest.activeDiffId === diffId &&
+        manifest.diffs.find(
+          (entry) => entry.id === diffId && entry.status === 'pending',
+        )) ||
+      manifest.diffs.find(
+        (entry) =>
+          entry.id === manifest.activeDiffId && entry.status === 'pending',
+      ) ||
+      manifest.diffs.at(-1)
+    if (!active || active.status !== 'pending') {
+      throw new Error('No proposal to explain')
+    }
     title =
       manifest.steps.find((step) => step.index === active.step)?.title ||
       active.title ||

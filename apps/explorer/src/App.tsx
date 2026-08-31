@@ -1020,12 +1020,12 @@ function Explorer({
       options: { instruction?: string; step?: number; stepByStep?: boolean } = {},
     ) => {
       const current = intents.find((item) => item.sessionId === sessionId)
-      if (!current?.sessionId) return
+      if (!current?.sessionId) return false
       if (
         (action === 'continue' || action === 'instruct') &&
         (!current.diffId || !current.isActiveDiff)
       ) {
-        return
+        return false
       }
       try {
         if (action === 'blueprint_send') persistBlueprintRef.current()
@@ -1047,6 +1047,7 @@ function Explorer({
         ) {
           await onRefreshGraph()
         }
+        return next
       } catch {
         // Keep the pending patch visible if apply failed.
         return false

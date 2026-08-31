@@ -864,7 +864,12 @@ function sessionLiveStatus(intent: AgentIntent) {
     return { text: 'LLM disconnected', busy: false }
   }
   if (intent.pendingExplain) {
-    return { text: 'Starting an explanation…', busy: true }
+    return intent.listening
+      ? { text: 'Starting an explanation…', busy: true }
+      : {
+          text: 'Explanation queued — waiting for the LLM to listen',
+          busy: true,
+        }
   }
   if (kind === 'explain' && !intent.listening) {
     return { text: 'LLM is explaining this proposal on the map', busy: true }
@@ -969,7 +974,7 @@ type SessionPanelProps = {
     sessionId: string,
     action: WorkflowAction,
     options?: { instruction?: string; step?: number; stepByStep?: boolean },
-  ) => void
+  ) => void | boolean | AgentIntent | Promise<void | boolean | AgentIntent>
   onNavigateDiff: (sessionId: string, diffId: string) => void
 }
 
@@ -1303,8 +1308,16 @@ function SessionPanel({
                                       sessionId,
                                       'explain_proposal',
                                     ),
-                                  ).then((ok) => {
-                                    if (ok === false) setStartingExplain(false)
+                                  ).then((result) => {
+                                    if (
+                                      result === false ||
+                                      (result &&
+                                        typeof result === 'object' &&
+                                        'pendingExplain' in result &&
+                                        !result.pendingExplain)
+                                    ) {
+                                      setStartingExplain(false)
+                                    }
                                   })
                                 }}
                               >
@@ -1891,7 +1904,7 @@ type HUDProps = {
     sessionId: string,
     action: WorkflowAction,
     options?: { instruction?: string; step?: number; stepByStep?: boolean },
-  ) => void
+  ) => void | boolean | AgentIntent | Promise<void | boolean | AgentIntent>
   onNavigateDiff: (sessionId: string, diffId: string) => void
   onOpenMap: () => void
   onWalk: () => void
