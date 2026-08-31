@@ -23,8 +23,9 @@ the next unconnected slot. You do not need `/inbase`.
   color's empty slot. Aliases: `/red` (Coral), `/yellow` (Amber), `/green`
   (Lime), `/purple` (Violet). The text after the command is the user's request.
 - **`/blue`**: Blue is the global blueprint, not a chat. Do not attach.
-- **`/go`**: start making the current proposal (invoke the waiting plan step).
-- **`/accept`**: accept the current proposal. Then `/go` starts the next step, or finish on the last step.
+- **`/go`**: start the waiting plan step, or accept the current proposal and
+  start the next one. The last proposal still needs `/go` to finish.
+- **`/accept`**: same as `/go`.
 - **`/explain [question]`**: explain mode on the map. If a plan or proposal is
   waiting, explain that proposal; the question is optional extra focus. After a
   `?` click on the map, `/explain` explains that file or folder. During explain
@@ -39,23 +40,23 @@ The LLM uses a plan-first loop. It reports the complete plan before editing
 files, then **stops**. Do not poll the visualizer. The user drives the next
 action from this chat:
 
-- **`/go`**: invoke the waiting plan step and implement it.
-- **`/accept`**: accept the current proposal. Then wait for `/go` on the next
-  step, or finish on the last step.
+- **`/go`**: invoke the waiting plan step, or accept the current proposal and
+  start the next one. The last proposal still needs `/go` to finish.
+- **`/accept`**: same as `/go`.
 - **`/explain`**: explain the current proposal, a pending map `?` click, or a
   follow-up question.
 - An **alternative instruction** in chat while a proposal is waiting: edit those
-  live files and `propose-patch` again, then stop for `/accept`.
+  live files and `propose-patch` again, then stop for `/go`.
 
-When **Step by step** is off, `report-plan` and `/accept` invoke the next step
+When **Step by step** is off, `report-plan` and `/go` invoke the next step
 immediately (`VISUAL_CODER_EXECUTE`). Implement that step in the same turn.
-After the last recorded step, stop for `/accept`.
+After the last recorded step, stop for `/go`.
 
 **Recorded patches are the session record.** After `VISUAL_CODER_EXECUTE`, edit
 live project files with Write, StrReplace, and Delete for that step only. Then
 run `inbase propose-patch` with no patch file. Inbase diffs the working tree
 against the snapshot taken at invoke and stores that patch. Then **stop** and
-wait for `/accept` in chat. Do not write a unified diff yourself.
+wait for `/go` in chat. Do not write a unified diff yourself.
 
 The visualizer stores immutable diffs under
 `.inbase/diff-sessions/<session-id>/diffs/`. Inbase must already be running
@@ -113,7 +114,7 @@ the required tools in the same turn. Do not start with a long analysis. Do not
 call tools before that sentence.
 
 After `propose-patch`, **stop**. Do not explore, search, or re-plan. Wait for
-the user to type `/accept`, `/go`, `/explain`, or an alternative instruction
+the user to type `/go`, `/explain`, or an alternative instruction
 in this chat.
 
 ## Required sequence
@@ -122,7 +123,7 @@ in this chat.
    this once to load the optional blueprint, instruction, and attached files — it returns
    immediately. Do not wait for the user to send a blueprint. If you cannot
    report a plan yet (no instruction and no enabled blueprint work), **stop**.
-   Wait for the user to type a request, `/go`, `/accept`, or `/explain` in chat.
+   Wait for the user to type a request, `/go`, or `/explain` in chat.
 
 ```bash
 npx inbase wait-for-blueprint --session "<session-id>"
@@ -176,7 +177,8 @@ npx inbase report-plan \
    `wait-for-approval`. Do **not** edit project files until `/go` (or Step by
    step is off and `report-plan` already printed `VISUAL_CODER_EXECUTE` /
    phase working — then implement that step now).
-7. When the user types **`/go`**, run `npx inbase go --session "<session-id>"`.
+7. When the user types **`/go`** (or **`/accept`**), run
+   `npx inbase go --session "<session-id>"`.
    If that prints `VISUAL_CODER_EXECUTE`, implement only that step by editing
    the live project files (Write, StrReplace, Delete). Paths are the same ids as
    `codebase.json`. Then record the step:
@@ -187,28 +189,24 @@ npx inbase propose-patch --session "<session-id>"
 
    Do not write a unified diff. Do not pass a `.patch` file. Never write or
    replace a patch already stored in the session folder. Then **stop**. Wait
-   for `/accept` (or an alternative instruction) in chat.
-8. When the user types **`/accept`**, run `npx inbase accept --session "<session-id>"`.
-
-   - `VISUAL_CODER_ACCEPTED`: do not edit files. Stop. Wait for `/go` on the
-     next step.
-   - `VISUAL_CODER_EXECUTE`: Step by step is off; implement that step now, then
-     `propose-patch`, then stop for `/accept` if that was the last step.
-   - `VISUAL_CODER_FINISHED`: tell the user the feature is done and **stop**.
-     Do not propose another patch.
-9. When the user types **`/explain`**, do not edit project files and do not
+   for `/go` (or an alternative instruction) in chat. `/go` on a ready
+   proposal accepts it and starts the next step. The last proposal still
+   needs `/go` to finish.
+   If that prints `VISUAL_CODER_FINISHED`, tell the user the feature is done
+   and **stop**. Do not propose another patch.
+8. When the user types **`/explain`**, do not edit project files and do not
    invoke the next step. Run `npx inbase explain start` (with `--question` when
    they provided one). If that prints `VISUAL_CODER_EXPLAIN` for a map `?`
    click, inspect that path and report one `--step`. If it prints
    `VISUAL_CODER_EXPLAIN_FOLLOWUP`, report sub-steps with `--parent`. If it
    prints `VISUAL_CODER_PROPOSAL`, report every map step for that proposal.
    Then `npx inbase explain report`. After reporting, **stop**. The user
-   navigates the map. They type `/explain` again for a follow-up, or `/go` /
-   `/accept` to continue the plan.
-10. If the user sends an **alternative instruction** while a proposal is
-    waiting, edit those live files, then `inbase propose-patch`. Stop for
-    `/accept`. Do not start the next step and do not report a new plan.
-11. After a finished handshake, the explorer already removed stored session
+   navigates the map. They type `/explain` again for a follow-up, or `/go`
+   to continue the plan.
+9. If the user sends an **alternative instruction** while a proposal is
+   waiting, edit those live files, then `inbase propose-patch`. Stop for
+   `/go`. Do not start the next step and do not report a new plan.
+10. After a finished handshake, the explorer already removed stored session
     diffs. The global blueprint remains. Optionally run:
 
 ```bash
@@ -229,7 +227,7 @@ npx inbase propose-patch --session "<session-id>" --clear
 - Follow another session's local blueprint
 - Use the user's camera viewpoint to choose files
 - Edit project files before `VISUAL_CODER_EXECUTE`
-- Keep editing after `inbase propose-patch` until the user types `/go` or `/accept` (or Step by step is off and the next step is already invoked)
+- Keep editing after `inbase propose-patch` until the user types `/go` (or Step by step is off and the next step is already invoked)
 - Write a unified diff yourself; `inbase propose-patch` with no file records the git diff
 - Pass a `.patch` file to `propose-patch` unless you are debugging the CLI
 - Explore, search, or re-plan after `propose-patch` before the user types a command

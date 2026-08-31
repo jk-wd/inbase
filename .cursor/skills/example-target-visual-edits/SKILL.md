@@ -17,7 +17,7 @@ Apply this skill **only** when the work is file changes in `apps/example-target`
 Skip it for explorer, layout, lighting, or other Visual Coder app work.
 
 Follow `skill/inbase/SKILL.md` for the chat-driven sequence (`attach`,
-`wait-for-blueprint`, `report-plan`, then stop for `/go` `/accept` `/explain`).
+`wait-for-blueprint`, `report-plan`, then stop for `/go` `/explain`).
 After `VISUAL_CODER_EXECUTE`, edit files under `apps/example-target` with Write,
 StrReplace, and Delete for that step only, then `npx inbase propose-patch` with
 no patch file. Do not run `wait-for-approval` or `explain wait`.

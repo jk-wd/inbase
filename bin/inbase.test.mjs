@@ -372,7 +372,7 @@ test('go invokes the waiting plan step', async () => {
   }
 })
 
-test('go refuses a waiting proposal', async () => {
+test('go accepts a waiting proposal and starts the next step', async () => {
   const { root, cleanup } = tempProject()
   const target = path.join(root, 'app')
   const dataDir = path.join(root, '.inbase')
@@ -389,6 +389,7 @@ test('go refuses a waiting proposal', async () => {
     )
     planSession(store, dataDir, target, 'continue-review', 'Continue review', [
       'Bump value',
+      'Bump again',
     ])
     store.invokeStep(dataDir, 'continue-review', 1, target)
     store.appendDiff(dataDir, target, {
@@ -401,14 +402,17 @@ test('go refuses a waiting proposal', async () => {
       cwd: root,
       env,
     })
-    assert.notEqual(result.status, 0)
-    assert.match(result.stderr, /Use \/accept/)
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /VISUAL_CODER_ACK execute: step 2 — Bump again/)
+    assert.match(result.stdout, /VISUAL_CODER_EXECUTE Step 2 is invoked: Bump again/)
+    assert.equal(store.readManifest(dataDir, 'continue-review').phase, 'working')
+    assert.equal(store.readManifest(dataDir, 'continue-review').currentStep, 2)
   } finally {
     cleanup()
   }
 })
 
-test('accept waits for go on the next step', async () => {
+test('accept accepts a waiting proposal and starts the next step', async () => {
   const { root, cleanup } = tempProject()
   const target = path.join(root, 'app')
   const dataDir = path.join(root, '.inbase')
@@ -439,10 +443,9 @@ test('accept waits for go on the next step', async () => {
       env,
     })
     assert.equal(result.status, 0, result.stderr)
-    assert.match(result.stdout, /VISUAL_CODER_ACK plan: waiting for \/go on step 2 — Bump again/)
-    assert.match(result.stdout, /VISUAL_CODER_ACCEPTED Accepted the proposal/)
-    assert.match(result.stdout, /Wait for the user to type \/go step 2: Bump again/)
-    assert.equal(store.readManifest(dataDir, 'accept-next').phase, 'plan_ready')
+    assert.match(result.stdout, /VISUAL_CODER_ACK execute: step 2 — Bump again/)
+    assert.match(result.stdout, /VISUAL_CODER_EXECUTE Step 2 is invoked: Bump again/)
+    assert.equal(store.readManifest(dataDir, 'accept-next').phase, 'working')
     assert.equal(store.readManifest(dataDir, 'accept-next').currentStep, 2)
   } finally {
     cleanup()
@@ -481,6 +484,43 @@ test('accept finishes the last step', async () => {
     assert.equal(result.status, 5, result.stderr)
     assert.match(result.stdout, /VISUAL_CODER_FINISHED/)
     assert.equal(store.readManifest(dataDir, 'accept-last'), null)
+  } finally {
+    cleanup()
+  }
+})
+
+test('go finishes the last proposal', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    planSession(store, dataDir, target, 'go-last', 'Go last', [
+      'Bump value',
+    ])
+    store.invokeStep(dataDir, 'go-last', 1, target)
+    store.appendDiff(dataDir, target, {
+      sessionId: 'go-last',
+      patchText:
+        '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 2\n',
+    })
+    writeRunningInstance({ dataDir, targetRoot: target })
+    const result = runCli(['go', '--session', 'go-last'], {
+      cwd: root,
+      env,
+    })
+    assert.equal(result.status, 5, result.stderr)
+    assert.match(result.stdout, /VISUAL_CODER_FINISHED/)
+    assert.equal(store.readManifest(dataDir, 'go-last'), null)
   } finally {
     cleanup()
   }

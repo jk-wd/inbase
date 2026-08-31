@@ -1550,8 +1550,8 @@ export function invokeStep(dataDir, sessionId, step, targetRoot = null) {
     if (step !== expected) {
       throw new Error(
         last
-          ? `/accept on step ${active.step} to finish`
-          : `/accept on step ${active.step} to continue`,
+          ? `/go on step ${active.step} to finish`
+          : `/go on step ${active.step} to continue`,
       )
     }
     return continueDiff(dataDir, targetRoot, sessionId, active.id)
@@ -1711,7 +1711,7 @@ export function continueDiff(dataDir, targetRoot, sessionId, diffId) {
   manifest.phase = 'plan_ready'
   manifest.workStartedAt = null
   writeManifest(dataDir, manifest)
-  return autoAdvance(dataDir, sessionId, targetRoot)
+  return invokeStep(dataDir, sessionId, manifest.currentStep, targetRoot)
 }
 
 export function requestReplan(

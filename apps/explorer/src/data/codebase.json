@@ -27,7 +27,7 @@
       "name": "README.md",
       "path": "README.md",
       "folder": ".",
-      "lines": 130,
+      "lines": 129,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -4326,7 +4326,7 @@
       "name": "session-store.test.mjs",
       "path": "apps/explorer/scripts/session-store.test.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 2382,
+      "lines": 2373,
       "language": "mjs",
       "symbols": [
         {
@@ -4723,14 +4723,6 @@
         },
         {
           "name": "review",
-          "kind": "variable"
-        },
-        {
-          "name": "recycled",
-          "kind": "variable"
-        },
-        {
-          "name": "slots",
           "kind": "variable"
         },
         {
@@ -5262,7 +5254,7 @@
       "name": "App.tsx",
       "path": "apps/explorer/src/App.tsx",
       "folder": "apps/explorer/src",
-      "lines": 2673,
+      "lines": 2648,
       "language": "tsx",
       "symbols": [
         {
@@ -5831,18 +5823,6 @@
         },
         {
           "name": "goExplainStep",
-          "kind": "variable"
-        },
-        {
-          "name": "askExplainStep",
-          "kind": "variable"
-        },
-        {
-          "name": "parent",
-          "kind": "variable"
-        },
-        {
-          "name": "clicked",
           "kind": "variable"
         },
         {
@@ -10317,7 +10297,7 @@
       "name": "ExplainHud.tsx",
       "path": "apps/explorer/src/ui/ExplainHud.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 525,
+      "lines": 439,
       "language": "tsx",
       "symbols": [
         {
@@ -10334,18 +10314,6 @@
         },
         {
           "name": "toggleAutoStep",
-          "kind": "function"
-        },
-        {
-          "name": "openAsk",
-          "kind": "function"
-        },
-        {
-          "name": "closeAsk",
-          "kind": "function"
-        },
-        {
-          "name": "submitAsk",
           "kind": "function"
         },
         {
@@ -10421,10 +10389,6 @@
           "kind": "variable"
         },
         {
-          "name": "askInputRef",
-          "kind": "variable"
-        },
-        {
           "name": "clearAutoTimer",
           "kind": "variable"
         },
@@ -10466,10 +10430,6 @@
         },
         {
           "name": "startTelling",
-          "kind": "variable"
-        },
-        {
-          "name": "question",
           "kind": "variable"
         },
         {
@@ -10538,22 +10498,6 @@
         },
         {
           "name": "setSpeakStatus",
-          "kind": "variable"
-        },
-        {
-          "name": "asking",
-          "kind": "variable"
-        },
-        {
-          "name": "setAsking",
-          "kind": "variable"
-        },
-        {
-          "name": "draft",
-          "kind": "variable"
-        },
-        {
-          "name": "setDraft",
           "kind": "variable"
         },
         {
@@ -10797,7 +10741,7 @@
       "name": "HUD.tsx",
       "path": "apps/explorer/src/ui/HUD.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 3423,
+      "lines": 3416,
       "language": "tsx",
       "symbols": [
         {
@@ -12622,7 +12566,7 @@
       "name": "inbase.test.mjs",
       "path": "bin/inbase.test.mjs",
       "folder": "bin",
-      "lines": 1593,
+      "lines": 529,
       "language": "mjs",
       "symbols": [
         {
@@ -12642,19 +12586,7 @@
           "kind": "function"
         },
         {
-          "name": "collectChild",
-          "kind": "function"
-        },
-        {
-          "name": "of",
-          "kind": "function"
-        },
-        {
           "name": "planSession",
-          "kind": "function"
-        },
-        {
-          "name": "onError",
           "kind": "function"
         },
         {
@@ -12706,159 +12638,11 @@
           "kind": "variable"
         },
         {
-          "name": "resolveReady",
-          "kind": "variable"
-        },
-        {
-          "name": "ready",
-          "kind": "variable"
-        },
-        {
-          "name": "closed",
-          "kind": "variable"
-        },
-        {
           "name": "dataDir",
           "kind": "variable"
         },
         {
-          "name": "first",
-          "kind": "variable"
-        },
-        {
-          "name": "store",
-          "kind": "variable"
-        },
-        {
-          "name": "second",
-          "kind": "variable"
-        },
-        {
-          "name": "target",
-          "kind": "variable"
-        },
-        {
-          "name": "older",
-          "kind": "variable"
-        },
-        {
-          "name": "started",
-          "kind": "variable"
-        },
-        {
-          "name": "missing",
-          "kind": "variable"
-        },
-        {
-          "name": "coral",
-          "kind": "variable"
-        },
-        {
-          "name": "amber",
-          "kind": "variable"
-        },
-        {
-          "name": "busy",
-          "kind": "variable"
-        },
-        {
-          "name": "unknown",
-          "kind": "variable"
-        },
-        {
-          "name": "explain",
-          "kind": "variable"
-        },
-        {
-          "name": "reported",
-          "kind": "variable"
-        },
-        {
-          "name": "next",
-          "kind": "variable"
-        },
-        {
-          "name": "followUp",
-          "kind": "variable"
-        },
-        {
-          "name": "nested",
-          "kind": "variable"
-        },
-        {
-          "name": "stopped",
-          "kind": "variable"
-        },
-        {
-          "name": "child",
-          "kind": "variable"
-        },
-        {
-          "name": "pending",
-          "kind": "variable"
-        },
-        {
-          "name": "attached",
-          "kind": "variable"
-        },
-        {
-          "name": "bin",
-          "kind": "variable"
-        },
-        {
-          "name": "shim",
-          "kind": "variable"
-        },
-        {
-          "name": "value",
-          "kind": "variable"
-        },
-        {
-          "name": "coralDump",
-          "kind": "variable"
-        },
-        {
-          "name": "coralGlobal",
-          "kind": "variable"
-        },
-        {
-          "name": "coralLocal",
-          "kind": "variable"
-        },
-        {
-          "name": "amberDump",
-          "kind": "variable"
-        },
-        {
-          "name": "amberGlobal",
-          "kind": "variable"
-        },
-        {
-          "name": "amberLocal",
-          "kind": "variable"
-        },
-        {
-          "name": "invokedAt",
-          "kind": "variable"
-        },
-        {
-          "name": "elapsed",
-          "kind": "variable"
-        },
-        {
-          "name": "recorded",
-          "kind": "variable"
-        },
-        {
-          "name": "watcher",
-          "kind": "variable"
-        },
-        {
-          "name": "errors",
-          "kind": "variable"
-        },
-        {
-          "name": "gate",
+          "name": "approval",
           "kind": "variable"
         },
         {
@@ -12866,11 +12650,23 @@
           "kind": "variable"
         },
         {
-          "name": "err",
+          "name": "started",
           "kind": "variable"
         },
         {
-          "name": "preload",
+          "name": "explain",
+          "kind": "variable"
+        },
+        {
+          "name": "target",
+          "kind": "variable"
+        },
+        {
+          "name": "value",
+          "kind": "variable"
+        },
+        {
+          "name": "store",
           "kind": "variable"
         },
         {
@@ -12892,8 +12688,7 @@
       ],
       "imports": [
         "bin/inbase.mjs",
-        "bin/project.mjs",
-        "bin/session.mjs"
+        "bin/project.mjs"
       ]
     },
     {
@@ -13528,7 +13323,7 @@
       "name": "accept.md",
       "path": "skill/commands/accept.md",
       "folder": "skill/commands",
-      "lines": 26,
+      "lines": 24,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13568,7 +13363,7 @@
       "name": "explain.md",
       "path": "skill/commands/explain.md",
       "folder": "skill/commands",
-      "lines": 117,
+      "lines": 75,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13578,7 +13373,7 @@
       "name": "go.md",
       "path": "skill/commands/go.md",
       "folder": "skill/commands",
-      "lines": 24,
+      "lines": 22,
       "language": "md",
       "symbols": [],
       "imports": []

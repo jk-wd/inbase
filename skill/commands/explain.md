@@ -2,7 +2,7 @@
 description: Explain a codebase question on the Inbase map
 ---
 
-The user invoked `/explain`. Do **not** edit project files. Do **not** run `inbase start-session`. Do **not** `/go` or `/accept`.
+The user invoked `/explain`. Do **not** edit project files. Do **not** run `inbase start-session`. Do **not** `/go`.
 
 The user's question is:
 
@@ -49,7 +49,7 @@ npx inbase explain report \
 
 For a follow-up, add `--parent` from `VISUAL_CODER_PARENT`. For a `?` click, use a single `--step`. Repeat `--step` for every proposal step.
 
-4. **Stop.** Do not run `explain wait`. The user navigates the map. They type `/explain` again for a follow-up or another `?` click, or `/go` / `/accept` to continue the plan.
+4. **Stop.** Do not run `explain wait`. The user navigates the map. They type `/explain` again for a follow-up or another `?` click, or `/go` to continue the plan.
 
 ## No proposal
 

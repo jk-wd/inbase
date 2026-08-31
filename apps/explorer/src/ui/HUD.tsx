@@ -867,7 +867,7 @@ function sessionLiveStatus(intent: AgentIntent) {
     return { text: 'Explanation is on the map — /explain for a follow-up', busy: false }
   }
   if (intent.status === 'pending') {
-    return { text: 'Type /accept in chat', busy: false }
+    return { text: 'Type /go in chat', busy: false }
   }
   if (kind === 'execute') {
     return { text: `LLM received ${detail}`, busy: true }
@@ -1136,7 +1136,7 @@ function SessionPanel({
           {!llmDisconnected && !stepByStep && (
             <p className="hud-mode-hint">
               LLM implements the full plan. You can still walk the diffs, then
-              /accept.
+              /go.
             </p>
           )}
           {handshakeSetup ? (
@@ -1246,7 +1246,7 @@ function SessionPanel({
                                   ? 'Creating proposal…'
                                   : showGoHint
                                     ? '/go'
-                                    : '/accept · /explain'}
+                                    : '/go · /explain'}
                               </span>
                             </span>
                           )}
@@ -1692,7 +1692,7 @@ function explorerInstructions({
           id: 'cursor-chat',
           keys: ['Cursor chat'],
           label:
-            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /go /accept /explain; 5 chats at once',
+            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /go /explain; 5 chats at once',
         },
         {
           id: 'blueprint-select',
@@ -1779,7 +1779,7 @@ function explorerInstructions({
           id: 'cursor-chat',
           keys: ['Cursor chat'],
           label:
-            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /go /accept /explain; 5 chats at once',
+            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /go /explain; 5 chats at once',
         },
         {
           id: 'blueprint-select',
