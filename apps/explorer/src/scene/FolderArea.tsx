@@ -3,6 +3,7 @@ import { Html, Text } from '@react-three/drei'
 import {
   CHANGE_HIGHLIGHT,
   CONFIG,
+  blueprintPalette,
   folderAisleColor,
   folderFloorColor,
   MAP_SELECTION,
@@ -11,7 +12,7 @@ import {
 import type { PlacedFolder } from '../types'
 import { MapSelectBorder } from './MapSelectBorder'
 import { NameInput } from '../ui/NameInput'
-import { EyeIcon } from '../ui/EyeIcon'
+import { BlueprintEyes } from '../ui/EyeIcon'
 
 type FolderAreaProps = {
   folder: PlacedFolder
@@ -19,9 +20,10 @@ type FolderAreaProps = {
   selected?: boolean
   mapMode?: boolean
   highlightKind?: ChangeKind | null
-  previewLabels?: boolean
   labelVisible?: boolean
   pointed?: boolean
+  pointedColors?: string[]
+  opacity?: number
   onCommitName?: (name: string) => void
   onCancelName?: () => void
 }
@@ -32,32 +34,48 @@ export function FolderArea({
   selected = false,
   mapMode = false,
   highlightKind = null,
-  previewLabels = false,
   labelVisible = true,
   pointed = false,
+  pointedColors,
+  opacity = 1,
   onCommitName,
   onCancelName,
 }: FolderAreaProps) {
   const added = Boolean(folder.added)
   const highlight = highlightKind ? CHANGE_HIGHLIGHT[highlightKind] : null
   const addedOnly = added && !highlight
-  const outline = highlight ? highlight.color : addedOnly ? '#7ec8e8' : null
+  const tint = addedOnly ? blueprintPalette(folder.colorHex) : null
+  const outline = highlight ? highlight.color : addedOnly ? tint?.color ?? '#7ec8e8' : null
   const color = highlight
     ? highlight.floor
     : addedOnly
-      ? '#16323f'
+      ? tint?.floor ?? '#16323f'
       : folderFloorColor(folder.path)
   const aisle = highlight
     ? highlight.aisle
     : addedOnly
-      ? '#23485a'
+      ? tint?.aisle ?? '#23485a'
       : folderAisleColor(folder.path)
+  const eyeColors =
+    pointedColors && pointedColors.length > 0
+      ? pointedColors
+      : pointed
+        ? [MAP_SELECTION.pointed]
+        : []
+  const pointedColor = eyeColors[eyeColors.length - 1]
   const label =
     highlightKind === 'remove'
       ? `- ${folder.name}`
       : highlightKind === 'add' || added
         ? `+ ${folder.name}`
         : folder.name
+
+  const faded = opacity < 1
+  const floorMaterial = {
+    transparent: faded,
+    opacity,
+    depthWrite: !faded,
+  }
 
   return (
     <group position={[folder.x, 0, folder.z + folder.depth / 2]}>
@@ -67,12 +85,18 @@ export function FolderArea({
           <meshBasicMaterial
             color={outline}
             toneMapped={false}
+            {...floorMaterial}
           />
         </mesh>
       )}
       <mesh rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[folder.width, folder.depth]} />
-        <meshBasicMaterial color={color} />
+        <meshBasicMaterial
+          color={color}
+          transparent={faded}
+          opacity={opacity}
+          depthWrite={!faded}
+        />
       </mesh>
       {selected && mapMode && (
         <MapSelectBorder
@@ -83,9 +107,18 @@ export function FolderArea({
           color={MAP_SELECTION.island}
         />
       )}
+      {eyeColors.length > 0 && !naming && (
+        <MapSelectBorder
+          width={folder.width}
+          depth={folder.depth}
+          y={selected && mapMode ? 0.09 : 0.05}
+          stroke={MAP_SELECTION.pointedPad}
+          color={pointedColor ?? MAP_SELECTION.pointed}
+        />
+      )}
       <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[CONFIG.bridgeWidth, folder.depth]} />
-        <meshBasicMaterial color={aisle} />
+        <meshBasicMaterial color={aisle} {...floorMaterial} />
       </mesh>
       {folder.width > 28 && (
         <mesh
@@ -93,25 +126,18 @@ export function FolderArea({
           rotation={[-Math.PI / 2, 0, 0]}
         >
           <planeGeometry args={[folder.width, CONFIG.bridgeWidth]} />
-          <meshBasicMaterial color={aisle} />
+          <meshBasicMaterial color={aisle} {...floorMaterial} />
         </mesh>
       )}
-      {pointed && !naming && (
+      {eyeColors.length > 0 && !naming && !mapMode && (
         <Html
-          position={[0, mapMode ? 1.15 : 1.45, -folder.depth / 2 + 2.2]}
+          position={[1.45, 1.75, -folder.depth / 2 + 1.6]}
           center
           occlude={false}
           style={{ pointerEvents: 'none' }}
           zIndexRange={[40, 0]}
         >
-          <div
-            className="blueprint-eye"
-            data-map={mapMode ? 'true' : 'false'}
-            role="img"
-            aria-label="Keep in mind"
-          >
-            <EyeIcon size={mapMode ? 18 : 22} title="Keep in mind" />
-          </div>
+          <BlueprintEyes colors={eyeColors} size={20} />
         </Html>
       )}
       {naming && mapMode && onCommitName && onCancelName && (
@@ -124,31 +150,28 @@ export function FolderArea({
         >
           <NameInput
             placeholder="Folder name"
+            fallbackName="New folder"
             onCommit={onCommitName}
             onCancel={onCancelName}
           />
         </Html>
       )}
       <Suspense fallback={null}>
-        {!naming && previewLabels && labelVisible && (
-          <Html
-            position={[0, 1.35, -folder.depth / 2 + 1.6]}
-            center
-            occlude={false}
-            style={{ pointerEvents: 'none' }}
-            zIndexRange={[20, 0]}
-          >
-            <div className="thumbnail-folder-label">{label}</div>
-          </Html>
-        )}
-        {!naming && !previewLabels && !mapMode && labelVisible && (
+        {!naming && !mapMode && labelVisible && (
           <Text
             position={[0, 0.05, -folder.depth / 2 + 1.6]}
             rotation={[-Math.PI / 2, 0, 0]}
             fontSize={0.55}
             color={
-              highlight ? highlight.color : addedOnly ? '#9ad8ff' : '#8b95a5'
+              pointedColor
+                ? pointedColor
+                : highlight
+                  ? highlight.color
+                  : addedOnly
+                    ? tint?.label ?? '#9ad8ff'
+                    : '#8b95a5'
             }
+            fillOpacity={opacity}
             anchorX="center"
             anchorY="middle"
           >

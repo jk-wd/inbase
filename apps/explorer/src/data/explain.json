@@ -1,0 +1,11 @@
+{
+  "active": false,
+  "question": "",
+  "steps": [],
+  "currentStep": "1",
+  "pendingQuestion": null,
+  "pendingStart": null,
+  "answering": false,
+  "presentation": "walk",
+  "updatedAt": "2026-08-30T11:28:47.269Z"
+}

@@ -14,7 +14,7 @@ npm test
 npm run dev
 ```
 
-`npm run dev` maps `apps/example-target` by default. To map another project:
+`npm run dev` maps `apps/example-target` by default. Use **Look at** in the map to switch to the complete repository. To map another project:
 
 ```bash
 VISUAL_CODER_TARGET=/path/to/your/project npm run dev

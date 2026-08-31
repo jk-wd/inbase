@@ -8,18 +8,29 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { emptyIntent } from './scripts/patch-lib.mjs'
 import { readBranchChanges } from './scripts/branch-changes.mjs'
 import { writeRunningInstance, isolatedViteConfig, packageDirFromPackage } from '../../bin/project.mjs'
-import { dataDir, targetRoot } from './scripts/target-config.mjs'
+import {
+  dataDir,
+  isWorkspaceDevSwitcherEnabled,
+  setWorkspaceTarget,
+  targetRoot,
+  workspaceDevTargetsState,
+} from './scripts/target-config.mjs'
 import { editorFileUri, openInEditor } from './scripts/open-editor.mjs'
 import {
   answerBlueprint,
   clearDiffSessions,
+  ensureSessionPool,
   continueDiff,
   inspectTargetFile,
   invokeStep,
   listSessionIntents,
   nextAttachSessionId,
+  listOpenSessionIds,
   readActiveSession,
+  recycleDisconnectedSessions,
   requestReplan,
+  notifySessionExplain,
+  requestExplainProposal,
   sendBlueprint,
   sessionIntent,
   setInitialInstruction,
@@ -31,10 +42,20 @@ import {
   stopSession,
   updateBlueprint,
   readBlueprint,
+  listLocalBlueprints,
   setBlueprintHidden,
   clearBlueprint,
   cleanupBlueprint,
 } from './scripts/session-store.mjs'
+import {
+  askExplainQuestion,
+  explainTargetLabel,
+  parseExplainTargetKind,
+  readExplain,
+  requestExplainTarget,
+  setExplainStep,
+  stopExplain,
+} from './scripts/explain-store.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const isolation = isolatedViteConfig(dataDir)
@@ -44,10 +65,12 @@ const scanScript = path.resolve(here, 'scripts/scan-target.mjs')
 
 // The rescan runs with cwd set to the explorer, so hand it the already-resolved
 // root and data dir instead of letting relative env values resolve differently.
-const scanEnv = {
-  ...process.env,
-  VISUAL_CODER_TARGET: targetRoot,
-  INBASE_DATA_DIR: dataDir,
+function scanEnv() {
+  return {
+    ...process.env,
+    VISUAL_CODER_TARGET: targetRoot,
+    INBASE_DATA_DIR: dataDir,
+  }
 }
 
 function readBody(req: IncomingMessage) {
@@ -65,7 +88,7 @@ function rescanTarget(when: string) {
   const scan = spawnSync(process.execPath, [scanScript], {
     cwd: here,
     encoding: 'utf8',
-    env: scanEnv,
+    env: scanEnv(),
   })
   if (scan.status !== 0) {
     console.error(scan.stderr || scan.stdout || `scan failed ${when}`)
@@ -136,14 +159,24 @@ function jsonFilePlugin(): Plugin {
   return {
     name: 'visual-coder-json-files',
     configureServer(server) {
+      const serverPort = server.config.server.port ?? 5173
       writeRunningInstance({
         dataDir,
         targetRoot,
-        port: server.config.server.port ?? 5173,
+        port: serverPort,
       })
-      // Always boot with no LLM session. Leftover diffs and pointers are not restored.
+      // Discard leftover LLM sessions, then open 5 empty chat slots.
       clearDiffSessions(dataDir, targetRoot)
+      ensureSessionPool(dataDir)
       rescanTarget('after discarding leftover LLM sessions')
+      let lastLiveSessionKey = listOpenSessionIds(dataDir).join('\0')
+      function syncDisconnectedSessions() {
+        const recycled = recycleDisconnectedSessions(dataDir, targetRoot)
+        const liveKey = listOpenSessionIds(dataDir).join('\0')
+        const changed = recycled.length > 0 || liveKey !== lastLiveSessionKey
+        lastLiveSessionKey = liveKey
+        if (changed) rescanTarget('after LLM session reset')
+      }
       server.middlewares.use('/api/user-context', (req, res, next) => {
         if (req.method === 'GET') {
           sendJson(res, 200, readUserContext())
@@ -174,6 +207,7 @@ function jsonFilePlugin(): Plugin {
 
       server.middlewares.use('/api/agent-intent', (req, res, next) => {
         if (req.method === 'GET') {
+          syncDisconnectedSessions()
           const url = new URL(req.url ?? '/', 'http://visual-coder.local')
           const sessionId = url.searchParams.get('sessionId')
           const diffId = url.searchParams.get('diffId') ?? undefined
@@ -192,6 +226,7 @@ function jsonFilePlugin(): Plugin {
             nextAttachSessionId: nextAttachSessionId(dataDir),
             intents: listSessionIntents(dataDir, knownFileIds()),
             blueprint: readBlueprint(dataDir),
+            localBlueprints: listLocalBlueprints(dataDir),
           })
           return
         }
@@ -212,6 +247,18 @@ function jsonFilePlugin(): Plugin {
         next()
       })
 
+      server.middlewares.use('/api/explain', (req, res, next) => {
+        if (req.method === 'GET') {
+          sendJson(res, 200, readExplain(dataDir))
+          return
+        }
+        if (req.method === 'POST') {
+          void decideExplain(req, res)
+          return
+        }
+        next()
+      })
+
       server.middlewares.use('/api/inspect-file', (req, res, next) => {
         if (req.method === 'POST') {
           void inspectFile(req, res)
@@ -219,7 +266,110 @@ function jsonFilePlugin(): Plugin {
         }
         next()
       })
+
+      server.middlewares.use('/api/dev-targets', (req, res, next) => {
+        if (req.method === 'GET') {
+          sendJson(res, 200, workspaceDevTargetsState())
+          return
+        }
+        if (req.method === 'POST') {
+          void switchDevTarget(req, res, serverPort)
+          return
+        }
+        next()
+      })
     },
+  }
+}
+
+async function switchDevTarget(
+  req: IncomingMessage,
+  res: ServerResponse,
+  port: number,
+) {
+  if (!isWorkspaceDevSwitcherEnabled()) {
+    sendJson(res, 404, { error: 'dev target switcher is not available' })
+    return
+  }
+  try {
+    const body = JSON.parse(await readBody(req)) as { id?: string }
+    const id = body.id?.trim()
+    if (!id || id === 'custom') {
+      sendJson(res, 400, { error: 'id is required' })
+      return
+    }
+    setWorkspaceTarget(id)
+    writeRunningInstance({ dataDir, targetRoot, port })
+    stopExplain(dataDir)
+    clearDiffSessions(dataDir, targetRoot)
+    ensureSessionPool(dataDir)
+    if (!rescanTarget('after switching target')) {
+      sendJson(res, 500, { error: 'scan failed' })
+      return
+    }
+    sendJson(res, 200, {
+      ...workspaceDevTargetsState(),
+      codebase: readCodebase(),
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'invalid request'
+    sendJson(res, 400, { error: message })
+  }
+}
+
+async function decideExplain(req: IncomingMessage, res: ServerResponse) {
+  try {
+    const body = JSON.parse(await readBody(req)) as {
+      action?: string
+      step?: string | number
+      question?: string
+      kind?: string
+      path?: string
+      name?: string
+      sessionId?: string
+    }
+    if (body.action === 'stop') {
+      sendJson(res, 200, stopExplain(dataDir))
+      return
+    }
+    if (body.action === 'start') {
+      const next = requestExplainTarget(dataDir, {
+        kind: parseExplainTargetKind(body.kind) ?? 'file',
+        path: body.path ?? '',
+        name: body.name,
+        question: body.question,
+      })
+      const sessionId = body.sessionId?.trim()
+      if (sessionId && next.pendingStart) {
+        notifySessionExplain(
+          dataDir,
+          sessionId,
+          explainTargetLabel(next.pendingStart),
+        )
+      }
+      sendJson(res, 200, next)
+      return
+    }
+    if (body.action === 'set_step') {
+      if (body.step == null || body.step === '') {
+        sendJson(res, 400, { error: 'step is required' })
+        return
+      }
+      sendJson(res, 200, setExplainStep(dataDir, body.step))
+      return
+    }
+    if (body.action === 'ask') {
+      sendJson(
+        res,
+        200,
+        askExplainQuestion(dataDir, body.step ?? '', body.question ?? ''),
+      )
+      return
+    }
+    sendJson(res, 400, { error: 'invalid explain action' })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'invalid request'
+    sendJson(res, 400, { error: message })
   }
 }
 
@@ -262,6 +412,7 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       step?: number
       stepByStep?: boolean
       hidden?: boolean
+      color?: string
       userCreatedBlocks?: unknown[]
       userCreatedIslands?: unknown[]
       addedFunctions?: unknown[]
@@ -283,6 +434,7 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       action !== 'invoke' &&
       action !== 'continue' &&
       action !== 'instruct' &&
+      action !== 'explain_proposal' &&
       action !== 'stop' &&
       action !== 'blueprint_yes' &&
       action !== 'blueprint_no' &&
@@ -350,12 +502,15 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
         body.instruction ?? '',
         targetRoot,
       )
+    } else if (action === 'explain_proposal') {
+      requestExplainProposal(dataDir, body.sessionId, body.diffId)
     } else if (action === 'blueprint_yes') {
       answerBlueprint(dataDir, body.sessionId, true)
     } else if (action === 'blueprint_no') {
       answerBlueprint(dataDir, body.sessionId, false)
     } else if (action === 'blueprint_update') {
       updateBlueprint(dataDir, body.sessionId, {
+        color: body.color,
         userCreatedBlocks: body.userCreatedBlocks,
         userCreatedIslands: body.userCreatedIslands,
         addedFunctions: body.addedFunctions,
@@ -365,21 +520,13 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
         pointers: body.pointers,
       })
     } else if (action === 'blueprint_clear') {
-      clearBlueprint(dataDir)
+      clearBlueprint(dataDir, body.color)
     } else if (action === 'blueprint_cleanup') {
-      cleanupBlueprint(dataDir, knownFileIds(), knownFolderPaths())
+      cleanupBlueprint(dataDir, knownFileIds(), knownFolderPaths(), body.color)
     } else if (action === 'blueprint_set_hidden') {
-      setBlueprintHidden(dataDir, Boolean(body.hidden))
+      setBlueprintHidden(dataDir, Boolean(body.hidden), body.color)
     } else if (action === 'blueprint_send') {
-      sendBlueprint(dataDir, body.sessionId, {
-        userCreatedBlocks: body.userCreatedBlocks,
-        userCreatedIslands: body.userCreatedIslands,
-        addedFunctions: body.addedFunctions,
-        addedVariables: body.addedVariables,
-        addedImports: body.addedImports,
-        notes: body.notes,
-        pointers: body.pointers,
-      })
+      sendBlueprint(dataDir, body.sessionId)
     } else if (action === 'setup_session') {
       const manifest = setupSession(dataDir, {
         sessionId: body.sessionId,
@@ -453,11 +600,10 @@ function readUserContext() {
     >
     return {
       ...parsed,
-      followLook: Boolean(parsed.followLook),
       showBranchChanges: Boolean(parsed.showBranchChanges),
     }
   } catch {
-    return { followLook: false, showBranchChanges: false }
+    return { showBranchChanges: false }
   }
 }
 
@@ -468,15 +614,12 @@ async function writeUserContext(req: IncomingMessage, res: ServerResponse) {
     const next = {
       ...existing,
       ...incoming,
-      followLook:
-        typeof incoming.followLook === 'boolean'
-          ? incoming.followLook
-          : Boolean(existing.followLook),
       showBranchChanges:
         typeof incoming.showBranchChanges === 'boolean'
           ? incoming.showBranchChanges
           : Boolean(existing.showBranchChanges),
     }
+    delete next.followLook
     delete next.userCreatedBlocks
     delete next.userCreatedIslands
     fs.mkdirSync(path.dirname(userContextFile), { recursive: true })
@@ -517,6 +660,10 @@ export default defineConfig({
       '@react-three/fiber',
       '@react-three/drei',
     ],
+    exclude: ['kokoro-js', '@huggingface/transformers'],
+  },
+  worker: {
+    format: 'es',
   },
   server: {
     ...isolation.server,

@@ -17,6 +17,7 @@ import {
   materializeDiff,
   listOpenSessionIds,
   listSessionIntents,
+  recycleDisconnectedSessions,
   readActiveSession,
   focusSession,
   readBlueprint,
@@ -24,6 +25,7 @@ import {
   readDiff,
   readManifest,
   reportPlan,
+  requestExplainProposal,
   requestReplan,
   sendBlueprint,
   sessionIntent,
@@ -33,6 +35,14 @@ import {
   attachSession,
   listAttachQueue,
   nextAttachSessionId,
+  parseSessionColorQuery,
+  colorBusyMessage,
+  colorUnknownMessage,
+  colorMissingMessage,
+  SESSION_SLOT_COUNT,
+  SESSION_COLORS,
+  ensureSessionPool,
+  sessionPoolSize,
   setInitialInstruction,
   addContextFiles,
   removeContextFile,
@@ -47,6 +57,9 @@ import {
   clearBlueprint,
   cleanupBlueprint,
   setBlueprintHidden,
+  readLocalBlueprint,
+  readBlueprintByColor,
+  listLocalBlueprints,
   writeManifest,
   isSessionStopped,
   isWorkflowStopped,
@@ -337,11 +350,78 @@ test('attach without an id uses the oldest waiting session', () => {
     assert.equal(intent.awaitingAttach, false)
     assert.equal(intent.llmIdle, false)
     assert.equal(intent.lastAck.kind, 'attached')
+    assert.equal(intent.colorName, 'Coral')
+    assert.equal(intent.lastAck.detail, 'Coral')
 
     const again = attachSession(env.dataDir, first.sessionId)
     assert.equal(again.sessionId, first.sessionId)
     assert.deepEqual(listAttachQueue(env.dataDir), [second.sessionId])
     assert.equal(readActiveSession(env.dataDir), first.sessionId)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('parseSessionColorQuery maps aliases and rejects blue', () => {
+  assert.equal(parseSessionColorQuery('red').id, 'coral')
+  assert.equal(parseSessionColorQuery('Coral').id, 'coral')
+  assert.equal(parseSessionColorQuery('YELLOW').id, 'amber')
+  assert.equal(parseSessionColorQuery('green').id, 'lime')
+  assert.equal(parseSessionColorQuery('purple').id, 'violet')
+  assert.equal(parseSessionColorQuery('orange').id, 'orange')
+  assert.equal(parseSessionColorQuery(''), null)
+  assert.throws(
+    () => parseSessionColorQuery('blue'),
+    (error) => String(error.message).includes('VISUAL_CODER_COLOR_UNKNOWN'),
+  )
+  assert.throws(
+    () => parseSessionColorQuery('pink'),
+    (error) => String(error.message) === colorUnknownMessage('pink'),
+  )
+})
+
+test('attach --color takes that waiting session even if it is not first', () => {
+  const env = fixture()
+  try {
+    const coral = setupSession(env.dataDir)
+    const amber = setupSession(env.dataDir)
+    const lime = setupSession(env.dataDir)
+    assert.equal(coral.color, 'coral')
+    assert.equal(amber.color, 'amber')
+    assert.equal(lime.color, 'lime')
+    assert.equal(nextAttachSessionId(env.dataDir), coral.sessionId)
+
+    const attached = attachSession(env.dataDir, null, { color: 'green' })
+    assert.equal(attached.sessionId, lime.sessionId)
+    assert.equal(attached.color, 'lime')
+    assert.equal(attached.awaitingAttach, false)
+    assert.deepEqual(listAttachQueue(env.dataDir), [
+      coral.sessionId,
+      amber.sessionId,
+    ])
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('attach --color fails when that color already has a chat', () => {
+  const env = fixture()
+  try {
+    const coral = setupSession(env.dataDir)
+    setupSession(env.dataDir)
+    attachSession(env.dataDir, coral.sessionId)
+    assert.throws(
+      () => attachSession(env.dataDir, null, { color: 'red' }),
+      (error) => String(error.message) === colorBusyMessage('Coral'),
+    )
+    assert.throws(
+      () => attachSession(env.dataDir, null, { color: 'blue' }),
+      (error) => String(error.message).includes('VISUAL_CODER_COLOR_UNKNOWN'),
+    )
+    assert.throws(
+      () => attachSession(env.dataDir, null, { color: 'violet' }),
+      (error) => String(error.message) === colorMissingMessage('Violet'),
+    )
   } finally {
     env.cleanup()
   }
@@ -399,11 +479,71 @@ test('a newly created session waits behind older sessions in the attach queue', 
 test('attach fails when no visualizer session is waiting', () => {
   const env = fixture()
   try {
-    assert.throws(() => attachSession(env.dataDir), /waiting to attach/)
+    assert.throws(() => attachSession(env.dataDir), /VISUAL_CODER_CHAT_LIMIT/)
     const started = setupSession(env.dataDir)
     attachSession(env.dataDir)
     focusSession(env.dataDir, started.sessionId)
-    assert.throws(() => attachSession(env.dataDir), /waiting to attach/)
+    assert.throws(() => attachSession(env.dataDir), /VISUAL_CODER_CHAT_LIMIT/)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('startup opens five empty unconnected sessions', () => {
+  const env = fixture()
+  try {
+    const created = ensureSessionPool(env.dataDir)
+    assert.equal(created.length, SESSION_SLOT_COUNT)
+    assert.equal(sessionPoolSize(env.dataDir), SESSION_SLOT_COUNT)
+    const ids = listOpenSessionIds(env.dataDir)
+    assert.equal(ids.length, SESSION_SLOT_COUNT)
+    const colors = ids.map((sessionId) => readManifest(env.dataDir, sessionId).color)
+    assert.deepEqual(colors.sort(), SESSION_COLORS.map((entry) => entry.id).sort())
+    for (const sessionId of ids) {
+      const manifest = readManifest(env.dataDir, sessionId)
+      assert.match(sessionId, /^viz-[0-9a-f]+$/)
+      assert.equal(manifest.awaitingAttach, true)
+      assert.equal(manifest.name, '')
+      assert.equal(manifest.phase, 'blueprint')
+      const intent = sessionIntent(env.dataDir, sessionId)
+      assert.equal(intent.color, manifest.color)
+      assert.equal(typeof intent.colorName, 'string')
+      assert.match(intent.colorHex, /^#[0-9a-f]{6}$/)
+    }
+    assert.equal(nextAttachSessionId(env.dataDir), listAttachQueue(env.dataDir)[0])
+    assert.equal(readActiveSession(env.dataDir), nextAttachSessionId(env.dataDir))
+    assert.equal(ensureSessionPool(env.dataDir).length, 0)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('the sixth chat is refused while five are connected', () => {
+  const env = fixture()
+  try {
+    const created = ensureSessionPool(env.dataDir)
+    for (const session of created) attachSession(env.dataDir, session.sessionId)
+    assert.throws(() => attachSession(env.dataDir), /VISUAL_CODER_CHAT_LIMIT/)
+    assert.throws(() => setupSession(env.dataDir), /VISUAL_CODER_CHAT_LIMIT/)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('stopping a connected chat opens a new empty slot', () => {
+  const env = fixture()
+  try {
+    const created = ensureSessionPool(env.dataDir)
+    attachSession(env.dataDir, created[0].sessionId)
+    stopSession(env.dataDir, created[0].sessionId)
+    const ids = listOpenSessionIds(env.dataDir)
+    assert.equal(ids.length, SESSION_SLOT_COUNT)
+    assert.equal(ids.includes(created[0].sessionId), false)
+    assert.equal(
+      ids.filter((sessionId) => readManifest(env.dataDir, sessionId).awaitingAttach)
+        .length,
+      SESSION_SLOT_COUNT,
+    )
   } finally {
     env.cleanup()
   }
@@ -515,6 +655,109 @@ test('sessions share one blueprint across LLM chats', () => {
 
     focusSession(env.dataDir, 'edit-a')
     assert.equal(readActiveSession(env.dataDir), 'edit-a')
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('session-colored blueprints stay local to that color', () => {
+  const env = fixture()
+  try {
+    const first = setupSession(env.dataDir, { sessionId: 'local-a' })
+    const second = setupSession(env.dataDir, { sessionId: 'local-b' })
+    const block = {
+      id: 'src/Local.tsx',
+      name: 'Local.tsx',
+      path: 'src/Local.tsx',
+      folder: 'src',
+      x: 1,
+      z: 2,
+    }
+    updateBlueprint(env.dataDir, first.sessionId, {
+      color: first.color,
+      userCreatedBlocks: [block],
+    })
+    assert.deepEqual(readBlueprint(env.dataDir).userCreatedBlocks, [])
+    assert.deepEqual(readLocalBlueprint(env.dataDir, first.sessionId).userCreatedBlocks, [
+      block,
+    ])
+    assert.deepEqual(readLocalBlueprint(env.dataDir, second.sessionId).userCreatedBlocks, [])
+    assert.deepEqual(readBlueprintByColor(env.dataDir, second.color).userCreatedBlocks, [])
+    const locals = listLocalBlueprints(env.dataDir)
+    const firstLocal = locals.find((item) => item.sessionId === first.sessionId)
+    const secondLocal = locals.find((item) => item.sessionId === second.sessionId)
+    assert.deepEqual(firstLocal?.userCreatedBlocks, [block])
+    assert.deepEqual(secondLocal?.userCreatedBlocks, [])
+    assert.equal(readBlueprint(env.dataDir, first.sessionId).enabled, false)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('each chat keeps the global blueprint plus its own color only', () => {
+  const env = fixture()
+  try {
+    const coral = setupSession(env.dataDir, { sessionId: 'coral-chat' })
+    const amber = setupSession(env.dataDir, { sessionId: 'amber-chat' })
+    assert.equal(coral.color, 'coral')
+    assert.equal(amber.color, 'amber')
+    const globalBlock = {
+      id: 'src/Global.tsx',
+      name: 'Global.tsx',
+      path: 'src/Global.tsx',
+      folder: 'src',
+      x: 1,
+      z: 1,
+    }
+    const coralBlock = {
+      id: 'src/Coral.tsx',
+      name: 'Coral.tsx',
+      path: 'src/Coral.tsx',
+      folder: 'src',
+      x: 2,
+      z: 2,
+    }
+    const amberBlock = {
+      id: 'src/Amber.tsx',
+      name: 'Amber.tsx',
+      path: 'src/Amber.tsx',
+      folder: 'src',
+      x: 3,
+      z: 3,
+    }
+    updateBlueprint(env.dataDir, null, { userCreatedBlocks: [globalBlock] })
+    updateBlueprint(env.dataDir, coral.sessionId, {
+      color: coral.color,
+      userCreatedBlocks: [coralBlock],
+    })
+    updateBlueprint(env.dataDir, amber.sessionId, {
+      color: amber.color,
+      userCreatedBlocks: [amberBlock],
+    })
+    sendBlueprint(env.dataDir, coral.sessionId, {
+      userCreatedBlocks: [coralBlock],
+    })
+    assert.deepEqual(readBlueprint(env.dataDir).userCreatedBlocks, [globalBlock])
+    assert.deepEqual(readLocalBlueprint(env.dataDir, coral.sessionId).userCreatedBlocks, [
+      coralBlock,
+    ])
+    assert.deepEqual(readLocalBlueprint(env.dataDir, amber.sessionId).userCreatedBlocks, [
+      amberBlock,
+    ])
+    sendBlueprint(env.dataDir, amber.sessionId)
+    assert.deepEqual(readBlueprint(env.dataDir).userCreatedBlocks, [globalBlock])
+    assert.deepEqual(readLocalBlueprint(env.dataDir, coral.sessionId).userCreatedBlocks, [
+      coralBlock,
+    ])
+    assert.deepEqual(readLocalBlueprint(env.dataDir, amber.sessionId).userCreatedBlocks, [
+      amberBlock,
+    ])
+    const coralIntent = sessionIntent(env.dataDir, coral.sessionId, ['src/a.ts'])
+    const amberIntent = sessionIntent(env.dataDir, amber.sessionId, ['src/a.ts'])
+    assert.deepEqual(coralIntent.userCreatedBlocks, [globalBlock])
+    assert.deepEqual(amberIntent.userCreatedBlocks, [globalBlock])
+    assert.equal(coralIntent.localBlueprintEnabled, true)
+    assert.equal(amberIntent.localBlueprintEnabled, true)
   } finally {
     env.cleanup()
   }
@@ -1096,6 +1339,56 @@ test('alternative instruction keeps the current proposal on disk', () => {
   }
 })
 
+test('explain proposal keeps the pending review and records an ack', () => {
+  const env = fixture()
+  try {
+    reportPlan(env.dataDir, {
+      sessionId: 'explain-chat',
+      feature: 'Explain',
+      stepTitles: ['Build value', 'Finish value'],
+    })
+    invokeStep(env.dataDir, 'explain-chat', 1)
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'explain-chat',
+      patchText: oneToTwo,
+    })
+    const pending = sessionIntent(env.dataDir, 'explain-chat', ['src/a.ts'])
+    requestExplainProposal(env.dataDir, 'explain-chat', pending.diffId)
+    const manifest = readManifest(env.dataDir, 'explain-chat')
+    assert.equal(manifest.phase, 'review')
+    assert.equal(manifest.pendingExplain, true)
+    assert.equal(manifest.diffs.at(-1).status, 'pending')
+    const intent = sessionIntent(env.dataDir, 'explain-chat', ['src/a.ts'])
+    assert.equal(intent.pendingExplain, true)
+    assert.equal(intent.lastAck.kind, 'explain')
+    assert.equal(fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'), 'export const value = 2\n')
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('explain proposal from plan ready does not require a pending diff', () => {
+  const env = fixture()
+  try {
+    reportPlan(env.dataDir, {
+      sessionId: 'explain-plan',
+      feature: 'Explain',
+      stepTitles: ['Build value', 'Finish value'],
+    })
+    requestExplainProposal(env.dataDir, 'explain-plan')
+    const manifest = readManifest(env.dataDir, 'explain-plan')
+    assert.equal(manifest.phase, 'plan_ready')
+    assert.equal(manifest.pendingExplain, true)
+    assert.equal(manifest.diffs.length, 0)
+    const intent = sessionIntent(env.dataDir, 'explain-plan', ['src/a.ts'])
+    assert.equal(intent.pendingExplain, true)
+    assert.equal(intent.lastAck.kind, 'explain')
+    assert.equal(intent.lastAck.detail, 'the proposal for Build value')
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('revised proposal stays on the same step instead of advancing', () => {
   const env = fixture()
   try {
@@ -1466,54 +1759,110 @@ test('inactive sweep keeps open sessions even without an LLM waiter', () => {
   }
 })
 
-test('last-step review stays on the map after the LLM waiter disappears', () => {
+test('disconnected LLM sessions are reset instead of leaving a stale plan', () => {
   const env = fixture()
   const stale = '2026-01-01T00:00:00.000Z'
   try {
-    startSession(env.dataDir, { sessionId: 'usecase-chat' })
-    setStepByStep(env.dataDir, 'usecase-chat', false)
-    answerBlueprint(env.dataDir, 'usecase-chat', false)
+    ensureSessionPool(env.dataDir, { count: 1, focus: false })
+    startSession(env.dataDir, { sessionId: 'stale-chat' })
+    setStepByStep(env.dataDir, 'stale-chat', false)
+    answerBlueprint(env.dataDir, 'stale-chat', false)
     reportPlan(env.dataDir, {
-      sessionId: 'usecase-chat',
+      sessionId: 'stale-chat',
       feature: 'Auto run',
       stepTitles: ['Build value', 'Finish value'],
     })
     appendDiff(env.dataDir, env.targetRoot, {
-      sessionId: 'usecase-chat',
+      sessionId: 'stale-chat',
       patchText: oneToTwo,
     })
     appendDiff(env.dataDir, env.targetRoot, {
-      sessionId: 'usecase-chat',
+      sessionId: 'stale-chat',
       patchText:
         '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 2\n+export const value = 4\n',
     })
 
-    const review = readManifest(env.dataDir, 'usecase-chat')
+    const review = readManifest(env.dataDir, 'stale-chat')
     assert.equal(review.phase, 'review')
-    assert.equal(review.diffs.at(-1).step, 2)
     review.createdAt = stale
     review.updatedAt = stale
     fs.writeFileSync(
-      path.join(env.dataDir, 'diff-sessions', 'usecase-chat', 'manifest.json'),
+      path.join(env.dataDir, 'diff-sessions', 'stale-chat', 'manifest.json'),
       `${JSON.stringify(review, null, 2)}\n`,
     )
 
-    assert.deepEqual(listOpenSessionIds(env.dataDir), ['usecase-chat'])
-    const intent = sessionIntent(env.dataDir, 'usecase-chat', ['src/a.ts'])
+    const intent = sessionIntent(env.dataDir, 'stale-chat', ['src/a.ts'])
     assert.equal(intent.status, 'pending')
-    assert.equal(intent.preview, true)
     assert.equal(intent.llmIdle, true)
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
       'export const value = 4\n',
     )
 
-    discardInactiveDiffSessions(env.dataDir, env.targetRoot, new Set())
-    assert.equal(readManifest(env.dataDir, 'usecase-chat').phase, 'review')
+    const recycled = recycleDisconnectedSessions(
+      env.dataDir,
+      env.targetRoot,
+      new Set(),
+    )
+    assert.deepEqual(recycled, ['stale-chat'])
+    assert.equal(readManifest(env.dataDir, 'stale-chat'), null)
+    assert.equal(sessionIntent(env.dataDir, 'stale-chat', ['src/a.ts']), null)
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 4\n',
+      'export const value = 1\n',
     )
+    const slots = listOpenSessionIds(env.dataDir)
+    assert.equal(slots.length, 1)
+    assert.notEqual(slots[0], 'stale-chat')
+    const replacement = readManifest(env.dataDir, slots[0])
+    assert.equal(replacement.awaitingAttach, true)
+    assert.equal(replacement.phase, 'blueprint')
+    assert.deepEqual(replacement.steps, [])
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('waiting attach slots and live LLM sessions are not recycled', () => {
+  const env = fixture()
+  const stale = '2026-01-01T00:00:00.000Z'
+  try {
+    const waiting = setupSession(env.dataDir, { sessionId: 'wait-chat' })
+    waiting.createdAt = stale
+    waiting.updatedAt = stale
+    fs.writeFileSync(
+      path.join(env.dataDir, 'diff-sessions', 'wait-chat', 'manifest.json'),
+      `${JSON.stringify(waiting, null, 2)}\n`,
+    )
+
+    startSession(env.dataDir, { sessionId: 'live-chat' })
+    answerBlueprint(env.dataDir, 'live-chat', false)
+    reportPlan(env.dataDir, {
+      sessionId: 'live-chat',
+      feature: 'Keep live',
+      stepTitles: ['Build value'],
+    })
+    touchSessionConnection(env.dataDir, 'live-chat')
+
+    startSession(env.dataDir, { sessionId: 'work-chat' })
+    answerBlueprint(env.dataDir, 'work-chat', false)
+    const working = readManifest(env.dataDir, 'work-chat')
+    working.phase = 'working'
+    working.createdAt = stale
+    working.updatedAt = stale
+    working.workStartedAt = stale
+    fs.writeFileSync(
+      path.join(env.dataDir, 'diff-sessions', 'work-chat', 'manifest.json'),
+      `${JSON.stringify(working, null, 2)}\n`,
+    )
+
+    assert.deepEqual(
+      recycleDisconnectedSessions(env.dataDir, env.targetRoot, new Set()).sort(),
+      [],
+    )
+    assert.equal(readManifest(env.dataDir, 'wait-chat')?.awaitingAttach, true)
+    assert.equal(readManifest(env.dataDir, 'live-chat')?.feature, 'Keep live')
+    assert.equal(readManifest(env.dataDir, 'work-chat')?.phase, 'working')
   } finally {
     env.cleanup()
   }
@@ -1541,10 +1890,17 @@ test('visualizer startup discards leftover LLM sessions', () => {
       'export const value = 2\n',
     )
 
-    assert.deepEqual(recoverOpenDiffSessions(env.dataDir, env.targetRoot), [])
+    assert.deepEqual(recoverOpenDiffSessions(env.dataDir, env.targetRoot).length, 5)
     assert.equal(readManifest(env.dataDir, 'boot-chat'), null)
-    assert.deepEqual(listOpenSessionIds(env.dataDir), [])
-    assert.equal(readActiveSession(env.dataDir), null)
+    assert.equal(listOpenSessionIds(env.dataDir).length, SESSION_SLOT_COUNT)
+    assert.equal(
+      listOpenSessionIds(env.dataDir).every((sessionId) => {
+        const manifest = readManifest(env.dataDir, sessionId)
+        return manifest?.awaitingAttach === true && !manifest.name
+      }),
+      true,
+    )
+    assert.equal(readActiveSession(env.dataDir), nextAttachSessionId(env.dataDir))
     assert.equal(readBlueprintSession(env.dataDir), null)
     assert.equal(
       fs.existsSync(path.join(env.dataDir, 'diff-sessions', 'boot-chat')),

@@ -203,3 +203,20 @@ test('honours nested gitignore files in a monorepo', () => {
     fs.rmSync(root, { recursive: true, force: true })
   }
 })
+
+test('skips the explorer data directory when it lives inside the scan root', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'visual-coder-data-skip-'))
+  const dataDir = path.join(root, 'apps/explorer/src/data')
+  const dest = path.join(dataDir, 'codebase.json')
+  try {
+    fs.mkdirSync(path.join(root, 'apps/web/src'), { recursive: true })
+    fs.mkdirSync(dataDir, { recursive: true })
+    fs.writeFileSync(path.join(root, 'apps/web/src/app.ts'), 'export const app = 1\n')
+    fs.writeFileSync(path.join(dataDir, 'session-pool.json'), '{}\n')
+    const graph = scanQuiet({ root, dest })
+    const ids = graph.files.map((file) => file.id).sort()
+    assert.deepEqual(ids, ['apps/web/src/app.ts'])
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})

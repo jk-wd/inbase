@@ -1,6 +1,6 @@
 import type { CodebaseGraph } from './types'
 
-function parseCodebase(data: unknown): CodebaseGraph | null {
+export function parseCodebase(data: unknown): CodebaseGraph | null {
   if (
     !data ||
     typeof data !== 'object' ||

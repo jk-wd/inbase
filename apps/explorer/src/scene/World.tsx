@@ -5,11 +5,9 @@ import { DistantFileBlocks } from './DistantFileBlocks'
 import { Bridge } from './Bridge'
 import { RelationLines } from './RelationLines'
 import { Player } from './Player'
-import { MapView, type MapBlueprintMenu } from './MapView'
+import { MapView, type MapBlueprintMenu, type MapFileLabel, type MapFocusBounds } from './MapView'
 import { SelectionController } from './SelectionController'
 import { UserContextTracker } from './UserContextTracker'
-import { BlockPlacer } from './BlockPlacer'
-import { IslandPlacer } from './IslandPlacer'
 import { WalkLodTracker } from './WalkLodTracker'
 import { computeWalkLod, type WalkLod } from './walkLod'
 import {
@@ -19,6 +17,13 @@ import {
   folderOfFile,
   mapPointOntoFolder,
 } from '../layout'
+import {
+  explainFileFocused,
+  explainFileHighlighted,
+  explainFolderFocused,
+  explainHasFocus,
+  type ExplainFocus,
+} from '../explain'
 import { WORLD_VOID, CONFIG, fileHeight } from '../theme'
 import type {
   CodebaseGraph,
@@ -45,6 +50,7 @@ type WorldProps = {
   locked: boolean
   onSelect: (fileId: string | null) => void
   onSelectFolder: (folderPath: string | null) => void
+  pickingImport?: boolean
   onLockedChange: (locked: boolean) => void
   onLand: (x: number, z: number) => void
   onWalkPosition: (x: number, z: number) => void
@@ -63,8 +69,6 @@ type WorldProps = {
   onTravelTo: (fromId: string, toId: string) => void
   importedBy?: boolean
   namingId?: string | null
-  onPlaceBlock?: (spot: { x: number; z: number; folder: string }) => void
-  onPlaceIsland?: (parent: string) => void
   onBlueprintMenu?: (menu: MapBlueprintMenu) => void
   onCommitName?: (id: string, name: string) => boolean
   onCancelName?: (id: string) => void
@@ -74,10 +78,17 @@ type WorldProps = {
   userCreatedIslands?: UserCreatedIsland[]
   overlayBlocks?: UserCreatedBlock[]
   pointedFileIds?: string[]
+  pointedFileColors?: Record<string, string[]>
   pointedFolderPaths?: string[]
+  pointedFolderColors?: Record<string, string[]>
   namingIslandId?: string | null
   mapGraph?: CodebaseGraph | null
   mapLayout?: WorldLayout | null
+  explainActive?: boolean
+  explainFocus?: ExplainFocus | null
+  focusBounds?: MapFocusBounds | null
+  focusFlightKey?: string | number
+  landEnabled?: boolean
 }
 
 export function World({
@@ -90,6 +101,7 @@ export function World({
   locked,
   onSelect,
   onSelectFolder,
+  pickingImport = false,
   onLockedChange,
   onLand,
   onWalkPosition,
@@ -109,8 +121,6 @@ export function World({
   importedBy = false,
   namingId = null,
   namingIslandId = null,
-  onPlaceBlock,
-  onPlaceIsland,
   onBlueprintMenu,
   onCommitName,
   onCancelName,
@@ -120,9 +130,16 @@ export function World({
   userCreatedIslands = [],
   overlayBlocks = [],
   pointedFileIds = [],
+  pointedFileColors = {},
   pointedFolderPaths = [],
+  pointedFolderColors = {},
   mapGraph = null,
   mapLayout = null,
+  explainActive = false,
+  explainFocus = null,
+  focusBounds = null,
+  focusFlightKey = 0,
+  landEnabled = true,
 }: WorldProps) {
   const created = new Set(createdIds)
   const deleted = new Set(deletedIds)
@@ -224,6 +241,68 @@ export function World({
     placed: PlacedFile
     dimmed: boolean
   }[] = []
+  const mapFileLabels = useMemo(() => {
+    if (!mapping) return []
+    const pointed = new Set(pointedFileIds)
+    const seen = new Set<string>()
+    const items: MapFileLabel[] = []
+    const push = (id: string, name: string, placed: PlacedFile) => {
+      if (!placed || seen.has(id)) return
+      seen.add(id)
+      const colors = pointedFileColors[id]
+      items.push({
+        id,
+        name,
+        x: placed.position[0],
+        z: placed.position[2],
+        width: placed.size[0],
+        depth: placed.size[2],
+        outer: -placed.aisleFace as 1 | -1,
+        selected: id === selectedId,
+        pointed: pointed.has(id),
+        pointedColor: colors?.[colors.length - 1],
+        dimmed:
+          explainActive &&
+          !explainFileFocused(explainFocus, id, folderOfFile(id)),
+        focused: explainFileHighlighted(explainFocus, id, folderOfFile(id)),
+      })
+    }
+    for (const file of viewGraph.files) {
+      const placed = viewLayout.files[file.id]
+      if (placed) push(file.id, file.name, placed)
+    }
+    for (const placed of Object.values(ghosts)) {
+      push(placed.id, placed.id.split('/').pop() ?? placed.id, placed)
+    }
+    for (const block of overlayBlocks) {
+      const height = fileHeight(12)
+      push(block.id, block.name, {
+        id: block.id,
+        position: [block.x, height / 2 + 0.42, block.z],
+        size: [CONFIG.fileWidth, height, CONFIG.fileDepth],
+        aisleFace: 1,
+      })
+    }
+    return items
+  }, [
+    ghosts,
+    mapping,
+    overlayBlocks,
+    pointedFileColors,
+    pointedFileIds,
+    selectedId,
+    viewGraph.files,
+    viewLayout.files,
+    explainActive,
+    explainFocus,
+  ])
+
+  const dimmedFolderPaths = useMemo(() => {
+    if (!explainActive || !explainHasFocus(explainFocus)) return []
+    return Object.keys(viewLayout.folders).filter(
+      (path) => !explainFolderFocused(explainFocus, path),
+    )
+  }, [explainActive, explainFocus, viewLayout.folders])
 
   return (
     <>
@@ -238,15 +317,28 @@ export function World({
       <MapView
         layout={viewLayout}
         enabled={mapping}
-        marker={mapMarker}
+        marker={explainActive ? null : mapMarker}
         highlightedFolders={highlightedFolders}
         selectedFolder={selectedFolder}
         namingFolderPath={namingIslandId}
+        namingFileId={namingId}
+        pointedFolderPaths={pointedFolderPaths}
+        pointedFolderColors={pointedFolderColors}
+        fileLabels={mapFileLabels}
+        focusBounds={focusBounds}
+        focusFlightKey={focusFlightKey}
+        hudReserve={explainActive ? 24 : 88}
+        topReserve={explainActive ? 24 : 28}
+        landEnabled={landEnabled}
+        dimmedFolderPaths={dimmedFolderPaths}
         onLand={onLand}
         onSelect={onSelect}
         onSelectFolder={onSelectFolder}
+        pickingImport={pickingImport}
         onBlueprintMenu={
-          mapping && !placing && onBlueprintMenu ? onBlueprintMenu : undefined
+          mapping && !placing && !explainActive && onBlueprintMenu
+            ? onBlueprintMenu
+            : undefined
         }
       />
 
@@ -263,6 +355,12 @@ export function World({
               mapping ? highlightedFolders[folder.path] ?? null : null
             }
             pointed={pointedFolders.has(folder.path)}
+            pointedColors={pointedFolderColors[folder.path]}
+            opacity={
+              explainActive && !explainFolderFocused(explainFocus, folder.path)
+                ? 0.5
+                : 1
+            }
             labelVisible={!lod || lod.folderLabels.has(folder.path)}
             onCommitName={
               folder.path === namingIslandId && onCommitIslandName
@@ -295,6 +393,7 @@ export function World({
         const naming = file.id === namingId
         const aimed = file.id === aimedRelation?.flyTo
         const pointed = pointedFiles.has(file.id)
+        const focused = explainFileHighlighted(explainFocus, file.id, file.folder)
         const detailed =
           selected ||
           isRelated ||
@@ -302,16 +401,20 @@ export function World({
           naming ||
           aimed ||
           pointed ||
+          focused ||
           Boolean(changeKind)
         if (lod && !lod.files.has(file.id)) return null
         const dimmed =
-          hasFocus &&
-          !selected &&
-          !isRelated &&
-          !changeKind &&
-          !pointed &&
-          !patchLinked.has(file.id) &&
-          !folderFileIds.has(file.id)
+          explainActive
+            ? !explainFileFocused(explainFocus, file.id, file.folder)
+            : hasFocus &&
+              !selected &&
+              !isRelated &&
+              !changeKind &&
+              !pointed &&
+              !patchLinked.has(file.id) &&
+              !folderFileIds.has(file.id)
+        const opacity = explainActive && dimmed ? 0.5 : 1
         if (lod && !detailed && !lod.labels.has(file.id)) {
           distantFiles.push({ file, placed, dimmed })
           return null
@@ -328,7 +431,10 @@ export function World({
             added={created.has(file.id) || file.userCreated}
             aimed={aimed}
             pointed={pointed}
+            pointedColors={pointedFileColors[file.id]}
             dimmed={dimmed}
+            focused={focused}
+            opacity={opacity}
             naming={naming}
             mapMode={mapping}
             labelVisible={!lod || lod.labels.has(file.id) || naming}
@@ -366,7 +472,18 @@ export function World({
             changeKind="add"
             added
             pointed={pointedFiles.has(file.id)}
-            dimmed={false}
+            pointedColors={pointedFileColors[file.id]}
+            dimmed={
+              explainActive &&
+              !explainFileFocused(explainFocus, file.id, file.folder)
+            }
+            focused={explainFileHighlighted(explainFocus, file.id, file.folder)}
+            opacity={
+              explainActive &&
+              !explainFileFocused(explainFocus, file.id, file.folder)
+                ? 0.5
+                : 1
+            }
             mapMode={mapping}
             labelVisible
           />
@@ -395,7 +512,17 @@ export function World({
             planned
             changeKind="add"
             added
-            dimmed={false}
+            dimmed={
+              explainActive &&
+              !explainFileFocused(explainFocus, file.id, file.folder)
+            }
+            focused={explainFileHighlighted(explainFocus, file.id, file.folder)}
+            opacity={
+              explainActive &&
+              !explainFileFocused(explainFocus, file.id, file.folder)
+                ? 0.5
+                : 1
+            }
             mapMode={mapping}
           />
         )
@@ -407,6 +534,7 @@ export function World({
         layout={viewLayout}
         extras={ghosts}
         plannedEdges={plannedImports}
+        extraEdges={explainFocus?.relations ?? []}
         fromAbove={mapping}
         importedBy={importedBy}
       />
@@ -429,20 +557,6 @@ export function World({
           keepFolderPaths={keepFolderPaths}
           origin={landAt}
           onChange={setWalkLod}
-        />
-      )}
-      {onPlaceBlock && (
-        <BlockPlacer
-          enabled={!mapping && !placing}
-          layout={layout}
-          onPlace={onPlaceBlock}
-        />
-      )}
-      {onPlaceIsland && (
-        <IslandPlacer
-          enabled={!mapping && !placing}
-          layout={layout}
-          onPlace={onPlaceIsland}
         />
       )}
       <SelectionController

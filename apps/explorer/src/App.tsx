@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { shouldIgnoreShortcut, isKeyboardIsolated } from './keyboard'
-import { emptyIntent, fetchAgentIntent, fetchAgentIntents, inspectTargetFile, performAgentAction, persistBlueprintCleanup, persistBlueprintClear, persistBlueprintHidden, persistSessionBlueprint, persistSessionFocus, setupVisualizerSession } from './agentIntent'
+import { emptyIntent, fetchAgentIntent, fetchAgentIntents, inspectTargetFile, performAgentAction, persistBlueprintCleanup, persistBlueprintClear, persistBlueprintHidden, persistSessionBlueprint, persistSessionFocus } from './agentIntent'
 import { emptyBranchChanges, fetchBranchChanges } from './branchChanges'
 import { fetchCodebase, updateCodebase } from './codebase'
+import {
+  emptyDevTargets,
+  fetchDevTargets,
+  selectDevTarget,
+  type DevTargetsState,
+} from './devTargets'
 import {
   layoutWorld,
   markCreatedFolders,
@@ -12,17 +18,36 @@ import {
   withPreviewGraph,
   filterGraphToChangePaths,
   mapPointOntoFolder,
+  regionBounds,
 } from './layout'
 import { World } from './scene/World'
 import { HUD } from './ui/HUD'
+import { ExplainAskCard } from './ui/ExplainAskCard'
+import { ExplainHud } from './ui/ExplainHud'
+import { ExplainInfoPanel } from './ui/ExplainInfoPanel'
+import { ExplainPointer } from './ui/ExplainPointer'
 import { CanvasErrorBoundary } from './ui/CanvasErrorBoundary'
 import {
   MapContextMenu,
   type MapContextMenuState,
 } from './ui/MapContextMenu'
 import {
+  currentExplainStep,
+  emptyExplain,
+  explainFocus,
+  explainInfoFile,
+  explainIsCard,
+  explainTargetQuestion,
+  fetchExplain,
+  persistExplainAsk,
+  persistExplainStart,
+  persistExplainStep,
+  persistExplainStop,
+  stripExplainSubSteps,
+  topLevelExplainStepId,
+} from './explain'
+import {
   fetchUserContext,
-  persistFollowLook,
   persistShowBranchChanges,
   persistUserContext,
 } from './userContext'
@@ -36,11 +61,13 @@ import {
   isBlueprintSymbolName,
   namedCreatedBlocks,
   namedCreatedIslands,
+  blueprintImportRawFromFile,
   parseBlueprintImport,
   parseBlueprintNotes,
   parseBlueprintPointers,
   parseUserCreatedBlocks,
   parseUserCreatedIslands,
+  remapBlueprintFileId,
   resolveCreatedFile,
   resolveCreatedIsland,
   setBlueprintNote,
@@ -51,22 +78,398 @@ import {
 } from './userCreated'
 import {
   isPatchPreview,
+  isReviewingIntent,
   llmIsMakingChanges,
   type AgentIntent,
   type AimedRelation,
   type BlueprintNote,
   type BlueprintNoteKind,
+  type BlueprintOption,
   type BlueprintPointer,
   type BlueprintPointerKind,
   type CodebaseGraph,
+  type ExplainSession,
+  type ExplainTargetKind,
   type FlyTo,
+  GLOBAL_BLUEPRINT_COLOR,
+  type LocalBlueprint,
   type PatchImportAddition,
   type PatchSymbolAddition,
+  type SharedBlueprint,
   type UserCreatedBlock,
   type UserCreatedIsland,
   type ViewMode,
   type WorkflowAction,
 } from './types'
+
+function emptySharedBlueprint(): SharedBlueprint {
+  return {
+    hidden: false,
+    revision: 0,
+    enabled: false,
+    userCreatedBlocks: [],
+    userCreatedIslands: [],
+    addedFunctions: [],
+    addedVariables: [],
+    addedImports: [],
+    notes: [],
+    pointers: [],
+  }
+}
+
+function blueprintForColor(
+  color: string,
+  global: SharedBlueprint,
+  locals: LocalBlueprint[],
+) {
+  if (color === GLOBAL_BLUEPRINT_COLOR.id) return global
+  return locals.find((item) => item.color === color) ?? emptySharedBlueprint()
+}
+
+function blueprintOptionsFrom(
+  intents: AgentIntent[],
+  locals: LocalBlueprint[],
+): BlueprintOption[] {
+  const byColor = new Map<string, BlueprintOption>()
+  for (const intent of intents) {
+    if (!intent.color || byColor.has(intent.color)) continue
+    byColor.set(intent.color, {
+      id: intent.color,
+      name: intent.colorName || intent.color,
+      hex: intent.colorHex || '#6b7280',
+      kind: 'local',
+      sessionId: intent.sessionId,
+    })
+  }
+  for (const local of locals) {
+    const existing = byColor.get(local.color)
+    byColor.set(local.color, {
+      id: local.color,
+      name: local.colorName || existing?.name || local.color,
+      hex: local.colorHex || existing?.hex || '#6b7280',
+      kind: 'local',
+      sessionId: local.sessionId,
+    })
+  }
+  return [
+    {
+      id: GLOBAL_BLUEPRINT_COLOR.id,
+      name: GLOBAL_BLUEPRINT_COLOR.name,
+      hex: GLOBAL_BLUEPRINT_COLOR.hex,
+      kind: 'global',
+      sessionId: null,
+    },
+    ...byColor.values(),
+  ]
+}
+
+function blueprintLiveEnabled(
+  blocks: UserCreatedBlock[],
+  islands: UserCreatedIsland[],
+  functions: PatchSymbolAddition[],
+  variables: PatchSymbolAddition[],
+  imports: PatchImportAddition[],
+  notes: BlueprintNote[],
+  pointers: BlueprintPointer[],
+) {
+  return (
+    namedCreatedBlocks(blocks).length > 0 ||
+    namedCreatedIslands(islands).length > 0 ||
+    functions.length > 0 ||
+    variables.length > 0 ||
+    imports.length > 0 ||
+    notes.length > 0 ||
+    pointers.length > 0
+  )
+}
+
+function keepBlueprintDrafts(
+  stored: SharedBlueprint,
+  previous?: SharedBlueprint | null,
+): SharedBlueprint {
+  if (!previous) return stored
+  const draftBlocks = previous.userCreatedBlocks.filter((block) => block.naming)
+  const draftIslands = previous.userCreatedIslands.filter((island) => island.naming)
+  if (draftBlocks.length === 0 && draftIslands.length === 0) return stored
+  const draftBlockIds = new Set(draftBlocks.map((block) => block.id))
+  const draftIslandIds = new Set(draftIslands.map((island) => island.id))
+  return {
+    ...stored,
+    userCreatedBlocks: [
+      ...stored.userCreatedBlocks.filter((block) => !draftBlockIds.has(block.id)),
+      ...draftBlocks,
+    ],
+    userCreatedIslands: [
+      ...stored.userCreatedIslands.filter(
+        (island) => !draftIslandIds.has(island.id),
+      ),
+      ...draftIslands,
+    ],
+  }
+}
+
+function capturedBlueprintContents(
+  current: SharedBlueprint,
+  capture: {
+    hidden: boolean
+    blocks: UserCreatedBlock[]
+    islands: UserCreatedIsland[]
+    functions: PatchSymbolAddition[]
+    variables: PatchSymbolAddition[]
+    imports: PatchImportAddition[]
+    notes: BlueprintNote[]
+    pointers: BlueprintPointer[]
+  },
+): SharedBlueprint {
+  return {
+    ...current,
+    hidden: capture.hidden,
+    enabled: blueprintLiveEnabled(
+      capture.blocks,
+      capture.islands,
+      capture.functions,
+      capture.variables,
+      capture.imports,
+      capture.notes,
+      capture.pointers,
+    ),
+    userCreatedBlocks: capture.blocks,
+    userCreatedIslands: capture.islands,
+    addedFunctions: capture.functions,
+    addedVariables: capture.variables,
+    addedImports: capture.imports,
+    notes: capture.notes,
+    pointers: capture.pointers,
+  }
+}
+
+function withCapturedBlueprint(
+  current: { global: SharedBlueprint; locals: LocalBlueprint[] },
+  capture: {
+    color: string
+    hidden: boolean
+    blocks: UserCreatedBlock[]
+    islands: UserCreatedIsland[]
+    functions: PatchSymbolAddition[]
+    variables: PatchSymbolAddition[]
+    imports: PatchImportAddition[]
+    notes: BlueprintNote[]
+    pointers: BlueprintPointer[]
+    options: BlueprintOption[]
+  },
+): { global: SharedBlueprint; locals: LocalBlueprint[] } {
+  const fields = {
+    hidden: capture.hidden,
+    blocks: capture.blocks,
+    islands: capture.islands,
+    functions: capture.functions,
+    variables: capture.variables,
+    imports: capture.imports,
+    notes: capture.notes,
+    pointers: capture.pointers,
+  }
+  if (capture.color === GLOBAL_BLUEPRINT_COLOR.id) {
+    return {
+      global: capturedBlueprintContents(current.global, fields),
+      locals: current.locals,
+    }
+  }
+  const existing = current.locals.find((item) => item.color === capture.color)
+  const option = capture.options.find((item) => item.id === capture.color)
+  const nextLocal: LocalBlueprint = {
+    color: capture.color,
+    colorName: existing?.colorName || option?.name || capture.color,
+    colorHex: existing?.colorHex || option?.hex || '#6b7280',
+    sessionId: existing?.sessionId || option?.sessionId || '',
+    ...capturedBlueprintContents(existing ?? emptySharedBlueprint(), fields),
+  }
+  const locals = existing
+    ? current.locals.map((item) =>
+        item.color === capture.color ? nextLocal : item,
+      )
+    : [...current.locals, nextLocal]
+  return { global: current.global, locals }
+}
+
+function withPolledBlueprints(
+  previous: { global: SharedBlueprint; locals: LocalBlueprint[] },
+  polled: { global: SharedBlueprint; locals: LocalBlueprint[] },
+): { global: SharedBlueprint; locals: LocalBlueprint[] } {
+  return {
+    global: keepBlueprintDrafts(polled.global, previous.global),
+    locals: polled.locals.map((local) => {
+      const prior = previous.locals.find((item) => item.color === local.color)
+      const merged = keepBlueprintDrafts(local, prior)
+      return {
+        ...local,
+        ...merged,
+        color: local.color,
+        colorName: local.colorName,
+        colorHex: local.colorHex,
+        sessionId: local.sessionId,
+      }
+    }),
+  }
+}
+
+function visibleItemsForBlueprint(
+  hidden: boolean,
+  blocks: UserCreatedBlock[],
+  islands: UserCreatedIsland[],
+) {
+  if (!hidden) return { blocks, islands }
+  return {
+    blocks: blocks.filter((block) => block.naming),
+    islands: islands.filter((island) => island.naming),
+  }
+}
+
+function collectMapBlueprints(input: {
+  selectedColor: string
+  selectedHidden: boolean
+  selectedBlocks: UserCreatedBlock[]
+  selectedIslands: UserCreatedIsland[]
+  selectedFunctions: PatchSymbolAddition[]
+  selectedVariables: PatchSymbolAddition[]
+  selectedImports: PatchImportAddition[]
+  selectedPointers: BlueprintPointer[]
+  global: SharedBlueprint
+  locals: LocalBlueprint[]
+}) {
+  const blocks = new Map<string, UserCreatedBlock>()
+  const islands = new Map<string, UserCreatedIsland>()
+  const functions: PatchSymbolAddition[] = []
+  const variables: PatchSymbolAddition[] = []
+  const imports: PatchImportAddition[] = []
+  const pointers: Array<BlueprintPointer & { colorHex: string }> = []
+
+  const sources: Array<{
+    id: string
+    hex: string
+    hidden: boolean
+    live: boolean
+    blocks: UserCreatedBlock[]
+    islands: UserCreatedIsland[]
+    functions: PatchSymbolAddition[]
+    variables: PatchSymbolAddition[]
+    imports: PatchImportAddition[]
+    pointers: BlueprintPointer[]
+  }> = [
+    {
+      id: GLOBAL_BLUEPRINT_COLOR.id,
+      hex: GLOBAL_BLUEPRINT_COLOR.hex,
+      hidden:
+        input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
+          ? input.selectedHidden
+          : input.global.hidden,
+      live: input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id,
+      blocks:
+        input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
+          ? input.selectedBlocks
+          : input.global.userCreatedBlocks,
+      islands:
+        input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
+          ? input.selectedIslands
+          : input.global.userCreatedIslands,
+      functions:
+        input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
+          ? input.selectedFunctions
+          : input.global.addedFunctions,
+      variables:
+        input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
+          ? input.selectedVariables
+          : input.global.addedVariables,
+      imports:
+        input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
+          ? input.selectedImports
+          : input.global.addedImports,
+      pointers:
+        input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
+          ? input.selectedPointers
+          : input.global.pointers,
+    },
+    ...input.locals.map((local) => ({
+      id: local.color,
+      hex: local.colorHex || GLOBAL_BLUEPRINT_COLOR.hex,
+      hidden:
+        input.selectedColor === local.color
+          ? input.selectedHidden
+          : local.hidden,
+      live: input.selectedColor === local.color,
+      blocks:
+        input.selectedColor === local.color
+          ? input.selectedBlocks
+          : local.userCreatedBlocks,
+      islands:
+        input.selectedColor === local.color
+          ? input.selectedIslands
+          : local.userCreatedIslands,
+      functions:
+        input.selectedColor === local.color
+          ? input.selectedFunctions
+          : local.addedFunctions,
+      variables:
+        input.selectedColor === local.color
+          ? input.selectedVariables
+          : local.addedVariables,
+      imports:
+        input.selectedColor === local.color
+          ? input.selectedImports
+          : local.addedImports,
+      pointers:
+        input.selectedColor === local.color
+          ? input.selectedPointers
+          : local.pointers,
+    })),
+  ]
+
+  sources.sort((left, right) => Number(left.live) - Number(right.live))
+  for (const source of sources) {
+    const visible = visibleItemsForBlueprint(
+      source.hidden,
+      source.blocks,
+      source.islands,
+    )
+    for (const block of visible.blocks) {
+      blocks.set(block.id, { ...block, colorHex: source.hex })
+    }
+    for (const island of visible.islands) {
+      islands.set(island.id, { ...island, colorHex: source.hex })
+    }
+    if (!source.hidden) {
+      functions.push(...source.functions)
+      variables.push(...source.variables)
+      imports.push(...source.imports)
+      for (const pointer of source.pointers) {
+        pointers.push({ ...pointer, colorHex: source.hex })
+      }
+    }
+  }
+
+  return {
+    blocks: [...blocks.values()],
+    islands: [...islands.values()],
+    functions,
+    variables,
+    imports,
+    pointers,
+  }
+}
+
+function pointerColorMaps(
+  pointers: Array<BlueprintPointer & { colorHex?: string }>,
+) {
+  const files: Record<string, string[]> = {}
+  const folders: Record<string, string[]> = {}
+  for (const item of pointers) {
+    const hex = item.colorHex || GLOBAL_BLUEPRINT_COLOR.hex
+    const target = item.kind === 'folder' ? folders : files
+    const list = target[item.path] ?? []
+    if (!list.includes(hex)) list.push(hex)
+    target[item.path] = list
+  }
+  return { files, folders }
+}
 
 function intentSignature(intent: AgentIntent) {
   return JSON.stringify({
@@ -102,6 +505,8 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [updatingModel, setUpdatingModel] = useState(false)
   const updatingModelRef = useRef(false)
+  const [devTargets, setDevTargets] = useState<DevTargetsState>(emptyDevTargets)
+  const [targetEpoch, setTargetEpoch] = useState(0)
 
   const graphSig = useRef<string | null>(null)
   const applyGraph = useCallback((next: CodebaseGraph | null, failed: string) => {
@@ -121,7 +526,7 @@ export default function App() {
   }, [])
 
   const refreshGraph = useCallback(async () => {
-    applyGraph(await fetchCodebase(), 'Could not load the project map.')
+    applyGraph(await fetchCodebase(), 'Could not load files and folders.')
   }, [applyGraph])
 
   const updateModel = useCallback(async () => {
@@ -129,31 +534,60 @@ export default function App() {
     updatingModelRef.current = true
     setUpdatingModel(true)
     try {
-      applyGraph(await updateCodebase(), 'Could not update the project map.')
+      applyGraph(await updateCodebase(), 'Could not update files and folders.')
     } finally {
       updatingModelRef.current = false
       setUpdatingModel(false)
     }
   }, [applyGraph])
 
+  const switchDevTarget = useCallback(
+    async (id: string) => {
+      if (updatingModelRef.current) return
+      updatingModelRef.current = true
+      setUpdatingModel(true)
+      try {
+        const result = await selectDevTarget(id)
+        if (!result?.graph) {
+          setLoadError((current) => current ?? 'Could not switch project.')
+          return
+        }
+        setDevTargets(result.state)
+        applyGraph(result.graph, 'Could not switch project.')
+        setTargetEpoch((value) => value + 1)
+      } finally {
+        updatingModelRef.current = false
+        setUpdatingModel(false)
+      }
+    },
+    [applyGraph],
+  )
+
   useEffect(() => {
     void refreshGraph()
   }, [refreshGraph])
 
+  useEffect(() => {
+    void fetchDevTargets().then(setDevTargets)
+  }, [])
+
   if (!graph) {
     return (
       <div className="boot">
-        <p>{loadError ?? 'Loading map…'}</p>
+        <p>{loadError ?? 'Loading files and folders…'}</p>
       </div>
     )
   }
 
   return (
     <Explorer
+      key={targetEpoch}
       graph={graph}
       onRefreshGraph={refreshGraph}
       onUpdateModel={updateModel}
       updatingModel={updatingModel}
+      devTargets={devTargets}
+      onSelectDevTarget={switchDevTarget}
     />
   )
 }
@@ -163,11 +597,15 @@ function Explorer({
   onRefreshGraph,
   onUpdateModel,
   updatingModel,
+  devTargets,
+  onSelectDevTarget,
 }: {
   graph: CodebaseGraph
   onRefreshGraph: () => Promise<void>
   onUpdateModel: () => Promise<void>
   updatingModel: boolean
+  devTargets: DevTargetsState
+  onSelectDevTarget: (id: string) => void
 }) {
   const [intents, setIntents] = useState<AgentIntent[]>([])
   const [focusedSessionId, setFocusedSessionId] = useState<string | null>(null)
@@ -211,6 +649,23 @@ function Explorer({
     [],
   )
   const [blueprintHidden, setBlueprintHidden] = useState(false)
+  const [blueprintColor, setBlueprintColor] = useState<string>(
+    GLOBAL_BLUEPRINT_COLOR.id,
+  )
+  const [globalBlueprint, setGlobalBlueprint] = useState<SharedBlueprint>(
+    emptySharedBlueprint,
+  )
+  const [localBlueprints, setLocalBlueprints] = useState<LocalBlueprint[]>([])
+  const blueprintColorRef = useRef(blueprintColor)
+  blueprintColorRef.current = blueprintColor
+  const blueprintHiddenRef = useRef(blueprintHidden)
+  blueprintHiddenRef.current = blueprintHidden
+  const latestBlueprintsRef = useRef({
+    global: emptySharedBlueprint(),
+    locals: [] as LocalBlueprint[],
+  })
+  const blueprintOptionsRef = useRef<BlueprintOption[]>([])
+  blueprintOptionsRef.current = blueprintOptionsFrom(intents, localBlueprints)
   const userBlocksRef = useRef(userBlocks)
   const userIslandsRef = useRef(userIslands)
   const blueprintFunctionsRef = useRef(blueprintFunctions)
@@ -218,6 +673,8 @@ function Explorer({
   const blueprintImportsRef = useRef(blueprintImports)
   const blueprintNotesRef = useRef(blueprintNotes)
   const blueprintPointersRef = useRef(blueprintPointers)
+  const persistBlueprintRef = useRef<() => void>(() => {})
+  const selectBlueprintColorRef = useRef<(color: string) => void>(() => {})
   const notesDirty = useRef(false)
   const blueprintPersistGen = useRef(0)
   const notePersistTimer = useRef<number | null>(null)
@@ -256,30 +713,80 @@ function Explorer({
     () => new Set(previewGraph.folders.map((folder) => folder.path)),
     [previewGraph],
   )
-  const visibleBlocks = blueprintHidden
-    ? userBlocks.filter((block) => block.naming)
-    : userBlocks
-  const visibleIslands = blueprintHidden
-    ? userIslands.filter((island) => island.naming)
-    : userIslands
-  const pendingBlocks = visibleBlocks.filter(
+  const mapBlueprint = useMemo(
+    () =>
+      collectMapBlueprints({
+        selectedColor: blueprintColor,
+        selectedHidden: blueprintHidden,
+        selectedBlocks: userBlocks,
+        selectedIslands: userIslands,
+        selectedFunctions: blueprintFunctions,
+        selectedVariables: blueprintVariables,
+        selectedImports: blueprintImports,
+        selectedPointers: blueprintPointers,
+        global: globalBlueprint,
+        locals: localBlueprints,
+      }),
+    [
+      blueprintColor,
+      blueprintFunctions,
+      blueprintHidden,
+      blueprintImports,
+      blueprintPointers,
+      blueprintVariables,
+      globalBlueprint,
+      localBlueprints,
+      userBlocks,
+      userIslands,
+    ],
+  )
+  const blueprintOptions = useMemo(
+    () => blueprintOptionsFrom(intents, localBlueprints),
+    [intents, localBlueprints],
+  )
+  const blueprintColorPointers = useMemo(
+    () =>
+      blueprintOptions.map((option) => ({
+        ...option,
+        pointers:
+          option.id === blueprintColor
+            ? blueprintPointers
+            : option.id === GLOBAL_BLUEPRINT_COLOR.id
+              ? globalBlueprint.pointers
+              : (localBlueprints.find((item) => item.color === option.id)
+                  ?.pointers ?? []),
+      })),
+    [
+      blueprintColor,
+      blueprintOptions,
+      blueprintPointers,
+      globalBlueprint.pointers,
+      localBlueprints,
+    ],
+  )
+  const pointedColors = useMemo(
+    () => pointerColorMaps(mapBlueprint.pointers),
+    [mapBlueprint.pointers],
+  )
+  const pendingBlocks = mapBlueprint.blocks.filter(
     (block) => block.naming || !knownFileIds.has(block.id),
   )
-  const overlayBlocks = visibleBlocks.filter(
+  const overlayBlocks = mapBlueprint.blocks.filter(
     (block) => !block.naming && knownFileIds.has(block.id),
   )
+  const visibleIslands = mapBlueprint.islands
   const displayGraph = useMemo(
     () =>
       withBlueprintIntent(
         withUserCreatedGraph(previewGraph, pendingBlocks, visibleIslands),
-        blueprintFunctions,
-        blueprintVariables,
-        blueprintImports,
+        mapBlueprint.functions,
+        mapBlueprint.variables,
+        mapBlueprint.imports,
       ),
     [
-      blueprintFunctions,
-      blueprintImports,
-      blueprintVariables,
+      mapBlueprint.functions,
+      mapBlueprint.imports,
+      mapBlueprint.variables,
       pendingBlocks,
       previewGraph,
       visibleIslands,
@@ -303,38 +810,34 @@ function Explorer({
     for (const id of changeSet.files) ids.add(id)
     for (const id of changeSet.creates) ids.add(id)
     for (const id of changeSet.deletes) ids.add(id)
-    for (const block of userBlocks) ids.add(block.id)
-    for (const item of blueprintFunctions) ids.add(item.file)
-    for (const item of blueprintVariables) ids.add(item.file)
-    for (const item of blueprintImports) ids.add(item.file)
+    for (const block of mapBlueprint.blocks) ids.add(block.id)
+    for (const item of mapBlueprint.functions) ids.add(item.file)
+    for (const item of mapBlueprint.variables) ids.add(item.file)
+    for (const item of mapBlueprint.imports) ids.add(item.file)
     for (const note of blueprintNotes) ids.add(note.file)
-    for (const pointer of blueprintPointers) {
+    for (const pointer of mapBlueprint.pointers) {
       if (pointer.kind !== 'folder') ids.add(pointer.path)
     }
     return [...ids]
   }, [
-    blueprintFunctions,
-    blueprintImports,
     blueprintNotes,
-    blueprintPointers,
-    blueprintVariables,
     changeSet.creates,
     changeSet.deletes,
     changeSet.files,
-    userBlocks,
+    mapBlueprint,
   ])
   const changeFolderPaths = useMemo(() => {
     const paths = new Set<string>()
     for (const path of changeSet.createFolders ?? []) paths.add(path)
-    for (const island of userIslands) {
+    for (const island of mapBlueprint.islands) {
       if (island.path) paths.add(island.path)
       else if (island.id) paths.add(island.id)
     }
-    for (const pointer of blueprintPointers) {
+    for (const pointer of mapBlueprint.pointers) {
       if (pointer.kind === 'folder') paths.add(pointer.path)
     }
     return [...paths]
-  }, [blueprintPointers, changeSet.createFolders, userIslands])
+  }, [changeSet.createFolders, mapBlueprint])
   const hasChangeSet =
     changeFileIds.length > 0 || changeFolderPaths.length > 0
   const changePathGraph = useMemo(() => {
@@ -350,7 +853,7 @@ function Explorer({
     const world = layoutWorld(changePathGraph)
     markCreatedFolders(world, [
       ...(changeSet.createFolders ?? []),
-      ...userIslands.map((island) => island.path || island.id),
+      ...mapBlueprint.islands.map((island) => island.path || island.id),
     ])
     return world
   }, [
@@ -358,9 +861,20 @@ function Explorer({
     changeSet.createFolders,
     hasChangeSet,
     layout,
-    userIslands,
+    mapBlueprint.islands,
   ])
   const [mode, setMode] = useState<ViewMode>('map')
+  const [explain, setExplain] = useState<ExplainSession>(emptyExplain)
+  const [dismissedCardQuestion, setDismissedCardQuestion] = useState<
+    string | null
+  >(null)
+  const dismissedCardQuestionRef = useRef<string | null>(null)
+  dismissedCardQuestionRef.current = dismissedCardQuestion
+  const cardExplain = explainIsCard(explain)
+  const explaining =
+    explain.active &&
+    !cardExplain &&
+    explain.question !== dismissedCardQuestion
   const [landAt, setLandAt] = useState<[number, number]>([
     layout.spawn[0],
     layout.spawn[2],
@@ -369,13 +883,16 @@ function Explorer({
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedTick, setSelectedTick] = useState(0)
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null)
+  const [importPickFrom, setImportPickFrom] = useState<string | null>(null)
+  const importPickFromRef = useRef<string | null>(null)
+  importPickFromRef.current = importPickFrom
+  const pickImportTargetRef = useRef<(fileId: string) => void>(() => {})
   const [mapMenu, setMapMenu] = useState<MapContextMenuState | null>(null)
   const [aimedRelation, setAimedRelation] = useState<AimedRelation | null>(null)
   const [aimedFileId, setAimedFileId] = useState<string | null>(null)
   const [inspectTick, setInspectTick] = useState(0)
   const [flyTo, setFlyTo] = useState<FlyTo | null>(null)
   const [locked, setLocked] = useState(false)
-  const [followLook, setFollowLook] = useState(false)
   const [importedBy, setImportedBy] = useState(false)
   const [changePathsOnly, setChangePathsOnly] = useState(false)
   const lastIntentSig = useRef<string | null>(null)
@@ -411,14 +928,6 @@ function Explorer({
     persistSessionFocus(sessionId)
   }, [])
 
-  const setupLlmSession = useCallback(async () => {
-    const next = await setupVisualizerSession()
-    lastIntentSig.current = null
-    applyIntent(next, next.sessionId ?? undefined)
-    if (next.sessionId) setFocusedSessionId(next.sessionId)
-    return next
-  }, [applyIntent])
-
   const rememberWalk = useCallback((x: number, z: number) => {
     walkPos.current = [x, z]
   }, [])
@@ -431,10 +940,12 @@ function Explorer({
   }, [])
 
   const openWalk = useCallback(() => {
+    if (explaining) return
     setMode('walk')
-  }, [])
+  }, [explaining])
 
   const toggleMap = useCallback(() => {
+    if (explaining) return
     if (mode === 'walk') {
       setLandAt(walkPos.current)
       setFlyTo(null)
@@ -444,14 +955,15 @@ function Explorer({
       return
     }
     setMode('walk')
-  }, [mode])
+  }, [explaining, mode])
 
   const land = useCallback((x: number, z: number) => {
+    if (explaining) return
     walkPos.current = [x, z]
     setFlyTo(null)
     setLandAt([x, z])
     setMode('walk')
-  }, [])
+  }, [explaining])
 
   const landFromMap = useCallback(
     (x: number, z: number) => {
@@ -516,23 +1028,13 @@ function Explorer({
         return
       }
       try {
+        if (action === 'blueprint_send') persistBlueprintRef.current()
         const next = await performAgentAction(
           action,
           current.sessionId,
           {
             ...options,
             diffId: current.diffId ?? undefined,
-            ...(action === 'blueprint_send'
-              ? {
-                  userCreatedBlocks: namedCreatedBlocks(userBlocks),
-                  userCreatedIslands: namedCreatedIslands(userIslands),
-                  addedFunctions: blueprintFunctions,
-                  addedVariables: blueprintVariables,
-                  addedImports: blueprintImports,
-                  notes: blueprintNotes,
-                  pointers: blueprintPointers,
-                }
-              : {}),
           },
         )
         browsingHistory.current[sessionId] = false
@@ -547,19 +1049,13 @@ function Explorer({
         }
       } catch {
         // Keep the pending patch visible if apply failed.
+        return false
       }
     },
     [
       applyIntent,
-      blueprintFunctions,
-      blueprintImports,
-      blueprintNotes,
-      blueprintPointers,
-      blueprintVariables,
       intents,
       onRefreshGraph,
-      userBlocks,
-      userIslands,
     ],
   )
 
@@ -619,9 +1115,6 @@ function Explorer({
     let cancelled = false
     void fetchUserContext().then((context) => {
       if (cancelled) return
-      if (typeof context?.followLook === 'boolean') {
-        setFollowLook(context.followLook)
-      }
       if (typeof context?.showBranchChanges === 'boolean') {
         setWantBranchChanges(context.showBranchChanges)
       }
@@ -630,6 +1123,171 @@ function Explorer({
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const poll = async () => {
+      const next = await fetchExplain()
+      if (cancelled) return
+      setExplain((current) => {
+        if (
+          current.presentation === 'card' &&
+          current.active &&
+          current.pendingStart &&
+          !next.active
+        ) {
+          return current
+        }
+        const dismissed = dismissedCardQuestionRef.current
+        if (
+          next.presentation === 'card' &&
+          next.active &&
+          dismissed &&
+          next.question === dismissed
+        ) {
+          return current.active ? current : emptyExplain()
+        }
+        return next
+      })
+    }
+    void poll()
+    const timer = window.setInterval(() => {
+      void poll()
+    }, 250)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (explain.active && mode !== 'map') openMap()
+  }, [explain.active, mode, openMap])
+
+  useEffect(() => {
+    if (
+      explain.active &&
+      explain.presentation !== 'card' &&
+      dismissedCardQuestion &&
+      explain.question !== dismissedCardQuestion
+    ) {
+      setDismissedCardQuestion(null)
+    }
+  }, [
+    dismissedCardQuestion,
+    explain.active,
+    explain.presentation,
+    explain.question,
+  ])
+
+  const goExplainStep = useCallback((step: string) => {
+    setExplain((current) =>
+      current.active ? { ...current, currentStep: step } : current,
+    )
+    void persistExplainStep(step)
+  }, [])
+
+  const askExplainStep = useCallback((step: string, question: string) => {
+    const parent = topLevelExplainStepId(step)
+    setExplain((current) => {
+      if (!current.active) return current
+      const clicked = current.steps.find((item) => item.index === step)
+      return {
+        ...current,
+        steps: stripExplainSubSteps(current.steps),
+        currentStep: parent,
+        pendingQuestion: {
+          parent,
+          question,
+          from: step,
+          fromTitle: clicked?.title ?? '',
+        },
+        answering: false,
+      }
+    })
+    void persistExplainAsk(step, question)
+  }, [])
+
+  const exitExplain = useCallback(() => {
+    setExplain(emptyExplain())
+    void persistExplainStop()
+  }, [])
+
+  const closeAskCard = useCallback(() => {
+    setDismissedCardQuestion(explain.question)
+    exitExplain()
+  }, [exitExplain, explain.question])
+
+  const startExplainTarget = useCallback(
+    (input: { kind: ExplainTargetKind; path: string; name?: string }) => {
+      const target = input.path.trim()
+      const name = input.name?.trim()
+      if (!target) return
+      if (
+        (input.kind === 'function' ||
+          input.kind === 'variable' ||
+          input.kind === 'class') &&
+        !name
+      ) {
+        return
+      }
+      const question = explainTargetQuestion(input.kind, target, name)
+      setDismissedCardQuestion(null)
+      setExplain({
+        active: true,
+        question,
+        steps: [],
+        currentStep: '1',
+        pendingQuestion: null,
+        pendingStart: name
+          ? { kind: input.kind, path: target, name, question }
+          : { kind: input.kind, path: target, question },
+        answering: false,
+        presentation: 'card',
+        updatedAt: new Date().toISOString(),
+      })
+      void persistExplainStart({
+        kind: input.kind,
+        path: target,
+        name,
+        sessionId: focusedSessionId ?? intent.sessionId,
+      })
+    },
+    [focusedSessionId, intent.sessionId],
+  )
+
+  const rememberLiveBlueprint = useCallback(
+    (
+      color: string = blueprintColorRef.current,
+      snapshot: {
+        hidden?: boolean
+        blocks?: UserCreatedBlock[]
+        islands?: UserCreatedIsland[]
+        functions?: PatchSymbolAddition[]
+        variables?: PatchSymbolAddition[]
+        imports?: PatchImportAddition[]
+        notes?: BlueprintNote[]
+        pointers?: BlueprintPointer[]
+      } = {},
+    ) => {
+      const next = withCapturedBlueprint(latestBlueprintsRef.current, {
+        color,
+        hidden: snapshot.hidden ?? blueprintHiddenRef.current,
+        blocks: snapshot.blocks ?? userBlocksRef.current,
+        islands: snapshot.islands ?? userIslandsRef.current,
+        functions: snapshot.functions ?? blueprintFunctionsRef.current,
+        variables: snapshot.variables ?? blueprintVariablesRef.current,
+        imports: snapshot.imports ?? blueprintImportsRef.current,
+        notes: snapshot.notes ?? blueprintNotesRef.current,
+        pointers: snapshot.pointers ?? blueprintPointersRef.current,
+        options: blueprintOptionsRef.current,
+      })
+      latestBlueprintsRef.current = next
+      setGlobalBlueprint(next.global)
+      setLocalBlueprints(next.locals)
+    },
+    [],
+  )
 
   const persistBlueprint = useCallback(
     (
@@ -640,7 +1298,17 @@ function Explorer({
       imports: PatchImportAddition[] = blueprintImportsRef.current,
       notes: BlueprintNote[] = blueprintNotesRef.current,
       pointers: BlueprintPointer[] = blueprintPointersRef.current,
+      color: string = blueprintColorRef.current,
     ) => {
+      rememberLiveBlueprint(color, {
+        blocks,
+        islands,
+        functions,
+        variables,
+        imports,
+        notes,
+        pointers,
+      })
       if (notePersistTimer.current != null) {
         window.clearTimeout(notePersistTimer.current)
         notePersistTimer.current = null
@@ -648,6 +1316,7 @@ function Explorer({
       const gen = ++blueprintPersistGen.current
       notesDirty.current = true
       void persistSessionBlueprint(intent.sessionId, {
+        color,
         userCreatedBlocks: namedCreatedBlocks(blocks),
         userCreatedIslands: namedCreatedIslands(islands),
         addedFunctions: functions,
@@ -661,8 +1330,9 @@ function Explorer({
         notesDirty.current = false
       })
     },
-    [intent.sessionId],
+    [intent.sessionId, rememberLiveBlueprint],
   )
+  persistBlueprintRef.current = () => persistBlueprint()
 
   const persistBlueprintSoon = useCallback(() => {
     notesDirty.current = true
@@ -681,6 +1351,7 @@ function Explorer({
       notePersistTimer.current = null
       if (!notesDirty.current) return
       persistSessionBlueprint(intent.sessionId, {
+        color: blueprintColorRef.current,
         userCreatedBlocks: namedCreatedBlocks(userBlocksRef.current),
         userCreatedIslands: namedCreatedIslands(userIslandsRef.current),
         addedFunctions: blueprintFunctionsRef.current,
@@ -713,8 +1384,14 @@ function Explorer({
       kind: BlueprintPointerKind
       path: string
       name?: string
+      color?: string
     }) => {
-      const pointers = toggleBlueprintPointer(blueprintPointersRef.current, next)
+      const { color, ...pointer } = next
+      if (color) selectBlueprintColorRef.current(color)
+      const pointers = toggleBlueprintPointer(
+        blueprintPointersRef.current,
+        pointer,
+      )
       blueprintPointersRef.current = pointers
       setBlueprintPointers(pointers)
       persistBlueprint(
@@ -797,6 +1474,57 @@ function Explorer({
   const cancelBlockName = useCallback((id: string) => {
     setUserBlocks((current) => current.filter((block) => block.id !== id))
   }, [])
+
+  const renameCreatedBlock = useCallback(
+    (id: string, rawName: string) => {
+      const current = userBlocks.find((block) => block.id === id)
+      if (!current || current.naming) return null
+      const resolved = resolveCreatedFile(rawName, current.folder)
+      if (!resolved) return null
+      if (resolved.id === id) return id
+      const taken =
+        graph.files.some((file) => file.id === resolved.id) ||
+        userBlocks.some((block) => block.id === resolved.id && block.id !== id)
+      if (taken) return null
+      const nextBlocks = userBlocks.map((block) =>
+        block.id === id
+          ? {
+              ...resolved,
+              x: current.x,
+              z: current.z,
+              colorHex: current.colorHex,
+            }
+          : block,
+      )
+      const remapped = remapBlueprintFileId(id, resolved.id, {
+        functions: blueprintFunctionsRef.current,
+        variables: blueprintVariablesRef.current,
+        imports: blueprintImportsRef.current,
+        notes: blueprintNotesRef.current,
+        pointers: blueprintPointersRef.current,
+      })
+      blueprintNotesRef.current = remapped.notes
+      blueprintPointersRef.current = remapped.pointers
+      setUserBlocks(nextBlocks)
+      setBlueprintFunctions(remapped.functions)
+      setBlueprintVariables(remapped.variables)
+      setBlueprintImports(remapped.imports)
+      setBlueprintNotes(remapped.notes)
+      setBlueprintPointers(remapped.pointers)
+      persistBlueprint(
+        nextBlocks,
+        userIslands,
+        remapped.functions,
+        remapped.variables,
+        remapped.imports,
+        remapped.notes,
+        remapped.pointers,
+      )
+      if (selectedId === id) setSelectedId(resolved.id)
+      return resolved.id
+    },
+    [graph.files, persistBlueprint, selectedId, userBlocks, userIslands],
+  )
 
   const placeIsland = useCallback(
     (parent: string) => {
@@ -901,6 +1629,11 @@ function Explorer({
 
   const selectFile = useCallback(
     (fileId: string | null) => {
+      const pickFrom = importPickFromRef.current
+      if (pickFrom) {
+        if (fileId && fileId !== pickFrom) pickImportTargetRef.current(fileId)
+        return
+      }
       setSelectedId(fileId)
       if (fileId) {
         setSelectedFolder(null)
@@ -920,6 +1653,7 @@ function Explorer({
   )
 
   const selectFolder = useCallback((folderPath: string | null) => {
+    if (importPickFromRef.current) return
     setSelectedFolder(folderPath)
     if (folderPath) setSelectedId(null)
   }, [])
@@ -1046,6 +1780,23 @@ function Explorer({
       userIslands,
     ],
   )
+
+  pickImportTargetRef.current = (fileId: string) => {
+    const from = importPickFromRef.current
+    if (!from || fileId.startsWith('draft:')) return
+    const target = displayGraph.files.find((file) => file.id === fileId)
+    if (!target) return
+    addBlueprintImport(from, blueprintImportRawFromFile(target))
+    setImportPickFrom(null)
+  }
+
+  const cancelImportPick = useCallback(() => {
+    setImportPickFrom(null)
+  }, [])
+
+  const toggleImportPick = useCallback(() => {
+    setImportPickFrom((current) => (current ? null : selectedId))
+  }, [selectedId])
 
   const removeBlueprintFunction = useCallback(
     (fileId: string, name: string) => {
@@ -1176,6 +1927,25 @@ function Explorer({
   }, [cancelBlockName, cancelIslandName, namingId, namingIslandId])
 
   useEffect(() => {
+    if (mode !== 'map' || importedBy || !selectedId || namingId) {
+      setImportPickFrom(null)
+    }
+  }, [importedBy, mode, namingId, selectedId])
+
+  useEffect(() => {
+    if (!importPickFrom) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code !== 'Escape') return
+      if (isKeyboardIsolated()) return
+      event.preventDefault()
+      event.stopPropagation()
+      setImportPickFrom(null)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [importPickFrom])
+
+  useEffect(() => {
     if (mode !== 'map' || naming) setMapMenu(null)
   }, [mode, naming])
 
@@ -1189,14 +1959,6 @@ function Explorer({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [deleteSelectedCreatedBlock])
-
-  const toggleFollowLook = useCallback(() => {
-    setFollowLook((current) => {
-      const next = !current
-      persistFollowLook(next)
-      return next
-    })
-  }, [])
 
   const canToggleBranchChanges = !llmBusy && (wantBranchChanges || branchChanges.available)
 
@@ -1275,40 +2037,74 @@ function Explorer({
     return () => window.removeEventListener('keydown', onKey)
   }, [hasChangeSet, mode, toggleChangePathsOnly])
 
+  const applyBlueprintContents = useCallback(
+    (blueprint: SharedBlueprint, keepDrafts = true) => {
+      blueprintHiddenRef.current = Boolean(blueprint.hidden)
+      setBlueprintHidden(Boolean(blueprint.hidden))
+      const nextBlocks = parseUserCreatedBlocks(blueprint.userCreatedBlocks)
+      const nextIslands = parseUserCreatedIslands(blueprint.userCreatedIslands)
+      setUserBlocks((current) => {
+        if (!keepDrafts) return nextBlocks
+        const drafts = current.filter((block) => block.naming)
+        if (drafts.length === 0) return nextBlocks
+        const namedIds = new Set(drafts.map((block) => block.id))
+        return [...nextBlocks.filter((block) => !namedIds.has(block.id)), ...drafts]
+      })
+      setUserIslands((current) => {
+        if (!keepDrafts) return nextIslands
+        const drafts = current.filter((island) => island.naming)
+        if (drafts.length === 0) return nextIslands
+        const namedIds = new Set(drafts.map((island) => island.id))
+        return [...nextIslands.filter((island) => !namedIds.has(island.id)), ...drafts]
+      })
+      setBlueprintFunctions(blueprint.addedFunctions)
+      setBlueprintVariables(blueprint.addedVariables)
+      setBlueprintImports(blueprint.addedImports)
+      if (!keepDrafts || !notesDirty.current) {
+        const nextPointers = parseBlueprintPointers(blueprint.pointers)
+        blueprintPointersRef.current = nextPointers
+        setBlueprintPointers(nextPointers)
+      }
+      if (!keepDrafts || (!notesDirty.current && !isKeyboardIsolated())) {
+        const nextNotes = parseBlueprintNotes(blueprint.notes)
+        blueprintNotesRef.current = nextNotes
+        setBlueprintNotes(nextNotes)
+      }
+    },
+    [],
+  )
+
   useEffect(() => {
     let cancelled = false
     const poll = async () => {
       try {
         const bundle = await fetchAgentIntents()
         if (cancelled) return
-        setBlueprintHidden(Boolean(bundle.blueprint.hidden))
-        const nextBlocks = parseUserCreatedBlocks(bundle.blueprint.userCreatedBlocks)
-        const nextIslands = parseUserCreatedIslands(bundle.blueprint.userCreatedIslands)
-        setUserBlocks((current) => {
-          const drafts = current.filter((block) => block.naming)
-          if (drafts.length === 0) return nextBlocks
-          const namedIds = new Set(drafts.map((block) => block.id))
-          return [...nextBlocks.filter((block) => !namedIds.has(block.id)), ...drafts]
+        const nextBlueprints = withPolledBlueprints(latestBlueprintsRef.current, {
+          global: bundle.blueprint,
+          locals: bundle.localBlueprints,
         })
-        setUserIslands((current) => {
-          const drafts = current.filter((island) => island.naming)
-          if (drafts.length === 0) return nextIslands
-          const namedIds = new Set(drafts.map((island) => island.id))
-          return [...nextIslands.filter((island) => !namedIds.has(island.id)), ...drafts]
-        })
-        setBlueprintFunctions(bundle.blueprint.addedFunctions)
-        setBlueprintVariables(bundle.blueprint.addedVariables)
-        setBlueprintImports(bundle.blueprint.addedImports)
-        if (!notesDirty.current) {
-          const nextPointers = parseBlueprintPointers(bundle.blueprint.pointers)
-          blueprintPointersRef.current = nextPointers
-          setBlueprintPointers(nextPointers)
+        latestBlueprintsRef.current = nextBlueprints
+        setGlobalBlueprint(nextBlueprints.global)
+        setLocalBlueprints(nextBlueprints.locals)
+        const colorIds = new Set([
+          GLOBAL_BLUEPRINT_COLOR.id,
+          ...bundle.localBlueprints.map((item) => item.color),
+          ...bundle.intents
+            .map((item) => item.color)
+            .filter((id): id is string => Boolean(id)),
+        ])
+        if (!colorIds.has(blueprintColorRef.current)) {
+          blueprintColorRef.current = GLOBAL_BLUEPRINT_COLOR.id
+          setBlueprintColor(GLOBAL_BLUEPRINT_COLOR.id)
         }
-        if (!notesDirty.current && !isKeyboardIsolated()) {
-          const nextNotes = parseBlueprintNotes(bundle.blueprint.notes)
-          blueprintNotesRef.current = nextNotes
-          setBlueprintNotes(nextNotes)
-        }
+        applyBlueprintContents(
+          blueprintForColor(
+            blueprintColorRef.current,
+            nextBlueprints.global,
+            nextBlueprints.locals,
+          ),
+        )
         setNextAttachSessionId(bundle.nextAttachSessionId)
         const merged: AgentIntent[] = []
         for (const next of bundle.intents) {
@@ -1369,10 +2165,10 @@ function Explorer({
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [])
+  }, [applyBlueprintContents])
 
   const plannedIds = previewing ? [...changeSet.files, ...changeSet.creates] : []
-  const blueprintImportEdges = blueprintImports.flatMap((item) => {
+  const blueprintImportEdges = mapBlueprint.imports.flatMap((item) => {
     if (!displayGraph.files.some((file) => file.id === item.from)) return []
     return [{ from: item.file, to: item.from }]
   })
@@ -1394,12 +2190,67 @@ function Explorer({
     userIslands.some(
       (island) => !island.naming && knownFolderPaths.has(island.path),
     )
+  const canAskLlm =
+    Boolean(intent.sessionId) &&
+    isReviewingIntent(intent.status) &&
+    intent.awaitingAttach === false &&
+    !intent.llmIdle
+
+  const explainStep = currentExplainStep(explain)
+  const explainView = useMemo(
+    () => (explaining ? explainFocus(explainStep, displayGraph) : null),
+    [displayGraph, explainStep, explaining],
+  )
+  const mapLayoutForView =
+    !explaining && changePathsOnly && hasChangeSet ? changePathLayout : layout
+  const explainBounds = useMemo(() => {
+    if (!explaining || !explainView) return null
+    if (
+      explainView.zoomFiles.length === 0 &&
+      explainView.zoomFolders.length === 0
+    ) {
+      return null
+    }
+    return regionBounds(
+      mapLayoutForView,
+      explainView.zoomFiles,
+      explainView.zoomFolders,
+    )
+  }, [explainView, explaining, mapLayoutForView])
+  const mapSelectedId = explaining ? (explainView?.select ?? null) : selectedId
+  const mapImportedBy = explaining ? Boolean(explainView?.importedBy) : importedBy
+  const mapSelectedFolder = explaining ? null : selectedFolder
+  const explainFile = explaining ? explainInfoFile(explainStep, displayGraph) : null
 
   const toggleBlueprintHidden = useCallback(() => {
     const next = !blueprintHidden
+    blueprintHiddenRef.current = next
     setBlueprintHidden(next)
-    void persistBlueprintHidden(next).catch(() => setBlueprintHidden(!next))
-  }, [blueprintHidden])
+    rememberLiveBlueprint(blueprintColorRef.current, { hidden: next })
+    void persistBlueprintHidden(next, blueprintColorRef.current).catch(() => {
+      blueprintHiddenRef.current = !next
+      setBlueprintHidden(!next)
+    })
+  }, [blueprintHidden, rememberLiveBlueprint])
+
+  const selectBlueprintColor = useCallback(
+    (color: string) => {
+      if (color === blueprintColorRef.current) return
+      persistBlueprint()
+      blueprintColorRef.current = color
+      setBlueprintColor(color)
+      applyBlueprintContents(
+        blueprintForColor(
+          color,
+          latestBlueprintsRef.current.global,
+          latestBlueprintsRef.current.locals,
+        ),
+        false,
+      )
+    },
+    [applyBlueprintContents, persistBlueprint],
+  )
+  selectBlueprintColorRef.current = selectBlueprintColor
 
   const clearSharedBlueprint = useCallback(() => {
     setUserBlocks([])
@@ -1411,41 +2262,72 @@ function Explorer({
     blueprintPointersRef.current = []
     setBlueprintNotes([])
     setBlueprintPointers([])
-    void persistBlueprintClear()
-  }, [])
+    rememberLiveBlueprint(blueprintColorRef.current, {
+      blocks: [],
+      islands: [],
+      functions: [],
+      variables: [],
+      imports: [],
+      notes: [],
+      pointers: [],
+    })
+    void persistBlueprintClear(blueprintColorRef.current)
+  }, [rememberLiveBlueprint])
 
   const cleanupSharedBlueprint = useCallback(() => {
     const files = knownFileIds
     const folders = knownFolderPaths
+    const nextBlocks = userBlocks.filter(
+      (block) => block.naming || !files.has(block.id),
+    )
+    const nextIslands = userIslands.filter(
+      (island) => island.naming || !folders.has(island.path),
+    )
     const removed = new Set(
       userBlocks
         .filter((block) => !block.naming && files.has(block.id))
         .map((block) => block.id),
     )
-    setUserBlocks((current) =>
-      current.filter((block) => block.naming || !files.has(block.id)),
+    const nextFunctions = blueprintFunctions.filter(
+      (item) => !removed.has(item.file),
     )
-    setUserIslands((current) =>
-      current.filter((island) => island.naming || !folders.has(island.path)),
+    const nextVariables = blueprintVariables.filter(
+      (item) => !removed.has(item.file),
     )
-    setBlueprintFunctions((current) =>
-      current.filter((item) => !removed.has(item.file)),
+    const nextImports = blueprintImports.filter(
+      (item) => !removed.has(item.file),
     )
-    setBlueprintVariables((current) =>
-      current.filter((item) => !removed.has(item.file)),
-    )
-    setBlueprintImports((current) =>
-      current.filter((item) => !removed.has(item.file)),
-    )
+    setUserBlocks(nextBlocks)
+    setUserIslands(nextIslands)
+    setBlueprintFunctions(nextFunctions)
+    setBlueprintVariables(nextVariables)
+    setBlueprintImports(nextImports)
     const notes = dropBlueprintFileNotes(blueprintNotesRef.current, removed)
     blueprintNotesRef.current = notes
     setBlueprintNotes(notes)
-    void persistBlueprintCleanup()
-  }, [knownFileIds, knownFolderPaths, userBlocks])
+    rememberLiveBlueprint(blueprintColorRef.current, {
+      blocks: nextBlocks,
+      islands: nextIslands,
+      functions: nextFunctions,
+      variables: nextVariables,
+      imports: nextImports,
+      notes,
+    })
+    void persistBlueprintCleanup(blueprintColorRef.current)
+  }, [
+    blueprintFunctions,
+    blueprintImports,
+    blueprintVariables,
+    knownFileIds,
+    knownFolderPaths,
+    rememberLiveBlueprint,
+    userBlocks,
+    userIslands,
+  ])
 
   return (
     <>
-      <div className="stage">
+      <div className={explaining ? 'stage stage-explain' : 'stage'}>
         <CanvasErrorBoundary>
         <Canvas
           shadows={false}
@@ -1470,11 +2352,12 @@ function Explorer({
             layout={layout}
             mode={mode}
             landAt={landAt}
-            selectedId={selectedId}
-            selectedFolder={selectedFolder}
+            selectedId={mapSelectedId}
+            selectedFolder={mapSelectedFolder}
             locked={locked}
-            onSelect={selectFile}
-            onSelectFolder={selectFolder}
+            onSelect={explaining ? () => {} : selectFile}
+            onSelectFolder={explaining ? () => {} : selectFolder}
+            pickingImport={Boolean(importPickFrom)}
             onLockedChange={setLocked}
             onLand={landFromMap}
             onWalkPosition={rememberWalk}
@@ -1491,53 +2374,77 @@ function Explorer({
             onAimFile={setAimedFileId}
             onInspect={inspectBlock}
             onTravelTo={flyAlongRelation}
-            importedBy={importedBy}
+            importedBy={mapImportedBy}
             namingId={namingId}
             namingIslandId={namingIslandId}
-            onPlaceBlock={canPlace ? placeBlock : undefined}
-            onPlaceIsland={canPlace ? placeIsland : undefined}
-            onBlueprintMenu={canPlace ? setMapMenu : undefined}
+            onBlueprintMenu={
+              canPlace && !explaining ? setMapMenu : undefined
+            }
             onCommitName={commitBlockName}
             onCancelName={cancelBlockName}
             onCommitIslandName={commitIslandName}
             onCancelIslandName={cancelIslandName}
-            userCreatedBlocks={visibleBlocks}
-            userCreatedIslands={visibleIslands}
+            userCreatedBlocks={mapBlueprint.blocks}
+            userCreatedIslands={mapBlueprint.islands}
             overlayBlocks={overlayBlocks}
-            pointedFileIds={
-              blueprintHidden
-                ? undefined
-                : blueprintPointers.flatMap((item) =>
-                    item.kind === 'folder' ? [] : [item.path],
-                  )
-            }
-            pointedFolderPaths={
-              blueprintHidden
-                ? undefined
-                : blueprintPointers.flatMap((item) =>
-                    item.kind === 'folder' ? [item.path] : [],
-                  )
-            }
+            pointedFileIds={Object.keys(pointedColors.files)}
+            pointedFileColors={pointedColors.files}
+            pointedFolderPaths={Object.keys(pointedColors.folders)}
+            pointedFolderColors={pointedColors.folders}
             mapGraph={
-              changePathsOnly && hasChangeSet ? changePathGraph : null
+              explaining
+                ? null
+                : changePathsOnly && hasChangeSet
+                  ? changePathGraph
+                  : null
             }
             mapLayout={
-              changePathsOnly && hasChangeSet ? changePathLayout : null
+              explaining
+                ? null
+                : changePathsOnly && hasChangeSet
+                  ? changePathLayout
+                  : null
             }
+            explainActive={explaining}
+            explainFocus={explainView}
+            focusBounds={explainBounds}
+            focusFlightKey={explaining ? explain.currentStep : 0}
+            landEnabled={!explaining}
           />
         </Canvas>
         </CanvasErrorBoundary>
       </div>
+      {cardExplain ? (
+        <ExplainAskCard explain={explain} onClose={closeAskCard} />
+      ) : null}
+      {explaining ? (
+        <>
+          <ExplainHud
+            explain={explain}
+            onStep={goExplainStep}
+            onAsk={askExplainStep}
+            onExit={exitExplain}
+          />
+          {explainFile && explainStep ? (
+            <ExplainInfoPanel
+              file={explainFile}
+              highlights={explainStep.highlights}
+              point={explainStep.point}
+            />
+          ) : null}
+          {explainStep?.point ? (
+            <ExplainPointer stepKey={explain.currentStep} />
+          ) : null}
+        </>
+      ) : (
       <HUD
         graph={displayGraph}
-        layout={layout}
         mode={mode}
         locked={locked}
         selectedId={selectedId}
         selectedTick={selectedTick}
         inspectTick={inspectTick}
         selectedFolder={selectedFolder}
-        landAt={landAt}
         aimedRelation={aimedRelation}
         aimedFileId={aimedFileId}
         intent={intent}
@@ -1545,13 +2452,10 @@ function Explorer({
         focusedSessionId={focusedSessionId}
         nextAttachSessionId={nextAttachSessionId}
         onFocusSession={focusSessionPanel}
-        onSetupSession={setupLlmSession}
         onWorkflowAction={runWorkflowAction}
         onNavigateDiff={navigateDiff}
         onOpenMap={openMap}
         onWalk={openWalk}
-        followLook={followLook}
-        onToggleFollowLook={toggleFollowLook}
         showBranchChanges={showingBranchChanges}
         branchChanges={branchChanges}
         canShowBranchChanges={canToggleBranchChanges}
@@ -1580,6 +2484,9 @@ function Explorer({
         onAddBlueprintFunction={addBlueprintFunction}
         onAddBlueprintVariable={addBlueprintVariable}
         onAddBlueprintImport={addBlueprintImport}
+        importPickActive={Boolean(importPickFrom)}
+        onToggleImportPick={toggleImportPick}
+        onCancelImportPick={cancelImportPick}
         onRemoveBlueprintFunction={removeBlueprintFunction}
         onRemoveBlueprintVariable={removeBlueprintVariable}
         onRemoveBlueprintImport={removeBlueprintImport}
@@ -1587,18 +2494,25 @@ function Explorer({
         onToggleBlueprintPointer={applyBlueprintPointer}
         onMapAddFile={placeBlockOnFolder}
         onMapAddFolder={placeIslandOnFolder}
+        onRenameCreatedFile={renameCreatedBlock}
         onInspectFile={inspectFile}
         onInspectBlock={inspectBlock}
-        plannedIds={plannedIds}
-        createdIds={plannedCreates}
-        deletedIds={deletedIds}
+        onExplainTarget={canAskLlm ? startExplainTarget : undefined}
         blueprintHidden={blueprintHidden}
         blueprintHasContent={blueprintHasContent}
         blueprintCanCleanup={blueprintCanCleanup}
+        blueprintColor={blueprintColor}
+        blueprintOptions={blueprintOptions}
+        blueprintColorPointers={blueprintColorPointers}
+        onSelectBlueprintColor={selectBlueprintColor}
         onToggleBlueprintHidden={toggleBlueprintHidden}
         onClearBlueprint={clearSharedBlueprint}
         onCleanupBlueprint={cleanupSharedBlueprint}
+        devTargets={devTargets}
+        onSelectDevTarget={onSelectDevTarget}
       />
+      )}
+      {!explaining && (
       <MapContextMenu
         menu={mapMenu}
         pointed={
@@ -1613,6 +2527,7 @@ function Explorer({
         }
         onClose={() => setMapMenu(null)}
       />
+      )}
     </>
   )
 }

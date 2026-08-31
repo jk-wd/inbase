@@ -32,6 +32,7 @@ export function toCreatedFile(block: UserCreatedBlock): FileNode {
     symbols: [],
     imports: [],
     userCreated: true,
+    colorHex: block.colorHex,
   }
 }
 
@@ -174,6 +175,7 @@ export function withUserCreatedGraph(
       files: [],
       children: [],
       userCreated: true,
+      colorHex: island.colorHex,
     })
     if (parent) {
       const parentFolder = folders.get(parent)
@@ -259,7 +261,12 @@ function overlayIslands(
   for (const island of islands) {
     const id = islandKey(island)
     if (layout.folders[id]) {
-      folders[id] = { ...folders[id], added: true, name: island.name || folders[id].name }
+      folders[id] = {
+        ...folders[id],
+        added: true,
+        name: island.name || folders[id].name,
+        colorHex: island.colorHex ?? folders[id].colorHex,
+      }
       continue
     }
     const parentPath = island.parent
@@ -286,6 +293,7 @@ function overlayIslands(
       width,
       depth,
       added: true,
+      colorHex: island.colorHex,
     }
     bridges.push({
       id: `${parentPath}→${id}`,
@@ -532,6 +540,51 @@ export function dropBlueprintSymbolPointer(
     (item) =>
       !(item.kind === kind && item.path === path && item.name === name),
   )
+}
+
+export function remapBlueprintFileId(
+  fromId: string,
+  toId: string,
+  data: {
+    functions: PatchSymbolAddition[]
+    variables: PatchSymbolAddition[]
+    imports: PatchImportAddition[]
+    notes: BlueprintNote[]
+    pointers: BlueprintPointer[]
+  },
+) {
+  if (!fromId || fromId === toId) return data
+  return {
+    functions: data.functions.map((item) =>
+      item.file === fromId ? { ...item, file: toId } : item,
+    ),
+    variables: data.variables.map((item) =>
+      item.file === fromId ? { ...item, file: toId } : item,
+    ),
+    imports: data.imports.map((item) => ({
+      ...item,
+      file: item.file === fromId ? toId : item.file,
+      from: item.from === fromId ? toId : item.from,
+    })),
+    notes: data.notes.map((item) =>
+      item.file === fromId ? { ...item, file: toId } : item,
+    ),
+    pointers: data.pointers.map((item) =>
+      item.kind !== 'folder' && item.path === fromId
+        ? { ...item, path: toId }
+        : item,
+    ),
+  }
+}
+
+export function blueprintImportRawFromFile(file: {
+  id: string
+  name: string
+}): string {
+  const trimmed = file.name.trim()
+  const dot = trimmed.lastIndexOf('.')
+  const base = dot > 0 ? trimmed.slice(0, dot) : trimmed
+  return `${base || trimmed} from ${file.id}`
 }
 
 export function parseBlueprintImport(

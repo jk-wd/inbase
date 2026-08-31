@@ -572,6 +572,61 @@ export function worldBounds(layout: WorldLayout) {
   }
 }
 
+export function regionBounds(
+  layout: WorldLayout,
+  fileIds: Iterable<string> = [],
+  folderPaths: Iterable<string> = [],
+) {
+  let minX = Infinity
+  let maxX = -Infinity
+  let minZ = Infinity
+  let maxZ = -Infinity
+  let found = false
+
+  const include = (left: number, right: number, top: number, bottom: number) => {
+    found = true
+    minX = Math.min(minX, left)
+    maxX = Math.max(maxX, right)
+    minZ = Math.min(minZ, top)
+    maxZ = Math.max(maxZ, bottom)
+  }
+
+  for (const path of folderPaths) {
+    const folder = layout.folders[path]
+    if (!folder) continue
+    include(
+      folder.x - folder.width / 2,
+      folder.x + folder.width / 2,
+      folder.z,
+      folder.z + folder.depth,
+    )
+  }
+
+  for (const id of fileIds) {
+    const file = layout.files[id]
+    if (!file) continue
+    include(
+      file.position[0] - file.size[0] / 2,
+      file.position[0] + file.size[0] / 2,
+      file.position[2] - file.size[2] / 2,
+      file.position[2] + file.size[2] / 2,
+    )
+  }
+
+  if (!found) return worldBounds(layout)
+
+  return {
+    minX,
+    maxX,
+    minZ,
+    maxZ,
+    cx: (minX + maxX) / 2,
+    cz: (minZ + maxZ) / 2,
+    width: Math.max(maxX - minX, 8),
+    depth: Math.max(maxZ - minZ, 8),
+  }
+}
+
 export function fileChangeKind(
   id: string,
   planned: Set<string>,

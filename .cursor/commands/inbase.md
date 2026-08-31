@@ -1,17 +1,19 @@
 ---
-description: Attach this chat to the next waiting Inbase visualizer session
+description: Attach this chat to the next empty Inbase session
 ---
 
-The user invoked `/inbase`. This is how a chat joins the visualizer session that **Setup LLM session** already created.
+The user invoked `/inbase`. Attach this chat to the next unconnected Inbase session. You do not need this command — a regular Cursor chat does the same thing.
 
-Do **not** ask for a session id. Do **not** run `inbase start-session`. Do **not** print the "direct chat interaction not allowed" message.
+Do **not** ask for a session id. Do **not** run `inbase start-session`.
 
-1. Attach to the next waiting visualizer session (oldest first; skip sessions that already have an LLM):
+1. Attach to the next unconnected visualizer session (oldest first; skip sessions that already have an LLM):
 
 ```bash
 npx inbase attach
 ```
 
+If attach fails with `VISUAL_CODER_NOT_RUNNING`, `VISUAL_CODER_CHAT_LIMIT`, `VISUAL_CODER_COLOR_BUSY`, or `VISUAL_CODER_COLOR_UNKNOWN`, reply with that message and stop.
+
 2. Read `VISUAL_CODER_SESSION` from the output. That id is the session to use for every later `inbase` command.
 
-3. Continue the Inbase visual edits skill from `wait-for-blueprint` onward with that `--session` id. `/inbase` already started the session. `wait-for-blueprint` only reads the optional blueprint, instruction, and attached files; it does not wait.
+3. Continue the Inbase visual edits skill from `wait-for-blueprint` onward with that `--session` id. Attach already started the session. `wait-for-blueprint` only reads the optional blueprint, instruction, and attached files; it does not wait.

@@ -1,8 +1,8 @@
 import { memo, Suspense } from 'react'
 import { Billboard, Edges, Html, Text } from '@react-three/drei'
-import { CHANGE_HIGHLIGHT, CONFIG, dimColor, fileColor, FILE_SELECTION, MAP_SELECTION, type ChangeKind } from '../theme'
+import { CHANGE_HIGHLIGHT, CONFIG, blueprintPalette, dimColor, fileColor, FILE_SELECTION, MAP_SELECTION, type ChangeKind } from '../theme'
 import { NameInput } from '../ui/NameInput'
-import { EyeIcon } from '../ui/EyeIcon'
+import { BlueprintEyes } from '../ui/EyeIcon'
 import { MapSelectBorder } from './MapSelectBorder'
 import type { FileNode } from '../types'
 import type { PlacedFile } from '../types'
@@ -26,12 +26,14 @@ type FileBlockProps = {
   added?: boolean
   aimed?: boolean
   dimmed: boolean
+  focused?: boolean
   naming?: boolean
   mapMode?: boolean
   highlightMapChange?: boolean
-  previewLabels?: boolean
   labelVisible?: boolean
   pointed?: boolean
+  pointedColors?: string[]
+  opacity?: number
   onCommitName?: (name: string) => void
   onCancelName?: () => void
 }
@@ -90,32 +92,43 @@ export const FileBlock = memo(function FileBlock({
   added = false,
   aimed = false,
   dimmed,
+  focused = false,
   naming = false,
   mapMode = false,
   highlightMapChange = mapMode,
-  previewLabels = false,
   labelVisible = true,
   pointed = false,
+  pointedColors,
+  opacity = 1,
   onCommitName,
   onCancelName,
 }: FileBlockProps) {
   const [width, height, depth] = placed.size
   const highlight =
-    changeKind && highlightMapChange && !selected
+    changeKind && highlightMapChange && !selected && !file.userCreated && !file.colorHex
       ? CHANGE_HIGHLIGHT[changeKind]
       : null
   const isAdded = added || Boolean(file.userCreated)
-  const color = isAdded ? '#7ec8e8' : fileColor(file.language)
+  const tint = file.colorHex || file.userCreated ? blueprintPalette(file.colorHex) : null
+  const color = tint ? tint.color : isAdded ? '#7ec8e8' : fileColor(file.language)
   const muted = dimColor(color, 0.32)
   const label = fileLabel(file.name, changeKind, isAdded)
   const mark = changeMark(changeKind, isAdded)
+  const eyeColors =
+    pointedColors && pointedColors.length > 0
+      ? pointedColors
+      : pointed
+        ? ['#f4f7fb']
+        : []
   const labelColor = aimed
     ? '#9ad8ff'
     : highlight
       ? highlight.color
-      : dimmed
-        ? '#b4bcc8'
-        : '#e7ebf2'
+      : tint
+        ? tint.label
+        : dimmed
+          ? '#b4bcc8'
+          : '#e7ebf2'
   const meshColor = aimed
     ? '#9ad8ff'
     : highlight
@@ -135,10 +148,19 @@ export const FileBlock = memo(function FileBlock({
       <mesh userData={{ fileId: file.id }} scale={[width, height, depth]}>
         <boxGeometry args={[1, 1, 1]} />
         {mapMode ? (
-          <meshBasicMaterial color={meshColor} toneMapped={false} />
+          <meshBasicMaterial
+            color={meshColor}
+            toneMapped={false}
+            transparent={opacity < 1}
+            opacity={opacity}
+            depthWrite={opacity >= 1}
+          />
         ) : (
           <meshLambertMaterial
             color={meshColor}
+            transparent={opacity < 1}
+            opacity={opacity}
+            depthWrite={opacity >= 1}
             emissive={
               aimed
                 ? '#3a6a80'
@@ -148,11 +170,13 @@ export const FileBlock = memo(function FileBlock({
                     ? FILE_SELECTION.emissive
                     : related
                       ? '#1f4a44'
-                      : isAdded
-                        ? '#2a5064'
-                        : dimmed
-                          ? muted
-                          : color
+                      : tint
+                        ? tint.emissive
+                        : isAdded
+                          ? '#2a5064'
+                          : dimmed
+                            ? muted
+                            : color
             }
             emissiveIntensity={
               aimed
@@ -191,31 +215,43 @@ export const FileBlock = memo(function FileBlock({
           userData={{ fileId: file.id }}
         />
       )}
+      {focused && mapMode && (
+        <MapSelectBorder
+          width={width}
+          depth={depth}
+          y={height / 2 + (selected ? 0.06 : 0.03)}
+          stroke={MAP_SELECTION.explainPad}
+          color={MAP_SELECTION.explain}
+          userData={{ fileId: file.id }}
+        />
+      )}
       {mapMode && !naming && mark && (
         <MapChangeMark mark={mark} width={width} depth={depth} height={height} />
       )}
-      {pointed && !naming && (
+      {eyeColors.length > 0 && !naming && (
         <Html
           position={
             mapMode
-              ? mark
-                ? [width * 0.28, height / 2 + 0.16, -depth * 0.28]
-                : [0, height / 2 + 0.12, 0]
-              : [0, height / 2 + (planned || highlight ? 0.92 : 0.74), 0]
+              ? [
+                  width / 2 + Math.min(width, depth) * 0.28,
+                  height / 2 + 0.04,
+                  0,
+                ]
+              : [
+                  width * 0.38,
+                  height / 2 + 0.18,
+                  0,
+                ]
           }
           center
+          distanceFactor={
+            mapMode ? Math.min(width, depth) / 24 : undefined
+          }
           occlude={false}
           style={{ pointerEvents: 'none' }}
           zIndexRange={[40, 0]}
         >
-          <div
-            className="blueprint-eye"
-            data-map={mapMode ? 'true' : 'false'}
-            role="img"
-            aria-label="Keep in mind"
-          >
-            <EyeIcon size={mapMode ? 16 : 18} title="Keep in mind" />
-          </div>
+          <BlueprintEyes colors={eyeColors} mapMode={mapMode} />
         </Html>
       )}
       {naming && onCommitName && onCancelName && (
@@ -236,6 +272,7 @@ export const FileBlock = memo(function FileBlock({
         >
           <NameInput
             placeholder="File name"
+            fallbackName="New file"
             onCommit={onCommitName}
             onCancel={onCancelName}
           />
@@ -243,57 +280,43 @@ export const FileBlock = memo(function FileBlock({
       )}
       {showLabels && (
         <Suspense fallback={null}>
-          {previewLabels ? (
-            <Html
-              position={[0, height / 2 + 0.4, 0]}
-              center
-              occlude={false}
-              style={{ pointerEvents: 'none' }}
-              zIndexRange={[20, 0]}
+          <Billboard position={[0, height / 2 + (planned || highlight ? 0.55 : 0.38), 0]}>
+            <Text
+              fontSize={0.28}
+              color={labelColor}
+              anchorX="center"
+              anchorY="bottom"
+              maxWidth={3.4}
             >
-              <div className="thumbnail-block-label">{label}</div>
-            </Html>
-          ) : (
-            <>
-              <Billboard position={[0, height / 2 + (planned || highlight ? 0.55 : 0.38), 0]}>
+              {label}
+            </Text>
+          </Billboard>
+          {height >= SIDE_LABEL_MIN_HEIGHT &&
+            SIDE_LABELS.map((side) => {
+              const face = side.axis === 'x' ? width : depth
+              const x =
+                side.axis === 'x' ? side.sign * (width / 2 + SIDE_LABEL_PAD) : 0
+              const z =
+                side.axis === 'z' ? side.sign * (depth / 2 + SIDE_LABEL_PAD) : 0
+              return (
                 <Text
-                  fontSize={0.28}
+                  key={`${side.axis}:${side.sign}`}
+                  position={[x, -height / 2 + 0.22, z]}
+                  rotation={[0, side.rotationY, 0]}
+                  fontSize={0.22}
                   color={labelColor}
                   anchorX="center"
-                  anchorY="bottom"
-                  maxWidth={3.4}
+                  anchorY="middle"
+                  maxWidth={face - 0.2}
+                  overflowWrap="break-word"
+                  outlineWidth={0.012}
+                  outlineColor="#11151c"
+                  depthOffset={-1}
                 >
                   {label}
                 </Text>
-              </Billboard>
-              {height >= SIDE_LABEL_MIN_HEIGHT &&
-                SIDE_LABELS.map((side) => {
-                  const face = side.axis === 'x' ? width : depth
-                  const x =
-                    side.axis === 'x' ? side.sign * (width / 2 + SIDE_LABEL_PAD) : 0
-                  const z =
-                    side.axis === 'z' ? side.sign * (depth / 2 + SIDE_LABEL_PAD) : 0
-                  return (
-                    <Text
-                      key={`${side.axis}:${side.sign}`}
-                      position={[x, -height / 2 + 0.22, z]}
-                      rotation={[0, side.rotationY, 0]}
-                      fontSize={0.22}
-                      color={labelColor}
-                      anchorX="center"
-                      anchorY="middle"
-                      maxWidth={face - 0.2}
-                      overflowWrap="break-word"
-                      outlineWidth={0.012}
-                      outlineColor="#11151c"
-                      depthOffset={-1}
-                    >
-                      {label}
-                    </Text>
-                  )
-                })}
-            </>
-          )}
+              )
+            })}
         </Suspense>
       )}
     </group>

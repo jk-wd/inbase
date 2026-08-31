@@ -16,6 +16,45 @@ import { diffSourceTrees, snapshotSourceTree } from './tree-diff.mjs'
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const CONNECTED_TTL_MS = 15_000
 const STALLED_WAIT_MS = 2_000
+export const SESSION_SLOT_COUNT = 5
+export const SESSION_COLORS = [
+  { id: 'coral', name: 'Coral', hex: '#f87171' },
+  { id: 'amber', name: 'Amber', hex: '#fbbf24' },
+  { id: 'lime', name: 'Lime', hex: '#a3e635' },
+  { id: 'orange', name: 'Orange', hex: '#fb923c' },
+  { id: 'violet', name: 'Violet', hex: '#c084fc' },
+]
+export const SESSION_COLOR_ALIASES = {
+  coral: 'coral',
+  red: 'coral',
+  amber: 'amber',
+  yellow: 'amber',
+  lime: 'lime',
+  green: 'lime',
+  orange: 'orange',
+  violet: 'violet',
+  purple: 'violet',
+}
+const GLOBAL_COLOR_QUERIES = new Set(['blue', 'global', 'sky'])
+export const GLOBAL_BLUEPRINT_COLOR = {
+  id: 'global',
+  name: 'Global',
+  hex: '#38bdf8',
+}
+export const CHAT_LIMIT_MESSAGE =
+  'VISUAL_CODER_CHAT_LIMIT Only 5 Inbase chats can be connected at once. Finish or stop one in the map, then start a new chat.'
+export const NOT_RUNNING_MESSAGE =
+  "VISUAL_CODER_NOT_RUNNING Inbase isn't running. Start it with `npx inbase run`, then send this request again."
+export function colorUnknownMessage(query) {
+  const label = typeof query === 'string' && query.trim() ? query.trim() : 'That color'
+  return `VISUAL_CODER_COLOR_UNKNOWN ${label} is not a chat color. Connect with /coral, /amber, /lime, /orange, or /violet (aliases: /red, /yellow, /green, /purple). Blue is the global blueprint, not a chat.`
+}
+export function colorBusyMessage(colorName) {
+  return `VISUAL_CODER_COLOR_BUSY The ${colorName} session already has a chat connected. Finish or stop it in the map, then try again.`
+}
+export function colorMissingMessage(colorName) {
+  return `VISUAL_CODER_COLOR_UNKNOWN No ${colorName} session is open. Start Inbase with \`npx inbase run\`, then try again.`
+}
 export const MAX_CONTEXT_FILES = 16
 export const MAX_CONTEXT_FILE_BYTES = 8 * 1024 * 1024
 export const MAX_CONTEXT_TOTAL_BYTES = 24 * 1024 * 1024
@@ -56,6 +95,46 @@ function sessionName(value) {
 
 function resolvedSessionName(manifest) {
   return sessionName(manifest?.name) || sessionName(manifest?.feature)
+}
+
+export function resolveSessionColor(colorId) {
+  if (typeof colorId !== 'string' || colorId.trim() === '') return null
+  return SESSION_COLORS.find((entry) => entry.id === colorId) ?? null
+}
+
+export function parseSessionColorQuery(value) {
+  if (typeof value !== 'string' || value.trim() === '') return null
+  const key = value.trim().toLowerCase()
+  if (GLOBAL_COLOR_QUERIES.has(key)) {
+    throw new Error(colorUnknownMessage(key === 'global' ? 'Global' : 'Blue'))
+  }
+  const id = SESSION_COLOR_ALIASES[key] ?? resolveSessionColor(key)?.id ?? null
+  const color = resolveSessionColor(id)
+  if (!color) throw new Error(colorUnknownMessage(value.trim()))
+  return color
+}
+
+function assignedSessionColors(dataDir) {
+  const used = new Set()
+  for (const sessionId of listOpenSessionIds(dataDir)) {
+    const color = readManifest(dataDir, sessionId)?.color
+    if (resolveSessionColor(color)) used.add(color)
+  }
+  return used
+}
+
+function nextSessionColor(dataDir) {
+  const used = assignedSessionColors(dataDir)
+  return SESSION_COLORS.find((entry) => !used.has(entry.id))?.id ?? SESSION_COLORS[0].id
+}
+
+function ensureManifestColor(dataDir, manifest) {
+  if (!manifest) return manifest
+  if (resolveSessionColor(manifest.color)) return manifest
+  manifest.color = nextSessionColor(dataDir)
+  const { manifest: file } = sessionPaths(dataDir, manifest.sessionId)
+  atomicWrite(file, `${JSON.stringify(manifest, null, 2)}\n`)
+  return manifest
 }
 
 export function sessionPaths(dataDir, sessionId) {
@@ -346,6 +425,45 @@ export function focusSession(dataDir, sessionId) {
   return safeId
 }
 
+function sessionPoolFile(dataDir) {
+  return path.join(dataDir, 'session-pool.json')
+}
+
+export function enableSessionPool(dataDir, count = SESSION_SLOT_COUNT) {
+  atomicWrite(
+    sessionPoolFile(dataDir),
+    `${JSON.stringify({ count }, null, 2)}\n`,
+  )
+}
+
+export function sessionPoolSize(dataDir) {
+  const value = readJson(sessionPoolFile(dataDir), null)
+  const count = value?.count
+  return Number.isInteger(count) && count > 0 ? count : 0
+}
+
+export function ensureSessionPool(dataDir, options = {}) {
+  const size = sessionPoolSize(dataDir)
+  if (size <= 0) {
+    enableSessionPool(dataDir, options.count ?? SESSION_SLOT_COUNT)
+  }
+  const count = sessionPoolSize(dataDir)
+  const created = []
+  while (listOpenSessionIds(dataDir).length < count) {
+    created.push(setupSession(dataDir, { focus: false }))
+  }
+  if (options.focus !== false && !readActiveSession(dataDir)) {
+    const next = nextAttachSessionId(dataDir) ?? listOpenSessionIds(dataDir)[0]
+    if (next) focusSession(dataDir, next)
+  }
+  return created
+}
+
+function refillSessionPool(dataDir) {
+  if (sessionPoolSize(dataDir) <= 0) return []
+  return ensureSessionPool(dataDir, { focus: false })
+}
+
 function attachQueueFile(dataDir) {
   return path.join(dataDir, 'attach-queue.json')
 }
@@ -415,6 +533,23 @@ function enqueueAttachSession(dataDir, sessionId) {
 
 function blueprintFile(dataDir) {
   return path.join(dataDir, 'blueprint.json')
+}
+
+function localBlueprintFile(dataDir, sessionId) {
+  return sessionPaths(dataDir, sessionId).blueprint
+}
+
+export function isGlobalBlueprintColor(colorId) {
+  return !colorId || colorId === GLOBAL_BLUEPRINT_COLOR.id
+}
+
+export function findSessionIdByColor(dataDir, colorId) {
+  if (isGlobalBlueprintColor(colorId)) return null
+  for (const sessionId of listOpenSessionIds(dataDir)) {
+    const color = resolveSessionColor(readManifest(dataDir, sessionId)?.color)
+    if (color?.id === colorId) return sessionId
+  }
+  return null
 }
 
 function blueprintHasContent(blueprint) {
@@ -574,6 +709,7 @@ export function readManifest(dataDir, sessionId) {
     value.pendingInstruction ??= null
     value.workStartedAt ??= null
   }
+  if (typeof value.pendingExplain !== 'boolean') value.pendingExplain = false
   if (typeof value.stepByStep !== 'boolean') value.stepByStep = true
   value.initialInstruction =
     typeof value.initialInstruction === 'string' ? value.initialInstruction : null
@@ -748,13 +884,18 @@ export function sessionIntent(
   const previewVisible = patches.length > 0
   const blueprint = readBlueprint(dataDir, sessionId)
   const canEnterBlueprint = manifest.phase === 'blueprint_ask'
+  const colored = ensureManifestColor(dataDir, manifest)
+  const color = resolveSessionColor(colored.color)
 
   return {
-    updatedAt: manifest.updatedAt,
+    updatedAt: colored.updatedAt,
     showMap: previewVisible,
     status: activeView ? phaseStatus ?? historicalStatus : historicalStatus,
-    phase: manifest.phase,
-    name: resolvedSessionName(manifest) || null,
+    phase: colored.phase,
+    name: resolvedSessionName(colored) || null,
+    color: color?.id ?? null,
+    colorName: color?.name ?? null,
+    colorHex: color?.hex ?? null,
     feature: manifest.feature,
     initialInstruction:
       typeof manifest.initialInstruction === 'string'
@@ -790,11 +931,13 @@ export function sessionIntent(
       !isSessionConnected(dataDir, sessionId, waiterIds),
     listening: waiterIds.has(sessionId),
     lastAck: readSessionAck(dataDir, sessionId),
+    pendingExplain: Boolean(manifest.pendingExplain),
     creationMode: true,
     canEnterBlueprint,
     blueprintHidden: Boolean(blueprint.hidden),
     blueprintRevision: blueprint.revision,
     blueprintSessionId: null,
+    localBlueprintEnabled: readLocalBlueprint(dataDir, sessionId).enabled,
     userCreatedBlocks: blueprint.userCreatedBlocks,
     userCreatedIslands: blueprint.userCreatedIslands,
     ...preview,
@@ -1072,6 +1215,7 @@ export function startSession(dataDir, input) {
     currentStep: 1,
     activeDiffId: null,
     pendingInstruction: null,
+    pendingExplain: false,
     initialInstruction: null,
     contextFiles: [],
     workStartedAt: null,
@@ -1092,6 +1236,9 @@ export function setupSession(dataDir, input = {}) {
   if (existing && !isTerminalSession(existing)) {
     throw new Error(`Session ${sessionId} already exists`)
   }
+  if (!existing && listOpenSessionIds(dataDir).length >= SESSION_SLOT_COUNT) {
+    throw new Error(CHAT_LIMIT_MESSAGE)
+  }
   if (existing) {
     discardStoredSession(dataDir, sessionId, null, { restore: false })
   }
@@ -1102,6 +1249,7 @@ export function setupSession(dataDir, input = {}) {
     version: 2,
     sessionId,
     name,
+    color: nextSessionColor(dataDir),
     feature: featureName(input.feature) || name,
     steps: [],
     status: 'active',
@@ -1111,6 +1259,7 @@ export function setupSession(dataDir, input = {}) {
     currentStep: 1,
     activeDiffId: null,
     pendingInstruction: null,
+    pendingExplain: false,
     initialInstruction: null,
     contextFiles: [],
     workStartedAt: null,
@@ -1119,7 +1268,7 @@ export function setupSession(dataDir, input = {}) {
     diffs: [],
   }
   writeManifest(dataDir, manifest)
-  focusSession(dataDir, sessionId)
+  if (input.focus !== false) focusSession(dataDir, sessionId)
   enqueueAttachSession(dataDir, sessionId)
   return manifest
 }
@@ -1244,28 +1393,47 @@ export function readAttachedSession(dataDir) {
   return null
 }
 
-export function attachSession(dataDir, sessionId) {
-  const safeId = sessionId
-    ? assertSessionId(sessionId)
-    : nextAttachSessionId(dataDir)
+function resolveAttachSessionId(dataDir, sessionId, options = {}) {
+  if (sessionId) return assertSessionId(sessionId)
+  if (options.color) {
+    const color = parseSessionColorQuery(options.color)
+    if (!color) throw new Error(colorUnknownMessage(options.color))
+    const matchId = findSessionIdByColor(dataDir, color.id)
+    if (!matchId) throw new Error(colorMissingMessage(color.name))
+    const existing = requireManifest(dataDir, matchId)
+    if (!sessionIsWaitingToAttach(existing)) {
+      throw new Error(colorBusyMessage(color.name))
+    }
+    return matchId
+  }
+  return nextAttachSessionId(dataDir)
+}
+
+export function attachSession(dataDir, sessionId, options = {}) {
+  const safeId = resolveAttachSessionId(dataDir, sessionId, options)
   if (!safeId) {
-    throw new Error(
-      'No visualizer session is waiting to attach. Click Setup LLM session in the map, then /inbase.',
-    )
+    throw new Error(CHAT_LIMIT_MESSAGE)
   }
   const manifest = requireManifest(
     dataDir,
     safeId,
-    `No visualizer session ${safeId}. Click Setup LLM session in the map, then /inbase.`,
+    `No Inbase session ${safeId} is waiting to connect.`,
   )
   if (isTerminalSession(manifest)) {
     throw sessionStoppedError(safeId)
   }
   focusSession(dataDir, safeId)
   touchSessionConnection(dataDir, safeId)
-  recordSessionAck(dataDir, safeId, 'attached', resolvedSessionName(manifest) || safeId)
+  const colored = ensureManifestColor(dataDir, manifest)
+  const colorName = resolveSessionColor(colored.color)?.name
+  recordSessionAck(
+    dataDir,
+    safeId,
+    'attached',
+    colorName || resolvedSessionName(colored) || safeId,
+  )
   maybeStartVisualizerHandshake(dataDir, safeId)
-  return readManifest(dataDir, safeId) ?? manifest
+  return readManifest(dataDir, safeId) ?? colored
 }
 
 export function answerBlueprint(dataDir, sessionId, enabled) {
@@ -1280,36 +1448,27 @@ export function answerBlueprint(dataDir, sessionId, enabled) {
 }
 
 export function updateBlueprint(dataDir, _sessionId, input = {}) {
-  const current = readBlueprint(dataDir)
+  const colorId = input.color
+  const fields = blueprintInputFields(input)
+  const current = readBlueprintByColor(dataDir, colorId)
   const next = {
     ...current,
-    userCreatedBlocks: input.userCreatedBlocks ?? current.userCreatedBlocks,
-    userCreatedIslands: input.userCreatedIslands ?? current.userCreatedIslands,
-    addedFunctions: input.addedFunctions ?? current.addedFunctions,
-    addedVariables: input.addedVariables ?? current.addedVariables,
-    addedImports: input.addedImports ?? current.addedImports,
-    notes: input.notes ?? current.notes,
-    pointers: input.pointers ?? current.pointers,
+    userCreatedBlocks: fields.userCreatedBlocks ?? current.userCreatedBlocks,
+    userCreatedIslands: fields.userCreatedIslands ?? current.userCreatedIslands,
+    addedFunctions: fields.addedFunctions ?? current.addedFunctions,
+    addedVariables: fields.addedVariables ?? current.addedVariables,
+    addedImports: fields.addedImports ?? current.addedImports,
+    notes: fields.notes ?? current.notes,
+    pointers: fields.pointers ?? current.pointers,
   }
-  return writeBlueprint(dataDir, next)
+  return writeBlueprintByColor(dataDir, colorId, next)
 }
 
-export function sendBlueprint(dataDir, sessionId, input = {}) {
+export function sendBlueprint(dataDir, sessionId, _input = {}) {
   const safeId = assertSessionId(sessionId)
   const manifest = requireManifest(dataDir, safeId)
   if (manifest.phase !== 'blueprint') {
     throw new Error(`Session ${safeId} is not in blueprint mode`)
-  }
-  if (
-    input.userCreatedBlocks ||
-    input.userCreatedIslands ||
-    input.addedFunctions ||
-    input.addedVariables ||
-    input.addedImports ||
-    input.notes ||
-    input.pointers
-  ) {
-    updateBlueprint(dataDir, safeId, input)
   }
   manifest.phase = 'preparing'
   manifest.workStartedAt = new Date().toISOString()
@@ -1616,6 +1775,49 @@ export function requestReplan(
   return manifest
 }
 
+export function notifySessionExplain(dataDir, sessionId, detail) {
+  const manifest = readManifest(dataDir, sessionId)
+  if (!manifest) return null
+  writeManifest(dataDir, manifest)
+  recordSessionAck(
+    dataDir,
+    sessionId,
+    'explain',
+    typeof detail === 'string' && detail.trim() ? detail.trim() : 'a map target',
+  )
+  return manifest
+}
+
+export function requestExplainProposal(dataDir, sessionId, diffId) {
+  const manifest = requireManifest(dataDir, sessionId)
+  let title
+  if (manifest.phase === 'review') {
+    const active = pendingActive(manifest, diffId)
+    title =
+      manifest.steps.find((step) => step.index === active.step)?.title ||
+      active.title ||
+      `step ${active.step}`
+  } else if (manifest.phase === 'plan_ready') {
+    const step = manifest.currentStep
+    title =
+      manifest.steps.find((item) => item.index === step)?.title || `step ${step}`
+  } else {
+    throw new Error('No proposal to explain')
+  }
+  manifest.pendingExplain = true
+  writeManifest(dataDir, manifest)
+  recordSessionAck(dataDir, sessionId, 'explain', `the proposal for ${title}`)
+  return manifest
+}
+
+export function consumeExplainRequest(dataDir, sessionId) {
+  const manifest = readManifest(dataDir, sessionId)
+  if (!manifest?.pendingExplain) return null
+  manifest.pendingExplain = false
+  writeManifest(dataDir, manifest)
+  return manifest
+}
+
 function unstageDiffSessionArtifacts(dataDir, targetRoot, extraPaths = []) {
   if (!targetRoot) return
   unstagePaths(targetRoot, [
@@ -1697,6 +1899,31 @@ export function discardInactiveDiffSessions(
   return liveIds
 }
 
+export function recycleDisconnectedSessions(
+  dataDir,
+  targetRoot = null,
+  waiterIds = waiterSessionIds(),
+) {
+  const waiters = new Set()
+  for (const value of waiterIds) {
+    try {
+      waiters.add(assertSessionId(value))
+    } catch {
+      // Ignore process command lines with invalid session ids.
+    }
+  }
+
+  const recycled = []
+  for (const sessionId of listOpenSessionIds(dataDir, waiters)) {
+    const manifest = readManifest(dataDir, sessionId)
+    if (!manifest || manifest.awaitingAttach) continue
+    if (isSessionConnected(dataDir, sessionId, waiters)) continue
+    stopSession(dataDir, sessionId, targetRoot)
+    recycled.push(sessionId)
+  }
+  return recycled
+}
+
 export function clearDiffSessions(dataDir, targetRoot = null) {
   for (const sessionId of listStoredSessionIds(dataDir)) {
     discardStoredSession(dataDir, sessionId, targetRoot)
@@ -1704,6 +1931,8 @@ export function clearDiffSessions(dataDir, targetRoot = null) {
   writeActiveSession(dataDir, null)
   writeBlueprintSession(dataDir, null)
   writeAttachQueue(dataDir, [])
+  const poolFile = sessionPoolFile(dataDir)
+  if (fs.existsSync(poolFile)) fs.unlinkSync(poolFile)
 
   const root = diffSessionsRoot(dataDir)
   fs.mkdirSync(root, { recursive: true })
@@ -1715,9 +1944,9 @@ export function clearDiffSessions(dataDir, targetRoot = null) {
 }
 
 export function recoverOpenDiffSessions(dataDir, targetRoot = null) {
-  // Visualizer startup never reopens an LLM session.
+  // Visualizer startup never restores a previous LLM session.
   clearDiffSessions(dataDir, targetRoot)
-  return []
+  return ensureSessionPool(dataDir).map((manifest) => manifest.sessionId)
 }
 
 export function stopSession(dataDir, sessionId, targetRoot = null) {
@@ -1727,6 +1956,7 @@ export function stopSession(dataDir, sessionId, targetRoot = null) {
   const waiters = waiterSessionIds()
   waiters.add(safeId)
   discardInactiveDiffSessions(dataDir, targetRoot, waiters)
+  refillSessionPool(dataDir)
   return null
 }
 
@@ -1755,6 +1985,7 @@ export function closeSession(dataDir, sessionId) {
 
 export function finalizeFinishedSession(dataDir, sessionId) {
   discardStoredSession(dataDir, sessionId, null, { restore: false })
+  refillSessionPool(dataDir)
 }
 
 export function emptyBlueprint() {
@@ -1950,14 +2181,7 @@ function normalizeBlueprint(value) {
   }
 }
 
-export function readBlueprint(dataDir, _sessionId) {
-  return normalizeBlueprint(readJson(blueprintFile(dataDir), emptyBlueprint()))
-}
-
-export function writeBlueprint(dataDir, sessionIdOrBlueprint, maybeBlueprint) {
-  const current = readBlueprint(dataDir)
-  const incoming =
-    maybeBlueprint === undefined ? sessionIdOrBlueprint : maybeBlueprint
+function persistBlueprintFile(file, incoming, current) {
   const next = normalizeBlueprint({
     ...current,
     ...incoming,
@@ -1972,7 +2196,7 @@ export function writeBlueprint(dataDir, sessionIdOrBlueprint, maybeBlueprint) {
   next.enabled = blueprintHasContent(next)
   next.sent = true
   atomicWrite(
-    blueprintFile(dataDir),
+    file,
     `${JSON.stringify(
       {
         hidden: Boolean(next.hidden),
@@ -1991,24 +2215,104 @@ export function writeBlueprint(dataDir, sessionIdOrBlueprint, maybeBlueprint) {
       2,
     )}\n`,
   )
-  return readBlueprint(dataDir)
+  return normalizeBlueprint(readJson(file, emptyBlueprint()))
 }
 
-export function setBlueprintHidden(dataDir, hidden) {
-  return writeBlueprint(dataDir, { ...readBlueprint(dataDir), hidden: Boolean(hidden) })
+export function readBlueprint(dataDir, _sessionId) {
+  return normalizeBlueprint(readJson(blueprintFile(dataDir), emptyBlueprint()))
 }
 
-export function clearBlueprint(dataDir) {
-  const current = readBlueprint(dataDir)
-  return writeBlueprint(dataDir, {
+export function readLocalBlueprint(dataDir, sessionId) {
+  if (!sessionId) return emptyBlueprint()
+  return normalizeBlueprint(
+    readJson(localBlueprintFile(dataDir, sessionId), emptyBlueprint()),
+  )
+}
+
+export function readBlueprintByColor(dataDir, colorId) {
+  if (isGlobalBlueprintColor(colorId)) return readBlueprint(dataDir)
+  const sessionId = findSessionIdByColor(dataDir, colorId)
+  return readLocalBlueprint(dataDir, sessionId)
+}
+
+export function listLocalBlueprints(dataDir) {
+  const seen = new Set()
+  const locals = []
+  for (const sessionId of listOpenSessionIds(dataDir)) {
+    const color = resolveSessionColor(readManifest(dataDir, sessionId)?.color)
+    if (!color || seen.has(color.id)) continue
+    seen.add(color.id)
+    locals.push({
+      color: color.id,
+      colorName: color.name,
+      colorHex: color.hex,
+      sessionId,
+      ...readLocalBlueprint(dataDir, sessionId),
+    })
+  }
+  return locals.sort(
+    (left, right) =>
+      SESSION_COLORS.findIndex((entry) => entry.id === left.color) -
+      SESSION_COLORS.findIndex((entry) => entry.id === right.color),
+  )
+}
+
+export function writeBlueprint(dataDir, sessionIdOrBlueprint, maybeBlueprint) {
+  const incoming =
+    maybeBlueprint === undefined ? sessionIdOrBlueprint : maybeBlueprint
+  return persistBlueprintFile(
+    blueprintFile(dataDir),
+    incoming,
+    readBlueprint(dataDir),
+  )
+}
+
+export function writeLocalBlueprint(dataDir, sessionId, incoming) {
+  const safeId = assertSessionId(sessionId)
+  requireManifest(dataDir, safeId)
+  return persistBlueprintFile(
+    localBlueprintFile(dataDir, safeId),
+    incoming,
+    readLocalBlueprint(dataDir, safeId),
+  )
+}
+
+export function writeBlueprintByColor(dataDir, colorId, incoming) {
+  if (isGlobalBlueprintColor(colorId)) return writeBlueprint(dataDir, incoming)
+  const sessionId = findSessionIdByColor(dataDir, colorId)
+  if (!sessionId) return emptyBlueprint()
+  return writeLocalBlueprint(dataDir, sessionId, incoming)
+}
+
+function blueprintInputFields(input = {}) {
+  const { color: _color, ...fields } = input
+  return fields
+}
+
+export function setBlueprintHidden(dataDir, hidden, colorId) {
+  const current = readBlueprintByColor(dataDir, colorId)
+  return writeBlueprintByColor(dataDir, colorId, {
+    ...current,
+    hidden: Boolean(hidden),
+  })
+}
+
+export function clearBlueprint(dataDir, colorId) {
+  const current = readBlueprintByColor(dataDir, colorId)
+  return writeBlueprintByColor(dataDir, colorId, {
     ...emptyBlueprint(),
     hidden: current.hidden,
     revision: current.revision,
   })
 }
 
-export function cleanupBlueprint(dataDir, knownFileIds = [], knownFolderPaths = []) {
-  const current = readBlueprint(dataDir)
+export function cleanupBlueprint(
+  dataDir,
+  knownFileIds = [],
+  knownFolderPaths = [],
+  colorId,
+) {
+  const current = readBlueprintByColor(dataDir, colorId)
   const files = new Set(knownFileIds)
   const folders = new Set(knownFolderPaths)
   const removedFiles = new Set(
@@ -2026,14 +2330,23 @@ export function cleanupBlueprint(dataDir, knownFileIds = [], knownFolderPaths = 
     notes: current.notes.filter((item) => !removedFiles.has(item.file)),
     pointers: current.pointers,
   }
-  return writeBlueprint(dataDir, next)
+  return writeBlueprintByColor(dataDir, colorId, next)
 }
 
-export function markBlueprintSeen(dataDir, sessionId, revision) {
+export function markBlueprintSeen(dataDir, sessionId, revision, localRevision) {
   const manifest = readManifest(dataDir, sessionId)
   if (!manifest) return null
-  if (manifest.blueprintRevision === revision) return manifest
-  manifest.blueprintRevision = revision
+  const nextGlobal = Number.isInteger(revision) ? revision : manifest.blueprintRevision
+  const nextLocal =
+    Number.isInteger(localRevision) ? localRevision : manifest.localBlueprintRevision
+  if (
+    manifest.blueprintRevision === nextGlobal &&
+    manifest.localBlueprintRevision === nextLocal
+  ) {
+    return manifest
+  }
+  manifest.blueprintRevision = nextGlobal
+  if (Number.isInteger(localRevision)) manifest.localBlueprintRevision = nextLocal
   writeManifest(dataDir, manifest)
   return manifest
 }

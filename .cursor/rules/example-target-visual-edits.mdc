@@ -33,11 +33,10 @@ Do not write a unified diff yourself.
 
 1. `npx inbase attach` (no `--session`) if this chat is not already attached
 2. `npx inbase wait-for-blueprint --session <id>` (returns immediately with the optional blueprint)
-3. Read the running instance's `user-context.json` (viewpoint only if `followLook`)
-4. List every step, then `npx inbase report-plan`
-5. `npx inbase wait-for-approval --session <id>`
-6. Only after `VISUAL_CODER_EXECUTE`, edit live files for that step, then `npx inbase propose-patch --session <id>`
-7. Wait again. Handshake from the wait command:
+3. List every step, then `npx inbase report-plan`
+4. `npx inbase wait-for-approval --session <id>`
+5. Only after `VISUAL_CODER_EXECUTE`, edit live files for that step, then `npx inbase propose-patch --session <id>`
+6. Wait again. Handshake from the wait command:
    - Execute (exit 0): edit live files for the invoked step, then propose-patch
    - Finished (exit 5): optionally `--clear`, tell the user it is done, stop
    - Replan (exit 4): report a replacement plan tail, then wait

@@ -49,7 +49,23 @@ function resolvesThroughIgnored(absolutePath, root) {
   }
 }
 
-function walk(dir, root, ignoreSets, acc = []) {
+function isInside(filePath, root) {
+  const file = path.resolve(filePath)
+  const base = path.resolve(root)
+  return file === base || file.startsWith(base + path.sep)
+}
+
+function dataDirToSkip(root, dest) {
+  if (!dest) return null
+  const dataRoot = path.dirname(path.resolve(dest))
+  const target = path.resolve(root)
+  if (dataRoot === target) return null
+  const relative = path.relative(target, dataRoot)
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return null
+  return dataRoot
+}
+
+function walk(dir, root, ignoreSets, skipRoot = null, acc = []) {
   const localRules = readGitignoreRules(dir)
   const nextSets = localRules.length
     ? [...ignoreSets, { base: dir, rules: localRules }]
@@ -62,6 +78,7 @@ function walk(dir, root, ignoreSets, acc = []) {
   }
   for (const entry of entries) {
     const absolutePath = path.join(dir, entry.name)
+    if (skipRoot && isInside(absolutePath, skipRoot)) continue
     const relative = toPosix(path.relative(root, absolutePath))
     if (
       shouldIgnoreRelativePath(relative) ||
@@ -79,7 +96,7 @@ function walk(dir, root, ignoreSets, acc = []) {
       }
     }
     if (stat.isDirectory()) {
-      walk(absolutePath, root, nextSets, acc)
+      walk(absolutePath, root, nextSets, skipRoot, acc)
       continue
     }
     if (!stat.isFile()) continue
@@ -89,8 +106,8 @@ function walk(dir, root, ignoreSets, acc = []) {
   return acc
 }
 
-function listSourceAbsolutes(root) {
-  return walk(root, root, collectGitignoreSets(root))
+function listSourceAbsolutes(root, skipRoot = null) {
+  return walk(root, root, collectGitignoreSets(root), skipRoot)
 }
 
 function languageOf(filePath) {
@@ -192,7 +209,7 @@ export function scanTarget({
     )
   }
 
-  const absoluteFiles = listSourceAbsolutes(root)
+  const absoluteFiles = listSourceAbsolutes(root, dataDirToSkip(root, dest))
   const folders = new Map()
   ensureFolder(folders, '.', name)
 

@@ -3,6 +3,7 @@ import type {
   AgentIntentBundle,
   BlueprintNote,
   BlueprintPointer,
+  LocalBlueprint,
   PatchImport,
   PatchImportAddition,
   PatchSymbolAddition,
@@ -10,6 +11,7 @@ import type {
   UserCreatedIsland,
   WorkflowAction,
 } from './types'
+import { GLOBAL_BLUEPRINT_COLOR } from './types'
 import {
   parseBlueprintNotes,
   parseBlueprintPointers,
@@ -92,6 +94,9 @@ export const emptyIntent: AgentIntent = {
   showMap: false,
   status: 'idle',
   name: null,
+  color: null,
+  colorName: null,
+  colorHex: null,
   feature: null,
   steps: [],
   step: null,
@@ -121,7 +126,8 @@ export const emptyIntent: AgentIntent = {
   llmIdle: false,
   awaitingAttach: false,
   listening: false,
-  lastAck: null,
+    lastAck: null,
+    pendingExplain: false,
   initialInstruction: null,
   contextFiles: [],
   creationMode: false,
@@ -129,6 +135,7 @@ export const emptyIntent: AgentIntent = {
   blueprintHidden: false,
   blueprintRevision: 0,
   blueprintSessionId: null,
+  localBlueprintEnabled: false,
   userCreatedBlocks: [],
   userCreatedIslands: [],
   blueprintFunctions: [],
@@ -144,6 +151,9 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     showMap: Boolean(data?.showMap),
     status: data?.status ?? 'idle',
     name: data?.name ?? null,
+    color: typeof data?.color === 'string' ? data.color : null,
+    colorName: typeof data?.colorName === 'string' ? data.colorName : null,
+    colorHex: typeof data?.colorHex === 'string' ? data.colorHex : null,
     feature: data?.feature ?? null,
     steps: Array.isArray(data?.steps) ? data.steps : [],
     step: typeof data?.step === 'number' ? data.step : null,
@@ -177,6 +187,7 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     awaitingAttach: Boolean(data?.awaitingAttach),
     listening: Boolean(data?.listening),
     lastAck: normalizeAck(data?.lastAck),
+    pendingExplain: Boolean(data?.pendingExplain),
     initialInstruction:
       typeof data?.initialInstruction === 'string' ? data.initialInstruction : null,
     contextFiles: normalizeContextFiles(data?.contextFiles),
@@ -189,6 +200,7 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
       typeof data?.blueprintSessionId === 'string'
         ? data.blueprintSessionId
         : null,
+    localBlueprintEnabled: Boolean(data?.localBlueprintEnabled),
     userCreatedBlocks: parseUserCreatedBlocks(data?.userCreatedBlocks),
     userCreatedIslands: parseUserCreatedIslands(data?.userCreatedIslands),
     blueprintFunctions: normalizeSymbolAdditions(data?.blueprintFunctions),
@@ -214,6 +226,28 @@ function normalizeBlueprint(data: Partial<AgentIntentBundle['blueprint']> | null
   }
 }
 
+function normalizeLocalBlueprints(value: unknown): LocalBlueprint[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    const row = item as Partial<LocalBlueprint>
+    const color = typeof row.color === 'string' ? row.color : ''
+    const colorName = typeof row.colorName === 'string' ? row.colorName : ''
+    const colorHex = typeof row.colorHex === 'string' ? row.colorHex : ''
+    const sessionId = typeof row.sessionId === 'string' ? row.sessionId : ''
+    if (!color || !sessionId) return []
+    return [
+      {
+        ...normalizeBlueprint(row),
+        color,
+        colorName,
+        colorHex,
+        sessionId,
+      },
+    ]
+  })
+}
+
 export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
   const query = new URLSearchParams({ t: String(Date.now()) })
   const response = await fetch(`/api/agent-intent?${query}`)
@@ -224,6 +258,7 @@ export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
       nextAttachSessionId: null,
       intents: [],
       blueprint: emptyBlueprint,
+      localBlueprints: [],
     }
   }
   const data = (await response.json()) as {
@@ -232,6 +267,7 @@ export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
     intents?: unknown
     sessionId?: string | null
     blueprint?: Partial<AgentIntentBundle['blueprint']>
+    localBlueprints?: unknown
   } & Partial<AgentIntent>
   if (Array.isArray(data.intents)) {
     return {
@@ -245,6 +281,7 @@ export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
         .map((intent) => normalize(intent as Partial<AgentIntent>))
         .filter((intent) => Boolean(intent.sessionId)),
       blueprint: normalizeBlueprint(data.blueprint),
+      localBlueprints: normalizeLocalBlueprints(data.localBlueprints),
     }
   }
   const intent = normalize(data)
@@ -252,6 +289,7 @@ export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
     focusedSessionId: intent.sessionId,
     nextAttachSessionId: intent.awaitingAttach ? intent.sessionId : null,
     intents: intent.sessionId ? [intent] : [],
+    localBlueprints: [],
     blueprint: normalizeBlueprint(data.blueprint ?? {
       hidden: intent.blueprintHidden,
       revision: intent.blueprintRevision,
@@ -320,6 +358,7 @@ export async function performAgentAction(
 export function persistSessionBlueprint(
   sessionId: string | null | undefined,
   payload: {
+    color?: string | null
     userCreatedBlocks: UserCreatedBlock[]
     userCreatedIslands: UserCreatedIsland[]
     addedFunctions?: PatchSymbolAddition[]
@@ -336,36 +375,51 @@ export function persistSessionBlueprint(
       action: 'blueprint_update',
       sessionId,
       ...payload,
+      color: payload.color ?? GLOBAL_BLUEPRINT_COLOR.id,
     }),
   }).catch(() => {
-    // Keep local drafts if the visualizer could not save the shared blueprint.
+    // Keep local drafts if the visualizer could not save the blueprint.
   })
 }
 
-export function persistBlueprintHidden(hidden: boolean) {
+export function persistBlueprintHidden(
+  hidden: boolean,
+  color: string | null | undefined = GLOBAL_BLUEPRINT_COLOR.id,
+) {
   return fetch('/api/agent-intent', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       action: 'blueprint_set_hidden',
       hidden,
+      color: color ?? GLOBAL_BLUEPRINT_COLOR.id,
     }),
   })
 }
 
-export function persistBlueprintClear() {
+export function persistBlueprintClear(
+  color: string | null | undefined = GLOBAL_BLUEPRINT_COLOR.id,
+) {
   return fetch('/api/agent-intent', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'blueprint_clear' }),
+    body: JSON.stringify({
+      action: 'blueprint_clear',
+      color: color ?? GLOBAL_BLUEPRINT_COLOR.id,
+    }),
   })
 }
 
-export function persistBlueprintCleanup() {
+export function persistBlueprintCleanup(
+  color: string | null | undefined = GLOBAL_BLUEPRINT_COLOR.id,
+) {
   return fetch('/api/agent-intent', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'blueprint_cleanup' }),
+    body: JSON.stringify({
+      action: 'blueprint_cleanup',
+      color: color ?? GLOBAL_BLUEPRINT_COLOR.id,
+    }),
   })
 }
 

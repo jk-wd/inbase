@@ -17,6 +17,7 @@ type RelationLinesProps = {
   layout: WorldLayout
   extras?: Record<string, PlacedFile>
   plannedEdges?: PatchImport[]
+  extraEdges?: PatchImport[]
   fromAbove?: boolean
   importedBy?: boolean
 }
@@ -117,6 +118,7 @@ export function RelationLines({
   layout,
   extras = {},
   plannedEdges = [],
+  extraEdges = [],
   fromAbove = false,
   importedBy = false,
 }: RelationLinesProps) {
@@ -146,6 +148,10 @@ export function RelationLines({
       addLine(edge.from, edge.to, true, plannedRadius)
     }
 
+    for (const edge of extraEdges) {
+      addLine(edge.from, edge.to, false, selectedRadius)
+    }
+
     if (selectedId) {
       if (importedBy) {
         for (const file of files) {
@@ -165,6 +171,7 @@ export function RelationLines({
     return lines
   }, [
     extras,
+    extraEdges,
     files,
     fromAbove,
     importedBy,

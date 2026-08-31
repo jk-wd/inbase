@@ -16,6 +16,7 @@ export type FileNode = {
   symbols: CodeSymbol[]
   imports: string[]
   userCreated?: boolean
+  colorHex?: string
 }
 
 export type FolderNode = {
@@ -25,6 +26,7 @@ export type FolderNode = {
   files: string[]
   children: string[]
   userCreated?: boolean
+  colorHex?: string
 }
 
 export type CodebaseGraph = {
@@ -49,6 +51,7 @@ export type PlacedFolder = {
   width: number
   depth: number
   added?: boolean
+  colorHex?: string
 }
 
 export type PlacedBridge = {
@@ -88,6 +91,7 @@ export type UserCreatedBlock = {
   x: number
   z: number
   naming?: boolean
+  colorHex?: string
 }
 
 export type UserCreatedIsland = {
@@ -96,6 +100,7 @@ export type UserCreatedIsland = {
   path: string
   parent: string
   naming?: boolean
+  colorHex?: string
 }
 
 export type UserContext = {
@@ -113,7 +118,6 @@ export type UserContext = {
     x: number
     z: number
   }
-  followLook?: boolean
   showBranchChanges?: boolean
   userCreatedBlocks?: UserCreatedBlock[]
   userCreatedIslands?: UserCreatedIsland[]
@@ -152,13 +156,6 @@ export function isReviewingIntent(status: AgentIntentStatus) {
     status === 'extended' ||
     status === 'finished'
   )
-}
-
-export function canStopSession(intent: {
-  sessionId: string | null
-  status: AgentIntentStatus
-}) {
-  return Boolean(intent.sessionId) && intent.status !== 'idle'
 }
 
 export function llmIsMakingChanges(intent: {
@@ -262,6 +259,7 @@ export type WorkflowAction =
   | 'invoke'
   | 'continue'
   | 'instruct'
+  | 'explain_proposal'
   | 'stop'
   | 'blueprint_yes'
   | 'blueprint_no'
@@ -286,11 +284,98 @@ export type SharedBlueprint = {
   pointers: BlueprintPointer[]
 }
 
+export const GLOBAL_BLUEPRINT_COLOR = {
+  id: 'global',
+  name: 'Global',
+  hex: '#38bdf8',
+} as const
+
+export type BlueprintColorId = typeof GLOBAL_BLUEPRINT_COLOR.id | string
+
+export type LocalBlueprint = SharedBlueprint & {
+  color: string
+  colorName: string
+  colorHex: string
+  sessionId: string
+}
+
+export type BlueprintOption = {
+  id: string
+  name: string
+  hex: string
+  kind: 'global' | 'local'
+  sessionId?: string | null
+}
+
 export type AgentIntentBundle = {
   focusedSessionId: string | null
   nextAttachSessionId: string | null
   intents: AgentIntent[]
   blueprint: SharedBlueprint
+  localBlueprints: LocalBlueprint[]
+}
+
+export type ExplainRelation = {
+  from: string
+  to: string
+}
+
+export type ExplainSymbolKind = 'function' | 'variable' | 'class' | 'file' | 'symbol'
+
+export type ExplainSymbolRef = {
+  kind: ExplainSymbolKind
+  name: string
+}
+
+export type ExplainPendingQuestion = {
+  parent: string
+  question: string
+  from: string
+  fromTitle: string
+}
+
+export type ExplainTargetKind =
+  | 'file'
+  | 'folder'
+  | 'function'
+  | 'variable'
+  | 'class'
+
+export type ExplainPendingStart = {
+  kind: ExplainTargetKind
+  path: string
+  name?: string
+  question: string
+}
+
+export type ExplainStep = {
+  index: string
+  title: string
+  body: string
+  asked: string
+  files: string[]
+  folders: string[]
+  select: string | null
+  zoom: string | null
+  relations: ExplainRelation[]
+  importedBy: boolean
+  info: boolean
+  highlights: ExplainSymbolRef[]
+  point: ExplainSymbolRef | null
+}
+
+export type ExplainPresentation = 'walk' | 'card'
+
+export type ExplainSession = {
+  active: boolean
+  question: string
+  steps: ExplainStep[]
+  currentStep: string
+  pendingQuestion: ExplainPendingQuestion | null
+  pendingStart: ExplainPendingStart | null
+  answering: boolean
+  presentation: ExplainPresentation
+  updatedAt: string | null
 }
 
 export type AgentIntent = {
@@ -298,6 +383,9 @@ export type AgentIntent = {
   showMap: boolean
   status: AgentIntentStatus
   name: string | null
+  color?: string | null
+  colorName?: string | null
+  colorHex?: string | null
   feature: string | null
   steps: PlanStep[]
   step: number | null
@@ -332,6 +420,7 @@ export type AgentIntent = {
     detail: string
     at: string | null
   } | null
+  pendingExplain?: boolean
   initialInstruction?: string | null
   contextFiles?: Array<{
     id: string
@@ -344,6 +433,7 @@ export type AgentIntent = {
   blueprintHidden?: boolean
   blueprintRevision?: number
   blueprintSessionId: string | null
+  localBlueprintEnabled?: boolean
   userCreatedBlocks: UserCreatedBlock[]
   userCreatedIslands: UserCreatedIsland[]
   blueprintFunctions: PatchSymbolAddition[]

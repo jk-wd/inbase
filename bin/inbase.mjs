@@ -18,6 +18,7 @@ import {
 import {
   proposePatch,
   reportPlan,
+  runExplain,
   startSession,
   attachSession,
   waitForApproval,
@@ -33,12 +34,16 @@ Usage:
 
 Agent commands (used by the Cursor skill):
   inbase start-session --session <id> --name "short name"
-  inbase attach [--session <id>]
+  inbase attach [--session <id>] [--color <name>]
   inbase wait-for-blueprint --session <id>
   inbase report-plan --session <id> --feature "name" --steps "one" [--steps "two"]
   inbase wait-for-approval --session <id>
   inbase propose-patch --session <id> [file.patch|-]
   inbase propose-patch --session <id> --clear
+  inbase explain start --question "How does this work?"
+  inbase explain report --question "..." --step "Title" --body "..." --files path
+  inbase explain wait
+  inbase explain stop
 
 Options for run:
   --target <dir>           Project to map (default: current directory)
@@ -112,7 +117,7 @@ async function runServer(args) {
   const local = server.resolvedUrls?.local?.[0] ?? `http://localhost:${port}/`
   console.log(`Inbase is mapping ${targetRoot}`)
   console.log(`Open ${local}`)
-  console.log('Leave this running. In Cursor, the inbase skill talks to this server.')
+  console.log('Leave this running. Open a Cursor chat to connect — 5 chats can be connected at once.')
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -173,6 +178,10 @@ export async function main(argv = process.argv.slice(2)) {
   }
   if (command === 'propose-patch') {
     await proposePatch(args)
+    return
+  }
+  if (command === 'explain') {
+    await runExplain(args)
     return
   }
 

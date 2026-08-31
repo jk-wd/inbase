@@ -51,9 +51,11 @@ export type DiffManifest = {
     | 'finished'
     | 'stopped'
   awaitingAttach?: boolean
+  color?: string
   currentStep: number
   activeDiffId: string | null
   pendingInstruction: string | null
+  pendingExplain?: boolean
   initialInstruction?: string | null
   contextFiles?: SessionContextFile[]
   workStartedAt: string | null
@@ -61,6 +63,8 @@ export type DiffManifest = {
   createdAt: string
   updatedAt: string
   diffs: DiffEntry[]
+  blueprintRevision?: number
+  localBlueprintRevision?: number
 }
 
 export function assertSessionId(value: unknown): string
@@ -103,6 +107,11 @@ export function discardInactiveDiffSessions(
   targetRoot?: string | null,
   waiterIds?: Iterable<string>,
 ): string[]
+export function recycleDisconnectedSessions(
+  dataDir: string,
+  targetRoot?: string | null,
+  waiterIds?: Iterable<string>,
+): string[]
 export function recoverOpenDiffSessions(
   dataDir: string,
   targetRoot?: string | null,
@@ -136,11 +145,13 @@ export function setupSession(
     sessionId?: string
     name?: string
     feature?: string
+    focus?: boolean
   },
 ): DiffManifest
 export function attachSession(
   dataDir: string,
   sessionId?: string | null,
+  options?: { color?: string | null },
 ): DiffManifest
 export function setInitialInstruction(
   dataDir: string,
@@ -150,6 +161,32 @@ export function setInitialInstruction(
 export const MAX_CONTEXT_FILES: number
 export const MAX_CONTEXT_FILE_BYTES: number
 export const MAX_CONTEXT_TOTAL_BYTES: number
+export const SESSION_SLOT_COUNT: number
+export const SESSION_COLORS: Array<{ id: string; name: string; hex: string }>
+export const SESSION_COLOR_ALIASES: Record<string, string>
+export const GLOBAL_BLUEPRINT_COLOR: { id: 'global'; name: 'Global'; hex: string }
+export function resolveSessionColor(
+  colorId: string | null | undefined,
+): { id: string; name: string; hex: string } | null
+export function parseSessionColorQuery(
+  value: string | null | undefined,
+): { id: string; name: string; hex: string } | null
+export function colorUnknownMessage(query?: string | null): string
+export function colorBusyMessage(colorName: string): string
+export function colorMissingMessage(colorName: string): string
+export function isGlobalBlueprintColor(colorId: string | null | undefined): boolean
+export function findSessionIdByColor(
+  dataDir: string,
+  colorId: string | null | undefined,
+): string | null
+export const CHAT_LIMIT_MESSAGE: string
+export const NOT_RUNNING_MESSAGE: string
+export function enableSessionPool(dataDir: string, count?: number): void
+export function sessionPoolSize(dataDir: string): number
+export function ensureSessionPool(
+  dataDir: string,
+  options?: { count?: number; focus?: boolean },
+): DiffManifest[]
 export function listContextFiles(
   dataDir: string,
   sessionId: string,
@@ -189,6 +226,18 @@ export type SessionBlueprint = {
 }
 export function emptyBlueprint(): SessionBlueprint
 export function readBlueprint(dataDir: string, sessionId?: string): SessionBlueprint
+export function readLocalBlueprint(dataDir: string, sessionId?: string | null): SessionBlueprint
+export function readBlueprintByColor(
+  dataDir: string,
+  colorId?: string | null,
+): SessionBlueprint
+export type LocalBlueprint = SessionBlueprint & {
+  color: string
+  colorName: string
+  colorHex: string
+  sessionId: string
+}
+export function listLocalBlueprints(dataDir: string): LocalBlueprint[]
 export function writeBlueprint(
   dataDir: string,
   blueprint: SessionBlueprint,
@@ -198,17 +247,36 @@ export function writeBlueprint(
   sessionId: string,
   blueprint: SessionBlueprint,
 ): SessionBlueprint
-export function setBlueprintHidden(dataDir: string, hidden: boolean): SessionBlueprint
-export function clearBlueprint(dataDir: string): SessionBlueprint
+export function writeLocalBlueprint(
+  dataDir: string,
+  sessionId: string,
+  blueprint: Partial<SessionBlueprint>,
+): SessionBlueprint
+export function writeBlueprintByColor(
+  dataDir: string,
+  colorId: string | null | undefined,
+  blueprint: Partial<SessionBlueprint>,
+): SessionBlueprint
+export function setBlueprintHidden(
+  dataDir: string,
+  hidden: boolean,
+  colorId?: string | null,
+): SessionBlueprint
+export function clearBlueprint(
+  dataDir: string,
+  colorId?: string | null,
+): SessionBlueprint
 export function cleanupBlueprint(
   dataDir: string,
   knownFileIds?: string[],
   knownFolderPaths?: string[],
+  colorId?: string | null,
 ): SessionBlueprint
 export function markBlueprintSeen(
   dataDir: string,
   sessionId: string,
   revision: number,
+  localRevision?: number,
 ): DiffManifest | null
 export function answerBlueprint(
   dataDir: string,
@@ -219,6 +287,7 @@ export function updateBlueprint(
   dataDir: string,
   sessionId?: string | null,
   input?: {
+    color?: string | null
     userCreatedBlocks?: unknown[]
     userCreatedIslands?: unknown[]
     addedFunctions?: unknown[]
@@ -231,15 +300,7 @@ export function updateBlueprint(
 export function sendBlueprint(
   dataDir: string,
   sessionId: string,
-  input?: {
-    userCreatedBlocks?: unknown[]
-    userCreatedIslands?: unknown[]
-    addedFunctions?: unknown[]
-    addedVariables?: unknown[]
-    addedImports?: unknown[]
-    notes?: unknown[]
-    pointers?: unknown[]
-  },
+  input?: unknown,
 ): DiffManifest
 export function maybeStartVisualizerHandshake(
   dataDir: string,
@@ -341,6 +402,20 @@ export function requestReplan(
   instruction: string,
   targetRoot?: string | null,
 ): DiffManifest
+export function notifySessionExplain(
+  dataDir: string,
+  sessionId: string,
+  detail?: string,
+): DiffManifest | null
+export function requestExplainProposal(
+  dataDir: string,
+  sessionId: string,
+  diffId?: string | null,
+): DiffManifest
+export function consumeExplainRequest(
+  dataDir: string,
+  sessionId: string,
+): DiffManifest | null
 export function stopSession(
   dataDir: string,
   sessionId: string,

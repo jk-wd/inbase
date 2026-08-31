@@ -1,29 +1,29 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { persistAddContextFiles, persistInitialInstruction, persistRemoveContextFile } from '../agentIntent'
-import { NameInput } from './NameInput'
-import { SelectionThumbnail } from '../scene/SelectionThumbnail'
-import { CanvasErrorBoundary } from './CanvasErrorBoundary'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { InfoNameField, NameInput } from './NameInput'
 import {
-  canStopSession,
   isReviewingIntent,
   type AgentIntent,
   type AgentIntentStatus,
   type AimedRelation,
   type BlueprintNote,
   type BlueprintNoteKind,
+  GLOBAL_BLUEPRINT_COLOR,
+  type BlueprintOption,
   type BlueprintPointer,
   type BlueprintPointerKind,
   type BranchChanges,
   type CodebaseGraph,
+  type ExplainTargetKind,
   type PatchImportAddition,
   type PatchSymbolAddition,
   type ViewMode,
-  type WorldLayout,
   type WorkflowAction,
 } from '../types'
 import { findBlueprintNote, findBlueprintPointer } from '../userCreated'
 import { EyeIcon } from './EyeIcon'
 import { beginKeyboardIsolation, shouldIgnoreShortcut } from '../keyboard'
+import type { DevTargetsState } from '../devTargets'
 
 function reviewTitle(status: AgentIntentStatus) {
   if (status === 'blueprint_ask') return 'Setup blueprint'
@@ -43,14 +43,270 @@ function sessionLabel(intent: AgentIntent) {
   return intent.name?.trim() || intent.feature?.trim() || ''
 }
 
-function sessionTabLabel(intent: AgentIntent, sessions: AgentIntent[]) {
-  const title = sessionLabel(intent) || reviewTitle(intent.status)
-  const same = sessions.filter(
-    (item) => (sessionLabel(item) || reviewTitle(item.status)) === title,
+function sessionColorName(intent: AgentIntent) {
+  return intent.colorName?.trim() || ''
+}
+
+function sessionSlashCommand(intent: Pick<AgentIntent, 'color'>) {
+  const color = intent.color?.trim()
+  if (!color || color === 'blue') return null
+  return `/${color}`
+}
+
+function ColorConnectHint({
+  colorCommand,
+  queued,
+}: {
+  colorCommand?: string | null
+  queued?: boolean
+}) {
+  return (
+    <p>
+      {queued && colorCommand ? (
+        <>
+          Type <kbd>{colorCommand}</kbd> in a Cursor chat to skip the queue and
+          connect here.{' '}
+        </>
+      ) : null}
+      Use <kbd>/coral</kbd>, <kbd>/amber</kbd>, <kbd>/lime</kbd>,{' '}
+      <kbd>/orange</kbd>, or <kbd>/violet</kbd> to connect to that color
+      {!queued && colorCommand ? (
+        <>
+          {' '}
+          — this session is <kbd>{colorCommand}</kbd>
+        </>
+      ) : null}
+      . Aliases: <kbd>/red</kbd>, <kbd>/yellow</kbd>, <kbd>/green</kbd>,{' '}
+      <kbd>/purple</kbd>. <kbd>/blue</kbd> is the global blueprint, not a chat.
+    </p>
   )
-  if (same.length < 2) return title
-  const id = intent.sessionId ?? ''
-  return `${title} · ${id.slice(-4)}`
+}
+
+function sessionDisplayName(intent: AgentIntent) {
+  return sessionLabel(intent) || sessionColorName(intent)
+}
+
+function SessionSwatch({
+  colorHex,
+  className = 'hud-session-swatch',
+}: {
+  colorHex?: string | null
+  className?: string
+}) {
+  return (
+    <span
+      className={className}
+      aria-hidden="true"
+      style={
+        colorHex
+          ? ({ '--session-color': colorHex } as CSSProperties)
+          : undefined
+      }
+    />
+  )
+}
+
+type BlueprintColorOption = BlueprintOption & { pointers: BlueprintPointer[] }
+
+function optionPointed(
+  option: BlueprintColorOption,
+  target: { kind: BlueprintPointerKind; path: string; name?: string },
+) {
+  return findBlueprintPointer(
+    option.pointers,
+    target.kind,
+    target.path,
+    target.name,
+  )
+}
+
+function placeAnchoredMenu(
+  trigger: DOMRect,
+  menuHeight: number,
+  width: number,
+  alignEnd: boolean,
+) {
+  const gap = 4
+  const pad = 8
+  const left = Math.min(
+    Math.max(pad, alignEnd ? trigger.right - width : trigger.left),
+    window.innerWidth - width - pad,
+  )
+  const spaceBelow = window.innerHeight - trigger.bottom - pad
+  const spaceAbove = trigger.top - pad
+  const openAbove =
+    menuHeight > 0 &&
+    menuHeight + gap > spaceBelow &&
+    spaceAbove > spaceBelow
+  const maxHeight = Math.max(0, (openAbove ? spaceAbove : spaceBelow) - gap)
+  const usedHeight = menuHeight > 0 ? Math.min(menuHeight, maxHeight) : 0
+  const top = openAbove
+    ? Math.max(pad, trigger.top - usedHeight - gap)
+    : trigger.bottom + gap
+  return { top, left, width, maxHeight }
+}
+
+function PointColorControl({
+  target,
+  colorPointers = [],
+  currentColorId,
+  onToggle,
+  compact = false,
+  idleLabel,
+  pointedLabel,
+  disabled = false,
+}: {
+  target: { kind: BlueprintPointerKind; path: string; name?: string }
+  colorPointers?: BlueprintColorOption[]
+  currentColorId?: string | null
+  onToggle: (color?: string) => void
+  compact?: boolean
+  idleLabel: string
+  pointedLabel: string
+  disabled?: boolean
+}) {
+  const triggerRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false)
+  const current =
+    colorPointers.find((option) => option.id === (currentColorId ?? 'global')) ??
+    colorPointers[0]
+  const currentHex = current?.hex ?? GLOBAL_BLUEPRINT_COLOR.hex
+  const pointed = current ? optionPointed(current, target) : false
+  const showMenu = colorPointers.length > 0
+
+  useLayoutEffect(() => {
+    if (!open) return
+    const place = () => {
+      const trigger = triggerRef.current
+      const menu = menuRef.current
+      if (!trigger || !menu) return
+      const rect = trigger.getBoundingClientRect()
+      const width = compact ? 168 : Math.max(rect.width, 168)
+      menu.style.maxHeight = 'none'
+      const { top, left, maxHeight } = placeAnchoredMenu(
+        rect,
+        menu.offsetHeight,
+        width,
+        compact,
+      )
+      menu.style.top = `${top}px`
+      menu.style.left = `${left}px`
+      menu.style.width = `${width}px`
+      menu.style.maxHeight = `${maxHeight}px`
+      menu.style.visibility = 'visible'
+    }
+    place()
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    return () => {
+      window.removeEventListener('resize', place)
+      window.removeEventListener('scroll', place, true)
+    }
+  }, [compact, open, colorPointers.length])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code !== 'Escape') return
+      if (shouldIgnoreShortcut(event)) return
+      event.preventDefault()
+      setOpen(false)
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const node = event.target
+      if (
+        node instanceof Element &&
+        (triggerRef.current?.contains(node) ||
+          node.closest('.hud-point-dropdown'))
+      ) {
+        return
+      }
+      setOpen(false)
+    }
+    window.addEventListener('keydown', onKey, true)
+    window.addEventListener('pointerdown', onPointerDown, true)
+    return () => {
+      window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('pointerdown', onPointerDown, true)
+    }
+  }, [open])
+
+  return (
+    <div
+      ref={triggerRef}
+      className={
+        compact ? 'hud-point-menu hud-point-menu-compact' : 'hud-point-menu'
+      }
+    >
+      <button
+        className={
+          compact ? 'hud-item-point' : 'hud-button hud-inspect hud-point'
+        }
+        type="button"
+        data-pointed={pointed ? 'true' : 'false'}
+        data-active={open}
+        aria-pressed={pointed}
+        aria-haspopup={showMenu ? 'menu' : undefined}
+        aria-expanded={showMenu ? open : undefined}
+        aria-label={compact ? (pointed ? pointedLabel : idleLabel) : undefined}
+        disabled={disabled}
+        style={
+          {
+            '--session-color': currentHex,
+          } as CSSProperties
+        }
+        onClick={() => {
+          if (!showMenu || disabled) return
+          setOpen((currentOpen) => !currentOpen)
+        }}
+      >
+        <EyeIcon size={compact ? 13 : 15} />
+        {compact ? null : pointed ? pointedLabel : idleLabel}
+      </button>
+      {open &&
+        showMenu &&
+        createPortal(
+          <div ref={menuRef} className="hud-point-dropdown" role="menu">
+            <button
+              type="button"
+              role="menuitem"
+              className="hud-point-dropdown-cancel"
+              onClick={() => setOpen(false)}
+            >
+              Cancel
+            </button>
+            {colorPointers.map((option) => {
+              const selected = optionPointed(option, target)
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="menuitem"
+                  data-pointed={selected ? 'true' : 'false'}
+                  aria-pressed={selected}
+                  style={
+                    {
+                      '--session-color': option.hex,
+                    } as CSSProperties
+                  }
+                  onClick={() => {
+                    onToggle(option.id)
+                    setOpen(false)
+                  }}
+                >
+                  <EyeIcon size={15} />
+                  <span>
+                    {option.kind === 'global' ? 'Global' : option.name}
+                  </span>
+                </button>
+              )
+            })}
+          </div>,
+          document.body,
+        )}
+    </div>
+  )
 }
 
 function fileBase(id: string) {
@@ -193,9 +449,15 @@ function MutationFold({
 function AddIntentRow({
   placeholder,
   onAdd,
+  pickLabel,
+  pickActive = false,
+  onTogglePick,
 }: {
   placeholder: string
   onAdd: (value: string) => boolean
+  pickLabel?: string
+  pickActive?: boolean
+  onTogglePick?: () => void
 }) {
   const [value, setValue] = useState('')
   return (
@@ -218,6 +480,17 @@ function AddIntentRow({
       <button className="hud-button" type="submit">
         Add
       </button>
+      {onTogglePick && pickLabel && (
+        <button
+          className="hud-button"
+          type="button"
+          data-active={pickActive ? 'true' : undefined}
+          aria-pressed={pickActive}
+          onClick={onTogglePick}
+        >
+          {pickLabel}
+        </button>
+      )}
     </form>
   )
 }
@@ -315,54 +588,71 @@ function BlueprintSymbolRow({
   className,
   hasNote,
   noteOpen,
-  pointed,
   canEdit,
   canRemove,
   onRemove,
   onOpenNote,
+  onExplain,
+  pointerTarget,
+  colorPointers,
+  currentColorId,
   onTogglePoint,
 }: {
   name: string
   className?: string
   hasNote: boolean
   noteOpen?: boolean
-  pointed?: boolean
   canEdit: boolean
   canRemove?: boolean
   onRemove?: () => void
   onOpenNote: () => void
-  onTogglePoint?: () => void
+  onExplain?: () => void
+  pointerTarget?: {
+    kind: BlueprintPointerKind
+    path: string
+    name: string
+  }
+  colorPointers?: BlueprintColorOption[]
+  currentColorId?: string | null
+  onTogglePoint?: (color?: string) => void
 }) {
+  const showActions = Boolean(onExplain) || canEdit
   return (
     <li>
       <span className={className}>{name}</span>
-      {canEdit && (
+      {showActions && (
         <div className="hud-item-actions">
-          {onTogglePoint && (
+          {onExplain ? (
+            <ExplainButton
+              compact
+              label={`Explain ${name}`}
+              onClick={onExplain}
+            />
+          ) : null}
+          {canEdit && onTogglePoint && pointerTarget && (
+            <PointColorControl
+              compact
+              target={pointerTarget}
+              colorPointers={colorPointers}
+              currentColorId={currentColorId}
+              idleLabel={`Point to ${name}`}
+              pointedLabel={`Stop pointing to ${name}`}
+              onToggle={onTogglePoint}
+            />
+          )}
+          {canEdit && (
             <button
-              className="hud-item-point"
+              className="hud-item-note"
               type="button"
-              data-pointed={pointed ? 'true' : 'false'}
-              aria-label={
-                pointed ? `Stop pointing to ${name}` : `Point to ${name}`
-              }
-              aria-pressed={Boolean(pointed)}
-              onClick={onTogglePoint}
+              data-has-note={hasNote ? 'true' : 'false'}
+              data-open={noteOpen ? 'true' : 'false'}
+              aria-label={`Edit note for ${name}`}
+              onClick={onOpenNote}
             >
-              <EyeIcon size={13} />
+              Note
             </button>
           )}
-          <button
-            className="hud-item-note"
-            type="button"
-            data-has-note={hasNote ? 'true' : 'false'}
-            data-open={noteOpen ? 'true' : 'false'}
-            aria-label={`Edit note for ${name}`}
-            onClick={onOpenNote}
-          >
-            Note
-          </button>
-          {canRemove && (
+          {canEdit && canRemove && (
             <button
               className="hud-item-remove"
               type="button"
@@ -391,6 +681,35 @@ function AttachStateBadge({ attached }: { attached: boolean }) {
   )
 }
 
+function ExplainButton({
+  label,
+  onClick,
+  compact = false,
+}: {
+  label: string
+  onClick: () => void
+  compact?: boolean
+}) {
+  return (
+    <button
+      className={
+        compact
+          ? 'hud-explain-button hud-explain-inline'
+          : 'hud-explain-button'
+      }
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={(event) => {
+        event.stopPropagation()
+        onClick()
+      }}
+    >
+      ?
+    </button>
+  )
+}
+
 function PanelChrome({
   title,
   subtitle,
@@ -398,8 +717,8 @@ function PanelChrome({
   minimized = false,
   onMinimize,
   onClose,
-  closeLabel = 'Close',
-  closeReject = false,
+  onExplain,
+  explainLabel,
 }: {
   title: ReactNode
   subtitle?: ReactNode
@@ -407,14 +726,22 @@ function PanelChrome({
   minimized?: boolean
   onMinimize?: () => void
   onClose?: () => void
-  closeLabel?: string
-  closeReject?: boolean
+  onExplain?: () => void
+  explainLabel?: string
 }) {
   return (
     <div className="hud-panel-chrome">
       <div className="hud-panel-chrome-heading">
         <div className="hud-panel-chrome-title-row">
-          <div className="hud-panel-chrome-title">{title}</div>
+          <div className="hud-panel-chrome-title">
+            {title}
+            {onExplain ? (
+              <ExplainButton
+                label={explainLabel ?? 'Explain'}
+                onClick={onExplain}
+              />
+            ) : null}
+          </div>
           {badge}
         </div>
         {subtitle ? (
@@ -434,13 +761,9 @@ function PanelChrome({
         )}
         {onClose && (
           <button
-            className={
-              closeReject
-                ? 'hud-button hud-icon-button hud-panel-control hud-button-reject'
-                : 'hud-button hud-icon-button hud-panel-control'
-            }
+            className="hud-button hud-icon-button hud-panel-control"
             type="button"
-            aria-label={closeLabel}
+            aria-label="Close"
             onClick={onClose}
           >
             ×
@@ -451,142 +774,9 @@ function PanelChrome({
   )
 }
 
-function InitialInstructionField({
-  value,
-  onChange,
-}: {
-  value: string
-  onChange: (value: string) => void
-}) {
-  return (
-    <label className="hud-instruction">
-      <textarea
-        value={value}
-        maxLength={4000}
-        rows={4}
-        placeholder="What should the LLM build?"
-        onChange={(event) => onChange(event.target.value)}
-        onKeyDown={(event) => event.stopPropagation()}
-      />
-    </label>
-  )
-}
-
-function formatFileSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-async function fileToBase64(file: File) {
-  const bytes = new Uint8Array(await file.arrayBuffer())
-  const chunk = 0x8000
-  let binary = ''
-  for (let offset = 0; offset < bytes.length; offset += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunk))
-  }
-  return btoa(binary)
-}
-
-type ContextFileInfo = {
-  id: string
-  name: string
-  mimeType: string
-  size: number
-}
-
-function ContextFileDrop({
-  files,
-  busy,
-  error,
-  onAdd,
-  onRemove,
-}: {
-  files: ContextFileInfo[]
-  busy: boolean
-  error: string | null
-  onAdd: (files: File[]) => void
-  onRemove: (fileId: string) => void
-}) {
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [over, setOver] = useState(false)
-
-  const takeFiles = (list: FileList | File[] | null) => {
-    if (!list || busy) return
-    const next = [...list].filter((file) => file.size > 0)
-    if (next.length > 0) onAdd(next)
-  }
-
-  return (
-    <div className="hud-context">
-      <button
-        className="hud-context-drop"
-        type="button"
-        data-over={over}
-        data-busy={busy}
-        disabled={busy}
-        aria-label="Attach files for the LLM"
-        onDragEnter={(event) => {
-          event.preventDefault()
-          if (event.dataTransfer.types.includes('Files')) setOver(true)
-        }}
-        onDragOver={(event) => {
-          event.preventDefault()
-          event.dataTransfer.dropEffect = 'copy'
-        }}
-        onDragLeave={(event) => {
-          if (event.currentTarget.contains(event.relatedTarget as Node)) return
-          setOver(false)
-        }}
-        onDrop={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          setOver(false)
-          takeFiles(event.dataTransfer.files)
-        }}
-        onKeyDown={(event) => event.stopPropagation()}
-        onClick={() => inputRef.current?.click()}
-      >
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          hidden
-          onChange={(event) => {
-            takeFiles(event.target.files)
-            event.target.value = ''
-          }}
-        />
-        {busy ? 'Attaching…' : 'Drop files or click to attach'}
-      </button>
-      {files.length > 0 && (
-        <ul className="hud-context-list">
-          {files.map((file) => (
-            <li key={file.id}>
-              <span className="hud-context-name" title={file.name}>
-                {file.name}
-              </span>
-              <span className="hud-context-size">{formatFileSize(file.size)}</span>
-              <button
-                className="hud-item-remove"
-                type="button"
-                aria-label={`Remove ${file.name}`}
-                disabled={busy}
-                onClick={() => onRemove(file.id)}
-              >
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {error ? <p className="hud-context-error">{error}</p> : null}
-    </div>
-  )
-}
-
 function blueprintIsDefined(intent: AgentIntent) {
   return (
+    Boolean(intent.localBlueprintEnabled) ||
     (intent.userCreatedBlocks?.length ?? 0) > 0 ||
     (intent.userCreatedIslands?.length ?? 0) > 0 ||
     (intent.blueprintFunctions?.length ?? 0) > 0 ||
@@ -598,56 +788,18 @@ function blueprintIsDefined(intent: AgentIntent) {
 }
 
 function HandshakeSetup({
-  instruction,
-  onInstructionChange,
-  contextFiles,
-  contextBusy,
-  contextError,
-  onAddContextFiles,
-  onRemoveContextFile,
   blueprintDefined,
   awaitingAttach,
   nextAttachLabel,
+  colorCommand,
 }: {
-  instruction: string
-  onInstructionChange: (value: string) => void
-  contextFiles: ContextFileInfo[]
-  contextBusy: boolean
-  contextError: string | null
-  onAddContextFiles: (files: File[]) => void
-  onRemoveContextFile: (fileId: string) => void
   blueprintDefined: boolean
   awaitingAttach: boolean
   nextAttachLabel: string | null
+  colorCommand?: string | null
 }) {
   return (
     <div className="hud-setup">
-      <section
-        className="hud-setup-section"
-        onDragOver={(event) => {
-          if (event.dataTransfer.types.includes('Files')) event.preventDefault()
-        }}
-        onDrop={(event) => {
-          event.preventDefault()
-          const dropped = [...(event.dataTransfer.files ?? [])].filter(
-            (file) => file.size > 0,
-          )
-          if (dropped.length > 0) onAddContextFiles(dropped)
-        }}
-      >
-        <h2 className="hud-setup-heading">Instructions</h2>
-        <InitialInstructionField
-          value={instruction}
-          onChange={onInstructionChange}
-        />
-        <ContextFileDrop
-          files={contextFiles}
-          busy={contextBusy}
-          error={contextError}
-          onAdd={onAddContextFiles}
-          onRemove={onRemoveContextFile}
-        />
-      </section>
       <section className="hud-setup-section">
         <h2 className="hud-setup-heading">
           Blueprint
@@ -659,27 +811,32 @@ function HandshakeSetup({
           </span>
         </h2>
         <p>
-          Press <kbd>Space</kbd> for a file and <kbd>B</kbd> for an island.
-          On the map, right-click to add a file or folder. Open a file's info
-          panel to add functions, vars, and notes (instructions or pseudo
-          code). The blueprint is shared across sessions.
+          Right-click to create files and folders. Open a file's
+          info panel to add functions, vars, and notes (instructions or
+          pseudo code). Every chat receives the global (blue) blueprint plus
+          this session's color.
         </p>
       </section>
       <section className="hud-setup-section">
         <h2 className="hud-setup-heading">Start</h2>
         {awaitingAttach && nextAttachLabel ? (
-          <p>
-            <kbd>/inbase</kbd> attaches {nextAttachLabel} first. This session
-            stays in the queue.
-          </p>
+          <>
+            <p>
+              The next Cursor chat connects to {nextAttachLabel} first. This
+              session stays in the queue.
+            </p>
+            <ColorConnectHint colorCommand={colorCommand} queued />
+          </>
         ) : awaitingAttach ? (
-          <p>
-            Run <kbd>/inbase</kbd> in a Cursor chat to connect and start.
-          </p>
+          <>
+            <p>
+              Open a Cursor chat to connect and start. A regular chat takes
+              the next empty slot.
+            </p>
+            <ColorConnectHint colorCommand={colorCommand} />
+          </>
         ) : (
-          <p>
-            This window is attached. Starting from <kbd>/inbase</kbd>…
-          </p>
+          <p>This window is attached. Starting from the Cursor chat…</p>
         )}
       </section>
     </div>
@@ -701,7 +858,16 @@ function sessionLiveStatus(intent: AgentIntent) {
     return { text: 'LLM wait timed out', busy: false }
   }
   if (intent.awaitingAttach) {
-    return { text: 'Waiting for /inbase in Cursor', busy: false }
+    return { text: 'Waiting for a Cursor chat', busy: false }
+  }
+  if (intent.llmIdle) {
+    return { text: 'LLM disconnected', busy: false }
+  }
+  if (intent.pendingExplain) {
+    return { text: 'Starting an explanation…', busy: true }
+  }
+  if (kind === 'explain' && !intent.listening) {
+    return { text: 'LLM is explaining this proposal on the map', busy: true }
   }
   if (intent.status === 'pending') {
     return intent.listening
@@ -743,9 +909,6 @@ function sessionLiveStatus(intent: AgentIntent) {
   ) {
     return { text: 'LLM attached', busy: true }
   }
-  if (intent.llmIdle) {
-    return { text: 'LLM is idle', busy: false }
-  }
   return { text: 'LLM connected', busy: true }
 }
 
@@ -753,12 +916,16 @@ function LiveStatus({
   intent,
   showStop = false,
   onStop,
+  startingExplain = false,
 }: {
   intent: AgentIntent
   showStop?: boolean
   onStop?: () => void
+  startingExplain?: boolean
 }) {
-  const status = sessionLiveStatus(intent)
+  const status = startingExplain && !intent.pendingExplain
+    ? { text: 'Starting an explanation…', busy: true }
+    : sessionLiveStatus(intent)
   const [flash, setFlash] = useState(false)
   const lastAt = intent.lastAck?.at
 
@@ -783,6 +950,12 @@ function LiveStatus({
         </button>
       ) : null}
     </div>
+  )
+}
+
+function PlaceFilesHint() {
+  return (
+    <p className="hud-place-hint">Right-click to create files and folders.</p>
   )
 }
 
@@ -811,14 +984,7 @@ function SessionPanel({
 }: SessionPanelProps) {
   const [minimized, setMinimized] = useState(false)
   const [instruction, setInstruction] = useState('')
-  const [initialInstruction, setInitialInstruction] = useState(
-    () => intent.initialInstruction ?? '',
-  )
-  const [contextFiles, setContextFiles] = useState<ContextFileInfo[]>(
-    () => intent.contextFiles ?? [],
-  )
-  const [contextBusy, setContextBusy] = useState(false)
-  const [contextError, setContextError] = useState<string | null>(null)
+  const [startingExplain, setStartingExplain] = useState(false)
   const sessionId = intent.sessionId
   const latestEntry = intent.isActiveDiff ? intent.chain.at(-1) : null
   const pending =
@@ -863,8 +1029,10 @@ function SessionPanel({
     planReady && !working && proposalStep === null
       ? (intent.steps.find((step) => !acceptedSteps.has(step.index)) ?? null)
       : null
-  const canRunNext = stepByStep && Boolean(invokeStep)
-  const canAcceptProposal = proposalStep !== null
+  const llmDisconnected =
+    Boolean(intent.llmIdle) && intent.awaitingAttach === false
+  const canRunNext = stepByStep && Boolean(invokeStep) && !llmDisconnected
+  const canAcceptProposal = proposalStep !== null && !llmDisconnected
   const lastStep =
     typeof proposalStep === 'number' &&
     intent.steps.length > 0 &&
@@ -877,75 +1045,29 @@ function SessionPanel({
 
   useEffect(() => {
     setInstruction('')
-  }, [intent.diffId])
+    setStartingExplain(false)
+  }, [intent.diffId, sessionId])
 
   useEffect(() => {
-    setInitialInstruction(intent.initialInstruction ?? '')
-    setContextFiles(intent.contextFiles ?? [])
-    setContextError(null)
-  }, [sessionId])
-
-  useEffect(() => {
-    if (contextBusy) return
-    setContextFiles(intent.contextFiles ?? [])
-  }, [contextBusy, intent.contextFiles])
+    if (intent.pendingExplain) setStartingExplain(false)
+  }, [intent.pendingExplain])
 
   if (!sessionId || !isReviewingIntent(intent.status)) return null
 
-  const updateInitialInstruction = (value: string) => {
-    setInitialInstruction(value)
-    persistInitialInstruction(sessionId, value)
-  }
-
-  const addContextFiles = (files: File[]) => {
-    setContextBusy(true)
-    setContextError(null)
-    void Promise.all(
-      files.map(async (file) => ({
-        name: file.name,
-        mimeType: file.type || 'application/octet-stream',
-        contentBase64: await fileToBase64(file),
-      })),
-    )
-      .then((payload) => persistAddContextFiles(sessionId, payload))
-      .then((next) => {
-        setContextFiles(next.contextFiles ?? [])
-      })
-      .catch((caught) => {
-        setContextError(
-          caught instanceof Error ? caught.message : 'Could not attach files',
-        )
-      })
-      .finally(() => setContextBusy(false))
-  }
-
-  const removeContextFile = (fileId: string) => {
-    setContextBusy(true)
-    setContextError(null)
-    void persistRemoveContextFile(sessionId, fileId)
-      .then((next) => {
-        setContextFiles(next.contextFiles ?? [])
-      })
-      .catch((caught) => {
-        setContextError(
-          caught instanceof Error ? caught.message : 'Could not remove file',
-        )
-      })
-      .finally(() => setContextBusy(false))
-  }
-
-  const showInitialInstruction =
+  const handshakeSetup =
     Boolean(intent.awaitingAttach) &&
     (askingBlueprint || sendingBlueprint || preparing)
-  const handshakeSetup = showInitialInstruction
   const llmConnected = intent.awaitingAttach === false
   const showConnectedProgress =
-    llmConnected && (askingBlueprint || sendingBlueprint || preparing)
+    llmConnected && !llmDisconnected && (askingBlueprint || sendingBlueprint || preparing)
+  const showPlaceHint =
+    canPlace && !intent.working && !askingBlueprint && !sendingBlueprint
+  const liveHasStop = showConnectedProgress || working || llmDisconnected
   const queuedBehind =
     intent.awaitingAttach &&
     nextAttachSession &&
     nextAttachSession.sessionId !== sessionId
-      ? sessionLabel(nextAttachSession) || 'an earlier session'
+      ? sessionDisplayName(nextAttachSession) || 'an earlier session'
       : null
 
   const act = (
@@ -962,50 +1084,64 @@ function SessionPanel({
       }
       data-minimized={minimized}
       data-focused={focused}
-      data-attached={llmConnected}
+      data-attached={llmConnected && !llmDisconnected}
       onPointerDown={onFocus}
     >
       <PanelChrome
         title={
-          sessionLabel(intent) ||
-          (showConnectedProgress ? 'LLM connected' : reviewTitle(intent.status))
+          <>
+            <SessionSwatch colorHex={intent.colorHex} />
+            <span className="hud-panel-chrome-title-text">
+              {sessionDisplayName(intent) ||
+                (showConnectedProgress
+                  ? 'LLM connected'
+                  : reviewTitle(intent.status))}
+            </span>
+          </>
         }
         subtitle={
           sessionLabel(intent)
             ? showConnectedProgress
               ? 'LLM connected'
               : reviewTitle(intent.status)
-            : undefined
+            : sessionColorName(intent)
+              ? showConnectedProgress
+                ? 'LLM connected'
+                : reviewTitle(intent.status)
+              : undefined
         }
-        badge={<AttachStateBadge attached={llmConnected} />}
+        badge={<AttachStateBadge attached={llmConnected && !llmDisconnected} />}
         minimized={minimized}
         onMinimize={() => setMinimized((current) => !current)}
-        onClose={() => act('stop')}
-        closeLabel="Stop session"
-        closeReject
       />
       {!minimized && (
         <>
           {!intent.awaitingAttach && (
-            <LiveStatus
-              intent={intent}
-              showStop={showConnectedProgress || working}
-              onStop={() => act('stop')}
-            />
+            <>
+              {showPlaceHint && !planReady && !pending && <PlaceFilesHint />}
+              <LiveStatus
+                intent={intent}
+                showStop={liveHasStop}
+                startingExplain={startingExplain}
+                onStop={() => act('stop')}
+              />
+            </>
           )}
-          <label className="hud-mode-switch">
-            <span>Step by step</span>
-            <button
-              className="hud-switch"
-              type="button"
-              role="switch"
-              aria-checked={stepByStep}
-              aria-label="Step by step"
-              onKeyDown={(event) => event.stopPropagation()}
-              onClick={() => act('set_step_by_step', { stepByStep: !stepByStep })}
-            />
-          </label>
-          {!stepByStep && (
+          {!llmDisconnected && (
+            <label className="hud-mode-switch">
+              <span>Step by step</span>
+              <button
+                className="hud-switch"
+                type="button"
+                role="switch"
+                aria-checked={stepByStep}
+                aria-label="Step by step"
+                onKeyDown={(event) => event.stopPropagation()}
+                onClick={() => act('set_step_by_step', { stepByStep: !stepByStep })}
+              />
+            </label>
+          )}
+          {!llmDisconnected && !stepByStep && (
             <p className="hud-mode-hint">
               LLM implements the full plan. You can still walk the diffs, then
               Accept proposal.
@@ -1013,41 +1149,49 @@ function SessionPanel({
           )}
           {handshakeSetup ? (
             <HandshakeSetup
-              instruction={initialInstruction}
-              onInstructionChange={updateInitialInstruction}
-              contextFiles={contextFiles}
-              contextBusy={contextBusy}
-              contextError={contextError}
-              onAddContextFiles={addContextFiles}
-              onRemoveContextFile={removeContextFile}
               blueprintDefined={blueprintIsDefined(intent)}
               awaitingAttach={Boolean(intent.awaitingAttach)}
               nextAttachLabel={queuedBehind}
+              colorCommand={sessionSlashCommand(intent)}
             />
           ) : intent.awaitingAttach ? (
             queuedBehind ? (
-              <p className="hud-mode-hint">
-                <kbd>/inbase</kbd> attaches {queuedBehind} first. This session
-                stays in the queue.
-              </p>
+              <div className="hud-mode-hint">
+                <p>
+                  The next Cursor chat connects to {queuedBehind} first. This
+                  session stays in the queue.
+                </p>
+                <ColorConnectHint
+                  colorCommand={sessionSlashCommand(intent)}
+                  queued
+                />
+              </div>
             ) : (
-              <p className="hud-mode-hint">
-                No LLM is attached. Open a Cursor chat and run{' '}
-                <kbd>/inbase</kbd>. It connects to the next waiting session.
-              </p>
+              <div className="hud-mode-hint">
+                <p>
+                  No LLM is attached. Open a Cursor chat — it connects to the
+                  next waiting session.
+                </p>
+                <ColorConnectHint colorCommand={sessionSlashCommand(intent)} />
+              </div>
             )
+          ) : null}
+          {llmDisconnected ? (
+            <p className="hud-mode-hint">
+              This chat is no longer connected. The session will reset.
+            </p>
           ) : null}
           {intent.feature &&
             !handshakeSetup &&
             intent.feature.trim() !== sessionLabel(intent) && (
               <p className="hud-feature">{intent.feature}</p>
             )}
-          {askingBlueprint && !handshakeSetup && !showConnectedProgress ? (
+          {askingBlueprint && !handshakeSetup && !showConnectedProgress && !llmDisconnected ? (
             <>
               <p>
-                A shared blueprint is already available on the map. Send this
-                session to the LLM, or skip and let it continue with the current
-                layout.
+                This chat receives the global (blue) blueprint and this
+                session's color. Send it to the LLM, or skip and let it
+                continue with the current layout.
               </p>
               <div className="hud-decide">
                 <button
@@ -1076,20 +1220,13 @@ function SessionPanel({
           ) : handshakeSetup ? null : intent.status === 'finished' ? (
             <p>All plan steps were applied.</p>
           ) : showConnectedProgress || preparing ? null : (
-            <p>
+            <p className="hud-step-label">
               {stepLabel}
               {intent.reason ? ` · ${intent.reason}` : ''}
             </p>
           )}
           {!askingBlueprint && !sendingBlueprint && (
             <>
-              {canPlace && !intent.working && (
-                <p>
-                  On the map, right-click to add a file or folder.{' '}
-                  <kbd>Space</kbd> places a file, <kbd>B</kbd> an island while
-                  walking.
-                </p>
-              )}
               {intent.steps?.length > 0 && (
                 <ol className="hud-steps">
                   {intent.steps.map((step) => {
@@ -1097,6 +1234,8 @@ function SessionPanel({
                     const processing = processingStep === step.index
                     const accepted = acceptedSteps.has(step.index) && !proposed
                     const creating = processing && !proposed
+                    const explaining =
+                      startingExplain || Boolean(intent.pendingExplain)
                     const showStepAction =
                       creating ||
                       (canRunNext && invokeStep?.index === step.index) ||
@@ -1111,29 +1250,54 @@ function SessionPanel({
                         <span className="hud-step-main">
                           <span className="hud-step-title">{step.title}</span>
                           {showStepAction && (
-                            <button
-                              className="hud-button hud-button-approve hud-run-step"
-                              type="button"
-                              disabled={creating}
-                              aria-busy={creating}
-                              onClick={() =>
-                                proposed
-                                  ? lastStep
-                                    ? act('continue')
+                            <span className="hud-step-actions">
+                              <button
+                                className="hud-button hud-button-approve hud-run-step"
+                                type="button"
+                                disabled={creating}
+                                aria-busy={creating}
+                                onClick={() =>
+                                  proposed
+                                    ? lastStep
+                                      ? act('continue')
+                                      : act('invoke', {
+                                          step: step.index + 1,
+                                        })
                                     : act('invoke', {
-                                        step: step.index + 1,
+                                        step: step.index,
                                       })
-                                  : act('invoke', {
-                                      step: step.index,
+                                }
+                              >
+                                {proposed
+                                  ? 'Accept proposal'
+                                  : creating
+                                    ? 'Creating proposal…'
+                                    : 'Create proposal'}
+                              </button>
+                              {!creating && (
+                                <button
+                                  className="hud-button hud-button-approve hud-run-step"
+                                  type="button"
+                                  disabled={explaining}
+                                  aria-busy={explaining}
+                                  onClick={() => {
+                                    setStartingExplain(true)
+                                    void Promise.resolve(
+                                      onWorkflowAction(
+                                        sessionId,
+                                        'explain_proposal',
+                                      ),
+                                    ).then((ok) => {
+                                      if (ok === false) setStartingExplain(false)
                                     })
-                              }
-                            >
-                              {proposed
-                                ? 'Accept proposal'
-                                : creating
-                                  ? 'Creating proposal…'
-                                  : 'Create proposal'}
-                            </button>
+                                  }}
+                                >
+                                  {explaining
+                                    ? 'Starting explanation…'
+                                    : 'Explain proposal'}
+                                </button>
+                              )}
+                            </span>
                           )}
                         </span>
                       </li>
@@ -1200,7 +1364,7 @@ function SessionPanel({
                 {(intent.createFolders ?? []).length > 0 && (
                   <>
                     <div className="hud-section-title hud-section-title-add">
-                      Added islands
+                      Added folders
                     </div>
                     <ul>
                       {intent.createFolders.map((id) => (
@@ -1276,17 +1440,20 @@ function SessionPanel({
                 )}
               </MutationFold>
               {planReady && (
-                <div className="hud-decide">
-                  <button
-                    className="hud-button hud-button-reject"
-                    type="button"
-                    onClick={() => act('stop')}
-                  >
-                    Stop
-                  </button>
+                <div className="hud-session-actions">
+                  {showPlaceHint && <PlaceFilesHint />}
+                  <div className="hud-decide">
+                    <button
+                      className="hud-button hud-button-reject"
+                      type="button"
+                      onClick={() => act('stop')}
+                    >
+                      Stop
+                    </button>
+                  </div>
                 </div>
               )}
-              {pending && (
+              {pending && !llmDisconnected && (
                 <>
                   <label className="hud-instruction">
                     <span>Alternative instruction for the LLM</span>
@@ -1299,24 +1466,27 @@ function SessionPanel({
                       onKeyDown={(event) => event.stopPropagation()}
                     />
                   </label>
-                  <div className="hud-decide">
-                    <button
-                      className="hud-button hud-button-extend"
-                      type="button"
-                      disabled={!instruction.trim()}
-                      onClick={() =>
-                        act('instruct', { instruction })
-                      }
-                    >
-                      Send instruction
-                    </button>
-                    <button
-                      className="hud-button hud-button-reject"
-                      type="button"
-                      onClick={() => act('stop')}
-                    >
-                      Stop
-                    </button>
+                  <div className="hud-session-actions">
+                    {showPlaceHint && <PlaceFilesHint />}
+                    <div className="hud-decide">
+                      <button
+                        className="hud-button hud-button-extend"
+                        type="button"
+                        disabled={!instruction.trim()}
+                        onClick={() =>
+                          act('instruct', { instruction })
+                        }
+                      >
+                        Send instruction
+                      </button>
+                      <button
+                        className="hud-button hud-button-reject"
+                        type="button"
+                        onClick={() => act('stop')}
+                      >
+                        Stop
+                      </button>
+                    </div>
                   </div>
                 </>
               )}
@@ -1391,7 +1561,7 @@ function BranchChangesPanel({
               {(changes.createFolders ?? []).length > 0 && (
                 <>
                   <div className="hud-section-title hud-section-title-add">
-                    Added islands
+                    Added folders
                   </div>
                   <ul>
                     {changes.createFolders.map((id) => (
@@ -1459,7 +1629,7 @@ type ExplorerInstruction = {
   label: string
 }
 
-type InstructionView = 'walk' | '3dview' | 'map'
+type InstructionView = 'walk' | 'map'
 
 type ExplorerInstructionSection = {
   id: InstructionView
@@ -1492,10 +1662,7 @@ function explorerInstructions({
   changePathsOnly,
   selectedUserCreated,
   infoVisible,
-  thumbnailVisible,
   importedBy,
-  canStop,
-  sessionCount,
   showBranchChanges,
   canShowBranchChanges,
 }: {
@@ -1504,10 +1671,7 @@ function explorerInstructions({
   changePathsOnly: boolean
   selectedUserCreated: boolean
   infoVisible: boolean
-  thumbnailVisible: boolean
   importedBy: boolean
-  canStop: boolean
-  sessionCount: number
   showBranchChanges: boolean
   canShowBranchChanges: boolean
 }): ExplorerInstructionSection[] {
@@ -1541,23 +1705,6 @@ function explorerInstructions({
         },
       ]
     : []
-  const stop: ExplorerInstruction[] = canStop
-    ? [
-        {
-          id: 'stop',
-          keys: ['Stop'],
-          label:
-            sessionCount > 1
-              ? 'Ends the focused LLM session'
-              : 'Ends this LLM session',
-        },
-      ]
-    : []
-  const thumbnail: ExplorerInstruction = {
-    id: 'thumbnail',
-    keys: ['T'],
-    label: thumbnailVisible ? 'Hide 3D view' : 'Show 3D view',
-  }
   return [
     {
       id: 'walk',
@@ -1568,8 +1715,6 @@ function explorerInstructions({
         { id: 'shift', keys: ['Shift'], label: 'Sprint' },
         ...(canPlace
           ? [
-              { id: 'space', keys: ['Space'], label: 'Place file' },
-              { id: 'b-island', keys: ['B'], label: 'Place island' },
               {
                 id: 'point-to',
                 keys: ['Point to'],
@@ -1581,7 +1726,7 @@ function explorerInstructions({
         {
           id: 'dblclick-info',
           keys: ['Double-click'],
-          label: 'A block for info',
+          label: 'A file or folder for info',
         },
         { id: 'aim-line', keys: ['Click'], label: 'Aim a line to fly' },
         ...info,
@@ -1590,26 +1735,33 @@ function explorerInstructions({
         {
           id: 'update-model',
           keys: ['Update model'],
-          label: 'Rescan and rebuild the map',
+          label: 'Rescan files and folders',
         },
         {
-          id: 'setup-session',
-          keys: ['Setup LLM session'],
-          label: 'Open a session; /inbase attaches the oldest waiting one',
+          id: 'cursor-chat',
+          keys: ['Cursor chat'],
+          label:
+            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /explain for explain mode; 5 chats at once',
+        },
+        {
+          id: 'blueprint-select',
+          keys: ['Blueprint colors'],
+          label:
+            'All colors stay visible; the selected color is where new files go',
         },
         {
           id: 'blueprint-toggle',
-          keys: ['Hide/Show blueprint'],
-          label: 'Toggle the shared blueprint overlay',
+          keys: ['Hide/Show'],
+          label: 'Hide this color; other blueprint colors stay visible',
         },
         {
           id: 'blueprint-clear',
-          keys: ['Clear blueprint'],
+          keys: ['Clear'],
           label: 'Remove every planned file and folder',
         },
         {
           id: 'blueprint-cleanup',
-          keys: ['Cleanup blueprint'],
+          keys: ['Cleanup'],
           label: 'Drop blueprint files and folders that already exist',
         },
         { id: 'toggle-map', keys: ['M'], label: 'Toggle map' },
@@ -1618,26 +1770,6 @@ function explorerInstructions({
           keys: ['Double-click', 'Esc'],
           label: 'Release mouse',
         },
-        ...stop,
-      ],
-    },
-    {
-      id: '3dview',
-      title: '3D view',
-      items: [
-        { id: 'scroll-zoom', keys: ['Scroll'], label: 'Zoom' },
-        { id: 'drag-pan', keys: ['Drag'], label: 'Pan' },
-        {
-          id: 'cmd-drag-rotate',
-          keys: ['⌘', 'Ctrl', 'Drag'],
-          label: 'Rotate',
-        },
-        {
-          id: 'dblclick-reset',
-          keys: ['Double-click'],
-          label: 'Reset view',
-        },
-        thumbnail,
       ],
     },
     {
@@ -1646,26 +1778,26 @@ function explorerInstructions({
       items: [
         { id: 'scroll-zoom', keys: ['Scroll'], label: 'Zoom' },
         { id: 'drag-pan', keys: ['Drag'], label: 'Pan' },
-        { id: 'click-block', keys: ['Click'], label: 'A block for info' },
+        { id: 'click-block', keys: ['Click'], label: 'A file for info' },
         {
           id: 'click-island',
           keys: ['Click'],
-          label: 'An island for its files',
+          label: 'A folder for its files',
         },
         ...(canPlace
           ? [
-              { id: 'select-island', keys: ['Click'], label: 'Select an island' },
+              { id: 'select-island', keys: ['Click'], label: 'Select a folder' },
               {
                 id: 'add-file-folder',
                 keys: ['Right-click'],
-                label: 'Add file or folder, or point to a folder',
+                label: 'Create a file or folder, or point to a folder',
               },
             ]
           : []),
         {
           id: 'option-click-walk',
           keys: ['Option', 'Click'],
-          label: 'An island to walk',
+          label: 'A folder to walk',
         },
         {
           id: 'gold-pin',
@@ -1685,36 +1817,41 @@ function explorerInstructions({
           : []),
         ...backspace,
         ...info,
-        thumbnail,
         imported,
         ...branch,
         {
           id: 'update-model',
           keys: ['Update model'],
-          label: 'Rescan and rebuild the map',
+          label: 'Rescan files and folders',
         },
         {
-          id: 'setup-session',
-          keys: ['Setup LLM session'],
-          label: 'Open a session; /inbase attaches the oldest waiting one',
+          id: 'cursor-chat',
+          keys: ['Cursor chat'],
+          label:
+            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /explain for explain mode; 5 chats at once',
+        },
+        {
+          id: 'blueprint-select',
+          keys: ['Blueprint colors'],
+          label:
+            'All colors stay visible; the selected color is where new files go',
         },
         {
           id: 'blueprint-toggle',
-          keys: ['Hide/Show blueprint'],
-          label: 'Toggle the shared blueprint overlay',
+          keys: ['Hide/Show'],
+          label: 'Hide this color; other blueprint colors stay visible',
         },
         {
           id: 'blueprint-clear',
-          keys: ['Clear blueprint'],
+          keys: ['Clear'],
           label: 'Remove every planned file and folder',
         },
         {
           id: 'blueprint-cleanup',
-          keys: ['Cleanup blueprint'],
+          keys: ['Cleanup'],
           label: 'Drop blueprint files and folders that already exist',
         },
         { id: 'map-walk', keys: ['M'], label: 'Back to walk' },
-        ...stop,
       ],
     },
   ]
@@ -1722,14 +1859,12 @@ function explorerInstructions({
 
 type HUDProps = {
   graph: CodebaseGraph
-  layout: WorldLayout
   mode: ViewMode
   locked: boolean
   selectedId: string | null
   selectedTick?: number
   inspectTick?: number
   selectedFolder?: string | null
-  landAt: [number, number]
   aimedRelation: AimedRelation | null
   aimedFileId?: string | null
   intent: AgentIntent
@@ -1737,7 +1872,6 @@ type HUDProps = {
   focusedSessionId?: string | null
   nextAttachSessionId?: string | null
   onFocusSession?: (sessionId: string) => void
-  onSetupSession?: () => Promise<unknown>
   onWorkflowAction: (
     sessionId: string,
     action: WorkflowAction,
@@ -1746,8 +1880,6 @@ type HUDProps = {
   onNavigateDiff: (sessionId: string, diffId: string) => void
   onOpenMap: () => void
   onWalk: () => void
-  followLook: boolean
-  onToggleFollowLook: () => void
   showBranchChanges?: boolean
   branchChanges?: BranchChanges
   canShowBranchChanges?: boolean
@@ -1772,6 +1904,9 @@ type HUDProps = {
   onAddBlueprintFunction?: (fileId: string, name: string) => boolean
   onAddBlueprintVariable?: (fileId: string, name: string) => boolean
   onAddBlueprintImport?: (fileId: string, raw: string) => boolean
+  importPickActive?: boolean
+  onToggleImportPick?: () => void
+  onCancelImportPick?: () => void
   onRemoveBlueprintFunction?: (fileId: string, name: string) => void
   onRemoveBlueprintVariable?: (fileId: string, name: string) => void
   onRemoveBlueprintImport?: (
@@ -1789,32 +1924,40 @@ type HUDProps = {
     kind: BlueprintPointerKind
     path: string
     name?: string
+    color?: string
   }) => void
   onMapAddFile?: (folderPath: string) => void
   onMapAddFolder?: (folderPath: string) => void
+  onRenameCreatedFile?: (fileId: string, name: string) => string | null
   onInspectFile?: (fileId: string) => void
   onInspectBlock?: (fileId: string) => void
-  plannedIds?: string[]
-  createdIds?: string[]
-  deletedIds?: string[]
+  onExplainTarget?: (input: {
+    kind: ExplainTargetKind
+    path: string
+    name?: string
+  }) => void
   blueprintHidden?: boolean
   blueprintHasContent?: boolean
   blueprintCanCleanup?: boolean
+  blueprintColor?: string | null
+  blueprintOptions?: BlueprintOption[]
+  blueprintColorPointers?: BlueprintColorOption[]
+  onSelectBlueprintColor?: (color: string) => void
   onToggleBlueprintHidden?: () => void
   onClearBlueprint?: () => void
   onCleanupBlueprint?: () => void
+  devTargets?: DevTargetsState
+  onSelectDevTarget?: (id: string) => void
 }
 
 export function HUD({
   graph,
-  layout,
   mode,
   locked,
   selectedId,
   selectedTick = 0,
   inspectTick = 0,
   selectedFolder = null,
-  landAt,
   aimedRelation,
   aimedFileId = null,
   intent,
@@ -1822,13 +1965,10 @@ export function HUD({
   focusedSessionId = null,
   nextAttachSessionId = null,
   onFocusSession,
-  onSetupSession,
   onWorkflowAction,
   onNavigateDiff,
   onOpenMap,
   onWalk,
-  followLook,
-  onToggleFollowLook,
   showBranchChanges = false,
   branchChanges,
   canShowBranchChanges = false,
@@ -1849,10 +1989,12 @@ export function HUD({
   blueprintVariables = [],
   blueprintImports = [],
   blueprintNotes = [],
-  blueprintPointers = [],
   onAddBlueprintFunction,
   onAddBlueprintVariable,
   onAddBlueprintImport,
+  importPickActive = false,
+  onToggleImportPick,
+  onCancelImportPick,
   onRemoveBlueprintFunction,
   onRemoveBlueprintVariable,
   onRemoveBlueprintImport,
@@ -1860,17 +2002,22 @@ export function HUD({
   onToggleBlueprintPointer,
   onMapAddFile,
   onMapAddFolder,
+  onRenameCreatedFile,
   onInspectFile,
   onInspectBlock,
-  plannedIds = [],
-  createdIds = [],
-  deletedIds = [],
+  onExplainTarget,
   blueprintHidden = false,
   blueprintHasContent = false,
   blueprintCanCleanup = false,
+  blueprintColor = null,
+  blueprintOptions = [],
+  blueprintColorPointers = [],
+  onSelectBlueprintColor,
   onToggleBlueprintHidden,
   onClearBlueprint,
   onCleanupBlueprint,
+  devTargets,
+  onSelectDevTarget,
 }: HUDProps) {
   const selected = graph.files.find((file) => file.id === selectedId)
   const selectedFolderNode = graph.folders.find(
@@ -1891,7 +2038,6 @@ export function HUD({
   const sessions = (intents ?? [intent]).filter(
     (item) => item.sessionId && isReviewingIntent(item.status),
   )
-  const canStop = canStopSession(intent)
   const nextAttachSession =
     sessions.find((session) => session.sessionId === nextAttachSessionId) ??
     [...sessions].reverse().find((session) => session.awaitingAttach) ??
@@ -1899,6 +2045,9 @@ export function HUD({
   const [walkIntro, setWalkIntro] = useState(false)
   const walkIntroSeen = useRef(false)
   const [instructionsOpen, setInstructionsOpen] = useState(false)
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false)
+  const [actionsMenuPosition, setActionsMenuPosition] = useState<CSSProperties>()
+  const actionsMenuRef = useRef<HTMLDivElement>(null)
   const [noteEditor, setNoteEditor] = useState<{
     file: string
     kind: BlueprintNoteKind
@@ -1907,13 +2056,8 @@ export function HUD({
     subtitle: string
     placeholder: string
   } | null>(null)
-  const [setupError, setSetupError] = useState<string | null>(null)
-  const [setupBusy, setSetupBusy] = useState(false)
   const [infoVisible, setInfoVisible] = useState(false)
   const [infoMinimized, setInfoMinimized] = useState(false)
-  const [thumbnailVisible, setThumbnailVisible] = useState(true)
-  const [thumbnailMinimized, setThumbnailMinimized] = useState(false)
-  const [thumbnailMaximized, setThumbnailMaximized] = useState(false)
   const infoPanelRef = useRef<HTMLDivElement>(null)
   const canPlace = true
   const overlay = showBranchChanges && branchChanges ? branchChanges : intent
@@ -1984,19 +2128,23 @@ export function HUD({
   )
   const canEditBlueprint =
     canPlace && Boolean(selected) && !selected?.id.startsWith('draft:')
+  const canRenameSelected =
+    Boolean(onRenameCreatedFile) &&
+    Boolean(selected?.userCreated) &&
+    !selected?.id.startsWith('draft:')
+  const renameSelectedFile = (nextName: string) => {
+    if (!selected || !onRenameCreatedFile) return false
+    const previousId = selected.id
+    const nextId = onRenameCreatedFile(previousId, nextName)
+    if (!nextId) return false
+    setNoteEditor((current) =>
+      current?.file === previousId ? { ...current, file: nextId } : current,
+    )
+    return true
+  }
   const selectedFileNote = selected
     ? findBlueprintNote(blueprintNotes, selected.id, 'file')
     : ''
-  const selectedFilePointed = selected
-    ? findBlueprintPointer(blueprintPointers, 'file', selected.id)
-    : false
-  const selectedFolderPointed = selectedFolderNode
-    ? findBlueprintPointer(
-        blueprintPointers,
-        'folder',
-        selectedFolderNode.path,
-      )
-    : false
   const openFileNote = () => {
     if (!selected || !onSetBlueprintNote) return
     setInstructionsOpen(false)
@@ -2074,6 +2222,11 @@ export function HUD({
     setInfoMinimized(false)
   }, [locked])
 
+  useEffect(() => {
+    if (infoVisible || !importPickActive) return
+    onCancelImportPick?.()
+  }, [importPickActive, infoVisible, onCancelImportPick])
+
   const infoOpen = infoVisible && Boolean(selected || selectedFolderNode)
 
   useEffect(() => {
@@ -2103,26 +2256,6 @@ export function HUD({
   }, [aimedFileId, infoVisible, mode, onInspectBlock, selectedId])
 
   useEffect(() => {
-    if (!mapping) return
-    const onKey = (event: KeyboardEvent) => {
-      if (event.repeat || event.code !== 'KeyT') return
-      if (shouldIgnoreShortcut(event)) return
-      event.preventDefault()
-      setThumbnailVisible((visible) => {
-        if (!visible) {
-          setThumbnailMinimized(false)
-          setThumbnailMaximized(false)
-        } else {
-          setThumbnailMaximized(false)
-        }
-        return !visible
-      })
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [mapping])
-
-  useEffect(() => {
     if (!infoVisible || (!selectedId && !selectedFolder)) return
     const onKey = (event: KeyboardEvent) => {
       if (event.code !== 'ArrowUp' && event.code !== 'ArrowDown') return
@@ -2141,6 +2274,7 @@ export function HUD({
   useEffect(() => {
     if (!instructionsOpen) return
     document.exitPointerLock()
+    setActionsMenuOpen(false)
     const onKey = (event: KeyboardEvent) => {
       if (event.code !== 'Escape') return
       if (shouldIgnoreShortcut(event)) return
@@ -2152,24 +2286,61 @@ export function HUD({
     return () => window.removeEventListener('keydown', onKey, true)
   }, [instructionsOpen])
 
+  useLayoutEffect(() => {
+    if (!actionsMenuOpen) return
+    const updatePosition = () => {
+      const trigger = actionsMenuRef.current
+      if (!trigger) return
+      const rect = trigger.getBoundingClientRect()
+      setActionsMenuPosition({
+        right: window.innerWidth - rect.right,
+        bottom: window.innerHeight - rect.top + 8,
+      })
+    }
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    return () => window.removeEventListener('resize', updatePosition)
+  }, [actionsMenuOpen])
+
+  useEffect(() => {
+    if (!actionsMenuOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code !== 'Escape') return
+      if (shouldIgnoreShortcut(event)) return
+      event.preventDefault()
+      event.stopPropagation()
+      setActionsMenuOpen(false)
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (
+        target instanceof Element &&
+        (actionsMenuRef.current?.contains(target) ||
+          target.closest('.hud-actions-menu-list'))
+      ) {
+        return
+      }
+      setActionsMenuOpen(false)
+    }
+    window.addEventListener('keydown', onKey, true)
+    window.addEventListener('pointerdown', onPointerDown, true)
+    return () => {
+      window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('pointerdown', onPointerDown, true)
+    }
+  }, [actionsMenuOpen])
+
   const instructionSections = explorerInstructions({
     canPlace,
     hasChangeSet,
     changePathsOnly,
     selectedUserCreated: Boolean(selected?.userCreated),
     infoVisible,
-    thumbnailVisible,
     importedBy,
-    canStop,
-    sessionCount: sessions.length,
     showBranchChanges,
     canShowBranchChanges,
   })
-  const currentInstructionView: InstructionView = mapping
-    ? thumbnailMaximized
-      ? '3dview'
-      : 'map'
-    : 'walk'
+  const currentInstructionView: InstructionView = mapping ? 'map' : 'walk'
 
   return (
     <div className="hud">
@@ -2184,13 +2355,8 @@ export function HUD({
             </p>
             <p>
               <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> walk,{' '}
-              <kbd>Shift</kbd> sprint
-              {canPlace ? (
-                <>
-                  , <kbd>Space</kbd> place a file, <kbd>B</kbd> place an island
-                </>
-              ) : null}
-              , double-click a block or press <kbd>I</kbd> for info.
+              <kbd>Shift</kbd> sprint, double-click a file or folder or press{' '}
+              <kbd>I</kbd> for info.
             </p>
           </div>
         </div>
@@ -2203,6 +2369,7 @@ export function HUD({
           <div className="hud-name-gate">
             <NameInput
               placeholder="Folder name"
+              fallbackName="New folder"
               onCommit={onCommitIslandName}
               onCancel={onCancelIslandName}
             />
@@ -2234,20 +2401,40 @@ export function HUD({
           >
             Walk
           </button>
-          {canStop && (
-            <button
-              className="hud-button hud-button-reject"
-              type="button"
-              aria-label="Stop LLM session"
-              onClick={() =>
-                intent.sessionId && onWorkflowAction(intent.sessionId, 'stop')
-              }
-            >
-              Stop
-            </button>
-          )}
         </div>
-        {selected && <div className="hud-chip">{selected.path}</div>}
+        {(selected ||
+          (devTargets?.enabled &&
+            onSelectDevTarget &&
+            devTargets.targets.length > 0)) && (
+          <div className="hud-top-end">
+            {selected && <div className="hud-chip">{selected.path}</div>}
+            {devTargets?.enabled &&
+              onSelectDevTarget &&
+              devTargets.targets.length > 0 && (
+                <label className="hud-target-select">
+                  <span>Look at</span>
+                  <select
+                    className="hud-button hud-target-select-control"
+                    aria-label="Look at"
+                    title="Choose which project the map scans. Only available while developing Inbase."
+                    value={devTargets.currentId ?? ''}
+                    disabled={updatingModel}
+                    onChange={(event) => {
+                      const next = event.target.value
+                      if (!next || next === devTargets.currentId) return
+                      onSelectDevTarget(next)
+                    }}
+                  >
+                    {devTargets.targets.map((target) => (
+                      <option key={target.id} value={target.id}>
+                        {target.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+          </div>
+        )}
       </div>
 
       {(sessions.length > 0 || showBranchChanges) && (
@@ -2258,23 +2445,33 @@ export function HUD({
                 const active =
                   session.sessionId === (focusedSessionId ?? intent.sessionId)
                 const attached = session.awaitingAttach === false
-                const label = sessionTabLabel(session, sessions)
+                const label = sessionDisplayName(session) || 'Session'
                 return (
                   <button
                     className="hud-button hud-session-tab"
                     type="button"
                     role="tab"
                     aria-selected={active}
+                    aria-label={
+                      attached ? `${label}, attached` : `${label}, waiting`
+                    }
                     data-active={active}
                     data-attached={attached}
                     key={session.sessionId}
                     title={attached ? `${label} · Attached` : `${label} · Waiting`}
+                    style={
+                      session.colorHex
+                        ? ({
+                            '--session-color': session.colorHex,
+                          } as CSSProperties)
+                        : undefined
+                    }
                     onClick={() => {
                       if (session.sessionId) onFocusSession?.(session.sessionId)
+                      if (session.color) onSelectBlueprintColor?.(session.color)
                     }}
                   >
-                    <span className="hud-attach-dot" aria-hidden="true" />
-                    <span className="hud-session-tab-label">{label}</span>
+                    <SessionSwatch colorHex={session.colorHex} />
                   </button>
                 )
               })}
@@ -2306,7 +2503,16 @@ export function HUD({
           data-minimized={infoMinimized}
         >
           <PanelChrome
-            title={selected.name}
+            title={
+              canRenameSelected ? (
+                <InfoNameField
+                  name={selected.name}
+                  onRename={renameSelectedFile}
+                />
+              ) : (
+                selected.name
+              )
+            }
             minimized={infoMinimized}
             onMinimize={() => setInfoMinimized((current) => !current)}
             onClose={() => {
@@ -2320,28 +2526,43 @@ export function HUD({
           <p>
             {selected.lines} lines · {selected.language}
           </p>
-          {canInspectFile(selected.id, selected.userCreated) && (
-            <button
-              className="hud-button hud-inspect"
-              type="button"
-              onClick={() => onInspectFile?.(selected.id)}
-            >
-              Inspect file
-            </button>
+          {(onExplainTarget ||
+            canInspectFile(selected.id, selected.userCreated)) && (
+            <div className="hud-file-actions">
+              {onExplainTarget ? (
+                <ExplainButton
+                  label={`Explain ${selected.name}`}
+                  onClick={() =>
+                    onExplainTarget({ kind: 'file', path: selected.id })
+                  }
+                />
+              ) : null}
+              {canInspectFile(selected.id, selected.userCreated) && (
+                <button
+                  className="hud-button hud-inspect"
+                  type="button"
+                  onClick={() => onInspectFile?.(selected.id)}
+                >
+                  Inspect file
+                </button>
+              )}
+            </div>
           )}
           {canEditBlueprint && onToggleBlueprintPointer && (
-            <button
-              className="hud-button hud-inspect hud-point"
-              type="button"
-              data-pointed={selectedFilePointed ? 'true' : 'false'}
-              aria-pressed={selectedFilePointed}
-              onClick={() =>
-                onToggleBlueprintPointer({ kind: 'file', path: selected.id })
+            <PointColorControl
+              target={{ kind: 'file', path: selected.id }}
+              colorPointers={blueprintColorPointers}
+              currentColorId={blueprintColor}
+              idleLabel="Point to file"
+              pointedLabel="Stop pointing"
+              onToggle={(color) =>
+                onToggleBlueprintPointer({
+                  kind: 'file',
+                  path: selected.id,
+                  color,
+                })
               }
-            >
-              <EyeIcon size={15} />
-              {selectedFilePointed ? 'Stop pointing' : 'Point to file'}
-            </button>
+            />
           )}
           {canEditBlueprint && onSetBlueprintNote && (
             <button
@@ -2399,6 +2620,21 @@ export function HUD({
                     >
                       {symbol.name}
                     </span>
+                    {onExplainTarget ? (
+                      <div className="hud-item-actions">
+                        <ExplainButton
+                          compact
+                          label={`Explain ${symbol.name}`}
+                          onClick={() =>
+                            onExplainTarget({
+                              kind: 'class',
+                              path: selected.id,
+                              name: symbol.name,
+                            })
+                          }
+                        />
+                      </div>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -2434,23 +2670,35 @@ export function HUD({
                   }
                   canEdit={Boolean(canEditBlueprint && onSetBlueprintNote)}
                   canRemove={Boolean(canEditBlueprint && symbol.intended)}
-                  pointed={findBlueprintPointer(
-                    blueprintPointers,
-                    'function',
-                    selected.id,
-                    symbol.name,
-                  )}
+                  pointerTarget={{
+                    kind: 'function',
+                    path: selected.id,
+                    name: symbol.name,
+                  }}
+                  colorPointers={blueprintColorPointers}
+                  currentColorId={blueprintColor}
                   onRemove={() =>
                     onRemoveBlueprintFunction?.(selected.id, symbol.name)
                   }
                   onOpenNote={() => openSymbolNote('function', symbol.name)}
+                  onExplain={
+                    onExplainTarget
+                      ? () =>
+                          onExplainTarget({
+                            kind: 'function',
+                            path: selected.id,
+                            name: symbol.name,
+                          })
+                      : undefined
+                  }
                   onTogglePoint={
                     onToggleBlueprintPointer
-                      ? () =>
+                      ? (color) =>
                           onToggleBlueprintPointer({
                             kind: 'function',
                             path: selected.id,
                             name: symbol.name,
+                            color,
                           })
                       : undefined
                   }
@@ -2475,20 +2723,32 @@ export function HUD({
                     noteEditor.name === item.name
                   }
                   canEdit={Boolean(canEditBlueprint && onSetBlueprintNote)}
-                  pointed={findBlueprintPointer(
-                    blueprintPointers,
-                    'function',
-                    selected.id,
-                    item.name,
-                  )}
+                  pointerTarget={{
+                    kind: 'function',
+                    path: selected.id,
+                    name: item.name,
+                  }}
+                  colorPointers={blueprintColorPointers}
+                  currentColorId={blueprintColor}
                   onOpenNote={() => openSymbolNote('function', item.name)}
+                  onExplain={
+                    onExplainTarget
+                      ? () =>
+                          onExplainTarget({
+                            kind: 'function',
+                            path: selected.id,
+                            name: item.name,
+                          })
+                      : undefined
+                  }
                   onTogglePoint={
                     onToggleBlueprintPointer
-                      ? () =>
+                      ? (color) =>
                           onToggleBlueprintPointer({
                             kind: 'function',
                             path: selected.id,
                             name: item.name,
+                            color,
                           })
                       : undefined
                   }
@@ -2532,23 +2792,35 @@ export function HUD({
                   }
                   canEdit={Boolean(canEditBlueprint && onSetBlueprintNote)}
                   canRemove={Boolean(canEditBlueprint && symbol.intended)}
-                  pointed={findBlueprintPointer(
-                    blueprintPointers,
-                    'variable',
-                    selected.id,
-                    symbol.name,
-                  )}
+                  pointerTarget={{
+                    kind: 'variable',
+                    path: selected.id,
+                    name: symbol.name,
+                  }}
+                  colorPointers={blueprintColorPointers}
+                  currentColorId={blueprintColor}
                   onRemove={() =>
                     onRemoveBlueprintVariable?.(selected.id, symbol.name)
                   }
                   onOpenNote={() => openSymbolNote('variable', symbol.name)}
+                  onExplain={
+                    onExplainTarget
+                      ? () =>
+                          onExplainTarget({
+                            kind: 'variable',
+                            path: selected.id,
+                            name: symbol.name,
+                          })
+                      : undefined
+                  }
                   onTogglePoint={
                     onToggleBlueprintPointer
-                      ? () =>
+                      ? (color) =>
                           onToggleBlueprintPointer({
                             kind: 'variable',
                             path: selected.id,
                             name: symbol.name,
+                            color,
                           })
                       : undefined
                   }
@@ -2573,20 +2845,32 @@ export function HUD({
                     noteEditor.name === item.name
                   }
                   canEdit={Boolean(canEditBlueprint && onSetBlueprintNote)}
-                  pointed={findBlueprintPointer(
-                    blueprintPointers,
-                    'variable',
-                    selected.id,
-                    item.name,
-                  )}
+                  pointerTarget={{
+                    kind: 'variable',
+                    path: selected.id,
+                    name: item.name,
+                  }}
+                  colorPointers={blueprintColorPointers}
+                  currentColorId={blueprintColor}
                   onOpenNote={() => openSymbolNote('variable', item.name)}
+                  onExplain={
+                    onExplainTarget
+                      ? () =>
+                          onExplainTarget({
+                            kind: 'variable',
+                            path: selected.id,
+                            name: item.name,
+                          })
+                      : undefined
+                  }
                   onTogglePoint={
                     onToggleBlueprintPointer
-                      ? () =>
+                      ? (color) =>
                           onToggleBlueprintPointer({
                             kind: 'variable',
                             path: selected.id,
                             name: item.name,
+                            color,
                           })
                       : undefined
                   }
@@ -2678,10 +2962,20 @@ export function HUD({
             </ul>
           )}
           {canEditBlueprint && !importedBy && onAddBlueprintImport && (
-            <AddIntentRow
-              placeholder="Clock from src/components/Clock.tsx"
-              onAdd={(raw) => onAddBlueprintImport(selected.id, raw)}
-            />
+            <>
+              <AddIntentRow
+                placeholder="Clock from src/components/Clock.tsx"
+                onAdd={(raw) => onAddBlueprintImport(selected.id, raw)}
+                pickLabel={mapping ? 'Select a file' : undefined}
+                pickActive={importPickActive}
+                onTogglePick={mapping ? onToggleImportPick : undefined}
+              />
+              {importPickActive && (
+                <p className="hud-pick-hint">
+                  Click a file to import it. Esc to cancel.
+                </p>
+              )}
+            </>
           )}
             </div>
           )}
@@ -2701,6 +2995,16 @@ export function HUD({
               setInfoVisible(false)
               setInfoMinimized(false)
             }}
+            onExplain={
+              onExplainTarget
+                ? () =>
+                    onExplainTarget({
+                      kind: 'folder',
+                      path: selectedFolderNode.path,
+                    })
+                : undefined
+            }
+            explainLabel={`Explain ${selectedFolderNode.name}`}
           />
           {!infoMinimized && (
             <div ref={infoPanelRef} className="hud-panel-body">
@@ -2714,42 +3018,55 @@ export function HUD({
           </p>
           <div className="hud-section-title">Files</div>
           {folderFiles.length === 0 ? (
-            <p>No files on this island</p>
+            <p>No files in this folder</p>
           ) : (
             <ul>
               {folderFiles.map((file) => (
                 <li key={file.id}>
                   <span>{file.name}</span>
-                  {canInspectFile(file.id, file.userCreated) && (
-                    <button
-                      className="hud-item-inspect"
-                      type="button"
-                      onClick={() => onInspectFile?.(file.id)}
-                    >
-                      Inspect
-                    </button>
+                  {(onExplainTarget ||
+                    canInspectFile(file.id, file.userCreated)) && (
+                    <div className="hud-item-actions">
+                      {onExplainTarget ? (
+                        <ExplainButton
+                          compact
+                          label={`Explain ${file.name}`}
+                          onClick={() =>
+                            onExplainTarget({ kind: 'file', path: file.id })
+                          }
+                        />
+                      ) : null}
+                      {canInspectFile(file.id, file.userCreated) && (
+                        <button
+                          className="hud-item-inspect"
+                          type="button"
+                          onClick={() => onInspectFile?.(file.id)}
+                        >
+                          Inspect
+                        </button>
+                      )}
+                    </div>
                   )}
                 </li>
               ))}
             </ul>
           )}
           {canPlace && onToggleBlueprintPointer && (
-            <button
-              className="hud-button hud-inspect hud-point"
-              type="button"
-              data-pointed={selectedFolderPointed ? 'true' : 'false'}
-              aria-pressed={selectedFolderPointed}
+            <PointColorControl
+              target={{ kind: 'folder', path: selectedFolderNode.path }}
+              colorPointers={blueprintColorPointers}
+              currentColorId={blueprintColor}
+              idleLabel="Point to folder"
+              pointedLabel="Stop pointing"
               disabled={naming || selectedFolderNode.path.startsWith('draft:')}
-              onClick={() =>
+              onToggle={(color) =>
                 onToggleBlueprintPointer({
                   kind: 'folder',
                   path: selectedFolderNode.path,
+                  color,
                 })
               }
-            >
-              <EyeIcon size={15} />
-              {selectedFolderPointed ? 'Stop pointing' : 'Point to folder'}
-            </button>
+            />
           )}
           {canPlace && mapping && onMapAddFile && onMapAddFolder && (
             <div className="hud-decide hud-map-blueprint">
@@ -2774,51 +3091,6 @@ export function HUD({
             </div>
           )}
         </aside>
-      )}
-
-      {mapping && thumbnailVisible && (
-        <CanvasErrorBoundary fallback={null}>
-          <SelectionThumbnail
-          graph={graph}
-          layout={layout}
-          selectedId={selectedId}
-          selectedFolder={selectedFolder}
-          landAt={landAt}
-          importedBy={importedBy}
-          minimized={thumbnailMinimized}
-          maximized={thumbnailMaximized}
-          plannedIds={plannedIds}
-          createdIds={createdIds}
-          deletedIds={deletedIds}
-          pointedFileIds={
-            blueprintHidden
-              ? []
-              : blueprintPointers.flatMap((item) =>
-                  item.kind === 'folder' ? [] : [item.path],
-                )
-          }
-          pointedFolderPaths={
-            blueprintHidden
-              ? []
-              : blueprintPointers.flatMap((item) =>
-                  item.kind === 'folder' ? [item.path] : [],
-                )
-          }
-          onMinimize={() => {
-            setThumbnailMaximized(false)
-            setThumbnailMinimized((current) => !current)
-          }}
-          onMaximize={() => {
-            setThumbnailMinimized(false)
-            setThumbnailMaximized((current) => !current)
-          }}
-          onHide={() => {
-            setThumbnailVisible(false)
-            setThumbnailMinimized(false)
-            setThumbnailMaximized(false)
-          }}
-        />
-        </CanvasErrorBoundary>
       )}
       </div>
 
@@ -2892,52 +3164,54 @@ export function HUD({
 
       <div className="hud-bottom">
         <div className="hud-bottom-actions">
-          <button
-            className="hud-button"
-            data-active={instructionsOpen}
-            type="button"
-            aria-haspopup="dialog"
-            aria-expanded={instructionsOpen}
-            onClick={() => {
-              setNoteEditor(null)
-              setInstructionsOpen((open) => !open)
-            }}
-          >
-            Instructions
-          </button>
-          <button
-            className="hud-button"
-            type="button"
-            aria-label="Rescan the project and rebuild the map"
-            disabled={updatingModel}
-            onClick={onUpdateModel}
-          >
-            {updatingModel ? 'Updating…' : 'Update model'}
-          </button>
-          {onSetupSession && (
-            <button
-              className="hud-button"
-              type="button"
-              aria-label="Start an LLM session without attaching a chat yet"
-              title={setupError ?? 'Start an LLM session without attaching a chat yet'}
-              disabled={setupBusy}
-              onClick={() => {
-                setInstructionsOpen(false)
-                setSetupError(null)
-                setSetupBusy(true)
-                void onSetupSession()
-                  .catch((caught) => {
-                    setSetupError(
-                      caught instanceof Error
-                        ? caught.message
-                        : 'Could not set up the session',
-                    )
-                  })
-                  .finally(() => setSetupBusy(false))
-              }}
+          {onSelectBlueprintColor && blueprintOptions.length > 0 && (
+            <div
+              className="hud-blueprint-select"
+              role="radiogroup"
+              aria-label="Blueprint"
             >
-              {setupBusy ? 'Starting…' : 'Setup LLM session'}
-            </button>
+              {blueprintOptions.map((option) => {
+                const selected = (blueprintColor ?? 'global') === option.id
+                return (
+                  <button
+                    key={option.id}
+                    className={
+                      option.kind === 'global'
+                        ? 'hud-button hud-blueprint-option'
+                        : 'hud-button hud-blueprint-option hud-blueprint-option-swatch'
+                    }
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    data-active={selected}
+                    aria-label={
+                      option.kind === 'global'
+                        ? 'Global blueprint'
+                        : `${option.name} session blueprint`
+                    }
+                    title={
+                      option.kind === 'global'
+                        ? 'Place on the global blueprint. All colors stay visible.'
+                        : `Place on the ${option.name} blueprint. All colors stay visible.`
+                    }
+                    style={
+                      {
+                        '--session-color': option.hex,
+                      } as CSSProperties
+                    }
+                    onClick={() => onSelectBlueprintColor(option.id)}
+                  >
+                    <SessionSwatch
+                      colorHex={option.hex}
+                      className="hud-session-swatch hud-blueprint-swatch"
+                    />
+                    {option.kind === 'global' ? (
+                      <span className="hud-blueprint-select-label">Global</span>
+                    ) : null}
+                  </button>
+                )
+              })}
+            </div>
           )}
           {onToggleBlueprintHidden && (
             <button
@@ -2947,12 +3221,12 @@ export function HUD({
               aria-label={blueprintHidden ? 'Show blueprint' : 'Hide blueprint'}
               title={
                 blueprintHidden
-                  ? 'Show the shared blueprint overlay'
-                  : 'Hide the shared blueprint overlay'
+                  ? 'Show this blueprint overlay'
+                  : 'Hide this blueprint overlay; other colors stay visible'
               }
               onClick={onToggleBlueprintHidden}
             >
-              {blueprintHidden ? 'Show blueprint' : 'Hide blueprint'}
+              {blueprintHidden ? 'Show' : 'Hide'}
             </button>
           )}
           {onClearBlueprint && (
@@ -2964,7 +3238,7 @@ export function HUD({
               disabled={!blueprintHasContent}
               onClick={onClearBlueprint}
             >
-              Clear blueprint
+              Clear
             </button>
           )}
           {onCleanupBlueprint && (
@@ -2976,7 +3250,7 @@ export function HUD({
               disabled={!blueprintCanCleanup}
               onClick={onCleanupBlueprint}
             >
-              Cleanup blueprint
+              Cleanup
             </button>
           )}
         </div>
@@ -3017,48 +3291,6 @@ export function HUD({
                 {changePathsOnly
                   ? 'C show all paths'
                   : 'C show only changed paths'}
-              </span>
-            </button>
-          )}
-          {mapping && (
-            <button
-              className="hud-button hud-icon-button"
-              data-active={thumbnailVisible}
-              aria-label={
-                thumbnailVisible ? 'Hide 3D view' : 'Show 3D view'
-              }
-              aria-keyshortcuts="T"
-              aria-pressed={thumbnailVisible}
-              type="button"
-              onClick={() => {
-                setThumbnailVisible((visible) => {
-                  if (!visible) {
-                    setThumbnailMinimized(false)
-                    setThumbnailMaximized(false)
-                  } else {
-                    setThumbnailMaximized(false)
-                  }
-                  return !visible
-                })
-              }}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                width="18"
-                height="18"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <rect x="3" y="5" width="11" height="14" rx="1.5" />
-                <path d="M16 8h5v11H9v-3" />
-                <path d="M6.5 16.5 9 12l2 2.5 1.5-2L15 16.5" />
-              </svg>
-              <span className="hud-tooltip">
-                {thumbnailVisible ? 'T hide 3D view' : 'T show 3D view'}
               </span>
             </button>
           )}
@@ -3139,30 +3371,70 @@ export function HUD({
                     : 'G show branch changes'}
             </span>
           </button>
-          <button
-            className="hud-button hud-icon-button"
-            data-active={followLook}
-            aria-label="Make LLM look where I look"
-            aria-pressed={followLook}
-            type="button"
-            onClick={onToggleFollowLook}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="18"
-              height="18"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+          <div className="hud-actions-menu" ref={actionsMenuRef}>
+            <button
+              className="hud-button hud-icon-button"
+              data-active={actionsMenuOpen}
+              type="button"
+              aria-label="More actions"
+              aria-haspopup="menu"
+              aria-expanded={actionsMenuOpen}
+              onClick={() => setActionsMenuOpen((open) => !open)}
             >
-              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-            <span className="hud-tooltip">Make LLM look where I look</span>
-          </button>
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M4 7h16" />
+                <path d="M4 12h16" />
+                <path d="M4 17h16" />
+              </svg>
+              <span className="hud-tooltip">More</span>
+            </button>
+            {actionsMenuOpen &&
+              actionsMenuPosition &&
+              createPortal(
+                <div
+                  className="hud-actions-menu-list"
+                  role="menu"
+                  style={actionsMenuPosition}
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    aria-haspopup="dialog"
+                    aria-expanded={instructionsOpen}
+                    onClick={() => {
+                      setNoteEditor(null)
+                      setActionsMenuOpen(false)
+                      setInstructionsOpen((open) => !open)
+                    }}
+                  >
+                    Instructions
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    aria-label="Rescan files and folders"
+                    disabled={updatingModel}
+                    onClick={() => {
+                      setActionsMenuOpen(false)
+                      onUpdateModel()
+                    }}
+                  >
+                    {updatingModel ? 'Updating…' : 'Update model'}
+                  </button>
+                </div>,
+                document.body,
+              )}
+          </div>
         </div>
       </div>
     </div>

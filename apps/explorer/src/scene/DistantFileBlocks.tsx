@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { Instances, Instance } from '@react-three/drei'
-import { dimColor, fileColor } from '../theme'
+import { dimColor, fileColor, blueprintPalette } from '../theme'
 import type { FileNode, PlacedFile } from '../types'
 
 type DistantFile = {
@@ -28,7 +28,9 @@ export function DistantFileBlocks({
       <boxGeometry args={[1, 1, 1]} />
       <meshLambertMaterial />
       {items.map(({ file, placed, dimmed }) => {
-        const color = file.userCreated ? '#7ec8e8' : fileColor(file.language)
+        const color = file.userCreated || file.colorHex
+          ? blueprintPalette(file.colorHex).color
+          : fileColor(file.language)
         return (
           <Instance
             key={file.id}

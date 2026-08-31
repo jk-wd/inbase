@@ -131,7 +131,7 @@ export function ensureDataDir(dataDir) {
   if (!fs.existsSync(userContextFile)) {
     fs.writeFileSync(
       userContextFile,
-      `${JSON.stringify({ followLook: false, showBranchChanges: false }, null, 2)}\n`,
+      `${JSON.stringify({ showBranchChanges: false }, null, 2)}\n`,
     )
   }
   return dataDir

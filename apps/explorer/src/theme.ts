@@ -64,6 +64,10 @@ export const MAP_SELECTION = {
   island: FILE_SELECTION.color,
   islandPad: 0.38,
   blockPad: 0.1,
+  pointed: '#9ad8ff',
+  pointedPad: 0.22,
+  explain: '#9ad8ff',
+  explainPad: 0.16,
 }
 
 export function fileHeight(lines: number) {
@@ -108,6 +112,31 @@ export function dimColor(hex: string, amount = 0.32) {
       .padStart(2, '0')
   }
   return `#${channel(0)}${channel(2)}${channel(4)}`
+}
+
+export function lightenColor(hex: string, amount = 0.35) {
+  const value = hex.replace('#', '')
+  if (value.length !== 6) return hex
+  const mix = Math.max(0, Math.min(1, amount))
+  const channel = (start: number) => {
+    const n = parseInt(value.slice(start, start + 2), 16)
+    return Math.round(n + (255 - n) * mix)
+      .toString(16)
+      .padStart(2, '0')
+  }
+  return `#${channel(0)}${channel(2)}${channel(4)}`
+}
+
+export function blueprintPalette(hex?: string | null) {
+  const color =
+    typeof hex === 'string' && /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : '#38bdf8'
+  return {
+    color,
+    label: lightenColor(color, 0.42),
+    emissive: dimColor(color, 0.45),
+    floor: dimColor(color, 0.78),
+    aisle: dimColor(color, 0.58),
+  }
 }
 
 function folderHue(path: string) {

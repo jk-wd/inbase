@@ -28,16 +28,6 @@ export async function fetchUserContext(): Promise<UserContext | null> {
   }
 }
 
-export function persistFollowLook(followLook: boolean) {
-  fetch('/api/user-context', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: `${JSON.stringify({ followLook })}\n`,
-  }).catch(() => {
-    lastWritten = ''
-  })
-}
-
 export function persistShowBranchChanges(showBranchChanges: boolean) {
   fetch('/api/user-context', {
     method: 'POST',
@@ -60,7 +50,6 @@ function flushUserContext() {
   pending = null
   if (!context) return
   const {
-    followLook: _followLook,
     showBranchChanges: _showBranchChanges,
     userCreatedBlocks: _userCreatedBlocks,
     userCreatedIslands: _userCreatedIslands,
