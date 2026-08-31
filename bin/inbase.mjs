@@ -23,6 +23,8 @@ import {
   attachSession,
   waitForApproval,
   waitForBlueprint,
+  goProposal,
+  acceptProposal,
 } from './session.mjs'
 
 const HELP = `inbase — a first-person 3D map of a codebase
@@ -38,9 +40,11 @@ Agent commands (used by the Cursor skill):
   inbase wait-for-blueprint --session <id>
   inbase report-plan --session <id> --feature "name" --steps "one" [--steps "two"]
   inbase wait-for-approval --session <id>
+  inbase go [--session <id>]
+  inbase accept [--session <id>]
   inbase propose-patch --session <id> [file.patch|-]
   inbase propose-patch --session <id> --clear
-  inbase explain start --question "How does this work?"
+  inbase explain start [--question "How does this work?"]
   inbase explain report --question "..." --step "Title" --body "..." --files path
   inbase explain wait
   inbase explain stop
@@ -174,6 +178,14 @@ export async function main(argv = process.argv.slice(2)) {
   }
   if (command === 'wait-for-approval') {
     await waitForApproval(args)
+    return
+  }
+  if (command === 'go') {
+    await goProposal(args)
+    return
+  }
+  if (command === 'accept') {
+    await acceptProposal(args)
     return
   }
   if (command === 'propose-patch') {

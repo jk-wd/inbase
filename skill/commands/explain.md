@@ -2,13 +2,52 @@
 description: Explain a codebase question on the Inbase map
 ---
 
-The user invoked `/explain`. Do **not** attach an Inbase coding session. Do **not** edit project files. Do **not** run `inbase start-session`.
-
-Explain mode only runs on the map. Start it so the visualizer switches to a map-only overlay, then walk the question step by step on that map.
+The user invoked `/explain`. Do **not** edit project files. Do **not** run `inbase start-session`. Do **not** `/go` or `/accept`.
 
 The user's question is:
 
 $ARGUMENTS
+
+## Proposal in progress
+
+If this chat is already attached to an Inbase session (`VISUAL_CODER_SESSION` in this conversation) and a plan or proposal is waiting, **explain that proposal**. Stay in this session. Do not attach a new coding session.
+
+If `npx inbase explain start` prints `VISUAL_CODER_PROPOSAL`, a proposal is waiting on the map even if this chat is not the coding session — explain that proposal. Do not attach.
+
+Use the user's question when they provided one. If they did not, explain the current proposal.
+
+1. Reply in this chat first with one short sentence that you are explaining the current proposal.
+
+2. Start explain mode (requires `npx inbase run`):
+
+```bash
+npx inbase explain start --question "$ARGUMENTS"
+```
+
+If `$ARGUMENTS` is empty, omit `--question` or pass the proposal title from `VISUAL_CODER_PROPOSAL`. If that fails with `VISUAL_CODER_NOT_RUNNING`, reply with that message and stop.
+
+3. Inspect the live files this proposal changed (or the files this plan step will use). Report ordered steps that walk the proposal on the map:
+
+```bash
+npx inbase explain report \
+  --question "$ARGUMENTS" \
+  --step "Short title" \
+  --body "What this step is showing." \
+  --files path/to/file.ts \
+  --folders path/to/folder \
+  --select path/to/file.ts \
+  --zoom path/to/folder \
+  --relations path/to/file.ts:path/to/other.ts \
+  --info \
+  --highlight function:currentExplainStep \
+  --point function:currentExplainStep
+```
+
+Repeat `--step` for every step. After reporting, run `npx inbase explain wait`. Follow the wait exits below. When explain wait returns stopped or timeout, if this chat is the coding session run `wait-for-approval` again. The proposal is still waiting for `/go` or `/accept`.
+
+## No proposal
+
+Do **not** attach an Inbase coding session. Explain mode only runs on the map. Start it so the visualizer switches to a map-only overlay, then walk the question step by step on that map.
 
 1. Start explain mode (requires `npx inbase run`):
 
@@ -16,7 +55,7 @@ $ARGUMENTS
 npx inbase explain start --question "$ARGUMENTS"
 ```
 
-If that fails with `VISUAL_CODER_NOT_RUNNING`, reply with that message and stop.
+If that fails with `VISUAL_CODER_NOT_RUNNING`, reply with that message and stop. If the output includes `VISUAL_CODER_PROPOSAL`, follow **Proposal in progress** instead.
 
 2. Reply in this chat first with one short sentence that you opened explain mode on the map.
 

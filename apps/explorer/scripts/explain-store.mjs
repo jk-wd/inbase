@@ -328,6 +328,38 @@ export function normalizeExplain(value) {
   }
 }
 
+export function mergeExplainPoll(current, next) {
+  const from = normalizeExplain(current)
+  const to = normalizeExplain(next)
+  if (!from.active || !to.active) return to
+  if (from.question !== to.question) return to
+  if (from.presentation !== to.presentation) return to
+
+  const currentIds = new Set(from.steps.map((step) => step.index))
+  const nextIds = new Set(to.steps.map((step) => step.index))
+  const added = [...nextIds].filter((id) => !currentIds.has(id))
+  if (from.steps.length === 0 && to.steps.length > 0) return to
+  if (added.includes(to.currentStep)) return to
+
+  const pendingUnacked =
+    Boolean(from.pendingQuestion) && !to.pendingQuestion && !to.answering
+  const steps = pendingUnacked ? from.steps : to.steps
+  const pendingQuestion = pendingUnacked
+    ? from.pendingQuestion
+    : to.pendingQuestion
+  const validIds = new Set(steps.map((step) => step.index))
+  const currentStep = validIds.has(from.currentStep)
+    ? from.currentStep
+    : to.currentStep
+
+  return {
+    ...to,
+    steps,
+    pendingQuestion,
+    currentStep,
+  }
+}
+
 export function readExplain(dataDir) {
   try {
     return normalizeExplain(
@@ -461,11 +493,17 @@ export function reportExplain(dataDir, input) {
     return reportExplainChildren(dataDir, parent, input)
   }
   const previous = readExplain(dataDir)
+  const nextSteps = assignStepIndexes(steps)
+  const ids = new Set(nextSteps.map((step) => step.index))
+  const keepCurrent =
+    previous.active &&
+    previous.steps.length > 0 &&
+    ids.has(previous.currentStep)
   return writeExplain(dataDir, {
     active: true,
     question: question || previous.question,
-    steps: assignStepIndexes(steps),
-    currentStep: '1',
+    steps: nextSteps,
+    currentStep: keepCurrent ? previous.currentStep : '1',
     pendingQuestion: null,
     answering: false,
     presentation: previous.presentation === 'card' ? 'card' : 'walk',

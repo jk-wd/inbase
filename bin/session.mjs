@@ -82,14 +82,53 @@ function signalAck(store, dataDir, sessionId, kind, detail) {
 
 function waitingMessage(sessionId, manifest) {
   if (manifest.phase === 'plan_ready') {
-    return `Waiting for the user to invoke step ${manifest.currentStep}...`
+    return `Waiting for the user to /go step ${manifest.currentStep}...`
   }
   if (manifest.phase === 'review' && manifest.diffs?.at(-1)) {
     return manifest.stepByStep === false
-      ? `Waiting for the user to accept the proposal after ${manifest.diffs.at(-1).id}...`
-      : `Waiting for the user to accept the proposal on ${manifest.diffs.at(-1).id}...`
+      ? `Waiting for the user to /accept the proposal after ${manifest.diffs.at(-1).id}...`
+      : `Waiting for the user to /accept the proposal on ${manifest.diffs.at(-1).id}...`
   }
   return `Waiting for the visual workflow in session ${sessionId}...`
+}
+
+function requireVisualizer(store, config) {
+  if (!readInstanceFile(instanceFile(config.dataDir))) {
+    console.error(store.NOT_RUNNING_MESSAGE)
+    process.exit(1)
+  }
+}
+
+function resolveCliSessionId(store, dataDir, args, command) {
+  const sessionId = takeFlagValue(args, '--session') || store.readActiveSession(dataDir)
+  if (!sessionId) usage(command, '[--session <cursor-chat-id>]')
+  return sessionId
+}
+
+function proposalInfo(manifest) {
+  if (!manifest) return null
+  if (manifest.phase === 'review') {
+    const active = manifest.diffs?.at(-1)
+    if (!active || active.status !== 'pending') return null
+    const title =
+      manifest.steps?.find((item) => item.index === active.step)?.title ||
+      active.title ||
+      `step ${active.step}`
+    return { phase: 'review', step: active.step, title, sessionId: manifest.sessionId }
+  }
+  if (manifest.phase === 'plan_ready') {
+    const step = manifest.currentStep
+    const title =
+      manifest.steps?.find((item) => item.index === step)?.title || `step ${step}`
+    return { phase: 'plan_ready', step, title, sessionId: manifest.sessionId }
+  }
+  return null
+}
+
+function readProposalInfo(store, dataDir, sessionId = null) {
+  const id = sessionId || store.readActiveSession(dataDir)
+  if (!id) return null
+  return proposalInfo(store.readManifest(dataDir, id))
 }
 
 function emitStopped(store, dataDir, sessionId) {
@@ -154,10 +193,10 @@ function emitApprovalHandshake(store, explain, dataDir, sessionId, manifest, ini
       ? 'inspect the live files this proposal changed'
       : 'inspect the live files and folders this plan step will use'
     const waiting = reviewing
-      ? 'The proposal is still waiting for Accept proposal.'
-      : 'The plan is still waiting for Create proposal.'
+      ? 'The proposal is still waiting for /accept.'
+      : 'The plan is still waiting for /go.'
     console.log(
-      `VISUAL_CODER_EXPLAIN The user clicked Explain proposal for step ${step}: ${title}. Do not edit project files. Do not accept or invoke the next step. Start explain mode and walk this proposal on the map. Run: npx inbase explain start --question "Explain the current proposal: ${title}" Then ${target} and report steps with npx inbase explain report --question "Explain the current proposal: ${title}" --step "..." --body "..." --files path [--folders path] [--select path] [--zoom path] [--relations from:to] [--info] [--highlight function:name] [--point function:name]. After reporting, run npx inbase explain wait. If the user asks about a step, report sub-steps with --parent and wait again. When explain wait returns stopped or timeout, run wait-for-approval again. ${waiting}`,
+      `VISUAL_CODER_EXPLAIN The user invoked /explain for step ${step}: ${title}. Do not edit project files. Do not accept or invoke the next step. Start explain mode and report this proposal once. Do not walk the map after reporting — the UI reads the steps and the user navigates them. Run: npx inbase explain start --question "Explain the current proposal: ${title}" Then ${target} and report every step in one npx inbase explain report --question "Explain the current proposal: ${title}" --step "..." --body "..." --files path [--folders path] [--select path] [--zoom path] [--relations from:to] [--info] [--highlight function:name] [--point function:name]. After reporting, run npx inbase explain wait. If the user asks about a step, report sub-steps with --parent and wait again. When explain wait returns stopped or timeout, run wait-for-approval again. ${waiting}`,
     )
     process.exit(7)
   }
@@ -399,7 +438,7 @@ export async function reportPlan(args) {
   console.log(
     manifest.phase === 'working'
       ? `VISUAL_CODER_PLAN_READY Reported ${manifest.steps.length} plan step(s) for session ${sessionId}. Step by step is off, so step ${manifest.currentStep} is already invoked. Edit the live files for that step, then inbase propose-patch --session ${sessionId} with no patch file.`
-      : `VISUAL_CODER_PLAN_READY Reported ${manifest.steps.length} plan step(s) for session ${sessionId}. Wait for the user to invoke step ${manifest.currentStep}.`,
+      : `VISUAL_CODER_PLAN_READY Reported ${manifest.steps.length} plan step(s) for session ${sessionId}. Wait for the user to /go step ${manifest.currentStep}.`,
   )
 }
 
@@ -492,6 +531,101 @@ export async function waitForApproval(args) {
   process.exit(3)
 }
 
+export async function goProposal(args) {
+  const { store, config } = await loadExplorer()
+  requireVisualizer(store, config)
+  const sessionId = resolveCliSessionId(store, config.dataDir, args, 'go')
+  const manifest = store.readManifest(config.dataDir, sessionId)
+  if (!manifest) {
+    console.error(`No workflow session found for ${sessionId}`)
+    process.exit(1)
+  }
+  if (manifest.phase === 'review') {
+    console.error('A proposal is waiting. Use /accept to accept it.')
+    process.exit(1)
+  }
+  if (manifest.phase !== 'plan_ready') {
+    console.error('Session is not waiting for /go.')
+    process.exit(1)
+  }
+  let next
+  try {
+    next = store.invokeStep(
+      config.dataDir,
+      sessionId,
+      manifest.currentStep,
+      config.targetRoot,
+    )
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error)
+    process.exit(1)
+  }
+  const explain = await loadExplainStore()
+  emitApprovalHandshake(
+    store,
+    explain,
+    config.dataDir,
+    sessionId,
+    next,
+    null,
+    null,
+  )
+}
+
+export async function acceptProposal(args) {
+  const { store, config } = await loadExplorer()
+  requireVisualizer(store, config)
+  const sessionId = resolveCliSessionId(store, config.dataDir, args, 'accept')
+  const manifest = store.readManifest(config.dataDir, sessionId)
+  if (!manifest) {
+    console.error(`No workflow session found for ${sessionId}`)
+    process.exit(1)
+  }
+  if (manifest.phase === 'plan_ready') {
+    console.error('No proposal to accept. Use /go to start making it.')
+    process.exit(1)
+  }
+  if (manifest.phase !== 'review') {
+    console.error('Session is not waiting for /accept.')
+    process.exit(1)
+  }
+  const active = manifest.diffs?.at(-1)
+  if (!active || active.status !== 'pending') {
+    console.error('No proposal to accept.')
+    process.exit(1)
+  }
+  let next
+  try {
+    next =
+      active.step >= manifest.steps.length
+        ? store.continueDiff(
+            config.dataDir,
+            config.targetRoot,
+            sessionId,
+            active.id,
+          )
+        : store.invokeStep(
+            config.dataDir,
+            sessionId,
+            active.step + 1,
+            config.targetRoot,
+          )
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error)
+    process.exit(1)
+  }
+  const explain = await loadExplainStore()
+  emitApprovalHandshake(
+    store,
+    explain,
+    config.dataDir,
+    sessionId,
+    next,
+    null,
+    null,
+  )
+}
+
 export async function proposePatch(args) {
   const { store, patchLib, config } = await loadExplorer()
   const clear = args.includes('--clear')
@@ -547,8 +681,8 @@ export async function proposePatch(args) {
     manifest.phase === 'working'
       ? `VISUAL_CODER_STEP_READY Recorded live edits as patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Do not keep editing until the next EXECUTE. Step by step is off, so the next step is already invoked. Wait again.`
       : last
-        ? `VISUAL_CODER_STEP_READY Recorded live edits as patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Do not keep editing. Walk the diffs, then Accept proposal to finish.`
-        : `VISUAL_CODER_STEP_READY Recorded live edits as patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Immediately run wait-for-approval. Do not explore or plan. Accept proposal invokes the next step; when EXECUTE returns, implement that step at once.`,
+        ? `VISUAL_CODER_STEP_READY Recorded live edits as patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Do not keep editing. Walk the diffs, then /accept to finish.`
+        : `VISUAL_CODER_STEP_READY Recorded live edits as patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Immediately run wait-for-approval. Do not explore or plan. /accept invokes the next step; when EXECUTE returns, implement that step at once.`,
   )
 }
 
@@ -561,10 +695,7 @@ async function loadExplainStore() {
 
 export async function runExplain(args) {
   const { store, config } = await loadExplorer()
-  if (!readInstanceFile(instanceFile(config.dataDir))) {
-    console.error(store.NOT_RUNNING_MESSAGE)
-    process.exit(1)
-  }
+  requireVisualizer(store, config)
   const explain = await loadExplainStore()
   const parsed = explain.parseExplainCli(args)
   if (parsed.action === 'stop') {
@@ -577,13 +708,22 @@ export async function runExplain(args) {
     return
   }
   if (parsed.action === 'start') {
-    if (!parsed.question) {
+    const proposal = readProposalInfo(store, config.dataDir)
+    const question =
+      parsed.question ||
+      (proposal ? `Explain the current proposal: ${proposal.title}` : '')
+    if (!question) {
       usage('explain start', '--question "How does this work?"')
     }
-    explain.startExplain(config.dataDir, parsed.question)
+    explain.startExplain(config.dataDir, question)
     store.clearPendingExplain(config.dataDir)
     store.touchExplainConnections(config.dataDir)
-    console.log(`VISUAL_CODER_EXPLAIN_STARTED ${parsed.question}`)
+    if (proposal) {
+      console.log(
+        `VISUAL_CODER_PROPOSAL Explain the current proposal for step ${proposal.step}: ${proposal.title}. The user asked: ${question}. Do not edit project files. Walk this proposal on the map.`,
+      )
+    }
+    console.log(`VISUAL_CODER_EXPLAIN_STARTED ${question}`)
     console.log(
       'The map is in explain mode. Explore the codebase, then run inbase explain report with --step / --body / --files / --folders / --select / --zoom / --relations / --info / --highlight / --point.',
     )
@@ -610,7 +750,7 @@ export async function runExplain(args) {
     )
   } else {
     console.log(
-      `VISUAL_CODER_EXPLAIN_READY Reported ${next.steps.length} explanation step(s) for "${next.question}". The user can walk them on the map.`,
+      `VISUAL_CODER_EXPLAIN_READY Reported ${next.steps.length} explanation step(s) for "${next.question}". The visualizer shows them; the user navigates. Do not walk the map or change the current step.`,
     )
   }
   console.log(

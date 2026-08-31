@@ -78,6 +78,10 @@ export function topLevelExplainStepId(id: unknown): string
 export function isExplainSubStep(id: unknown): boolean
 export function stripExplainSubSteps(steps: ExplainStep[]): ExplainStep[]
 export function normalizeExplain(value: unknown): ExplainSession
+export function mergeExplainPoll(
+  current: ExplainSession,
+  next: ExplainSession,
+): ExplainSession
 export function readExplain(dataDir: string): ExplainSession
 export function parseExplainTargetKind(value: unknown): ExplainTargetKind | null
 export function explainTargetLabel(input: {

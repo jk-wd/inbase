@@ -23,6 +23,10 @@ the next unconnected slot. You do not need `/inbase`.
   color's empty slot. Aliases: `/red` (Coral), `/yellow` (Amber), `/green`
   (Lime), `/purple` (Violet). The text after the command is the user's request.
 - **`/blue`**: Blue is the global blueprint, not a chat. Do not attach.
+- **`/go`**: start making the current proposal (invoke the waiting plan step).
+- **`/accept`**: accept the current proposal and continue, or finish on the last step.
+- **`/explain [question]`**: explain mode on the map. If a plan or proposal is
+  waiting, explain that proposal; the question is optional extra focus.
 - **`/skipinbase`**: do the user's request without Inbase. Do not attach, wait,
   or record patches.
 - **Any other file-change request**, or this conversation already has a
@@ -30,12 +34,12 @@ the next unconnected slot. You do not need `/inbase`.
   Do not refuse.
 
 The LLM uses a plan-first loop. It reports the complete plan before editing
-files. When **Step by step** is on, it waits for the user to click **Create
-proposal** on the first step, edits live files for that step, records them with `inbase propose-patch`,
-then waits for **Accept proposal** or an alternative instruction. When **Step
+files. When **Step by step** is on, it waits for the user to type `/go`
+on the first step, edits live files for that step, records them with `inbase propose-patch`,
+then waits for `/accept` or an alternative instruction. When **Step
 by step** is off, `inbase wait-for-approval` returns `VISUAL_CODER_EXECUTE` for
-every remaining step without the user clicking; after the last recorded step,
-wait for the user to **Accept proposal**. They can still walk Previous/Next
+every remaining step without the user invoking; after the last recorded step,
+wait for the user to `/accept`. They can still walk Previous/Next
 over the recorded diffs.
 
 **Recorded patches are the session record.** After `VISUAL_CODER_EXECUTE`, edit
@@ -43,7 +47,7 @@ files under `apps/example-target` with Write, StrReplace, and Delete for that
 step only. Then run `inbase propose-patch` with no patch file. Inbase diffs
 the working tree against the snapshot taken at invoke and stores that patch.
 A later instruction updates that live proposal; edit those files, then
-propose-patch again. Wait for **Accept proposal** before the next step. Do not
+propose-patch again. Wait for `/accept` before the next step. Do not
 write a unified diff yourself.
 
 The visualizer stores immutable diffs under the running instance's
@@ -106,8 +110,8 @@ the required tools in the same turn. Do not wait for the user after the ack.
 Do not start with a long analysis. Do not call tools before that sentence.
 
 After `propose-patch` on a non-final step, the **next tool call must be**
-`wait-for-approval`. Do not explore, search, or re-plan in between. **Accept
-proposal** invokes the next step; when that wait returns `EXECUTE`, implement
+`wait-for-approval`. Do not explore, search, or re-plan in between. `/accept`
+invokes the next step; when that wait returns `EXECUTE`, implement
 that step immediately. Do not run `wait-for-blueprint` again. Do not report a
 new plan.
 
@@ -176,8 +180,8 @@ npx inbase wait-for-approval --session "<session-id>"
 ```
 
    Describe this tool call as `inbase wait-for-approval`, not "waiting for the
-   user to invoke". The command keeps running until they invoke, click
-   **Explain proposal**, or click `?` on a file, folder, or symbol; when it
+   user to invoke". The command keeps running until they type `/go`,
+   `/accept`, or `/explain`, or click `?` on a file, folder, or symbol; when it
    returns, they already did. Do not edit
    example-target files until this prints `VISUAL_CODER_ACK execute` /
    `VISUAL_CODER_EXECUTE`. If it prints `VISUAL_CODER_ACK explain`, follow
@@ -200,7 +204,7 @@ npx inbase propose-patch --session "<session-id>"
 8. **Stop editing** `apps/example-target` until the next `VISUAL_CODER_EXECUTE`.
     The stored patch is the session record; disk already has your edits. Your
     next tool call is `wait-for-approval` — nothing else.
-9. Wait until the user clicks **Accept proposal** or **Explain proposal** on the current step (or, when Step by
+9. Wait until the user types `/accept` or `/explain` on the current step (or, when Step by
    step is off, until the next step is auto-invoked), sends an alternative
    instruction, or stops the workflow:
 
@@ -214,7 +218,7 @@ npx inbase wait-for-approval --session "<session-id>"
    - Exit `0` (`VISUAL_CODER_ACK execute` / `VISUAL_CODER_EXECUTE`): follow
      the printed `VISUAL_CODER_EXECUTE` line. If it says **Update the current
      proposal**, edit those live files, record with `inbase propose-patch` (no
-     patch file), then wait again for **Accept proposal**. Do not start the
+     patch file), then wait again for `/accept`. Do not start the
      next step and do not report a new plan. Otherwise the highlighted step
      was invoked: implement that step now — do not explore, re-plan, or run
      `wait-for-blueprint`. Re-read the global `blueprint.json` and this
@@ -237,7 +241,7 @@ npx inbase wait-for-approval --session "<session-id>"
      still contain the current proposal. Do not reset them and do not report a
      new plan. Follow the text between `VISUAL_CODER_INSTRUCTION_START` and
      `VISUAL_CODER_INSTRUCTION_END`, edit those live files, then
-     `inbase propose-patch`. Wait for **Accept proposal**. Do not start the
+     `inbase propose-patch`. Wait for `/accept`. Do not start the
      next step.
    - Exit `7` (`VISUAL_CODER_ACK explain` / `VISUAL_CODER_EXPLAIN`): the user
      wants something explained on the map — either the current proposal or a
@@ -245,15 +249,17 @@ npx inbase wait-for-approval --session "<session-id>"
      and do not invoke the next step. Follow the printed `VISUAL_CODER_EXPLAIN`
      line: `npx inbase explain start --question "..."`, then
      `npx inbase explain report`. For a `?` click, report one `--step` /
-     `--body` for the modal. For **Explain proposal**, walk the map with
+     `--body` for the modal. For `/explain` of the current proposal, report every map step
+     in one command with
      `--files` / `--folders` / `--select` / `--zoom` / `--info` /
-     `--highlight` / `--point`. After
+     `--highlight` / `--point`. Do not walk the map after reporting; the user
+     navigates. After
      reporting, run `npx inbase explain wait`. If that returns
      `VISUAL_CODER_EXPLAIN_QUESTION`, report sub-steps with `--parent` and wait
      again. If it returns another `VISUAL_CODER_EXPLAIN` for a file or folder,
      replace the explanation. When explain wait returns stopped or timeout, run
      `wait-for-approval` again. The plan is still waiting for
-     **Create proposal** or **Accept proposal**.
+     `/go` or `/accept`.
    - Exit `2` (`VISUAL_CODER_ACK stopped` / `VISUAL_CODER_STOPPED`) or `3`
      (`VISUAL_CODER_ACK timeout`): make no further example-target changes.
 

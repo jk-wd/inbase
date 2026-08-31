@@ -1273,6 +1273,12 @@ button {
   text-decoration: none;
 }
 
+.hud-step-hint {
+  font-size: 11px;
+  color: #8b95a5;
+  letter-spacing: 0.02em;
+}
+
 .hud-run-step {
   flex: none;
   padding: 4px 8px;

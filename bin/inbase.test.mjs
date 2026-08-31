@@ -69,6 +69,8 @@ test('init copies the Cursor skill and gitignores .inbase', () => {
     assert.match(skillText, /VISUAL_CODER_NOT_RUNNING/)
     assert.match(skillText, /VISUAL_CODER_CHAT_LIMIT/)
     assert.match(skillText, /VISUAL_CODER_COLOR/)
+    assert.match(skillText, /\/go/)
+    assert.match(skillText, /\/accept/)
     assert.doesNotMatch(skillText, /direct chat interaction not allowed/)
     assert.doesNotMatch(skillText, /npx inbase start-session/)
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/inbase.md')), true)
@@ -89,6 +91,20 @@ test('init copies the Cursor skill and gitignores .inbase', () => {
     assert.match(
       fs.readFileSync(path.join(root, '.cursor/commands/explain.md'), 'utf8'),
       /npx inbase explain wait/,
+    )
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/explain.md'), 'utf8'),
+      /VISUAL_CODER_PROPOSAL/,
+    )
+    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/go.md')), true)
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/go.md'), 'utf8'),
+      /npx inbase go/,
+    )
+    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/accept.md')), true)
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/accept.md'), 'utf8'),
+      /npx inbase accept/,
     )
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/coral.md')), true)
     assert.match(
@@ -1109,7 +1125,7 @@ test('wait-for-approval returns explain from plan ready without a pending patch'
     assert.match(result.stdout, /VISUAL_CODER_ACK explain: the proposal for Bump value/)
     assert.match(result.stdout, /VISUAL_CODER_EXPLAIN/)
     assert.match(result.stdout, /Explain the current proposal: Bump value/)
-    assert.match(result.stdout, /still waiting for Create proposal/)
+    assert.match(result.stdout, /still waiting for \/go/)
     assert.equal(store.readManifest(dataDir, 'explain-plan').pendingExplain, true)
     assert.equal(store.readManifest(dataDir, 'explain-plan').phase, 'plan_ready')
   } finally {
@@ -1355,6 +1371,215 @@ test('wait-for-approval timeout resets the visualizer session', async () => {
     assert.match(result.stdout, /VISUAL_CODER_ACK timeout/)
     assert.match(result.stderr, /Timed out waiting for visualizer review/)
     assert.equal(store.readManifest(dataDir, 'ack-timeout'), null)
+  } finally {
+    cleanup()
+  }
+})
+
+function planSession(store, dataDir, target, sessionId, name, stepTitles) {
+  const started = runCli(
+    ['start-session', '--session', sessionId, '--name', name],
+    {
+      cwd: path.dirname(dataDir),
+      env: {
+        ...process.env,
+        VISUAL_CODER_TARGET: target,
+        INBASE_DATA_DIR: dataDir,
+      },
+    },
+  )
+  assert.equal(started.status, 0, started.stderr)
+  store.answerBlueprint(dataDir, sessionId, false)
+  store.reportPlan(dataDir, {
+    sessionId,
+    feature: name,
+    stepTitles,
+    targetRoot: target,
+  })
+}
+
+test('go invokes the waiting plan step', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    planSession(store, dataDir, target, 'continue-chat', 'Continue chat', [
+      'Bump value',
+      'Bump again',
+    ])
+    writeRunningInstance({ dataDir, targetRoot: target })
+    const result = runCli(['go', '--session', 'continue-chat'], {
+      cwd: root,
+      env,
+    })
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /VISUAL_CODER_ACK execute: step 1 — Bump value/)
+    assert.match(result.stdout, /VISUAL_CODER_EXECUTE Step 1 is invoked: Bump value/)
+    assert.equal(store.readManifest(dataDir, 'continue-chat').phase, 'working')
+  } finally {
+    cleanup()
+  }
+})
+
+test('go refuses a waiting proposal', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    planSession(store, dataDir, target, 'continue-review', 'Continue review', [
+      'Bump value',
+    ])
+    store.invokeStep(dataDir, 'continue-review', 1, target)
+    store.appendDiff(dataDir, target, {
+      sessionId: 'continue-review',
+      patchText:
+        '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 2\n',
+    })
+    writeRunningInstance({ dataDir, targetRoot: target })
+    const result = runCli(['go', '--session', 'continue-review'], {
+      cwd: root,
+      env,
+    })
+    assert.notEqual(result.status, 0)
+    assert.match(result.stderr, /Use \/accept/)
+  } finally {
+    cleanup()
+  }
+})
+
+test('accept invokes the next step', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    planSession(store, dataDir, target, 'accept-next', 'Accept next', [
+      'Bump value',
+      'Bump again',
+    ])
+    store.invokeStep(dataDir, 'accept-next', 1, target)
+    store.appendDiff(dataDir, target, {
+      sessionId: 'accept-next',
+      patchText:
+        '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 2\n',
+    })
+    writeRunningInstance({ dataDir, targetRoot: target })
+    const result = runCli(['accept', '--session', 'accept-next'], {
+      cwd: root,
+      env,
+    })
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /VISUAL_CODER_ACK execute: step 2 — Bump again/)
+    assert.match(result.stdout, /VISUAL_CODER_EXECUTE Step 2 is invoked/)
+    assert.equal(store.readManifest(dataDir, 'accept-next').phase, 'working')
+    assert.equal(store.readManifest(dataDir, 'accept-next').currentStep, 2)
+  } finally {
+    cleanup()
+  }
+})
+
+test('accept finishes the last step', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    planSession(store, dataDir, target, 'accept-last', 'Accept last', [
+      'Bump value',
+    ])
+    store.invokeStep(dataDir, 'accept-last', 1, target)
+    store.appendDiff(dataDir, target, {
+      sessionId: 'accept-last',
+      patchText:
+        '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 2\n',
+    })
+    writeRunningInstance({ dataDir, targetRoot: target })
+    const result = runCli(['accept', '--session', 'accept-last'], {
+      cwd: root,
+      env,
+    })
+    assert.equal(result.status, 5, result.stderr)
+    assert.match(result.stdout, /VISUAL_CODER_FINISHED/)
+    assert.equal(store.readManifest(dataDir, 'accept-last'), null)
+  } finally {
+    cleanup()
+  }
+})
+
+test('explain start detects a waiting proposal', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    planSession(store, dataDir, target, 'explain-proposal', 'Explain proposal', [
+      'Bump value',
+    ])
+    writeRunningInstance({ dataDir, targetRoot: target })
+    const withQuestion = runCli(
+      ['explain', 'start', '--question', 'why this import'],
+      { cwd: root, env },
+    )
+    assert.equal(withQuestion.status, 0, withQuestion.stderr)
+    assert.match(withQuestion.stdout, /VISUAL_CODER_PROPOSAL/)
+    assert.match(withQuestion.stdout, /Bump value/)
+    assert.match(withQuestion.stdout, /why this import/)
+    runCli(['explain', 'stop'], { cwd: root, env })
+
+    const withoutQuestion = runCli(['explain', 'start'], { cwd: root, env })
+    assert.equal(withoutQuestion.status, 0, withoutQuestion.stderr)
+    assert.match(withoutQuestion.stdout, /VISUAL_CODER_PROPOSAL/)
+    assert.match(
+      withoutQuestion.stdout,
+      /VISUAL_CODER_EXPLAIN_STARTED Explain the current proposal: Bump value/,
+    )
   } finally {
     cleanup()
   }

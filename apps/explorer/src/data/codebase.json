@@ -27,7 +27,7 @@
       "name": "README.md",
       "path": "README.md",
       "folder": ".",
-      "lines": 128,
+      "lines": 130,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -485,7 +485,7 @@
       "name": "explain-store.d.ts",
       "path": "apps/explorer/scripts/explain-store.d.ts",
       "folder": "apps/explorer/scripts",
-      "lines": 136,
+      "lines": 140,
       "language": "ts",
       "symbols": [
         {
@@ -526,6 +526,10 @@
         },
         {
           "name": "normalizeExplain",
+          "kind": "function"
+        },
+        {
+          "name": "mergeExplainPoll",
           "kind": "function"
         },
         {
@@ -596,7 +600,7 @@
       "name": "explain-store.mjs",
       "path": "apps/explorer/scripts/explain-store.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 667,
+      "lines": 705,
       "language": "mjs",
       "symbols": [
         {
@@ -705,6 +709,10 @@
         },
         {
           "name": "normalizeExplain",
+          "kind": "function"
+        },
+        {
+          "name": "mergeExplainPoll",
           "kind": "function"
         },
         {
@@ -936,6 +944,30 @@
           "kind": "variable"
         },
         {
+          "name": "currentIds",
+          "kind": "variable"
+        },
+        {
+          "name": "nextIds",
+          "kind": "variable"
+        },
+        {
+          "name": "added",
+          "kind": "variable"
+        },
+        {
+          "name": "pendingUnacked",
+          "kind": "variable"
+        },
+        {
+          "name": "validIds",
+          "kind": "variable"
+        },
+        {
+          "name": "currentStep",
+          "kind": "variable"
+        },
+        {
           "name": "previous",
           "kind": "variable"
         },
@@ -969,6 +1001,14 @@
         },
         {
           "name": "parentStep",
+          "kind": "variable"
+        },
+        {
+          "name": "nextSteps",
+          "kind": "variable"
+        },
+        {
+          "name": "keepCurrent",
           "kind": "variable"
         },
         {
@@ -1019,7 +1059,7 @@
       "name": "explain-store.test.mjs",
       "path": "apps/explorer/scripts/explain-store.test.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 460,
+      "lines": 523,
       "language": "mjs",
       "symbols": [
         {
@@ -1063,6 +1103,10 @@
           "kind": "variable"
         },
         {
+          "name": "rereported",
+          "kind": "variable"
+        },
+        {
           "name": "stopped",
           "kind": "variable"
         },
@@ -1096,6 +1140,18 @@
         },
         {
           "name": "loaded",
+          "kind": "variable"
+        },
+        {
+          "name": "onTwo",
+          "kind": "variable"
+        },
+        {
+          "name": "stale",
+          "kind": "variable"
+        },
+        {
+          "name": "firstReport",
           "kind": "variable"
         }
       ],
@@ -4290,7 +4346,7 @@
       "name": "session-store.test.mjs",
       "path": "apps/explorer/scripts/session-store.test.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 2262,
+      "lines": 2334,
       "language": "mjs",
       "symbols": [
         {
@@ -4631,6 +4687,14 @@
         },
         {
           "name": "replacement",
+          "kind": "variable"
+        },
+        {
+          "name": "connected",
+          "kind": "variable"
+        },
+        {
+          "name": "explain",
           "kind": "variable"
         },
         {
@@ -5202,7 +5266,7 @@
       "name": "App.tsx",
       "path": "apps/explorer/src/App.tsx",
       "folder": "apps/explorer/src",
-      "lines": 2535,
+      "lines": 2536,
       "language": "tsx",
       "symbols": [
         {
@@ -6746,11 +6810,19 @@
       "name": "explain.ts",
       "path": "apps/explorer/src/explain.ts",
       "folder": "apps/explorer/src",
-      "lines": 313,
+      "lines": 352,
       "language": "ts",
       "symbols": [
         {
           "name": "emptyExplain",
+          "kind": "function"
+        },
+        {
+          "name": "explainStepIds",
+          "kind": "function"
+        },
+        {
+          "name": "mergeExplainPoll",
           "kind": "function"
         },
         {
@@ -6862,6 +6934,38 @@
           "kind": "function"
         },
         {
+          "name": "currentIds",
+          "kind": "variable"
+        },
+        {
+          "name": "nextIds",
+          "kind": "variable"
+        },
+        {
+          "name": "added",
+          "kind": "variable"
+        },
+        {
+          "name": "pendingUnacked",
+          "kind": "variable"
+        },
+        {
+          "name": "steps",
+          "kind": "variable"
+        },
+        {
+          "name": "pendingQuestion",
+          "kind": "variable"
+        },
+        {
+          "name": "validIds",
+          "kind": "variable"
+        },
+        {
+          "name": "currentStep",
+          "kind": "variable"
+        },
+        {
           "name": "query",
           "kind": "variable"
         },
@@ -6948,7 +7052,7 @@
       "name": "index.css",
       "path": "apps/explorer/src/index.css",
       "folder": "apps/explorer/src",
-      "lines": 2324,
+      "lines": 2330,
       "language": "css",
       "symbols": [],
       "imports": []
@@ -10651,7 +10755,7 @@
       "name": "HUD.tsx",
       "path": "apps/explorer/src/ui/HUD.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 3486,
+      "lines": 3401,
       "language": "tsx",
       "symbols": [
         {
@@ -11115,10 +11219,6 @@
           "kind": "variable"
         },
         {
-          "name": "lastStep",
-          "kind": "variable"
-        },
-        {
           "name": "panelDone",
           "kind": "variable"
         },
@@ -11171,15 +11271,15 @@
           "kind": "variable"
         },
         {
-          "name": "explaining",
+          "name": "showGoHint",
           "kind": "variable"
         },
         {
-          "name": "showStepAction",
+          "name": "showAcceptHint",
           "kind": "variable"
         },
         {
-          "name": "canExplain",
+          "name": "showStepHint",
           "kind": "variable"
         },
         {
@@ -11424,22 +11524,6 @@
         },
         {
           "name": "setInstruction",
-          "kind": "variable"
-        },
-        {
-          "name": "startingExplain",
-          "kind": "variable"
-        },
-        {
-          "name": "setStartingExplain",
-          "kind": "variable"
-        },
-        {
-          "name": "startingInvoke",
-          "kind": "variable"
-        },
-        {
-          "name": "setStartingInvoke",
           "kind": "variable"
         },
         {
@@ -12338,7 +12422,7 @@
       "name": "inbase.mjs",
       "path": "bin/inbase.mjs",
       "folder": "bin",
-      "lines": 209,
+      "lines": 221,
       "language": "mjs",
       "symbols": [
         {
@@ -12456,7 +12540,7 @@
       "name": "inbase.test.mjs",
       "path": "bin/inbase.test.mjs",
       "folder": "bin",
-      "lines": 1360,
+      "lines": 1587,
       "language": "mjs",
       "symbols": [
         {
@@ -12481,6 +12565,10 @@
         },
         {
           "name": "of",
+          "kind": "function"
+        },
+        {
+          "name": "planSession",
           "kind": "function"
         },
         {
@@ -12701,6 +12789,14 @@
         },
         {
           "name": "preload",
+          "kind": "variable"
+        },
+        {
+          "name": "withQuestion",
+          "kind": "variable"
+        },
+        {
+          "name": "withoutQuestion",
           "kind": "variable"
         },
         {
@@ -13015,7 +13111,7 @@
       "name": "session.mjs",
       "path": "bin/session.mjs",
       "folder": "bin",
-      "lines": 685,
+      "lines": 825,
       "language": "mjs",
       "symbols": [
         {
@@ -13040,6 +13136,22 @@
         },
         {
           "name": "waitingMessage",
+          "kind": "function"
+        },
+        {
+          "name": "requireVisualizer",
+          "kind": "function"
+        },
+        {
+          "name": "resolveCliSessionId",
+          "kind": "function"
+        },
+        {
+          "name": "proposalInfo",
+          "kind": "function"
+        },
+        {
+          "name": "readProposalInfo",
           "kind": "function"
         },
         {
@@ -13080,6 +13192,14 @@
         },
         {
           "name": "waitForApproval",
+          "kind": "function"
+        },
+        {
+          "name": "goProposal",
+          "kind": "function"
+        },
+        {
+          "name": "acceptProposal",
           "kind": "function"
         },
         {
@@ -13131,6 +13251,26 @@
           "kind": "variable"
         },
         {
+          "name": "sessionId",
+          "kind": "variable"
+        },
+        {
+          "name": "active",
+          "kind": "variable"
+        },
+        {
+          "name": "title",
+          "kind": "variable"
+        },
+        {
+          "name": "step",
+          "kind": "variable"
+        },
+        {
+          "name": "id",
+          "kind": "variable"
+        },
+        {
           "name": "consumed",
           "kind": "variable"
         },
@@ -13148,18 +13288,6 @@
         },
         {
           "name": "reviewing",
-          "kind": "variable"
-        },
-        {
-          "name": "active",
-          "kind": "variable"
-        },
-        {
-          "name": "step",
-          "kind": "variable"
-        },
-        {
-          "name": "title",
           "kind": "variable"
         },
         {
@@ -13188,10 +13316,6 @@
         },
         {
           "name": "continuing",
-          "kind": "variable"
-        },
-        {
-          "name": "sessionId",
           "kind": "variable"
         },
         {
@@ -13379,6 +13503,14 @@
           "kind": "variable"
         },
         {
+          "name": "proposal",
+          "kind": "variable"
+        },
+        {
+          "name": "question",
+          "kind": "variable"
+        },
+        {
           "name": "added",
           "kind": "variable"
         },
@@ -13438,6 +13570,16 @@
       "imports": []
     },
     {
+      "id": "skill/commands/accept.md",
+      "name": "accept.md",
+      "path": "skill/commands/accept.md",
+      "folder": "skill/commands",
+      "lines": 25,
+      "language": "md",
+      "symbols": [],
+      "imports": []
+    },
+    {
       "id": "skill/commands/amber.md",
       "name": "amber.md",
       "path": "skill/commands/amber.md",
@@ -13472,7 +13614,17 @@
       "name": "explain.md",
       "path": "skill/commands/explain.md",
       "folder": "skill/commands",
-      "lines": 78,
+      "lines": 117,
+      "language": "md",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": "skill/commands/go.md",
+      "name": "go.md",
+      "path": "skill/commands/go.md",
+      "folder": "skill/commands",
+      "lines": 24,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13572,7 +13724,7 @@
       "name": "SKILL.md",
       "path": "skill/inbase/SKILL.md",
       "folder": "skill/inbase",
-      "lines": 288,
+      "lines": 293,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13763,10 +13915,12 @@
       "name": "commands",
       "parent": "skill",
       "files": [
+        "skill/commands/accept.md",
         "skill/commands/amber.md",
         "skill/commands/blue.md",
         "skill/commands/coral.md",
         "skill/commands/explain.md",
+        "skill/commands/go.md",
         "skill/commands/green.md",
         "skill/commands/inbase.md",
         "skill/commands/lime.md",

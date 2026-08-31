@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import {
+  mergeExplainPoll,
   emptyExplain,
   parseExplainArgs,
   parseExplainCli,
@@ -177,6 +178,17 @@ test('start, report, set step, and stop persist explain.json', () => {
 
     const moved = setExplainStep(env.dataDir, 2)
     assert.equal(moved.currentStep, '2')
+
+    const rereported = reportExplain(env.dataDir, {
+      question: 'How does login work?',
+      steps: [
+        { title: 'Login handler', files: ['src/auth/login.ts'] },
+        { title: 'Session store', folders: ['src/auth'] },
+        { title: 'Callers', select: 'src/auth/login.ts' },
+      ],
+    })
+    assert.equal(rereported.steps.length, 3)
+    assert.equal(rereported.currentStep, '2')
 
     const stopped = stopExplain(env.dataDir)
     assert.equal(stopped.active, false)
@@ -456,4 +468,55 @@ test('normalizeExplain keeps dotted ids from older numeric indexes', () => {
   } finally {
     env.cleanup()
   }
+})
+
+test('mergeExplainPoll keeps the local step while the user navigates', () => {
+  const reported = {
+    active: true,
+    question: 'How does login work?',
+    presentation: 'walk',
+    steps: [{ title: 'One' }, { title: 'Two' }, { title: 'Three' }],
+    currentStep: '1',
+    pendingQuestion: null,
+    pendingStart: null,
+    answering: false,
+  }
+  const onTwo = { ...reported, currentStep: '2' }
+  const stale = mergeExplainPoll(onTwo, reported)
+  assert.equal(stale.currentStep, '2')
+  assert.equal(stale.steps.length, 3)
+
+  const firstReport = mergeExplainPoll(
+    { ...reported, steps: [], currentStep: '1' },
+    reported,
+  )
+  assert.equal(firstReport.currentStep, '1')
+  assert.equal(firstReport.steps.length, 3)
+
+  const followUp = mergeExplainPoll(onTwo, {
+    ...reported,
+    currentStep: '2.1',
+    steps: [
+      { index: '1', title: 'One' },
+      { index: '2', title: 'Two' },
+      { index: '2.1', title: 'Closer' },
+      { index: '3', title: 'Three' },
+    ],
+  })
+  assert.equal(followUp.currentStep, '2.1')
+
+  const asked = mergeExplainPoll(
+    {
+      ...onTwo,
+      pendingQuestion: {
+        parent: '2',
+        question: 'Why this file?',
+        from: '2',
+        fromTitle: 'Two',
+      },
+    },
+    reported,
+  )
+  assert.equal(asked.currentStep, '2')
+  assert.equal(asked.pendingQuestion?.question, 'Why this file?')
 })

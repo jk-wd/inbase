@@ -1589,8 +1589,8 @@ export function invokeStep(dataDir, sessionId, step, targetRoot = null) {
     if (step !== expected) {
       throw new Error(
         last
-          ? `Accept proposal on step ${active.step} to finish`
-          : `Accept proposal on step ${active.step} to continue`,
+          ? `/accept on step ${active.step} to finish`
+          : `/accept on step ${active.step} to continue`,
       )
     }
     applyUnresolved(dataDir, targetRoot, manifest, active.id)

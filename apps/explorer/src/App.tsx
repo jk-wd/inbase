@@ -39,6 +39,7 @@ import {
   explainIsCard,
   explainTargetQuestion,
   fetchExplain,
+  mergeExplainPoll,
   persistExplainAsk,
   persistExplainStart,
   persistExplainStep,
@@ -1148,7 +1149,7 @@ function Explorer({
         ) {
           return current.active ? current : emptyExplain()
         }
-        return next
+        return mergeExplainPoll(current, next)
       })
     }
     void poll()

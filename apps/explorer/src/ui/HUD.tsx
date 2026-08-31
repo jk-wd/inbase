@@ -867,11 +867,11 @@ function sessionLiveStatus(intent: AgentIntent) {
     return { text: 'Starting an explanation…', busy: true }
   }
   if (intent.explainActive || (kind === 'explain' && !intent.listening)) {
-    return { text: 'LLM is explaining this proposal on the map', busy: true }
+    return { text: 'Explanation is on the map', busy: true }
   }
   if (intent.status === 'pending') {
     return intent.listening
-      ? { text: 'LLM is listening — accept or send an instruction', busy: false }
+      ? { text: 'LLM is listening — /accept or send an instruction', busy: false }
       : { text: 'Review this step', busy: false }
   }
   if (kind === 'execute') {
@@ -899,7 +899,7 @@ function sessionLiveStatus(intent: AgentIntent) {
   }
   if (kind === 'plan' || intent.status === 'planned') {
     return intent.listening
-      ? { text: 'LLM is listening — run the next step', busy: false }
+      ? { text: 'LLM is listening — /go to start the proposal', busy: false }
       : { text: 'Plan ready', busy: false }
   }
   if (
@@ -916,30 +916,21 @@ function LiveStatus({
   intent,
   showStop = false,
   onStop,
-  startingExplain = false,
-  startingInvoke = false,
 }: {
   intent: AgentIntent
   showStop?: boolean
   onStop?: () => void
-  startingExplain?: boolean
-  startingInvoke?: boolean
 }) {
-  const status =
-    startingExplain && !intent.pendingExplain && !intent.explainActive
-      ? { text: 'Starting an explanation…', busy: true }
-      : startingInvoke && intent.status !== 'working'
-        ? { text: 'LLM is starting…', busy: true }
-        : sessionLiveStatus(intent)
+  const status = sessionLiveStatus(intent)
   const [flash, setFlash] = useState(false)
   const lastAt = intent.lastAck?.at
 
   useEffect(() => {
-    if (!lastAt && !startingExplain && !startingInvoke) return
+    if (!lastAt) return
     setFlash(true)
     const timer = window.setTimeout(() => setFlash(false), 700)
     return () => window.clearTimeout(timer)
-  }, [lastAt, startingExplain, startingInvoke])
+  }, [lastAt])
 
   return (
     <div className="hud-live" data-busy={status.busy} data-flash={flash}>
@@ -989,8 +980,6 @@ function SessionPanel({
 }: SessionPanelProps) {
   const [minimized, setMinimized] = useState(false)
   const [instruction, setInstruction] = useState('')
-  const [startingExplain, setStartingExplain] = useState(false)
-  const [startingInvoke, setStartingInvoke] = useState(false)
   const sessionId = intent.sessionId
   const latestEntry = intent.isActiveDiff ? intent.chain.at(-1) : null
   const pending =
@@ -1039,10 +1028,6 @@ function SessionPanel({
     Boolean(intent.llmIdle) && intent.awaitingAttach === false
   const canRunNext = stepByStep && Boolean(invokeStep) && !llmDisconnected
   const canAcceptProposal = proposalStep !== null && !llmDisconnected
-  const lastStep =
-    typeof proposalStep === 'number' &&
-    intent.steps.length > 0 &&
-    proposalStep >= intent.steps.length
   const panelDone =
     intent.status === 'finished' ||
     intent.status === 'approved' ||
@@ -1051,19 +1036,7 @@ function SessionPanel({
 
   useEffect(() => {
     setInstruction('')
-    setStartingExplain(false)
-    setStartingInvoke(false)
   }, [intent.diffId, sessionId])
-
-  useEffect(() => {
-    if (intent.pendingExplain || intent.explainActive) setStartingExplain(false)
-  }, [intent.pendingExplain, intent.explainActive])
-
-  useEffect(() => {
-    if (intent.status === 'working' || intent.status === 'replanning') {
-      setStartingInvoke(false)
-    }
-  }, [intent.status])
 
   if (!sessionId || !isReviewingIntent(intent.status)) return null
 
@@ -1078,8 +1051,6 @@ function SessionPanel({
   const liveHasStop =
     showConnectedProgress ||
     working ||
-    startingInvoke ||
-    startingExplain ||
     Boolean(intent.pendingExplain) ||
     Boolean(intent.explainActive) ||
     llmDisconnected
@@ -1151,8 +1122,6 @@ function SessionPanel({
               <LiveStatus
                 intent={intent}
                 showStop={liveHasStop}
-                startingExplain={startingExplain}
-                startingInvoke={startingInvoke}
                 onStop={() => act('stop')}
               />
             </>
@@ -1174,7 +1143,7 @@ function SessionPanel({
           {!llmDisconnected && !stepByStep && (
             <p className="hud-mode-hint">
               LLM implements the full plan. You can still walk the diffs, then
-              Accept proposal.
+              /accept.
             </p>
           )}
           {handshakeSetup ? (
@@ -1261,20 +1230,13 @@ function SessionPanel({
                 <ol className="hud-steps">
                   {intent.steps.map((step) => {
                     const proposed = proposalStep === step.index
-                    const processing =
-                      processingStep === step.index ||
-                      (startingInvoke && invokeStep?.index === step.index)
+                    const processing = processingStep === step.index
                     const accepted = acceptedSteps.has(step.index) && !proposed
                     const creating = processing && !proposed
-                    const explaining =
-                      startingExplain ||
-                      Boolean(intent.pendingExplain) ||
-                      Boolean(intent.explainActive)
-                    const showStepAction =
-                      creating ||
-                      (canRunNext && invokeStep?.index === step.index) ||
-                      (canAcceptProposal && proposed)
-                    const canExplain = showStepAction && !explaining && !creating
+                    const showGoHint =
+                      canRunNext && invokeStep?.index === step.index && !creating
+                    const showAcceptHint = canAcceptProposal && proposed
+                    const showStepHint = creating || showGoHint || showAcceptHint
                     return (
                       <li
                         key={step.index}
@@ -1284,62 +1246,15 @@ function SessionPanel({
                         <span className="hud-step-index">{step.index}.</span>
                         <span className="hud-step-main">
                           <span className="hud-step-title">{step.title}</span>
-                          {showStepAction && (
+                          {showStepHint && (
                             <span className="hud-step-actions">
-                              <button
-                                className="hud-button hud-button-approve hud-run-step"
-                                type="button"
-                                disabled={creating || explaining}
-                                aria-busy={creating}
-                                onPointerDown={(event) => event.stopPropagation()}
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  if (creating || explaining) return
-                                  if (proposed) {
-                                    if (lastStep) act('continue')
-                                    else act('invoke', { step: step.index + 1 })
-                                    return
-                                  }
-                                  setStartingInvoke(true)
-                                  void Promise.resolve(
-                                    onWorkflowAction(sessionId, 'invoke', {
-                                      step: step.index,
-                                    }),
-                                  ).then((result) => {
-                                    if (result === false) setStartingInvoke(false)
-                                  })
-                                }}
-                              >
-                                {proposed
-                                  ? 'Accept proposal'
-                                  : creating
-                                    ? 'Creating proposal…'
-                                    : 'Create proposal'}
-                              </button>
-                              <button
-                                className="hud-button hud-button-approve hud-run-step"
-                                type="button"
-                                disabled={!canExplain}
-                                aria-busy={explaining}
-                                onPointerDown={(event) => event.stopPropagation()}
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  if (!canExplain) return
-                                  setStartingExplain(true)
-                                  void Promise.resolve(
-                                    onWorkflowAction(
-                                      sessionId,
-                                      'explain_proposal',
-                                    ),
-                                  ).then((result) => {
-                                    if (result === false) setStartingExplain(false)
-                                  })
-                                }}
-                              >
-                                {explaining
-                                  ? 'Starting explanation…'
-                                  : 'Explain proposal'}
-                              </button>
+                              <span className="hud-step-hint">
+                                {creating
+                                  ? 'Creating proposal…'
+                                  : showGoHint
+                                    ? '/go'
+                                    : '/accept · /explain'}
+                              </span>
                             </span>
                           )}
                         </span>
@@ -1784,7 +1699,7 @@ function explorerInstructions({
           id: 'cursor-chat',
           keys: ['Cursor chat'],
           label:
-            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /explain for explain mode; 5 chats at once',
+            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /go /accept /explain; 5 chats at once',
         },
         {
           id: 'blueprint-select',
@@ -1871,7 +1786,7 @@ function explorerInstructions({
           id: 'cursor-chat',
           keys: ['Cursor chat'],
           label:
-            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /explain for explain mode; 5 chats at once',
+            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /go /accept /explain; 5 chats at once',
         },
         {
           id: 'blueprint-select',

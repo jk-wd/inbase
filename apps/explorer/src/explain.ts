@@ -23,6 +23,45 @@ export function emptyExplain(): ExplainSession {
   }
 }
 
+function explainStepIds(steps: ExplainStep[]) {
+  return new Set(steps.map((step) => step.index))
+}
+
+export function mergeExplainPoll(
+  current: ExplainSession,
+  next: ExplainSession,
+): ExplainSession {
+  if (!current.active || !next.active) return next
+  if (current.question !== next.question) return next
+  if (current.presentation !== next.presentation) return next
+
+  const currentIds = explainStepIds(current.steps)
+  const nextIds = explainStepIds(next.steps)
+  const added = [...nextIds].filter((id) => !currentIds.has(id))
+  if (current.steps.length === 0 && next.steps.length > 0) return next
+  if (added.includes(next.currentStep)) return next
+
+  const pendingUnacked =
+    Boolean(current.pendingQuestion) &&
+    !next.pendingQuestion &&
+    !next.answering
+  const steps = pendingUnacked ? current.steps : next.steps
+  const pendingQuestion = pendingUnacked
+    ? current.pendingQuestion
+    : next.pendingQuestion
+  const validIds = explainStepIds(steps)
+  const currentStep = validIds.has(current.currentStep)
+    ? current.currentStep
+    : next.currentStep
+
+  return {
+    ...next,
+    steps,
+    pendingQuestion,
+    currentStep,
+  }
+}
+
 export function explainIsCard(explain: ExplainSession) {
   return explain.active && explain.presentation === 'card'
 }
