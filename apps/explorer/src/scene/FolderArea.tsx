@@ -11,7 +11,6 @@ import {
 } from '../theme'
 import type { PlacedFolder } from '../types'
 import { MapSelectBorder } from './MapSelectBorder'
-import { NameInput } from '../ui/NameInput'
 import { BlueprintEyes } from '../ui/EyeIcon'
 
 type FolderAreaProps = {
@@ -24,8 +23,6 @@ type FolderAreaProps = {
   pointed?: boolean
   pointedColors?: string[]
   opacity?: number
-  onCommitName?: (name: string) => void
-  onCancelName?: () => void
 }
 
 export function FolderArea({
@@ -38,8 +35,6 @@ export function FolderArea({
   pointed = false,
   pointedColors,
   opacity = 1,
-  onCommitName,
-  onCancelName,
 }: FolderAreaProps) {
   const added = Boolean(folder.added)
   const highlight = highlightKind ? CHANGE_HIGHLIGHT[highlightKind] : null
@@ -138,22 +133,6 @@ export function FolderArea({
           zIndexRange={[40, 0]}
         >
           <BlueprintEyes colors={eyeColors} size={20} />
-        </Html>
-      )}
-      {naming && mapMode && onCommitName && onCancelName && (
-        <Html
-          position={[0, 1.35, -folder.depth / 2 + 1.35]}
-          center
-          occlude={false}
-          wrapperClass="block-name-overlay"
-          zIndexRange={[120, 0]}
-        >
-          <NameInput
-            placeholder="Folder name"
-            fallbackName="New folder"
-            onCommit={onCommitName}
-            onCancel={onCancelName}
-          />
         </Html>
       )}
       <Suspense fallback={null}>

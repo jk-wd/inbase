@@ -53,15 +53,17 @@ import {
   persistUserContext,
 } from './userContext'
 import {
+  createdIslandKey,
+  createdItemsInsideFolder,
   defaultBlockSpot,
   dropBlueprintFileNotes,
-  dropBlueprintFilePointers,
   dropBlueprintSymbolNote,
   dropBlueprintSymbolPointer,
   findBlueprintPointer,
   isBlueprintSymbolName,
   namedCreatedBlocks,
   namedCreatedIslands,
+  omitCreatedItems,
   blueprintImportRawFromFile,
   parseBlueprintImport,
   parseBlueprintNotes,
@@ -1330,6 +1332,7 @@ function Explorer({
         if (gen !== blueprintPersistGen.current) return
         if (notePersistTimer.current != null) return
         notesDirty.current = false
+        blueprintPersistGen.current += 1
       })
     },
     [intent.sessionId, rememberLiveBlueprint],
@@ -1602,32 +1605,142 @@ function Explorer({
     [userIslands],
   )
 
-  const deleteSelectedCreatedBlock = useCallback(() => {
-    if (!canPlace || !selectedId) return false
-    const selected = userBlocks.find((block) => block.id === selectedId)
-    if (!selected || selected.naming) return false
-    const next = userBlocks.filter((block) => block.id !== selectedId)
-    const notes = dropBlueprintFileNotes(blueprintNotesRef.current, [selectedId])
-    const pointers = dropBlueprintFilePointers(blueprintPointersRef.current, [
-      selectedId,
-    ])
-    blueprintNotesRef.current = notes
-    blueprintPointersRef.current = pointers
-    setUserBlocks(next)
-    setBlueprintNotes(notes)
-    setBlueprintPointers(pointers)
-    persistBlueprint(
-      next,
-      userIslands,
-      undefined,
-      undefined,
-      undefined,
-      notes,
-      pointers,
+  const createdContentsForColor = useCallback((color: string) => {
+    if (color === blueprintColorRef.current) {
+      return {
+        blocks: userBlocksRef.current,
+        islands: userIslandsRef.current,
+        functions: blueprintFunctionsRef.current,
+        variables: blueprintVariablesRef.current,
+        imports: blueprintImportsRef.current,
+        notes: blueprintNotesRef.current,
+        pointers: blueprintPointersRef.current,
+      }
+    }
+    const stored = blueprintForColor(
+      color,
+      latestBlueprintsRef.current.global,
+      latestBlueprintsRef.current.locals,
     )
-    setSelectedId(null)
+    return {
+      blocks: stored.userCreatedBlocks,
+      islands: stored.userCreatedIslands,
+      functions: stored.addedFunctions,
+      variables: stored.addedVariables,
+      imports: stored.addedImports,
+      notes: stored.notes,
+      pointers: stored.pointers,
+    }
+  }, [])
+
+  const removeCreatedItems = useCallback(
+    (
+      color: string,
+      removedBlockIds: Iterable<string>,
+      removedFolderPaths: Iterable<string> = [],
+    ) => {
+      const next = omitCreatedItems(
+        createdContentsForColor(color),
+        removedBlockIds,
+        removedFolderPaths,
+      )
+      if (color === blueprintColorRef.current) {
+        blueprintNotesRef.current = next.notes
+        blueprintPointersRef.current = next.pointers
+        setUserBlocks(next.blocks)
+        setUserIslands(next.islands)
+        setBlueprintFunctions(next.functions)
+        setBlueprintVariables(next.variables)
+        setBlueprintImports(next.imports)
+        setBlueprintNotes(next.notes)
+        setBlueprintPointers(next.pointers)
+      }
+      persistBlueprint(
+        next.blocks,
+        next.islands,
+        next.functions,
+        next.variables,
+        next.imports,
+        next.notes,
+        next.pointers,
+        color,
+      )
+    },
+    [createdContentsForColor, persistBlueprint],
+  )
+
+  const ownerColorForCreatedFile = useCallback((fileId: string) => {
+    if (
+      userBlocksRef.current.some(
+        (block) => block.id === fileId && !block.naming,
+      )
+    ) {
+      return blueprintColorRef.current
+    }
+    const { global, locals } = latestBlueprintsRef.current
+    if (global.userCreatedBlocks.some((block) => block.id === fileId)) {
+      return GLOBAL_BLUEPRINT_COLOR.id
+    }
+    return (
+      locals.find((item) =>
+        item.userCreatedBlocks.some((block) => block.id === fileId),
+      )?.color ?? null
+    )
+  }, [])
+
+  const ownerColorForCreatedFolder = useCallback((folderPath: string) => {
+    const matches = (island: UserCreatedIsland) =>
+      !island.naming && createdIslandKey(island) === folderPath
+    if (userIslandsRef.current.some(matches)) return blueprintColorRef.current
+    const { global, locals } = latestBlueprintsRef.current
+    if (global.userCreatedIslands.some(matches)) return GLOBAL_BLUEPRINT_COLOR.id
+    return locals.find((item) => item.userCreatedIslands.some(matches))?.color ?? null
+  }, [])
+
+  const deleteSelectedCreated = useCallback(() => {
+    if (!canPlace) return false
+    if (selectedId) {
+      const color = ownerColorForCreatedFile(selectedId)
+      if (!color) return false
+      const selected = createdContentsForColor(color).blocks.find(
+        (block) => block.id === selectedId,
+      )
+      if (!selected || selected.naming) return false
+      removeCreatedItems(color, [selectedId])
+      setSelectedId(null)
+      return true
+    }
+    if (!selectedFolder) return false
+    const color = ownerColorForCreatedFolder(selectedFolder)
+    if (!color) return false
+    const source = createdContentsForColor(color)
+    const selected = source.islands.find(
+      (island) =>
+        !island.naming && createdIslandKey(island) === selectedFolder,
+    )
+    if (!selected) return false
+    const folderPath = createdIslandKey(selected)
+    const { removedBlocks, removedIslands } = createdItemsInsideFolder(
+      folderPath,
+      source.blocks,
+      source.islands,
+    )
+    removeCreatedItems(
+      color,
+      removedBlocks.map((block) => block.id),
+      removedIslands.map((island) => createdIslandKey(island)),
+    )
+    setSelectedFolder(null)
     return true
-  }, [canPlace, persistBlueprint, selectedId, userBlocks, userIslands])
+  }, [
+    canPlace,
+    createdContentsForColor,
+    ownerColorForCreatedFile,
+    ownerColorForCreatedFolder,
+    removeCreatedItems,
+    selectedFolder,
+    selectedId,
+  ])
 
   const selectFile = useCallback(
     (fileId: string | null) => {
@@ -1953,14 +2066,15 @@ function Explorer({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.repeat || event.code !== 'Backspace') return
+      if (event.repeat || (event.code !== 'Backspace' && event.code !== 'Delete'))
+        return
       if (shouldIgnoreShortcut(event)) return
-      if (!deleteSelectedCreatedBlock()) return
+      if (!deleteSelectedCreated()) return
       event.preventDefault()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [deleteSelectedCreatedBlock])
+  }, [deleteSelectedCreated])
 
   const canToggleBranchChanges = !llmBusy && (wantBranchChanges || branchChanges.available)
 
@@ -2080,33 +2194,39 @@ function Explorer({
     let cancelled = false
     const poll = async () => {
       try {
+        const persistGen = blueprintPersistGen.current
         const bundle = await fetchAgentIntents()
         if (cancelled) return
-        const nextBlueprints = withPolledBlueprints(latestBlueprintsRef.current, {
-          global: bundle.blueprint,
-          locals: bundle.localBlueprints,
-        })
-        latestBlueprintsRef.current = nextBlueprints
-        setGlobalBlueprint(nextBlueprints.global)
-        setLocalBlueprints(nextBlueprints.locals)
-        const colorIds = new Set([
-          GLOBAL_BLUEPRINT_COLOR.id,
-          ...bundle.localBlueprints.map((item) => item.color),
-          ...bundle.intents
-            .map((item) => item.color)
-            .filter((id): id is string => Boolean(id)),
-        ])
-        if (!colorIds.has(blueprintColorRef.current)) {
-          blueprintColorRef.current = GLOBAL_BLUEPRINT_COLOR.id
-          setBlueprintColor(GLOBAL_BLUEPRINT_COLOR.id)
+        if (
+          !notesDirty.current &&
+          persistGen === blueprintPersistGen.current
+        ) {
+          const nextBlueprints = withPolledBlueprints(latestBlueprintsRef.current, {
+            global: bundle.blueprint,
+            locals: bundle.localBlueprints,
+          })
+          latestBlueprintsRef.current = nextBlueprints
+          setGlobalBlueprint(nextBlueprints.global)
+          setLocalBlueprints(nextBlueprints.locals)
+          const colorIds = new Set([
+            GLOBAL_BLUEPRINT_COLOR.id,
+            ...bundle.localBlueprints.map((item) => item.color),
+            ...bundle.intents
+              .map((item) => item.color)
+              .filter((id): id is string => Boolean(id)),
+          ])
+          if (!colorIds.has(blueprintColorRef.current)) {
+            blueprintColorRef.current = GLOBAL_BLUEPRINT_COLOR.id
+            setBlueprintColor(GLOBAL_BLUEPRINT_COLOR.id)
+          }
+          applyBlueprintContents(
+            blueprintForColor(
+              blueprintColorRef.current,
+              nextBlueprints.global,
+              nextBlueprints.locals,
+            ),
+          )
         }
-        applyBlueprintContents(
-          blueprintForColor(
-            blueprintColorRef.current,
-            nextBlueprints.global,
-            nextBlueprints.locals,
-          ),
-        )
         setNextAttachSessionId(bundle.nextAttachSessionId)
         const merged: AgentIntent[] = []
         for (const next of bundle.intents) {
@@ -2191,6 +2311,20 @@ function Explorer({
     userBlocks.some((block) => !block.naming && knownFileIds.has(block.id)) ||
     userIslands.some(
       (island) => !island.naming && knownFolderPaths.has(island.path),
+    )
+  const canDeleteSelected =
+    Boolean(
+      selectedId &&
+        mapBlueprint.blocks.some(
+          (block) => block.id === selectedId && !block.naming,
+        ),
+    ) ||
+    Boolean(
+      selectedFolder &&
+        mapBlueprint.islands.some(
+          (island) =>
+            !island.naming && createdIslandKey(island) === selectedFolder,
+        ),
     )
   const canAskLlm =
     Boolean(intent.sessionId) &&
@@ -2382,10 +2516,6 @@ function Explorer({
             onBlueprintMenu={
               canPlace && !explaining ? setMapMenu : undefined
             }
-            onCommitName={commitBlockName}
-            onCancelName={cancelBlockName}
-            onCommitIslandName={commitIslandName}
-            onCancelIslandName={cancelIslandName}
             userCreatedBlocks={mapBlueprint.blocks}
             userCreatedIslands={mapBlueprint.islands}
             overlayBlocks={overlayBlocks}
@@ -2447,6 +2577,7 @@ function Explorer({
         selectedTick={selectedTick}
         inspectTick={inspectTick}
         selectedFolder={selectedFolder}
+        canDeleteSelected={canDeleteSelected}
         aimedRelation={aimedRelation}
         aimedFileId={aimedFileId}
         intent={intent}
@@ -2472,6 +2603,12 @@ function Explorer({
         onToggleChangePathsOnly={toggleChangePathsOnly}
         naming={naming}
         namingIsland={Boolean(namingIslandId)}
+        onCommitName={(name) => {
+          if (namingId) commitBlockName(namingId, name)
+        }}
+        onCancelName={() => {
+          if (namingId) cancelBlockName(namingId)
+        }}
         onCommitIslandName={(name) => {
           if (namingIslandId) commitIslandName(namingIslandId, name)
         }}

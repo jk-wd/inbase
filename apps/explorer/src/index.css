@@ -1908,20 +1908,11 @@ button {
 
 .hud-name-gate {
   position: absolute;
-  top: 42%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: auto;
-  z-index: 4;
-}
-
-.block-name-overlay {
-  z-index: 90 !important;
-  pointer-events: auto;
-}
-
-.block-name-overlay-map .block-name-form {
-  transform: translate(-50%, calc(-100% - 8px));
+  inset: 0;
+  z-index: 22;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
 }
 
 .block-name-form {

@@ -26,6 +26,8 @@ export function NameInput({
     return () => window.clearTimeout(timer)
   }, [])
 
+  useEffect(() => beginKeyboardIsolation(), [])
+
   const commit = (allowFallback: boolean) => {
     const typed = input.current?.value ?? ''
     const value = typed.trim()

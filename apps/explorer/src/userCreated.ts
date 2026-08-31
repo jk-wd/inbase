@@ -136,8 +136,35 @@ export function resolveCreatedIsland(rawName: string, parent: string) {
   }
 }
 
-function islandKey(island: UserCreatedIsland) {
+export function createdIslandKey(island: Pick<UserCreatedIsland, 'id' | 'path'>) {
   return island.path || island.id
+}
+
+function islandKey(island: UserCreatedIsland) {
+  return createdIslandKey(island)
+}
+
+export function pathIsInside(path: string, parent: string) {
+  if (!path || !parent) return false
+  if (path === parent) return true
+  if (parent === '.') return path !== '.'
+  return path.startsWith(`${parent}/`)
+}
+
+export function createdItemsInsideFolder(
+  folderPath: string,
+  blocks: UserCreatedBlock[],
+  islands: UserCreatedIsland[],
+) {
+  const removedIslands = islands.filter((island) =>
+    pathIsInside(createdIslandKey(island), folderPath),
+  )
+  const removedBlocks = blocks.filter(
+    (block) =>
+      pathIsInside(block.folder, folderPath) ||
+      pathIsInside(block.path || block.id, folderPath),
+  )
+  return { removedBlocks, removedIslands }
 }
 
 function islandWidth() {
@@ -528,6 +555,37 @@ export function dropBlueprintFilePointers(
   return pointers.filter((item) =>
     item.kind === 'folder' ? !folders.has(item.path) : !files.has(item.path),
   )
+}
+
+export function omitCreatedItems<
+  T extends {
+    blocks: UserCreatedBlock[]
+    islands: UserCreatedIsland[]
+    functions: PatchSymbolAddition[]
+    variables: PatchSymbolAddition[]
+    imports: PatchImportAddition[]
+    notes: BlueprintNote[]
+    pointers: BlueprintPointer[]
+  },
+>(
+  current: T,
+  removedBlockIds: Iterable<string>,
+  removedFolderPaths: Iterable<string> = [],
+): T {
+  const files = new Set(removedBlockIds)
+  const folders = new Set(removedFolderPaths)
+  return {
+    ...current,
+    blocks: current.blocks.filter((block) => !files.has(block.id)),
+    islands: current.islands.filter(
+      (island) => !folders.has(createdIslandKey(island)),
+    ),
+    functions: current.functions.filter((item) => !files.has(item.file)),
+    variables: current.variables.filter((item) => !files.has(item.file)),
+    imports: current.imports.filter((item) => !files.has(item.file)),
+    notes: dropBlueprintFileNotes(current.notes, files),
+    pointers: dropBlueprintFilePointers(current.pointers, files, folders),
+  }
 }
 
 export function dropBlueprintSymbolPointer(

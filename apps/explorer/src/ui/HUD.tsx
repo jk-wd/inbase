@@ -1823,6 +1823,7 @@ type HUDProps = {
   selectedTick?: number
   inspectTick?: number
   selectedFolder?: string | null
+  canDeleteSelected?: boolean
   aimedRelation: AimedRelation | null
   aimedFileId?: string | null
   intent: AgentIntent
@@ -1852,6 +1853,8 @@ type HUDProps = {
   onToggleChangePathsOnly?: () => void
   naming?: boolean
   namingIsland?: boolean
+  onCommitName?: (name: string) => void
+  onCancelName?: () => void
   onCommitIslandName?: (name: string) => void
   onCancelIslandName?: () => void
   blueprintFunctions?: PatchSymbolAddition[]
@@ -1916,6 +1919,7 @@ export function HUD({
   selectedTick = 0,
   inspectTick = 0,
   selectedFolder = null,
+  canDeleteSelected = false,
   aimedRelation,
   aimedFileId = null,
   intent,
@@ -1941,6 +1945,8 @@ export function HUD({
   onToggleChangePathsOnly,
   naming = false,
   namingIsland = false,
+  onCommitName,
+  onCancelName,
   onCommitIslandName,
   onCancelIslandName,
   blueprintFunctions = [],
@@ -2292,13 +2298,32 @@ export function HUD({
     canPlace,
     hasChangeSet,
     changePathsOnly,
-    selectedUserCreated: Boolean(selected?.userCreated),
+    selectedUserCreated:
+      canDeleteSelected ||
+      Boolean(selected?.userCreated) ||
+      Boolean(selectedFolderNode?.userCreated),
     infoVisible,
     importedBy,
     showBranchChanges,
     canShowBranchChanges,
   })
   const currentInstructionView: InstructionView = mapping ? 'map' : 'walk'
+  const namingFolder = Boolean(
+    namingIsland && onCommitIslandName && onCancelIslandName,
+  )
+  const namingFile = Boolean(
+    naming && !namingIsland && onCommitName && onCancelName,
+  )
+  const namingCommit = namingFolder
+    ? onCommitIslandName
+    : namingFile
+      ? onCommitName
+      : undefined
+  const namingCancel = namingFolder
+    ? onCancelIslandName
+    : namingFile
+      ? onCancelName
+      : undefined
 
   return (
     <div className="hud">
@@ -2320,19 +2345,16 @@ export function HUD({
         </div>
       )}
 
-      {mode === 'walk' &&
-        namingIsland &&
-        onCommitIslandName &&
-        onCancelIslandName && (
-          <div className="hud-name-gate">
-            <NameInput
-              placeholder="Folder name"
-              fallbackName="New folder"
-              onCommit={onCommitIslandName}
-              onCancel={onCancelIslandName}
-            />
-          </div>
-        )}
+      {namingCommit && namingCancel && (
+        <div className="hud-name-gate">
+          <NameInput
+            placeholder={namingFolder ? 'Folder name' : 'File name'}
+            fallbackName={namingFolder ? 'New folder' : 'New file'}
+            onCommit={namingCommit}
+            onCancel={namingCancel}
+          />
+        </div>
+      )}
 
       {mode === 'walk' && locked && (
         <div className="crosshair" data-aim={Boolean(aimed)} />

@@ -70,10 +70,6 @@ type WorldProps = {
   importedBy?: boolean
   namingId?: string | null
   onBlueprintMenu?: (menu: MapBlueprintMenu) => void
-  onCommitName?: (id: string, name: string) => boolean
-  onCancelName?: (id: string) => void
-  onCommitIslandName?: (id: string, name: string) => boolean
-  onCancelIslandName?: (id: string) => void
   userCreatedBlocks?: UserCreatedBlock[]
   userCreatedIslands?: UserCreatedIsland[]
   overlayBlocks?: UserCreatedBlock[]
@@ -122,10 +118,6 @@ export function World({
   namingId = null,
   namingIslandId = null,
   onBlueprintMenu,
-  onCommitName,
-  onCancelName,
-  onCommitIslandName,
-  onCancelIslandName,
   userCreatedBlocks = [],
   userCreatedIslands = [],
   overlayBlocks = [],
@@ -362,18 +354,6 @@ export function World({
                 : 1
             }
             labelVisible={!lod || lod.folderLabels.has(folder.path)}
-            onCommitName={
-              folder.path === namingIslandId && onCommitIslandName
-                ? (name) => {
-                    onCommitIslandName(folder.path, name)
-                  }
-                : undefined
-            }
-            onCancelName={
-              folder.path === namingIslandId && onCancelIslandName
-                ? () => onCancelIslandName(folder.path)
-                : undefined
-            }
           />
         )
       })}
@@ -438,16 +418,6 @@ export function World({
             naming={naming}
             mapMode={mapping}
             labelVisible={!lod || lod.labels.has(file.id) || naming}
-            onCommitName={
-              naming && onCommitName
-                ? (name) => {
-                    onCommitName(file.id, name)
-                  }
-                : undefined
-            }
-            onCancelName={
-              naming && onCancelName ? () => onCancelName(file.id) : undefined
-            }
           />
         )
       })}

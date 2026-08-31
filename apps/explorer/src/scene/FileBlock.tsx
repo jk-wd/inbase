@@ -1,7 +1,6 @@
 import { memo, Suspense } from 'react'
 import { Billboard, Edges, Html, Text } from '@react-three/drei'
 import { CHANGE_HIGHLIGHT, CONFIG, blueprintPalette, dimColor, fileColor, FILE_SELECTION, MAP_SELECTION, type ChangeKind } from '../theme'
-import { NameInput } from '../ui/NameInput'
 import { BlueprintEyes } from '../ui/EyeIcon'
 import { MapSelectBorder } from './MapSelectBorder'
 import type { FileNode } from '../types'
@@ -34,8 +33,6 @@ type FileBlockProps = {
   pointed?: boolean
   pointedColors?: string[]
   opacity?: number
-  onCommitName?: (name: string) => void
-  onCancelName?: () => void
 }
 
 function fileLabel(name: string, changeKind: ChangeKind | null, added: boolean) {
@@ -100,8 +97,6 @@ export const FileBlock = memo(function FileBlock({
   pointed = false,
   pointedColors,
   opacity = 1,
-  onCommitName,
-  onCancelName,
 }: FileBlockProps) {
   const [width, height, depth] = placed.size
   const highlight =
@@ -252,30 +247,6 @@ export const FileBlock = memo(function FileBlock({
           zIndexRange={[40, 0]}
         >
           <BlueprintEyes colors={eyeColors} mapMode={mapMode} />
-        </Html>
-      )}
-      {naming && onCommitName && onCancelName && (
-        <Html
-          position={
-            mapMode
-              ? [0, height / 2 + 0.04, -depth / 2]
-              : [0, height / 2 + 0.42, 0]
-          }
-          center={!mapMode}
-          occlude={false}
-          wrapperClass={
-            mapMode
-              ? 'block-name-overlay block-name-overlay-map'
-              : 'block-name-overlay'
-          }
-          zIndexRange={[120, 0]}
-        >
-          <NameInput
-            placeholder="File name"
-            fallbackName="New file"
-            onCommit={onCommitName}
-            onCancel={onCancelName}
-          />
         </Html>
       )}
       {showLabels && (

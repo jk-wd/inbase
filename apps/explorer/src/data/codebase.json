@@ -5266,7 +5266,7 @@
       "name": "App.tsx",
       "path": "apps/explorer/src/App.tsx",
       "folder": "apps/explorer/src",
-      "lines": 2536,
+      "lines": 2674,
       "language": "tsx",
       "symbols": [
         {
@@ -5331,6 +5331,10 @@
         },
         {
           "name": "poll",
+          "kind": "function"
+        },
+        {
+          "name": "matches",
           "kind": "function"
         },
         {
@@ -5962,11 +5966,39 @@
           "kind": "variable"
         },
         {
-          "name": "deleteSelectedCreatedBlock",
+          "name": "createdContentsForColor",
+          "kind": "variable"
+        },
+        {
+          "name": "stored",
+          "kind": "variable"
+        },
+        {
+          "name": "removeCreatedItems",
+          "kind": "variable"
+        },
+        {
+          "name": "ownerColorForCreatedFile",
+          "kind": "variable"
+        },
+        {
+          "name": "ownerColorForCreatedFolder",
+          "kind": "variable"
+        },
+        {
+          "name": "deleteSelectedCreated",
+          "kind": "variable"
+        },
+        {
+          "name": "color",
           "kind": "variable"
         },
         {
           "name": "selected",
+          "kind": "variable"
+        },
+        {
+          "name": "folderPath",
           "kind": "variable"
         },
         {
@@ -6066,6 +6098,10 @@
           "kind": "variable"
         },
         {
+          "name": "persistGen",
+          "kind": "variable"
+        },
+        {
           "name": "bundle",
           "kind": "variable"
         },
@@ -6115,6 +6151,10 @@
         },
         {
           "name": "blueprintCanCleanup",
+          "kind": "variable"
+        },
+        {
+          "name": "canDeleteSelected",
           "kind": "variable"
         },
         {
@@ -6490,7 +6530,15 @@
           "kind": "variable"
         },
         {
-          "name": "color",
+          "name": "global",
+          "kind": "variable"
+        },
+        {
+          "name": "removedBlocks",
+          "kind": "variable"
+        },
+        {
+          "name": "removedIslands",
           "kind": "variable"
         }
       ],
@@ -7052,7 +7100,7 @@
       "name": "index.css",
       "path": "apps/explorer/src/index.css",
       "folder": "apps/explorer/src",
-      "lines": 2330,
+      "lines": 2321,
       "language": "css",
       "symbols": [],
       "imports": []
@@ -7854,7 +7902,7 @@
       "name": "FileBlock.tsx",
       "path": "apps/explorer/src/scene/FileBlock.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 325,
+      "lines": 296,
       "language": "tsx",
       "symbols": [
         {
@@ -7960,7 +8008,6 @@
       ],
       "imports": [
         "apps/explorer/src/theme.ts",
-        "apps/explorer/src/ui/NameInput.tsx",
         "apps/explorer/src/ui/EyeIcon.tsx",
         "apps/explorer/src/scene/MapSelectBorder.tsx",
         "apps/explorer/src/types.ts"
@@ -7971,7 +8018,7 @@
       "name": "FolderArea.tsx",
       "path": "apps/explorer/src/scene/FolderArea.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 185,
+      "lines": 164,
       "language": "tsx",
       "symbols": [
         {
@@ -8031,7 +8078,6 @@
         "apps/explorer/src/theme.ts",
         "apps/explorer/src/types.ts",
         "apps/explorer/src/scene/MapSelectBorder.tsx",
-        "apps/explorer/src/ui/NameInput.tsx",
         "apps/explorer/src/ui/EyeIcon.tsx"
       ]
     },
@@ -9373,7 +9419,7 @@
       "name": "World.tsx",
       "path": "apps/explorer/src/scene/World.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 583,
+      "lines": 553,
       "language": "tsx",
       "symbols": [
         {
@@ -10755,7 +10801,7 @@
       "name": "HUD.tsx",
       "path": "apps/explorer/src/ui/HUD.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 3401,
+      "lines": 3423,
       "language": "tsx",
       "symbols": [
         {
@@ -11467,6 +11513,22 @@
           "kind": "variable"
         },
         {
+          "name": "namingFolder",
+          "kind": "variable"
+        },
+        {
+          "name": "namingFile",
+          "kind": "variable"
+        },
+        {
+          "name": "namingCommit",
+          "kind": "variable"
+        },
+        {
+          "name": "namingCancel",
+          "kind": "variable"
+        },
+        {
           "name": "next",
           "kind": "variable"
         },
@@ -11646,7 +11708,7 @@
       "name": "NameInput.tsx",
       "path": "apps/explorer/src/ui/NameInput.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 155,
+      "lines": 157,
       "language": "tsx",
       "symbols": [
         {
@@ -11812,7 +11874,7 @@
       "name": "userCreated.ts",
       "path": "apps/explorer/src/userCreated.ts",
       "folder": "apps/explorer/src",
-      "lines": 653,
+      "lines": 711,
       "language": "ts",
       "symbols": [
         {
@@ -11848,7 +11910,19 @@
           "kind": "function"
         },
         {
+          "name": "createdIslandKey",
+          "kind": "function"
+        },
+        {
           "name": "islandKey",
+          "kind": "function"
+        },
+        {
+          "name": "pathIsInside",
+          "kind": "function"
+        },
+        {
+          "name": "createdItemsInsideFolder",
           "kind": "function"
         },
         {
@@ -11940,6 +12014,10 @@
           "kind": "function"
         },
         {
+          "name": "omitCreatedItems",
+          "kind": "function"
+        },
+        {
           "name": "dropBlueprintSymbolPointer",
           "kind": "function"
         },
@@ -11981,6 +12059,14 @@
         },
         {
           "name": "path",
+          "kind": "variable"
+        },
+        {
+          "name": "removedIslands",
+          "kind": "variable"
+        },
+        {
+          "name": "removedBlocks",
           "kind": "variable"
         },
         {
