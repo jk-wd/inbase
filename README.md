@@ -5,6 +5,10 @@
   </picture>
 </p>
 
+<p align="center">
+  <img src="docs/manual-proposal.png" alt="Pending proposal with changed files and added functions" width="680" />
+</p>
+
 ## Blueprint based development
 
 When an LLM writes code, it takes over decisions about what goes where. You stop building your own mental map of the codebase. The model has it. You do not.
