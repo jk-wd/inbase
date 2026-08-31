@@ -1711,7 +1711,7 @@ export function continueDiff(dataDir, targetRoot, sessionId, diffId) {
   manifest.phase = 'plan_ready'
   manifest.workStartedAt = null
   writeManifest(dataDir, manifest)
-  return invokeStep(dataDir, sessionId, manifest.currentStep, targetRoot)
+  return autoAdvance(dataDir, sessionId, targetRoot)
 }
 
 export function requestReplan(

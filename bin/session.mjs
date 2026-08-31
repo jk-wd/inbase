@@ -379,6 +379,23 @@ export async function goProposal(args) {
     console.error(error instanceof Error ? error.message : error)
     process.exit(1)
   }
+  if (next?.phase === 'plan_ready') {
+    const step = next.currentStep
+    const title = next.steps.find((item) => item.index === step)?.title
+    signalAck(
+      store,
+      config.dataDir,
+      sessionId,
+      'plan',
+      title
+        ? `waiting for /go on step ${step} — ${title}`
+        : `waiting for /go on step ${step}`,
+    )
+    console.log(
+      `VISUAL_CODER_ACCEPTED Accepted the proposal. Stop. Wait for the user to type /go step ${step}${title ? `: ${title}` : ''} in chat. Do not edit files. The user can still Stop.`,
+    )
+    process.exit(0)
+  }
   emitApprovalHandshake(store, config.dataDir, sessionId, next)
 }
 

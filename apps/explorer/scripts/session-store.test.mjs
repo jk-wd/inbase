@@ -1053,7 +1053,7 @@ test('reports a plan before invocation and exposes plan-only intent', () => {
   }
 })
 
-test('invokes, reviews, continues, and starts the next step', () => {
+test('invokes, reviews, continues, and waits to run the next step', () => {
   const env = fixture()
   try {
     reportPlan(env.dataDir, {
@@ -1078,13 +1078,18 @@ test('invokes, reviews, continues, and starts the next step', () => {
     )
 
     invokeStep(env.dataDir, 'happy-chat', 2, env.targetRoot)
-    const continued = readManifest(env.dataDir, 'happy-chat')
-    assert.equal(continued.phase, 'working')
-    assert.equal(continued.currentStep, 2)
+    const accepted = readManifest(env.dataDir, 'happy-chat')
+    assert.equal(accepted.phase, 'plan_ready')
+    assert.equal(accepted.currentStep, 2)
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
       'export const value = 2\n',
     )
+
+    invokeStep(env.dataDir, 'happy-chat', 2, env.targetRoot)
+    const continued = readManifest(env.dataDir, 'happy-chat')
+    assert.equal(continued.phase, 'working')
+    assert.equal(continued.currentStep, 2)
 
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'happy-chat',
@@ -1105,7 +1110,7 @@ test('invokes, reviews, continues, and starts the next step', () => {
   }
 })
 
-test('accepting a step starts the next one and still waits for go on the last proposal', () => {
+test('accepting a step waits for go, including the last proposal', () => {
   const env = fixture()
   try {
     reportPlan(env.dataDir, {
@@ -1124,9 +1129,10 @@ test('accepting a step starts the next one and still waits for go on the last pr
       'last-go',
       '0001',
     )
-    assert.equal(afterAccept.phase, 'working')
+    assert.equal(afterAccept.phase, 'plan_ready')
     assert.equal(afterAccept.currentStep, 2)
 
+    invokeStep(env.dataDir, 'last-go', 2, env.targetRoot)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'last-go',
       patchText:
@@ -1262,6 +1268,7 @@ test('preview keeps earlier diffs visible as later steps accumulate', () => {
     assert.deepEqual(afterContinue.files, ['src/a.ts'])
     assert.deepEqual(afterContinue.creates, [])
 
+    invokeStep(env.dataDir, 'preview-chat', 2)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'preview-chat',
       patchText: addB,
@@ -1366,6 +1373,7 @@ test('alternative instruction keeps the current proposal on disk', () => {
       'export const value = 3\n',
     )
 
+    invokeStep(env.dataDir, 'replan-chat', 2)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'replan-chat',
       patchText: threeToFour,
@@ -2055,6 +2063,7 @@ test('stop reverts accepted diffs and the pending preview', () => {
       patchText: oneToTwo,
     })
     continueDiff(env.dataDir, env.targetRoot, 'keep-chat', '0001')
+    invokeStep(env.dataDir, 'keep-chat', 2)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'keep-chat',
       patchText: addB,
@@ -2098,6 +2107,7 @@ test('stop unstages reverted files from git', () => {
       patchText: oneToTwo,
     })
     continueDiff(env.dataDir, env.targetRoot, 'stage-chat', '0001')
+    invokeStep(env.dataDir, 'stage-chat', 2)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'stage-chat',
       patchText: addB,
@@ -2180,6 +2190,7 @@ test('inspecting a file materializes the selected diff into the editor path', ()
       patchText: oneToTwo,
     })
     continueDiff(env.dataDir, env.targetRoot, 'inspect-chat', '0001')
+    invokeStep(env.dataDir, 'inspect-chat', 2)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'inspect-chat',
       patchText: twoToThree,
@@ -2308,6 +2319,8 @@ test('records live file edits against the invoke snapshot', () => {
       'export const value = 2\n',
     )
 
+    invokeStep(env.dataDir, 'live-chat', 2, env.targetRoot)
+    assert.equal(readManifest(env.dataDir, 'live-chat').phase, 'plan_ready')
     invokeStep(env.dataDir, 'live-chat', 2, env.targetRoot)
     assert.equal(readManifest(env.dataDir, 'live-chat').phase, 'working')
     fs.writeFileSync(

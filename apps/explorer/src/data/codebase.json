@@ -4326,7 +4326,7 @@
       "name": "session-store.test.mjs",
       "path": "apps/explorer/scripts/session-store.test.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 2373,
+      "lines": 2360,
       "language": "mjs",
       "symbols": [
         {
@@ -4627,10 +4627,6 @@
         },
         {
           "name": "finished",
-          "kind": "variable"
-        },
-        {
-          "name": "accepted",
           "kind": "variable"
         },
         {
@@ -12566,7 +12562,7 @@
       "name": "inbase.test.mjs",
       "path": "bin/inbase.test.mjs",
       "folder": "bin",
-      "lines": 529,
+      "lines": 569,
       "language": "mjs",
       "symbols": [
         {
@@ -12988,7 +12984,7 @@
       "name": "session.mjs",
       "path": "bin/session.mjs",
       "folder": "bin",
-      "lines": 587,
+      "lines": 546,
       "language": "mjs",
       "symbols": [
         {
@@ -13323,7 +13319,7 @@
       "name": "accept.md",
       "path": "skill/commands/accept.md",
       "folder": "skill/commands",
-      "lines": 24,
+      "lines": 23,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13373,7 +13369,7 @@
       "name": "go.md",
       "path": "skill/commands/go.md",
       "folder": "skill/commands",
-      "lines": 22,
+      "lines": 24,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13473,7 +13469,7 @@
       "name": "SKILL.md",
       "path": "skill/inbase/SKILL.md",
       "folder": "skill/inbase",
-      "lines": 241,
+      "lines": 239,
       "language": "md",
       "symbols": [],
       "imports": []

@@ -23,8 +23,9 @@ the next unconnected slot. You do not need `/inbase`.
   color's empty slot. Aliases: `/red` (Coral), `/yellow` (Amber), `/green`
   (Lime), `/purple` (Violet). The text after the command is the user's request.
 - **`/blue`**: Blue is the global blueprint, not a chat. Do not attach.
-- **`/go`**: start the waiting plan step, or accept the current proposal and
-  start the next one. The last proposal still needs `/go` to finish.
+- **`/go`**: start the waiting plan step, or accept the current proposal.
+  After accept, stop; another `/go` starts the next step. The last proposal
+  still needs `/go` to finish.
 - **`/accept`**: same as `/go`.
 - **`/explain [question]`**: explain mode on the map. If a plan or proposal is
   waiting, explain that proposal; the question is optional extra focus. After a
@@ -40,8 +41,9 @@ The LLM uses a plan-first loop. It reports the complete plan before editing
 files, then **stops**. Do not poll the visualizer. The user drives the next
 action from this chat:
 
-- **`/go`**: invoke the waiting plan step, or accept the current proposal and
-  start the next one. The last proposal still needs `/go` to finish.
+- **`/go`**: invoke the waiting plan step, or accept the current proposal.
+  After accept, stop; another `/go` starts the next step. The last proposal
+  still needs `/go` to finish.
 - **`/accept`**: same as `/go`.
 - **`/explain`**: explain the current proposal, a pending map `?` click, or a
   follow-up question.
@@ -189,9 +191,9 @@ npx inbase propose-patch --session "<session-id>"
 
    Do not write a unified diff. Do not pass a `.patch` file. Never write or
    replace a patch already stored in the session folder. Then **stop**. Wait
-   for `/go` (or an alternative instruction) in chat. `/go` on a ready
-   proposal accepts it and starts the next step. The last proposal still
-   needs `/go` to finish.
+   for `/go` to accept that proposal (or an alternative instruction) in chat.
+   If that prints `VISUAL_CODER_ACCEPTED`, do not edit files. **Stop.** Wait
+   for `/go` on the next step. The last proposal still needs `/go` to finish.
    If that prints `VISUAL_CODER_FINISHED`, tell the user the feature is done
    and **stop**. Do not propose another patch.
 8. When the user types **`/explain`**, do not edit project files and do not

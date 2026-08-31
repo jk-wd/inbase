@@ -372,7 +372,7 @@ test('go invokes the waiting plan step', async () => {
   }
 })
 
-test('go accepts a waiting proposal and starts the next step', async () => {
+test('go accepts a waiting proposal and waits to start the next step', async () => {
   const { root, cleanup } = tempProject()
   const target = path.join(root, 'app')
   const dataDir = path.join(root, '.inbase')
@@ -403,16 +403,17 @@ test('go accepts a waiting proposal and starts the next step', async () => {
       env,
     })
     assert.equal(result.status, 0, result.stderr)
-    assert.match(result.stdout, /VISUAL_CODER_ACK execute: step 2 — Bump again/)
-    assert.match(result.stdout, /VISUAL_CODER_EXECUTE Step 2 is invoked: Bump again/)
-    assert.equal(store.readManifest(dataDir, 'continue-review').phase, 'working')
+    assert.match(result.stdout, /VISUAL_CODER_ACK plan: waiting for \/go on step 2 — Bump again/)
+    assert.match(result.stdout, /VISUAL_CODER_ACCEPTED Accepted the proposal/)
+    assert.match(result.stdout, /Wait for the user to type \/go step 2: Bump again/)
+    assert.equal(store.readManifest(dataDir, 'continue-review').phase, 'plan_ready')
     assert.equal(store.readManifest(dataDir, 'continue-review').currentStep, 2)
   } finally {
     cleanup()
   }
 })
 
-test('accept accepts a waiting proposal and starts the next step', async () => {
+test('accept accepts a waiting proposal and waits to start the next step', async () => {
   const { root, cleanup } = tempProject()
   const target = path.join(root, 'app')
   const dataDir = path.join(root, '.inbase')
@@ -443,9 +444,10 @@ test('accept accepts a waiting proposal and starts the next step', async () => {
       env,
     })
     assert.equal(result.status, 0, result.stderr)
-    assert.match(result.stdout, /VISUAL_CODER_ACK execute: step 2 — Bump again/)
-    assert.match(result.stdout, /VISUAL_CODER_EXECUTE Step 2 is invoked: Bump again/)
-    assert.equal(store.readManifest(dataDir, 'accept-next').phase, 'working')
+    assert.match(result.stdout, /VISUAL_CODER_ACK plan: waiting for \/go on step 2 — Bump again/)
+    assert.match(result.stdout, /VISUAL_CODER_ACCEPTED Accepted the proposal/)
+    assert.match(result.stdout, /Wait for the user to type \/go step 2: Bump again/)
+    assert.equal(store.readManifest(dataDir, 'accept-next').phase, 'plan_ready')
     assert.equal(store.readManifest(dataDir, 'accept-next').currentStep, 2)
   } finally {
     cleanup()

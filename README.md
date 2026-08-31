@@ -47,7 +47,7 @@ inbase run --target /path/to/your/project
 
 <img src="docs/inbase-llm.png" alt="LLM working through a plan in the heads-up display overlay" align="left" width="280" hspace="16" />
 
-Inbase does not call a model itself. The visual coding loop currently supports **Cursor**. The installed skill makes the agent work through the map: it reports a plan, then waits in the Cursor chat for **`/go`** or **`/explain`**. The HUD (heads-up display — the overlay panel on the 3D map) shows those commands. After `/go`, the agent edits live files for that step and records a patch. Those stored patches are the session record and are applied on every step update. `/go` on a ready proposal accepts it and starts the next step.
+Inbase does not call a model itself. The visual coding loop currently supports **Cursor**. The installed skill makes the agent work through the map: it reports a plan, then waits in the Cursor chat for **`/go`** or **`/explain`**. The HUD (heads-up display — the overlay panel on the 3D map) shows those commands. After `/go`, the agent edits live files for that step and records a patch. Those stored patches are the session record and are applied on every step update. `/go` on a ready proposal accepts it; another `/go` starts the next step.
 
 `npx inbase run` opens 5 empty chat slots on the map. Open a regular Cursor chat to connect — it takes the next unconnected slot. You can type an **initial instruction**, drop **context files**, and place a **blueprint** (right-click the map to create files and folders) on a waiting slot before or after that chat connects. The layout is the source of truth for the chat. Dropped context files stay with that session until it ends. The **global** (blue) blueprint is shared across sessions; each session color also has a **local** blueprint that only that chat sees. Both stay on the map even after those files and folders exist. Use the color chips to choose which blueprint you are editing, then **Hide**, **Clear**, or **Cleanup** (drops planned items that already exist). When a session finishes it is discarded and a new empty slot is opened; the global blueprint remains. Restarting the visualizer discards leftover sessions and opens 5 new empty slots.
 
@@ -55,7 +55,7 @@ A normal chat request connects to the next empty slot. Use `/coral add a login p
 
 If several slots are waiting, the next Cursor chat attaches the oldest empty session. Sessions that already have an LLM are skipped, and the map window does not need to be focused.
 
-With **Step by step** on, type `/go` in Cursor to start the first step. When the proposal is ready, `/go` accepts it and starts the next one. You still type `/go` on the last proposal to finish. After the last recorded patch you can still `/go` or **Stop**. `/explain` (optionally with a question) has the LLM publish an explanation you step through on the map. With Step by step off, the LLM implements the full plan; you can still walk Previous/Next over the diffs, then `/go` on the last proposal. Send an alternative instruction in the Cursor chat to update the current proposal, or **Stop** to end the session.
+With **Step by step** on, type `/go` in Cursor to start a step. When the proposal is ready, `/go` accepts it and pauses — type `/go` again to start the next step, including for the last proposal. After the last recorded patch you can still `/go` or **Stop**. `/explain` (optionally with a question) has the LLM publish an explanation you step through on the map. With Step by step off, the LLM implements the full plan; you can still walk Previous/Next over the diffs, then `/go` on the last proposal. Send an alternative instruction in the Cursor chat to update the current proposal, or **Stop** to end the session.
 
 When no LLM is currently making changes, turn on **Show branch changes** (or press **G**) to highlight the current git branch against its base — committed, unstaged, and untracked files — instead of LLM patch files. The control is disabled while an LLM session is writing or reviewing a patch.
 
@@ -72,7 +72,7 @@ session record and are applied on every step update.
 | `inbase init` | Install the Cursor skill in this repo |
 | `inbase run` | Scan this repo and start the local map |
 | `inbase run --port 5174` | Start on another port |
-| `inbase go [--session <id>]` | Start the waiting step, or accept a ready proposal and start the next (`/go`) |
+| `inbase go [--session <id>]` | Start the waiting step, or accept a ready proposal (`/go`) |
 | `inbase accept [--session <id>]` | Same as `go` (`/accept`) |
 | `inbase explain start [--question "..."]` | Open map-only explain mode |
 | `inbase explain report --step "..."` | Publish explanation steps and map focus |

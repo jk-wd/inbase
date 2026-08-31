@@ -2,7 +2,7 @@
 description: Start or continue the current Inbase proposal
 ---
 
-The user invoked `/go`. Start the waiting plan step, or accept the current proposal and start the next one. The last proposal still needs `/go` to finish.
+The user invoked `/go`. Start the waiting plan step, or accept the current proposal. After a proposal is accepted, **stop** — another `/go` starts the next step. The last proposal still needs `/go` to finish.
 
 This chat should already be attached to an Inbase session (`VISUAL_CODER_SESSION` in this conversation). Do **not** attach a new session. Do **not** report a new plan.
 
@@ -16,8 +16,10 @@ Use the `VISUAL_CODER_SESSION` from this conversation. If `--session` is omitted
 
 If that fails with `VISUAL_CODER_NOT_RUNNING`, reply with that message and stop.
 
-2. Reply in this chat first with one short sentence that you are starting the proposal.
+2. Reply in this chat first with one short sentence that you are starting or accepting the proposal.
 
-3. If the output includes `VISUAL_CODER_EXECUTE`, implement that step now: edit live files for that step only, then `npx inbase propose-patch --session "<session-id>"` with no patch file. Then **stop**. Wait for the user to type `/go` (or an alternative instruction) in chat.
+3. If the output includes `VISUAL_CODER_EXECUTE`, implement that step now: edit live files for that step only, then `npx inbase propose-patch --session "<session-id>"` with no patch file. Then **stop**. Wait for the user to type `/go` to accept (or an alternative instruction) in chat.
 
-4. If the output includes `VISUAL_CODER_FINISHED`, that was the last proposal. Tell the user the feature is done and **stop**. Do not propose another patch.
+4. If the output includes `VISUAL_CODER_ACCEPTED`, the proposal is accepted. Do **not** edit files. **Stop.** Wait for the user to type `/go` on the next step.
+
+5. If the output includes `VISUAL_CODER_FINISHED`, that was the last proposal. Tell the user the feature is done and **stop**. Do not propose another patch.
