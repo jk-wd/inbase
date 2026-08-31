@@ -1718,29 +1718,6 @@ export function continueDiff(dataDir, targetRoot, sessionId, diffId) {
   return autoAdvance(dataDir, sessionId, targetRoot)
 }
 
-export function requestReplan(
-  dataDir,
-  sessionId,
-  diffId,
-  instruction,
-  targetRoot = null,
-) {
-  const manifest = requireManifest(dataDir, sessionId)
-  const active = pendingActive(manifest, diffId)
-  const guidance = typeof instruction === 'string' ? instruction.trim() : ''
-  if (!guidance) throw new Error('An alternative instruction is required')
-  active.status = 'extend'
-  active.instruction = guidance
-  active.decidedAt = new Date().toISOString()
-  manifest.phase = 'working'
-  manifest.pendingInstruction = guidance
-  manifest.workStartedAt = new Date().toISOString()
-  writeManifest(dataDir, manifest)
-  // Keep the current proposal on disk. The instruction updates that latest state.
-  void targetRoot
-  return manifest
-}
-
 export function notifySessionExplain(dataDir, sessionId, detail) {
   const manifest = readManifest(dataDir, sessionId)
   if (!manifest) return null
@@ -1974,13 +1951,9 @@ export function decideDiff(
   sessionId,
   diffId,
   decision,
-  instruction = '',
 ) {
   if (decision === 'approved') {
     return continueDiff(dataDir, targetRoot, sessionId, diffId)
-  }
-  if (decision === 'extend') {
-    return requestReplan(dataDir, sessionId, diffId, instruction, targetRoot)
   }
   return stopSession(dataDir, sessionId, targetRoot)
 }

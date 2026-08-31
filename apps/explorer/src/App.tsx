@@ -1022,12 +1022,12 @@ function Explorer({
     async (
       sessionId: string,
       action: WorkflowAction,
-      options: { instruction?: string; step?: number; stepByStep?: boolean } = {},
+      options: { step?: number; stepByStep?: boolean } = {},
     ) => {
       const current = intents.find((item) => item.sessionId === sessionId)
       if (!current?.sessionId) return false
       if (
-        (action === 'continue' || action === 'instruct') &&
+        action === 'continue' &&
         (!current.diffId || !current.isActiveDiff)
       ) {
         return false

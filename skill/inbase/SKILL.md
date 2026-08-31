@@ -47,8 +47,6 @@ action from this chat:
 - **`/accept`**: same as `/go`.
 - **`/explain`**: explain the current proposal, a pending map `?` click, or a
   follow-up question.
-- An **alternative instruction** in chat while a proposal is waiting: edit those
-  live files and `propose-patch` again, then stop for `/go`.
 
 **Step by step** is off by default. Then `report-plan` and `/go` invoke the next
 step immediately (`VISUAL_CODER_EXECUTE`). Implement that step in the same turn.
@@ -119,8 +117,7 @@ call tools before that sentence.
 
 After `propose-patch`, **stop** unless Step by step is off and the next step is
 already invoked — then implement that step now. Do not explore, search, or
-re-plan. Otherwise wait for `/go`, `/explain`, or an alternative instruction
-in this chat.
+re-plan. Otherwise wait for `/go` or `/explain` in this chat.
 
 ## Required sequence
 
@@ -161,7 +158,7 @@ npx inbase wait-for-blueprint --session "<session-id>"
    Do not omit, rename, relocate, or replace a blueprint file, island, symbol,
    or import. Extra edits to existing files are allowed when needed to finish
    the feature. Extra new files that are not in either blueprint are a deviation.
-   If the user request, a later instruction, or your own plan would
+   If the user request, a later request, or your own plan would
    differ from an enabled blueprint, **stop and ask the user in chat** before
    reporting the plan. Do not silently deviate.
 4. List **all** steps needed to finish the feature. Keep steps small enough that
@@ -196,10 +193,10 @@ npx inbase propose-patch --session "<session-id>"
    Do not write a unified diff. Do not pass a `.patch` file. Never write or
    replace a patch already stored in the session folder. Then **stop**, unless
    Step by step is off and the next step is already invoked — implement that
-   step now. Wait for `/go` to accept the last proposal (or an alternative
-   instruction) in chat. If that prints `VISUAL_CODER_ACCEPTED`, do not edit
-   files. **Stop.** Wait for `/go` on the next step unless it is already
-   invoked. The last proposal still needs `/go` to finish.
+   step now. Wait for `/go` to accept the last proposal in chat. If that
+   prints `VISUAL_CODER_ACCEPTED`, do not edit files. **Stop.** Wait for
+   `/go` on the next step unless it is already invoked. The last proposal
+   still needs `/go` to finish.
    If that prints `VISUAL_CODER_FINISHED`, tell the user the feature is done
    and **stop**. Do not propose another patch.
 8. When the user types **`/explain`**, do not edit project files and do not
@@ -211,10 +208,7 @@ npx inbase propose-patch --session "<session-id>"
    Then `npx inbase explain report`. After reporting, **stop**. The user
    navigates the map. They type `/explain` again for a follow-up, or `/go`
    to continue the plan.
-9. If the user sends an **alternative instruction** while a proposal is
-   waiting, edit those live files, then `inbase propose-patch`. Stop for
-   `/go`. Do not start the next step and do not report a new plan.
-10. After a finished handshake, the explorer already removed stored session
+9. After a finished handshake, the explorer already removed stored session
     diffs. The global blueprint remains. Optionally run:
 
 ```bash

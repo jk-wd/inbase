@@ -28,7 +28,6 @@ import {
   listOpenSessionIds,
   readActiveSession,
   recycleDisconnectedSessions,
-  requestReplan,
   notifySessionExplain,
   requestExplainProposal,
   sendBlueprint,
@@ -433,7 +432,6 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
     if (
       action !== 'invoke' &&
       action !== 'continue' &&
-      action !== 'instruct' &&
       action !== 'explain_proposal' &&
       action !== 'stop' &&
       action !== 'blueprint_yes' &&
@@ -490,18 +488,6 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       }
       continueDiff(dataDir, targetRoot, body.sessionId, body.diffId)
       rescanTarget('after applying patch')
-    } else if (action === 'instruct') {
-      if (!body.diffId) {
-        sendJson(res, 400, { error: 'diffId is required for instruct' })
-        return
-      }
-      requestReplan(
-        dataDir,
-        body.sessionId,
-        body.diffId,
-        body.instruction ?? '',
-        targetRoot,
-      )
     } else if (action === 'explain_proposal') {
       requestExplainProposal(dataDir, body.sessionId, body.diffId)
     } else if (action === 'blueprint_yes') {

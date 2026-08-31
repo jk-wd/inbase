@@ -397,13 +397,6 @@ export function continueDiff(
   sessionId: string,
   diffId: string,
 ): DiffManifest
-export function requestReplan(
-  dataDir: string,
-  sessionId: string,
-  diffId: string,
-  instruction: string,
-  targetRoot?: string | null,
-): DiffManifest
 export function notifySessionExplain(
   dataDir: string,
   sessionId: string,
@@ -433,8 +426,7 @@ export function decideDiff(
   targetRoot: string,
   sessionId: string,
   diffId: string,
-  decision: 'approved' | 'extend' | 'rejected',
-  instruction?: string,
+  decision: 'approved' | 'rejected',
 ): DiffManifest | null
 export function closeSession(dataDir: string, sessionId: string): void
 export function finalizeFinishedSession(dataDir: string, sessionId: string): void

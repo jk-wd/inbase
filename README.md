@@ -17,7 +17,7 @@ Inbase is a structured way to collaborate with an LLM. It visualizes the codebas
 
 You draw the intended change on a map of the real codebase before the model writes a file. That drawing is a **blueprint**: planned files, folders, functions, variables, imports, notes, and pointers, laid on the existing code. The LLM must follow that layout.
 
-The model reads the blueprint, reports a plan that matches it, and **stops**. You run the work from Cursor with `/accept`, one map change per command. Inbase records each one as a patch on the map. If a proposal is wrong, send an alternative instruction or change the blueprint.
+The model reads the blueprint, reports a plan that matches it, and **stops**. You run the work from Cursor with `/accept`, one map change per command. Inbase records each one as a patch on the map. If a proposal is wrong, change the blueprint or Stop.
 
 Blueprints have two layers:
 
@@ -66,7 +66,7 @@ inbase init
 inbase run
 ```
 
-The map opens in your browser (http://localhost:5173 by default). Use `--no-open` to skip that.
+Open the printed URL (http://localhost:5173 by default).
 
 ![Map open after inbase run](docs/manual-start.png)
 
@@ -196,7 +196,6 @@ With **Step by step** on:
 
 While a proposal is waiting:
 
-- Send an **alternative instruction** in the Cursor chat (or the HUD textarea) to revise that proposal. The agent edits those live files, records a new patch, and waits for `/accept` again. It does not start the next step or report a new plan.
 - Type **`/explain`** to walk the current proposal on the map instead of accepting it.
 - **Stop** ends the session.
 
@@ -289,10 +288,9 @@ The in-app **Instructions** overlay (bottom of the HUD) lists the same controls 
 | Command | What it does |
 | --- | --- |
 | `inbase init` | Install the Cursor skill in this repo |
-| `inbase run` | Scan this repo, start the local map, and open it in a browser |
+| `inbase run` | Scan this repo and start the local map |
 | `inbase run --port 5174` | Start on another port |
 | `inbase run --target <dir>` | Map another folder |
-| `inbase run --no-open` | Start without opening a browser |
 | `inbase accept [--session <id>]` | Start the waiting step, or accept a ready proposal (`/accept`) |
 | `inbase go [--session <id>]` | Same as `accept` (`/go`) |
 | `inbase explain start [--question "..."]` | Open map-only explain mode |

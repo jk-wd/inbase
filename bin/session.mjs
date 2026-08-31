@@ -106,54 +106,22 @@ function emitApprovalHandshake(store, dataDir, sessionId, manifest) {
   if (manifest.phase === 'working') {
     const next = manifest.steps.find((step) => step.index === manifest.currentStep)
     const title = next?.title
-    const guidance =
-      typeof manifest.pendingInstruction === 'string'
-        ? manifest.pendingInstruction.trim()
-        : ''
-    const updating = Boolean(guidance)
     signalAck(
       store,
       dataDir,
       sessionId,
       'execute',
-      updating
-        ? 'a new instruction'
-        : title
-          ? `step ${manifest.currentStep} — ${title}`
-          : `step ${manifest.currentStep}`,
+      title
+        ? `step ${manifest.currentStep} — ${title}`
+        : `step ${manifest.currentStep}`,
     )
-    const instruction = updating
-      ? `\nVISUAL_CODER_INSTRUCTION_START\n${guidance}\nVISUAL_CODER_INSTRUCTION_END`
-      : ''
     const continuing = (manifest.diffs?.length ?? 0) > 0
-    if (updating) {
-      console.log(
-        `VISUAL_CODER_EXECUTE Update the current proposal for step ${manifest.currentStep}${title ? `: ${title}` : ''}. Live files already contain that proposal — do not reset them. Follow the instruction between VISUAL_CODER_INSTRUCTION_START and END, edit those live files, then inbase propose-patch --session ${sessionId} with no patch file. Do not report a new plan.${instruction}`,
-      )
-    } else {
-      console.log(
-        continuing
-          ? `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Continue immediately: edit live files for this step only, then inbase propose-patch --session ${sessionId} with no patch file. Then stop and wait for the user to /go in chat.`
-          : `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Re-read the global blueprint.json and this session's local blueprint before implementing; the user can place files and islands at any time. Edit the live project files for this step only (Write, StrReplace, Delete). Then record the step with inbase propose-patch --session ${sessionId} — no patch file. Then stop and wait for the user to /go in chat.`,
-      )
-    }
-    process.exit(0)
-  }
-  if (manifest.phase === 'replanning') {
-    signalAck(
-      store,
-      dataDir,
-      sessionId,
-      'replan',
-      `revise the current proposal for step ${manifest.currentStep}`,
-    )
-    const instruction = manifest.pendingInstruction
-      ? `\nVISUAL_CODER_INSTRUCTION_START\n${manifest.pendingInstruction}\nVISUAL_CODER_INSTRUCTION_END`
-      : ''
     console.log(
-      `VISUAL_CODER_REPLAN Live files still contain the current proposal for step ${manifest.currentStep}. Do not reset them. Follow the instruction between VISUAL_CODER_INSTRUCTION_START and END, edit those live files, then inbase propose-patch. Do not report a new plan.${instruction}`,
+      continuing
+        ? `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Continue immediately: edit live files for this step only, then inbase propose-patch --session ${sessionId} with no patch file. Then stop and wait for the user to /go in chat.`
+        : `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Re-read the global blueprint.json and this session's local blueprint before implementing; the user can place files and islands at any time. Edit the live project files for this step only (Write, StrReplace, Delete). Then record the step with inbase propose-patch --session ${sessionId} — no patch file. Then stop and wait for the user to /go in chat.`,
     )
-    process.exit(4)
+    process.exit(0)
   }
 }
 
@@ -459,7 +427,7 @@ export async function proposePatch(args) {
       ? `VISUAL_CODER_STEP_READY Recorded live edits as patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Step by step is off, so the next step is already invoked. Implement that step now, then propose-patch again.`
       : last
         ? `VISUAL_CODER_STEP_READY Recorded live edits as patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Stop. Wait for the user to type /go in chat to finish.`
-        : `VISUAL_CODER_STEP_READY Recorded live edits as patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Stop. Wait for the user to type /go in chat. An alternative instruction in chat updates this proposal.`,
+        : `VISUAL_CODER_STEP_READY Recorded live edits as patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Stop. Wait for the user to type /go in chat.`,
   )
 }
 

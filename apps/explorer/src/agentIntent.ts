@@ -333,7 +333,6 @@ export async function performAgentAction(
   sessionId: string,
   options: {
     diffId?: string
-    instruction?: string
     step?: number
     stepByStep?: boolean
     userCreatedBlocks?: UserCreatedBlock[]

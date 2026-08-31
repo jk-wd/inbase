@@ -875,9 +875,6 @@ function sessionLiveStatus(intent: AgentIntent) {
   if (kind === 'invoke') {
     return { text: 'LLM is starting…', busy: true }
   }
-  if (kind === 'replan') {
-    return { text: 'LLM received a new instruction', busy: true }
-  }
   if (intent.status === 'working') {
     return {
       text: intent.reason
@@ -957,7 +954,7 @@ type SessionPanelProps = {
   onWorkflowAction: (
     sessionId: string,
     action: WorkflowAction,
-    options?: { instruction?: string; step?: number; stepByStep?: boolean },
+    options?: { step?: number; stepByStep?: boolean },
   ) => void | boolean | AgentIntent | Promise<void | boolean | AgentIntent>
   onNavigateDiff: (sessionId: string, diffId: string) => void
 }
@@ -972,7 +969,6 @@ function SessionPanel({
   onNavigateDiff,
 }: SessionPanelProps) {
   const [minimized, setMinimized] = useState(false)
-  const [instruction, setInstruction] = useState('')
   const sessionId = intent.sessionId
   const latestEntry = intent.isActiveDiff ? intent.chain.at(-1) : null
   const pending =
@@ -1027,10 +1023,6 @@ function SessionPanel({
     acceptedSteps.size > 0 ||
     canAcceptProposal
 
-  useEffect(() => {
-    setInstruction('')
-  }, [intent.diffId, sessionId])
-
   if (!sessionId || !isReviewingIntent(intent.status)) return null
 
   const handshakeSetup =
@@ -1056,7 +1048,7 @@ function SessionPanel({
 
   const act = (
     action: WorkflowAction,
-    options?: { instruction?: string; step?: number; stepByStep?: boolean },
+    options?: { step?: number; stepByStep?: boolean },
   ) => onWorkflowAction(sessionId, action, options)
 
   return (
@@ -1390,7 +1382,7 @@ function SessionPanel({
                   </>
                 )}
               </MutationFold>
-              {planReady && (
+              {(planReady || (pending && !llmDisconnected)) && (
                 <div className="hud-session-actions">
                   {showPlaceHint && <PlaceFilesHint />}
                   <div className="hud-decide">
@@ -1403,43 +1395,6 @@ function SessionPanel({
                     </button>
                   </div>
                 </div>
-              )}
-              {pending && !llmDisconnected && (
-                <>
-                  <label className="hud-instruction">
-                    <span>Alternative instruction for the LLM</span>
-                    <textarea
-                      value={instruction}
-                      maxLength={4000}
-                      rows={3}
-                      placeholder="Describe what should change in this proposal…"
-                      onChange={(event) => setInstruction(event.target.value)}
-                      onKeyDown={(event) => event.stopPropagation()}
-                    />
-                  </label>
-                  <div className="hud-session-actions">
-                    {showPlaceHint && <PlaceFilesHint />}
-                    <div className="hud-decide">
-                      <button
-                        className="hud-button hud-button-extend"
-                        type="button"
-                        disabled={!instruction.trim()}
-                        onClick={() =>
-                          act('instruct', { instruction })
-                        }
-                      >
-                        Send instruction
-                      </button>
-                      <button
-                        className="hud-button hud-button-reject"
-                        type="button"
-                        onClick={() => act('stop')}
-                      >
-                        Stop
-                      </button>
-                    </div>
-                  </div>
-                </>
               )}
             </>
           )}
@@ -1827,7 +1782,7 @@ type HUDProps = {
   onWorkflowAction: (
     sessionId: string,
     action: WorkflowAction,
-    options?: { instruction?: string; step?: number; stepByStep?: boolean },
+    options?: { step?: number; stepByStep?: boolean },
   ) => void | boolean | AgentIntent | Promise<void | boolean | AgentIntent>
   onNavigateDiff: (sessionId: string, diffId: string) => void
   onOpenMap: () => void

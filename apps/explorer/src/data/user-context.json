@@ -1,84 +1,17 @@
 {
-  "updatedAt": "2026-08-31T17:04:34.849Z",
-  "mode": "walk",
+  "updatedAt": "2026-08-31T17:24:34.498Z",
+  "mode": "map",
   "island": {
-    "path": ".",
-    "name": "inbase"
+    "path": null,
+    "name": "open ground"
   },
-  "lookingAt": {
-    "id": "README.md",
-    "name": "README.md",
-    "path": "README.md",
-    "folder": "."
-  },
-  "lookingAtFiles": [
-    {
-      "id": "README.md",
-      "name": "README.md",
-      "path": "README.md",
-      "folder": "."
-    },
-    {
-      "id": "package.json",
-      "name": "package.json",
-      "path": "package.json",
-      "folder": "."
-    },
-    {
-      "id": "CONTRIBUTING.md",
-      "name": "CONTRIBUTING.md",
-      "path": "CONTRIBUTING.md",
-      "folder": "."
-    },
-    {
-      "id": "SECURITY.md",
-      "name": "SECURITY.md",
-      "path": "SECURITY.md",
-      "folder": "."
-    },
-    {
-      "id": "LICENSE",
-      "name": "LICENSE",
-      "path": "LICENSE",
-      "folder": "."
-    }
-  ],
+  "lookingAt": null,
+  "lookingAtFiles": [],
   "selected": null,
-  "filesOnIsland": [
-    {
-      "id": "CONTRIBUTING.md",
-      "name": "CONTRIBUTING.md",
-      "path": "CONTRIBUTING.md",
-      "folder": "."
-    },
-    {
-      "id": "LICENSE",
-      "name": "LICENSE",
-      "path": "LICENSE",
-      "folder": "."
-    },
-    {
-      "id": "package.json",
-      "name": "package.json",
-      "path": "package.json",
-      "folder": "."
-    },
-    {
-      "id": "README.md",
-      "name": "README.md",
-      "path": "README.md",
-      "folder": "."
-    },
-    {
-      "id": "SECURITY.md",
-      "name": "SECURITY.md",
-      "path": "SECURITY.md",
-      "folder": "."
-    }
-  ],
+  "filesOnIsland": [],
   "position": {
-    "x": 11.74,
-    "z": 16.84
+    "x": 0,
+    "z": 151.58
   },
   "showBranchChanges": true
 }

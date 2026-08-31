@@ -27,7 +27,6 @@ import {
   reportPlan as reportPlanStore,
   requestExplainProposal,
   clearPendingExplain,
-  requestReplan,
   sendBlueprint,
   sessionIntent,
   setStepByStep,
@@ -98,14 +97,8 @@ function reportPlan(dataDir, input) {
 
 const oneToTwo =
   '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 2\n'
-const oneToThree =
-  '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 3\n'
-const oneToNine =
-  '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 9\n'
 const twoToThree =
   '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 2\n+export const value = 3\n'
-const threeToFour =
-  '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 3\n+export const value = 4\n'
 
 test('rejects unsafe session identifiers', () => {
   assert.throws(() => assertSessionId('../other-chat'))
@@ -1321,95 +1314,6 @@ test('preview keeps earlier diffs visible as later steps accumulate', () => {
   }
 })
 
-test('alternative instruction keeps the current proposal on disk', () => {
-  const env = fixture()
-  try {
-    reportPlan(env.dataDir, {
-      sessionId: 'replan-chat',
-      feature: 'Replan',
-      stepTitles: ['Build value', 'Old second step'],
-    })
-    invokeStep(env.dataDir, 'replan-chat', 1)
-    const first = appendDiff(env.dataDir, env.targetRoot, {
-      sessionId: 'replan-chat',
-      patchText: oneToTwo,
-    })
-    const firstText = readDiff(env.dataDir, 'replan-chat', first.entry)
-
-    requestReplan(
-      env.dataDir,
-      'replan-chat',
-      '0001',
-      'Make the value configurable before finishing',
-      env.targetRoot,
-    )
-    assert.equal(
-      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 2\n',
-    )
-    const kept = sessionIntent(env.dataDir, 'replan-chat', ['src/a.ts'])
-    assert.equal(kept.preview, true)
-    assert.deepEqual(kept.files, ['src/a.ts'])
-    const manifest = readManifest(env.dataDir, 'replan-chat')
-    assert.equal(manifest.phase, 'working')
-    assert.equal(
-      manifest.pendingInstruction,
-      'Make the value configurable before finishing',
-    )
-    assert.deepEqual(
-      manifest.steps.map((step) => step.title),
-      ['Build value', 'Old second step'],
-    )
-
-    const revised = appendDiff(env.dataDir, env.targetRoot, {
-      sessionId: 'replan-chat',
-      patchText: oneToThree,
-    })
-    assert.equal(readDiff(env.dataDir, 'replan-chat', first.entry), firstText)
-    assert.equal(
-      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 3\n',
-    )
-    const replacement = sessionIntent(env.dataDir, 'replan-chat', ['src/a.ts'])
-    assert.deepEqual(replacement.files, ['src/a.ts'])
-    assert.equal(replacement.diffId, revised.entry.id)
-    assert.equal(replacement.status, 'pending')
-    assert.equal(replacement.phase, 'review')
-    assert.equal(replacement.step, 1)
-    assert.equal(replacement.chain.at(-1).status, 'pending')
-    assert.equal(replacement.chain.at(-1).step, 1)
-    assert.equal(
-      replacement.chain.filter((entry) => entry.status === 'applied').length,
-      0,
-    )
-    materializeDiff(env.dataDir, env.targetRoot, 'replan-chat', '0001')
-    assert.equal(
-      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 2\n',
-    )
-    materializeDiff(env.dataDir, env.targetRoot, 'replan-chat', '0002')
-    assert.equal(
-      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 3\n',
-    )
-    continueDiff(env.dataDir, env.targetRoot, 'replan-chat', '0002')
-    assert.equal(
-      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 3\n',
-    )
-
-    invokeStep(env.dataDir, 'replan-chat', 2)
-    appendDiff(env.dataDir, env.targetRoot, {
-      sessionId: 'replan-chat',
-      patchText: threeToFour,
-    })
-    continueDiff(env.dataDir, env.targetRoot, 'replan-chat', '0003')
-    assert.equal(readManifest(env.dataDir, 'replan-chat'), null)
-  } finally {
-    env.cleanup()
-  }
-})
-
 test('explain proposal keeps the pending review and records an ack', () => {
   const env = fixture()
   try {
@@ -1555,48 +1459,6 @@ test('pending explain and active explain keep the LLM session connected', async 
   }
 })
 
-test('revised proposal stays on the same step instead of advancing', () => {
-  const env = fixture()
-  try {
-    reportPlan(env.dataDir, {
-      sessionId: 'revise-stay',
-      feature: 'Stay',
-      stepTitles: ['Build value', 'Finish value'],
-    })
-    invokeStep(env.dataDir, 'revise-stay', 1)
-    appendDiff(env.dataDir, env.targetRoot, {
-      sessionId: 'revise-stay',
-      patchText: oneToTwo,
-    })
-    requestReplan(
-      env.dataDir,
-      'revise-stay',
-      '0001',
-      'Use three instead',
-      env.targetRoot,
-    )
-    appendDiff(env.dataDir, env.targetRoot, {
-      sessionId: 'revise-stay',
-      patchText: oneToThree,
-    })
-    const intent = sessionIntent(env.dataDir, 'revise-stay', ['src/a.ts'])
-    assert.equal(intent.status, 'pending')
-    assert.equal(intent.step, 1)
-    assert.equal(intent.chain.at(-1).status, 'pending')
-
-    setStepByStep(env.dataDir, 'revise-stay', false, env.targetRoot)
-    const after = readManifest(env.dataDir, 'revise-stay')
-    assert.equal(after.phase, 'review')
-    assert.equal(after.currentStep, 1)
-    assert.equal(after.diffs.at(-1).status, 'pending')
-    const still = sessionIntent(env.dataDir, 'revise-stay', ['src/a.ts'])
-    assert.equal(still.status, 'pending')
-    assert.equal(still.step, 1)
-  } finally {
-    env.cleanup()
-  }
-})
-
 test('rejects stale actions and invalid virtual continuations', () => {
   const env = fixture()
   try {
@@ -1614,39 +1476,11 @@ test('rejects stale actions and invalid virtual continuations', () => {
     assert.throws(() =>
       continueDiff(env.dataDir, env.targetRoot, 'guard-chat', '9999'),
     )
-    requestReplan(
-      env.dataDir,
-      'guard-chat',
-      '0001',
-      'Try another value',
-      env.targetRoot,
-    )
-    assert.equal(
-      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 2\n',
-    )
-    assert.throws(() =>
-      reportPlan(env.dataDir, {
-        sessionId: 'guard-chat',
-        feature: 'Guards',
-        stepTitles: ['Try another value'],
-      }),
-    )
-    assert.throws(() => invokeStep(env.dataDir, 'guard-chat', 1))
     assert.throws(() =>
       appendDiff(env.dataDir, env.targetRoot, {
         sessionId: 'guard-chat',
         patchText: twoToThree,
       }),
-    )
-    const replaced = appendDiff(env.dataDir, env.targetRoot, {
-      sessionId: 'guard-chat',
-      patchText: oneToNine,
-    })
-    assert.equal(replaced.entry.step, 1)
-    assert.equal(
-      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 9\n',
     )
     stopSession(env.dataDir, 'guard-chat', env.targetRoot)
     assert.equal(readManifest(env.dataDir, 'guard-chat'), null)

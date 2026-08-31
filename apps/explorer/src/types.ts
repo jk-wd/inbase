@@ -258,7 +258,6 @@ export type WorkflowPhase =
 export type WorkflowAction =
   | 'invoke'
   | 'continue'
-  | 'instruct'
   | 'explain_proposal'
   | 'stop'
   | 'blueprint_yes'

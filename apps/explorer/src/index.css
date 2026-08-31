@@ -1321,14 +1321,6 @@ button {
   margin-top: 12px;
 }
 
-.hud-instruction {
-  display: grid;
-  gap: 6px;
-  margin-top: 14px;
-  color: #b7c0ce;
-  font-size: 11px;
-}
-
 .hud-setup {
   display: grid;
   gap: 16px;
@@ -1374,21 +1366,6 @@ button {
 .hud-setup-section p + p,
 .hud-mode-hint p + p {
   margin-top: 8px;
-}
-
-.hud-instruction textarea {
-  width: 100%;
-  resize: vertical;
-  color: #e7ebf2;
-  background: var(--vc-surface);
-  border: 1px solid #3a4250;
-  padding: 8px;
-  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-.hud-instruction textarea:focus {
-  border-color: #d6b56a;
-  outline: none;
 }
 
 .hud-working {
@@ -1561,11 +1538,6 @@ button {
 .hud-button-approve {
   border-color: #9ad8ff;
   color: #d7eef8;
-}
-
-.hud-button-extend {
-  border-color: #d6b56a;
-  color: #f3e6c4;
 }
 
 .hud-button-reject {
