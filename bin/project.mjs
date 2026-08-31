@@ -55,13 +55,15 @@ export function resolveOptionalPath(value, fallback) {
 
 export const INSTANCE_FILE = 'instance.json'
 
-function isPidAlive(pid) {
+export function isPidAlive(pid) {
   if (!Number.isInteger(pid)) return true
   try {
     process.kill(pid, 0)
     return true
-  } catch {
-    return false
+  } catch (error) {
+    // Cursor's agent sandbox cannot signal other processes (EPERM) even when
+    // they are alive. POSIX EPERM means the pid exists; only ESRCH is gone.
+    return error?.code === 'EPERM'
   }
 }
 

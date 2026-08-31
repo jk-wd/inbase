@@ -11,6 +11,7 @@ import {
   readRunningInstance,
   resolveFromPackage,
   writeRunningInstance,
+  isPidAlive,
 } from './project.mjs'
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -64,6 +65,37 @@ test('readInstanceFile ignores a dead visualizer pid', () => {
     )
     assert.equal(readInstanceFile(file), null)
   } finally {
+    cleanup()
+  }
+})
+
+test('readInstanceFile treats EPERM as a live visualizer', () => {
+  const { root, cleanup } = tempProject()
+  const originalKill = process.kill
+  process.kill = (pid, signal) => {
+    if (pid === 12345) {
+      const error = new Error('kill EPERM')
+      error.code = 'EPERM'
+      throw error
+    }
+    return originalKill.call(process, pid, signal)
+  }
+  try {
+    const file = path.join(root, 'instance.json')
+    fs.writeFileSync(
+      file,
+      `${JSON.stringify({
+        dataDir: path.join(root, 'data'),
+        targetRoot: path.join(root, 'app'),
+        pid: 12345,
+      })}\n`,
+    )
+    const read = readInstanceFile(file)
+    assert.equal(read.pid, 12345)
+    assert.equal(isPidAlive(12345), true)
+    assert.equal(isPidAlive(2147483647), false)
+  } finally {
+    process.kill = originalKill
     cleanup()
   }
 })

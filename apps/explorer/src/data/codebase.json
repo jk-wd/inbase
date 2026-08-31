@@ -5181,7 +5181,7 @@
       "name": "App.tsx",
       "path": "apps/explorer/src/App.tsx",
       "folder": "apps/explorer/src",
-      "lines": 2533,
+      "lines": 2534,
       "language": "tsx",
       "symbols": [
         {
@@ -6725,7 +6725,7 @@
       "name": "explain.ts",
       "path": "apps/explorer/src/explain.ts",
       "folder": "apps/explorer/src",
-      "lines": 312,
+      "lines": 313,
       "language": "ts",
       "symbols": [
         {
@@ -12423,7 +12423,7 @@
       "name": "inbase.test.mjs",
       "path": "bin/inbase.test.mjs",
       "folder": "bin",
-      "lines": 1326,
+      "lines": 1360,
       "language": "mjs",
       "symbols": [
         {
@@ -12690,7 +12690,7 @@
       "name": "project.mjs",
       "path": "bin/project.mjs",
       "folder": "bin",
-      "lines": 192,
+      "lines": 194,
       "language": "mjs",
       "symbols": [
         {
@@ -12885,7 +12885,7 @@
       "name": "project.test.mjs",
       "path": "bin/project.test.mjs",
       "folder": "bin",
-      "lines": 147,
+      "lines": 179,
       "language": "mjs",
       "symbols": [
         {
@@ -12926,6 +12926,14 @@
         },
         {
           "name": "file",
+          "kind": "variable"
+        },
+        {
+          "name": "originalKill",
+          "kind": "variable"
+        },
+        {
+          "name": "error",
           "kind": "variable"
         },
         {
@@ -12974,7 +12982,7 @@
       "name": "session.mjs",
       "path": "bin/session.mjs",
       "folder": "bin",
-      "lines": 674,
+      "lines": 681,
       "language": "mjs",
       "symbols": [
         {
@@ -13234,6 +13242,10 @@
           "kind": "variable"
         },
         {
+          "name": "explain",
+          "kind": "variable"
+        },
+        {
           "name": "sessionParsed",
           "kind": "variable"
         },
@@ -13262,11 +13274,15 @@
           "kind": "variable"
         },
         {
-          "name": "explain",
+          "name": "explainFile",
           "kind": "variable"
         },
         {
           "name": "gate",
+          "kind": "variable"
+        },
+        {
+          "name": "explainGate",
           "kind": "variable"
         },
         {
@@ -13331,10 +13347,6 @@
         },
         {
           "name": "added",
-          "kind": "variable"
-        },
-        {
-          "name": "explainFile",
           "kind": "variable"
         },
         {
@@ -13527,7 +13539,7 @@
       "name": "SKILL.md",
       "path": "skill/inbase/SKILL.md",
       "folder": "skill/inbase",
-      "lines": 284,
+      "lines": 288,
       "language": "md",
       "symbols": [],
       "imports": []
