@@ -1286,6 +1286,13 @@ button {
   color: #8b95a5;
 }
 
+.hud-run-step:disabled[aria-busy='true'] {
+  opacity: 1;
+  border-color: #9ad8ff;
+  color: #d7eef8;
+  cursor: progress;
+}
+
 .hud-step-actions {
   display: flex;
   flex-wrap: wrap;

@@ -26,6 +26,7 @@ import {
   readManifest,
   reportPlan,
   requestExplainProposal,
+  clearPendingExplain,
   requestReplan,
   sendBlueprint,
   sessionIntent,
@@ -1408,6 +1409,77 @@ test('explain proposal from plan ready does not require a pending diff', () => {
     assert.equal(intent.pendingExplain, true)
     assert.equal(intent.lastAck.kind, 'explain')
     assert.equal(intent.lastAck.detail, 'the proposal for Build value')
+    assert.equal(intent.explainActive, false)
+    assert.equal(intent.llmIdle, false)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('pending explain and active explain keep the LLM session connected', async () => {
+  const env = fixture()
+  const stale = '2026-01-01T00:00:00.000Z'
+  try {
+    reportPlan(env.dataDir, {
+      sessionId: 'explain-live',
+      feature: 'Explain',
+      stepTitles: ['Build value', 'Finish value'],
+    })
+    requestExplainProposal(env.dataDir, 'explain-live')
+    const pending = readManifest(env.dataDir, 'explain-live')
+    pending.createdAt = stale
+    pending.updatedAt = stale
+    fs.writeFileSync(
+      path.join(env.dataDir, 'diff-sessions', 'explain-live', 'manifest.json'),
+      `${JSON.stringify(pending, null, 2)}\n`,
+    )
+    const connected = path.join(
+      env.dataDir,
+      'diff-sessions',
+      'explain-live',
+      'connected.json',
+    )
+    if (fs.existsSync(connected)) {
+      fs.writeFileSync(
+        connected,
+        `${JSON.stringify({ sessionId: 'explain-live', connectedAt: stale }, null, 2)}\n`,
+      )
+    }
+
+    let intent = sessionIntent(env.dataDir, 'explain-live', ['src/a.ts'])
+    assert.equal(intent.pendingExplain, true)
+    assert.equal(intent.llmIdle, false)
+    assert.deepEqual(
+      recycleDisconnectedSessions(env.dataDir, env.targetRoot, new Set()),
+      [],
+    )
+
+    const explain = await import('./explain-store.mjs')
+    explain.startExplain(env.dataDir, 'Explain the current proposal: Build value')
+    clearPendingExplain(env.dataDir, 'explain-live')
+    const started = readManifest(env.dataDir, 'explain-live')
+    started.createdAt = stale
+    started.updatedAt = stale
+    fs.writeFileSync(
+      path.join(env.dataDir, 'diff-sessions', 'explain-live', 'manifest.json'),
+      `${JSON.stringify(started, null, 2)}\n`,
+    )
+    if (fs.existsSync(connected)) {
+      fs.writeFileSync(
+        connected,
+        `${JSON.stringify({ sessionId: 'explain-live', connectedAt: stale }, null, 2)}\n`,
+      )
+    }
+
+    intent = sessionIntent(env.dataDir, 'explain-live', ['src/a.ts'])
+    assert.equal(intent.pendingExplain, false)
+    assert.equal(intent.explainActive, true)
+    assert.equal(intent.llmIdle, false)
+    assert.deepEqual(
+      recycleDisconnectedSessions(env.dataDir, env.targetRoot, new Set()),
+      [],
+    )
+    assert.equal(readManifest(env.dataDir, 'explain-live')?.feature, 'Explain')
   } finally {
     env.cleanup()
   }

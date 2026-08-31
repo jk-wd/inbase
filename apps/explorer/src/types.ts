@@ -421,6 +421,7 @@ export type AgentIntent = {
     at: string | null
   } | null
   pendingExplain?: boolean
+  explainActive?: boolean
   initialInstruction?: string | null
   contextFiles?: Array<{
     id: string

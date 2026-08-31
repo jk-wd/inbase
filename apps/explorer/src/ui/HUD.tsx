@@ -860,18 +860,13 @@ function sessionLiveStatus(intent: AgentIntent) {
   if (intent.awaitingAttach) {
     return { text: 'Waiting for a Cursor chat', busy: false }
   }
-  if (intent.llmIdle) {
+  if (intent.llmIdle && !intent.pendingExplain && !intent.explainActive) {
     return { text: 'LLM disconnected', busy: false }
   }
   if (intent.pendingExplain) {
-    return intent.listening
-      ? { text: 'Starting an explanation…', busy: true }
-      : {
-          text: 'Explanation queued — waiting for the LLM to listen',
-          busy: true,
-        }
+    return { text: 'Starting an explanation…', busy: true }
   }
-  if (kind === 'explain' && !intent.listening) {
+  if (intent.explainActive || (kind === 'explain' && !intent.listening)) {
     return { text: 'LLM is explaining this proposal on the map', busy: true }
   }
   if (intent.status === 'pending') {
@@ -883,7 +878,7 @@ function sessionLiveStatus(intent: AgentIntent) {
     return { text: `LLM received ${detail}`, busy: true }
   }
   if (kind === 'invoke') {
-    return { text: `Sent ${detail} — waiting for LLM`, busy: true }
+    return { text: 'LLM is starting…', busy: true }
   }
   if (kind === 'replan') {
     return { text: 'LLM received a new instruction', busy: true }
@@ -922,24 +917,29 @@ function LiveStatus({
   showStop = false,
   onStop,
   startingExplain = false,
+  startingInvoke = false,
 }: {
   intent: AgentIntent
   showStop?: boolean
   onStop?: () => void
   startingExplain?: boolean
+  startingInvoke?: boolean
 }) {
-  const status = startingExplain && !intent.pendingExplain
-    ? { text: 'Starting an explanation…', busy: true }
-    : sessionLiveStatus(intent)
+  const status =
+    startingExplain && !intent.pendingExplain && !intent.explainActive
+      ? { text: 'Starting an explanation…', busy: true }
+      : startingInvoke && intent.status !== 'working'
+        ? { text: 'LLM is starting…', busy: true }
+        : sessionLiveStatus(intent)
   const [flash, setFlash] = useState(false)
   const lastAt = intent.lastAck?.at
 
   useEffect(() => {
-    if (!lastAt) return
+    if (!lastAt && !startingExplain && !startingInvoke) return
     setFlash(true)
     const timer = window.setTimeout(() => setFlash(false), 700)
     return () => window.clearTimeout(timer)
-  }, [lastAt])
+  }, [lastAt, startingExplain, startingInvoke])
 
   return (
     <div className="hud-live" data-busy={status.busy} data-flash={flash}>
@@ -990,6 +990,7 @@ function SessionPanel({
   const [minimized, setMinimized] = useState(false)
   const [instruction, setInstruction] = useState('')
   const [startingExplain, setStartingExplain] = useState(false)
+  const [startingInvoke, setStartingInvoke] = useState(false)
   const sessionId = intent.sessionId
   const latestEntry = intent.isActiveDiff ? intent.chain.at(-1) : null
   const pending =
@@ -1051,11 +1052,18 @@ function SessionPanel({
   useEffect(() => {
     setInstruction('')
     setStartingExplain(false)
+    setStartingInvoke(false)
   }, [intent.diffId, sessionId])
 
   useEffect(() => {
-    if (intent.pendingExplain) setStartingExplain(false)
-  }, [intent.pendingExplain])
+    if (intent.pendingExplain || intent.explainActive) setStartingExplain(false)
+  }, [intent.pendingExplain, intent.explainActive])
+
+  useEffect(() => {
+    if (intent.status === 'working' || intent.status === 'replanning') {
+      setStartingInvoke(false)
+    }
+  }, [intent.status])
 
   if (!sessionId || !isReviewingIntent(intent.status)) return null
 
@@ -1067,7 +1075,14 @@ function SessionPanel({
     llmConnected && !llmDisconnected && (askingBlueprint || sendingBlueprint || preparing)
   const showPlaceHint =
     canPlace && !intent.working && !askingBlueprint && !sendingBlueprint
-  const liveHasStop = showConnectedProgress || working || llmDisconnected
+  const liveHasStop =
+    showConnectedProgress ||
+    working ||
+    startingInvoke ||
+    startingExplain ||
+    Boolean(intent.pendingExplain) ||
+    Boolean(intent.explainActive) ||
+    llmDisconnected
   const queuedBehind =
     intent.awaitingAttach &&
     nextAttachSession &&
@@ -1137,6 +1152,7 @@ function SessionPanel({
                 intent={intent}
                 showStop={liveHasStop}
                 startingExplain={startingExplain}
+                startingInvoke={startingInvoke}
                 onStop={() => act('stop')}
               />
             </>
@@ -1245,15 +1261,20 @@ function SessionPanel({
                 <ol className="hud-steps">
                   {intent.steps.map((step) => {
                     const proposed = proposalStep === step.index
-                    const processing = processingStep === step.index
+                    const processing =
+                      processingStep === step.index ||
+                      (startingInvoke && invokeStep?.index === step.index)
                     const accepted = acceptedSteps.has(step.index) && !proposed
                     const creating = processing && !proposed
                     const explaining =
-                      startingExplain || Boolean(intent.pendingExplain)
+                      startingExplain ||
+                      Boolean(intent.pendingExplain) ||
+                      Boolean(intent.explainActive)
                     const showStepAction =
                       creating ||
                       (canRunNext && invokeStep?.index === step.index) ||
                       (canAcceptProposal && proposed)
+                    const canExplain = showStepAction && !explaining && !creating
                     return (
                       <li
                         key={step.index}
@@ -1268,18 +1289,25 @@ function SessionPanel({
                               <button
                                 className="hud-button hud-button-approve hud-run-step"
                                 type="button"
-                                disabled={creating}
+                                disabled={creating || explaining}
                                 aria-busy={creating}
                                 onPointerDown={(event) => event.stopPropagation()}
                                 onClick={(event) => {
                                   event.stopPropagation()
-                                  if (creating) return
+                                  if (creating || explaining) return
                                   if (proposed) {
                                     if (lastStep) act('continue')
                                     else act('invoke', { step: step.index + 1 })
                                     return
                                   }
-                                  act('invoke', { step: step.index })
+                                  setStartingInvoke(true)
+                                  void Promise.resolve(
+                                    onWorkflowAction(sessionId, 'invoke', {
+                                      step: step.index,
+                                    }),
+                                  ).then((result) => {
+                                    if (result === false) setStartingInvoke(false)
+                                  })
                                 }}
                               >
                                 {proposed
@@ -1291,17 +1319,12 @@ function SessionPanel({
                               <button
                                 className="hud-button hud-button-approve hud-run-step"
                                 type="button"
-                                disabled={!proposed || explaining}
+                                disabled={!canExplain}
                                 aria-busy={explaining}
-                                title={
-                                  proposed
-                                    ? undefined
-                                    : 'Available once a proposal exists'
-                                }
                                 onPointerDown={(event) => event.stopPropagation()}
                                 onClick={(event) => {
                                   event.stopPropagation()
-                                  if (!proposed || explaining) return
+                                  if (!canExplain) return
                                   setStartingExplain(true)
                                   void Promise.resolve(
                                     onWorkflowAction(
@@ -1309,15 +1332,7 @@ function SessionPanel({
                                       'explain_proposal',
                                     ),
                                   ).then((result) => {
-                                    if (
-                                      result === false ||
-                                      (result &&
-                                        typeof result === 'object' &&
-                                        'pendingExplain' in result &&
-                                        !result.pendingExplain)
-                                    ) {
-                                      setStartingExplain(false)
-                                    }
+                                    if (result === false) setStartingExplain(false)
                                   })
                                 }}
                               >

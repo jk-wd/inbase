@@ -1054,8 +1054,10 @@ test('wait-for-approval returns explain when the user asks to explain a proposal
     assert.match(result.stdout, /VISUAL_CODER_ACK explain: the proposal for Bump value/)
     assert.match(result.stdout, /VISUAL_CODER_EXPLAIN/)
     assert.match(result.stdout, /Explain the current proposal: Bump value/)
-    assert.equal(store.readManifest(dataDir, 'explain-next').pendingExplain, false)
+    assert.equal(store.readManifest(dataDir, 'explain-next').pendingExplain, true)
     assert.equal(store.readManifest(dataDir, 'explain-next').phase, 'review')
+    store.clearPendingExplain(dataDir, 'explain-next')
+    assert.equal(store.readManifest(dataDir, 'explain-next').pendingExplain, false)
   } finally {
     cleanup()
   }
@@ -1108,7 +1110,7 @@ test('wait-for-approval returns explain from plan ready without a pending patch'
     assert.match(result.stdout, /VISUAL_CODER_EXPLAIN/)
     assert.match(result.stdout, /Explain the current proposal: Bump value/)
     assert.match(result.stdout, /still waiting for Create proposal/)
-    assert.equal(store.readManifest(dataDir, 'explain-plan').pendingExplain, false)
+    assert.equal(store.readManifest(dataDir, 'explain-plan').pendingExplain, true)
     assert.equal(store.readManifest(dataDir, 'explain-plan').phase, 'plan_ready')
   } finally {
     cleanup()

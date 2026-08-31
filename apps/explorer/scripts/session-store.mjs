@@ -12,6 +12,7 @@ import {
   parseUnifiedPatch,
 } from './patch-lib.mjs'
 import { diffSourceTrees, snapshotSourceTree } from './tree-diff.mjs'
+import { readExplain } from './explain-store.mjs'
 
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const CONNECTED_TTL_MS = 15_000
@@ -338,6 +339,15 @@ export function isSessionConnected(
     waiterIds.has(safeId) || isFreshTimestamp(connected?.connectedAt)
   if (manifest.awaitingAttach) return heartbeat
   if (isGeneratingPhase(manifest.phase)) return true
+  if (manifest.pendingExplain) return true
+  const explain = readExplain(dataDir)
+  if (
+    explain.active &&
+    (readActiveSession(dataDir) === safeId ||
+      readSessionAck(dataDir, safeId)?.kind === 'explain')
+  ) {
+    return true
+  }
   if (heartbeat) return true
   return isFreshTimestamp(manifest.updatedAt) || isFreshTimestamp(manifest.createdAt)
 }
@@ -932,6 +942,7 @@ export function sessionIntent(
     listening: waiterIds.has(sessionId),
     lastAck: readSessionAck(dataDir, sessionId),
     pendingExplain: Boolean(manifest.pendingExplain),
+    explainActive: Boolean(readExplain(dataDir).active),
     creationMode: true,
     canEnterBlueprint,
     blueprintHidden: Boolean(blueprint.hidden),
@@ -1820,6 +1831,7 @@ export function requestExplainProposal(dataDir, sessionId, diffId) {
   manifest.pendingExplain = true
   writeManifest(dataDir, manifest)
   recordSessionAck(dataDir, sessionId, 'explain', `the proposal for ${title}`)
+  focusSession(dataDir, sessionId)
   return manifest
 }
 
@@ -1829,6 +1841,34 @@ export function consumeExplainRequest(dataDir, sessionId) {
   manifest.pendingExplain = false
   writeManifest(dataDir, manifest)
   return manifest
+}
+
+export function clearPendingExplain(dataDir, sessionId = null) {
+  const ids = sessionId
+    ? [assertSessionId(sessionId)]
+    : listStoredSessionIds(dataDir)
+  let last = null
+  for (const id of ids) {
+    const manifest = readManifest(dataDir, id)
+    if (!manifest?.pendingExplain) continue
+    manifest.pendingExplain = false
+    writeManifest(dataDir, manifest)
+    last = manifest
+  }
+  return last
+}
+
+export function touchExplainConnections(dataDir) {
+  const active = readActiveSession(dataDir)
+  const ids = new Set(listStoredSessionIds(dataDir).filter((id) => {
+    const manifest = readManifest(dataDir, id)
+    return Boolean(manifest?.pendingExplain)
+  }))
+  if (active) ids.add(active)
+  for (const id of ids) {
+    if (isTerminalSession(readManifest(dataDir, id))) continue
+    touchSessionConnection(dataDir, id)
+  }
 }
 
 function unstageDiffSessionArtifacts(dataDir, targetRoot, extraPaths = []) {

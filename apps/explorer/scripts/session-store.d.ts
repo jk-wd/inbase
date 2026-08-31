@@ -416,6 +416,11 @@ export function consumeExplainRequest(
   dataDir: string,
   sessionId: string,
 ): DiffManifest | null
+export function clearPendingExplain(
+  dataDir: string,
+  sessionId?: string | null,
+): DiffManifest | null
+export function touchExplainConnections(dataDir: string): void
 export function stopSession(
   dataDir: string,
   sessionId: string,

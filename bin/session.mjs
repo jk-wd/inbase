@@ -136,12 +136,11 @@ function emitApprovalHandshake(store, explain, dataDir, sessionId, manifest, ini
     emitTargetExplain(store, explain, dataDir, sessionId)
   }
   if (manifest.pendingExplain) {
-    const consumed = store.consumeExplainRequest(dataDir, sessionId) ?? manifest
-    const reviewing = consumed.phase === 'review'
-    const active = reviewing ? consumed.diffs?.at(-1) : null
-    const step = active?.step ?? consumed.currentStep
+    const reviewing = manifest.phase === 'review'
+    const active = reviewing ? manifest.diffs?.at(-1) : null
+    const step = active?.step ?? manifest.currentStep
     const title =
-      consumed.steps?.find((item) => item.index === step)?.title ||
+      manifest.steps?.find((item) => item.index === step)?.title ||
       active?.title ||
       `step ${step}`
     signalAck(
@@ -574,7 +573,7 @@ export async function runExplain(args) {
     return
   }
   if (parsed.action === 'wait') {
-    await waitForExplain(explain, config.dataDir, args)
+    await waitForExplain(store, explain, config.dataDir, args)
     return
   }
   if (parsed.action === 'start') {
@@ -582,6 +581,8 @@ export async function runExplain(args) {
       usage('explain start', '--question "How does this work?"')
     }
     explain.startExplain(config.dataDir, parsed.question)
+    store.clearPendingExplain(config.dataDir)
+    store.touchExplainConnections(config.dataDir)
     console.log(`VISUAL_CODER_EXPLAIN_STARTED ${parsed.question}`)
     console.log(
       'The map is in explain mode. Explore the codebase, then run inbase explain report with --step / --body / --files / --folders / --select / --zoom / --relations / --info / --highlight / --point.',
@@ -599,6 +600,7 @@ export async function runExplain(args) {
     parent: parsed.parent,
     steps: parsed.steps,
   })
+  store.touchExplainConnections(config.dataDir)
   if (parsed.parent) {
     const added = next.steps.filter((step) =>
       explain.isExplainDescendant(step.index, parsed.parent),
@@ -616,7 +618,7 @@ export async function runExplain(args) {
   )
 }
 
-async function waitForExplain(explain, dataDir, args) {
+async function waitForExplain(store, explain, dataDir, args) {
   const timeoutMs = Number(takeFlagValue(args, '--timeout') ?? 600000)
   const started = Date.now()
   const explainFile = path.join(dataDir, explain.EXPLAIN_FILE)
@@ -624,6 +626,7 @@ async function waitForExplain(explain, dataDir, args) {
   let lastWaiting = null
   try {
     while (Date.now() - started < timeoutMs) {
+      store.touchExplainConnections(dataDir)
       const current = explain.readExplain(dataDir)
       if (!current.active) {
         printAck('stopped', 'explain mode was closed')

@@ -2644,7 +2644,7 @@
       "name": "session-store.d.ts",
       "path": "apps/explorer/scripts/session-store.d.ts",
       "folder": "apps/explorer/scripts",
-      "lines": 434,
+      "lines": 439,
       "language": "ts",
       "symbols": [
         {
@@ -2960,6 +2960,14 @@
           "kind": "function"
         },
         {
+          "name": "clearPendingExplain",
+          "kind": "function"
+        },
+        {
+          "name": "touchExplainConnections",
+          "kind": "function"
+        },
+        {
           "name": "stopSession",
           "kind": "function"
         },
@@ -3019,7 +3027,7 @@
       "name": "session-store.mjs",
       "path": "apps/explorer/scripts/session-store.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 2366,
+      "lines": 2406,
       "language": "mjs",
       "symbols": [
         {
@@ -3515,6 +3523,14 @@
           "kind": "function"
         },
         {
+          "name": "clearPendingExplain",
+          "kind": "function"
+        },
+        {
+          "name": "touchExplainConnections",
+          "kind": "function"
+        },
+        {
           "name": "unstageDiffSessionArtifacts",
           "kind": "function"
         },
@@ -3796,6 +3812,10 @@
         },
         {
           "name": "heartbeat",
+          "kind": "variable"
+        },
+        {
+          "name": "explain",
           "kind": "variable"
         },
         {
@@ -4261,7 +4281,8 @@
       ],
       "imports": [
         "apps/explorer/scripts/patch-lib.mjs",
-        "apps/explorer/scripts/tree-diff.mjs"
+        "apps/explorer/scripts/tree-diff.mjs",
+        "apps/explorer/scripts/explain-store.mjs"
       ]
     },
     {
@@ -6435,7 +6456,7 @@
       "name": "agentIntent.ts",
       "path": "apps/explorer/src/agentIntent.ts",
       "folder": "apps/explorer/src",
-      "lines": 540,
+      "lines": 542,
       "language": "ts",
       "symbols": [
         {
@@ -6927,7 +6948,7 @@
       "name": "index.css",
       "path": "apps/explorer/src/index.css",
       "folder": "apps/explorer/src",
-      "lines": 2317,
+      "lines": 2324,
       "language": "css",
       "symbols": [],
       "imports": []
@@ -10036,7 +10057,7 @@
       "name": "types.ts",
       "path": "apps/explorer/src/types.ts",
       "folder": "apps/explorer/src",
-      "lines": 445,
+      "lines": 446,
       "language": "ts",
       "symbols": [
         {
@@ -10630,7 +10651,7 @@
       "name": "HUD.tsx",
       "path": "apps/explorer/src/ui/HUD.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 3471,
+      "lines": 3486,
       "language": "tsx",
       "symbols": [
         {
@@ -11158,6 +11179,10 @@
           "kind": "variable"
         },
         {
+          "name": "canExplain",
+          "kind": "variable"
+        },
+        {
           "name": "subtitle",
           "kind": "variable"
         },
@@ -11407,6 +11432,14 @@
         },
         {
           "name": "setStartingExplain",
+          "kind": "variable"
+        },
+        {
+          "name": "startingInvoke",
+          "kind": "variable"
+        },
+        {
+          "name": "setStartingInvoke",
           "kind": "variable"
         },
         {
@@ -12982,7 +13015,7 @@
       "name": "session.mjs",
       "path": "bin/session.mjs",
       "folder": "bin",
-      "lines": 682,
+      "lines": 685,
       "language": "mjs",
       "symbols": [
         {
