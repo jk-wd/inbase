@@ -855,24 +855,19 @@ function sessionLiveStatus(intent: AgentIntent) {
     return { text: 'Stopped', busy: false }
   }
   if (kind === 'timeout') {
-    return { text: 'LLM wait timed out', busy: false }
+    return { text: 'Stopped', busy: false }
   }
   if (intent.awaitingAttach) {
     return { text: 'Waiting for a Cursor chat', busy: false }
   }
-  if (intent.llmIdle && !intent.pendingExplain && !intent.explainActive) {
-    return { text: 'LLM disconnected', busy: false }
-  }
   if (intent.pendingExplain) {
-    return { text: 'Starting an explanation…', busy: true }
+    return { text: 'Type /explain in chat', busy: false }
   }
-  if (intent.explainActive || (kind === 'explain' && !intent.listening)) {
-    return { text: 'Explanation is on the map', busy: true }
+  if (intent.explainActive || kind === 'explain') {
+    return { text: 'Explanation is on the map — /explain for a follow-up', busy: false }
   }
   if (intent.status === 'pending') {
-    return intent.listening
-      ? { text: 'LLM is listening — /accept or send an instruction', busy: false }
-      : { text: 'Review this step', busy: false }
+    return { text: 'Type /accept in chat', busy: false }
   }
   if (kind === 'execute') {
     return { text: `LLM received ${detail}`, busy: true }
@@ -898,9 +893,7 @@ function sessionLiveStatus(intent: AgentIntent) {
     return { text: 'LLM is drafting the plan', busy: true }
   }
   if (kind === 'plan' || intent.status === 'planned') {
-    return intent.listening
-      ? { text: 'LLM is listening — /go to start the proposal', busy: false }
-      : { text: 'Plan ready', busy: false }
+    return { text: 'Type /go in chat', busy: false }
   }
   if (
     kind === 'attached' ||
@@ -1240,7 +1233,7 @@ function SessionPanel({
                     return (
                       <li
                         key={step.index}
-                        data-done={accepted || proposed}
+                        data-done={accepted}
                         data-active={processing || proposed}
                       >
                         <span className="hud-step-index">{step.index}.</span>

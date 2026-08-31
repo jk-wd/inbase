@@ -2,7 +2,7 @@
 description: Accept the current Inbase proposal
 ---
 
-The user invoked `/accept`. Accept the current proposal — apply it and continue to the next step, or finish if this was the last step.
+The user invoked `/accept`. Accept the current proposal. Do **not** start the next step. Finish only if this was the last step.
 
 This chat should already be attached to an Inbase session (`VISUAL_CODER_SESSION` in this conversation). Do **not** attach a new session. Do **not** report a new plan. Do **not** edit files until `VISUAL_CODER_EXECUTE`.
 
@@ -18,7 +18,6 @@ If that fails with `VISUAL_CODER_NOT_RUNNING`, reply with that message and stop.
 
 2. Reply in this chat first with the `VISUAL_CODER_ACK` line, then:
 
-- `VISUAL_CODER_EXECUTE`: the next step is invoked. Implement that step now — edit live files for that step only, `npx inbase propose-patch --session "<session-id>"` with no patch file, then `wait-for-approval`.
+- `VISUAL_CODER_ACCEPTED`: this proposal is accepted. Do **not** edit files. **Stop.** Wait for the user to type `/go` on the next step. They can still Stop.
+- `VISUAL_CODER_EXECUTE`: Step by step is off, so the next step is invoked. Implement that step now — edit live files for that step only, `npx inbase propose-patch --session "<session-id>"` with no patch file, then **stop** for `/accept` if more remains.
 - `VISUAL_CODER_FINISHED`: that was the last step. Tell the user the feature is done and **stop**. Do not propose another patch.
-
-If `wait-for-approval` was already running and now returns EXECUTE or FINISHED, follow that the same way.

@@ -1078,25 +1078,70 @@ test('invokes, reviews, continues, and waits to run the next step', () => {
     )
 
     invokeStep(env.dataDir, 'happy-chat', 2, env.targetRoot)
-    const continued = readManifest(env.dataDir, 'happy-chat')
-    assert.equal(continued.phase, 'working')
-    assert.equal(continued.currentStep, 2)
+    const accepted = readManifest(env.dataDir, 'happy-chat')
+    assert.equal(accepted.phase, 'plan_ready')
+    assert.equal(accepted.currentStep, 2)
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
       'export const value = 2\n',
     )
+
+    invokeStep(env.dataDir, 'happy-chat', 2, env.targetRoot)
+    const continued = readManifest(env.dataDir, 'happy-chat')
+    assert.equal(continued.phase, 'working')
+    assert.equal(continued.currentStep, 2)
 
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'happy-chat',
       patchText:
         '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 2\n+export const value = 4\n',
     })
+    const lastReview = readManifest(env.dataDir, 'happy-chat')
+    assert.equal(lastReview.phase, 'review')
+    assert.equal(lastReview.diffs.at(-1).status, 'pending')
     invokeStep(env.dataDir, 'happy-chat', 2, env.targetRoot)
     assert.equal(readManifest(env.dataDir, 'happy-chat'), null)
     assert.equal(
       fs.existsSync(path.join(env.dataDir, 'diff-sessions', 'happy-chat')),
       false,
     )
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('accepting a step waits for go, including the last proposal', () => {
+  const env = fixture()
+  try {
+    reportPlan(env.dataDir, {
+      sessionId: 'last-go',
+      feature: 'Last go',
+      stepTitles: ['Build value', 'Finish value'],
+    })
+    invokeStep(env.dataDir, 'last-go', 1, env.targetRoot)
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'last-go',
+      patchText: oneToTwo,
+    })
+    const afterAccept = continueDiff(
+      env.dataDir,
+      env.targetRoot,
+      'last-go',
+      '0001',
+    )
+    assert.equal(afterAccept.phase, 'plan_ready')
+    assert.equal(afterAccept.currentStep, 2)
+
+    invokeStep(env.dataDir, 'last-go', 2, env.targetRoot)
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'last-go',
+      patchText:
+        '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 2\n+export const value = 4\n',
+    })
+    const last = readManifest(env.dataDir, 'last-go')
+    assert.equal(last.phase, 'review')
+    assert.equal(last.diffs.at(-1).status, 'pending')
+    assert.equal(sessionIntent(env.dataDir, 'last-go', ['src/a.ts']).status, 'pending')
   } finally {
     env.cleanup()
   }
@@ -1855,7 +1900,7 @@ test('inactive sweep keeps open sessions even without an LLM waiter', () => {
   }
 })
 
-test('disconnected LLM sessions are reset instead of leaving a stale plan', () => {
+test('attached sessions stay connected without an LLM waiter', () => {
   const env = fixture()
   const stale = '2026-01-01T00:00:00.000Z'
   try {
@@ -1889,31 +1934,22 @@ test('disconnected LLM sessions are reset instead of leaving a stale plan', () =
 
     const intent = sessionIntent(env.dataDir, 'stale-chat', ['src/a.ts'])
     assert.equal(intent.status, 'pending')
-    assert.equal(intent.llmIdle, true)
+    assert.equal(intent.llmIdle, false)
+    assert.equal(intent.awaitingAttach, false)
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
       'export const value = 4\n',
     )
 
-    const recycled = recycleDisconnectedSessions(
-      env.dataDir,
-      env.targetRoot,
-      new Set(),
+    assert.deepEqual(
+      recycleDisconnectedSessions(env.dataDir, env.targetRoot, new Set()),
+      [],
     )
-    assert.deepEqual(recycled, ['stale-chat'])
-    assert.equal(readManifest(env.dataDir, 'stale-chat'), null)
-    assert.equal(sessionIntent(env.dataDir, 'stale-chat', ['src/a.ts']), null)
+    assert.equal(readManifest(env.dataDir, 'stale-chat')?.feature, 'Auto run')
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 1\n',
+      'export const value = 4\n',
     )
-    const slots = listOpenSessionIds(env.dataDir)
-    assert.equal(slots.length, 1)
-    assert.notEqual(slots[0], 'stale-chat')
-    const replacement = readManifest(env.dataDir, slots[0])
-    assert.equal(replacement.awaitingAttach, true)
-    assert.equal(replacement.phase, 'blueprint')
-    assert.deepEqual(replacement.steps, [])
   } finally {
     env.cleanup()
   }
@@ -2284,6 +2320,9 @@ test('records live file edits against the invoke snapshot', () => {
     )
 
     invokeStep(env.dataDir, 'live-chat', 2, env.targetRoot)
+    assert.equal(readManifest(env.dataDir, 'live-chat').phase, 'plan_ready')
+    invokeStep(env.dataDir, 'live-chat', 2, env.targetRoot)
+    assert.equal(readManifest(env.dataDir, 'live-chat').phase, 'working')
     fs.writeFileSync(
       path.join(env.targetRoot, 'src/helper.ts'),
       'export function helper() { return 2 }\n',

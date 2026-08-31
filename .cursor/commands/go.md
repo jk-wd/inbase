@@ -18,6 +18,4 @@ If that fails with `VISUAL_CODER_NOT_RUNNING`, reply with that message and stop.
 
 2. Reply in this chat first with one short sentence that you are starting the proposal.
 
-3. If the output includes `VISUAL_CODER_EXECUTE`, implement that step now: edit live files for that step only, then `npx inbase propose-patch --session "<session-id>"` with no patch file. Then run `wait-for-approval`. Follow the Inbase visual edits skill from EXECUTE onward.
-
-If `wait-for-approval` was already running and now returns `VISUAL_CODER_EXECUTE`, follow that the same way. Do not skip `propose-patch`.
+3. If the output includes `VISUAL_CODER_EXECUTE`, implement that step now: edit live files for that step only, then `npx inbase propose-patch --session "<session-id>"` with no patch file. Then **stop**. Wait for the user to type `/accept` (or an alternative instruction) in chat.

@@ -278,35 +278,7 @@ export function touchSessionConnection(dataDir, sessionId) {
 }
 
 function waiterSessionIds() {
-  try {
-    const result = spawnSync('ps', ['-ax', '-o', 'command='], {
-      encoding: 'utf8',
-    })
-    if (result.status !== 0 || !result.stdout) return new Set()
-    const ids = new Set()
-    for (const line of result.stdout.split('\n')) {
-      if (
-        !line.includes('wait-for-blueprint') &&
-        !line.includes('wait-for-approval')
-      ) {
-        continue
-      }
-      const match = line.match(/--session\s+(\S+)/)
-      if (!match) continue
-      try {
-        ids.add(assertSessionId(match[1]))
-      } catch {
-        // Ignore process command lines with invalid session ids.
-      }
-    }
-    return ids
-  } catch {
-    return new Set()
-  }
-}
-
-function isGeneratingPhase(phase) {
-  return phase === 'preparing' || phase === 'working' || phase === 'replanning'
+  return new Set()
 }
 
 function isTerminalSession(manifest) {
@@ -334,22 +306,11 @@ export function isSessionConnected(
   const safeId = assertSessionId(sessionId)
   const manifest = readManifest(dataDir, safeId)
   if (isTerminalSession(manifest)) return false
-  const connected = readJson(connectionFile(dataDir, safeId), null)
-  const heartbeat =
-    waiterIds.has(safeId) || isFreshTimestamp(connected?.connectedAt)
-  if (manifest.awaitingAttach) return heartbeat
-  if (isGeneratingPhase(manifest.phase)) return true
-  if (manifest.pendingExplain) return true
-  const explain = readExplain(dataDir)
-  if (
-    explain.active &&
-    (readActiveSession(dataDir) === safeId ||
-      readSessionAck(dataDir, safeId)?.kind === 'explain')
-  ) {
-    return true
+  if (manifest.awaitingAttach) {
+    const connected = readJson(connectionFile(dataDir, safeId), null)
+    return waiterIds.has(safeId) || isFreshTimestamp(connected?.connectedAt)
   }
-  if (heartbeat) return true
-  return isFreshTimestamp(manifest.updatedAt) || isFreshTimestamp(manifest.createdAt)
+  return true
 }
 
 function diffSessionsRoot(dataDir) {
@@ -1593,17 +1554,7 @@ export function invokeStep(dataDir, sessionId, step, targetRoot = null) {
           : `/accept on step ${active.step} to continue`,
       )
     }
-    applyUnresolved(dataDir, targetRoot, manifest, active.id)
-    if (last) {
-      manifest.phase = 'finished'
-      manifest.status = 'finished'
-      writeManifest(dataDir, manifest)
-      finalizeFinishedSession(dataDir, sessionId)
-      return manifest
-    }
-    manifest.currentStep = expected
-    manifest.phase = 'plan_ready'
-    manifest.workStartedAt = null
+    return continueDiff(dataDir, targetRoot, sessionId, active.id)
   }
 
   if (manifest.phase !== 'plan_ready') {

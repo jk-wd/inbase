@@ -22,12 +22,10 @@ import {
 export function ExplainHud({
   explain,
   onStep,
-  onAsk,
   onExit,
 }: {
   explain: ExplainSession
   onStep: (step: string) => void
-  onAsk: (step: string, question: string) => void
   onExit: () => void
 }) {
   const step = currentExplainStep(explain)
@@ -42,8 +40,6 @@ export function ExplainHud({
   const [telling, setTelling] = useState(false)
   const [autoStep, setAutoStep] = useState(false)
   const [speakStatus, setSpeakStatus] = useState<SpeakStatus>('idle')
-  const [asking, setAsking] = useState(false)
-  const [draft, setDraft] = useState('')
   const tellingRef = useRef(false)
   const autoStepRef = useRef(false)
   const autoTimerRef = useRef<number | null>(null)
@@ -54,7 +50,6 @@ export function ExplainHud({
   const goToRef = useRef<(stepId: string) => void>(() => {})
   const neighborRef = useRef<(delta: number) => string | null>(() => null)
   const activeItemRef = useRef<HTMLLIElement | null>(null)
-  const askInputRef = useRef<HTMLTextAreaElement | null>(null)
   const [pointerTop, setPointerTop] = useState<number | null>(null)
   idRef.current = id
 
@@ -179,34 +174,6 @@ export function ExplainHud({
     if (!isSpeaking()) scheduleAutoStep()
   }
 
-  const openAsk = () => {
-    stopTelling()
-    setAsking(true)
-    setDraft('')
-  }
-
-  const closeAsk = () => {
-    setAsking(false)
-    setDraft('')
-  }
-
-  const submitAsk = () => {
-    const question = draft.trim()
-    if (!question || !id) return
-    onAsk(id, question)
-    closeAsk()
-  }
-
-  useEffect(() => {
-    if (!asking) return
-    askInputRef.current?.focus()
-  }, [asking])
-
-  useEffect(() => {
-    if (!askingAbout && !explain.answering) return
-    closeAsk()
-  }, [askingAbout, explain.answering])
-
   useEffect(() => subscribeSpeakStatus(setSpeakStatus), [])
 
   useEffect(
@@ -223,10 +190,6 @@ export function ExplainHud({
       if (shouldIgnoreShortcut(event) && event.code !== 'Escape') return
       if (event.code === 'Escape') {
         event.preventDefault()
-        if (asking) {
-          closeAsk()
-          return
-        }
         onExit()
         return
       }
@@ -246,7 +209,7 @@ export function ExplainHud({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [asking, goTo, hasSteps, neighbor, onExit])
+  }, [goTo, hasSteps, neighbor, onExit])
 
   useEffect(() => {
     activeItemRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
@@ -348,58 +311,9 @@ export function ExplainHud({
                     <p className="explain-preparing-step">Preparing sub-steps…</p>
                   ) : null}
                   {active && !preparingFollowUp ? (
-                    asking ? (
-                      <form
-                        className="explain-ask-form"
-                        onSubmit={(event) => {
-                          event.preventDefault()
-                          submitAsk()
-                        }}
-                      >
-                        <label className="explain-ask-label">
-                          <span>Question about this step</span>
-                          <textarea
-                            ref={askInputRef}
-                            value={draft}
-                            maxLength={4000}
-                            rows={3}
-                            placeholder="What should this step explain more closely?"
-                            onChange={(event) => setDraft(event.target.value)}
-                            onKeyDown={(event) => {
-                              event.stopPropagation()
-                              if (event.key === 'Escape') {
-                                event.preventDefault()
-                                closeAsk()
-                              }
-                            }}
-                          />
-                        </label>
-                        <div className="explain-ask-actions">
-                          <button
-                            className="hud-button"
-                            type="submit"
-                            disabled={!draft.trim()}
-                          >
-                            Send question
-                          </button>
-                          <button
-                            className="hud-button"
-                            type="button"
-                            onClick={closeAsk}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </form>
-                    ) : (
-                      <button
-                        className="hud-button explain-ask"
-                        type="button"
-                        onClick={openAsk}
-                      >
-                        Ask question
-                      </button>
-                    )
+                    <p className="explain-ask-hint">
+                      Type /explain your question in the Cursor chat.
+                    </p>
                   ) : null}
                 </li>
               )

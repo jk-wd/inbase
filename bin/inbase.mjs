@@ -21,7 +21,6 @@ import {
   runExplain,
   startSession,
   attachSession,
-  waitForApproval,
   waitForBlueprint,
   goProposal,
   acceptProposal,
@@ -38,15 +37,13 @@ Agent commands (used by the Cursor skill):
   inbase start-session --session <id> --name "short name"
   inbase attach [--session <id>] [--color <name>]
   inbase wait-for-blueprint --session <id>
-  inbase report-plan --session <id> --feature "name" --steps "one" [--steps "two"]
-  inbase wait-for-approval --session <id>
+  inbase report-plan --session <id> --feature "name" --steps "one"
   inbase go [--session <id>]
   inbase accept [--session <id>]
   inbase propose-patch --session <id> [file.patch|-]
   inbase propose-patch --session <id> --clear
   inbase explain start [--question "How does this work?"]
-  inbase explain report --question "..." --step "Title" --body "..." --files path
-  inbase explain wait
+  inbase explain report --step "..." --body "..."
   inbase explain stop
 
 Options for run:
@@ -156,7 +153,7 @@ export async function main(argv = process.argv.slice(2)) {
   ensureDataDir(process.env.INBASE_DATA_DIR)
   if (host.instance) {
     console.log(
-      `INBASE_ATTACHED Using the running visualizer (${host.instance.dataDir}). Run wait-for-blueprint to read the optional blueprint; it does not wait.`,
+      `INBASE_ATTACHED Using the running visualizer (${host.instance.dataDir}). Run wait-for-blueprint to read the optional blueprint; it does not wait. Then stop for /go, /accept, or /explain in chat.`,
     )
   }
 
@@ -177,8 +174,10 @@ export async function main(argv = process.argv.slice(2)) {
     return
   }
   if (command === 'wait-for-approval') {
-    await waitForApproval(args)
-    return
+    console.error(
+      'wait-for-approval was removed. The user types /go, /accept, or /explain in chat.',
+    )
+    process.exit(1)
   }
   if (command === 'go') {
     await goProposal(args)

@@ -110,7 +110,7 @@ export function ExplainAskCard({
           <p className="explain-body explain-ask-card-body">{copy.body}</p>
         ) : (
           <p className="explain-preparing" role="status">
-            Preparing an explanation…
+            Preparing an explanation… Type /explain in the Cursor chat.
           </p>
         )}
         <div className="explain-ask-card-footer">

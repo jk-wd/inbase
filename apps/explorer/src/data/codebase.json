@@ -3083,7 +3083,7 @@
       "name": "session-store.mjs",
       "path": "apps/explorer/scripts/session-store.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 2406,
+      "lines": 2357,
       "language": "mjs",
       "symbols": [
         {
@@ -3208,10 +3208,6 @@
         },
         {
           "name": "waiterSessionIds",
-          "kind": "function"
-        },
-        {
-          "name": "isGeneratingPhase",
           "kind": "function"
         },
         {
@@ -3843,22 +3839,6 @@
           "kind": "variable"
         },
         {
-          "name": "result",
-          "kind": "variable"
-        },
-        {
-          "name": "ids",
-          "kind": "variable"
-        },
-        {
-          "name": "line",
-          "kind": "variable"
-        },
-        {
-          "name": "match",
-          "kind": "variable"
-        },
-        {
           "name": "started",
           "kind": "variable"
         },
@@ -3867,11 +3847,7 @@
           "kind": "variable"
         },
         {
-          "name": "heartbeat",
-          "kind": "variable"
-        },
-        {
-          "name": "explain",
+          "name": "ids",
           "kind": "variable"
         },
         {
@@ -3904,6 +3880,10 @@
         },
         {
           "name": "next",
+          "kind": "variable"
+        },
+        {
+          "name": "result",
           "kind": "variable"
         },
         {
@@ -4346,7 +4326,7 @@
       "name": "session-store.test.mjs",
       "path": "apps/explorer/scripts/session-store.test.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 2334,
+      "lines": 2382,
       "language": "mjs",
       "symbols": [
         {
@@ -4650,7 +4630,23 @@
           "kind": "variable"
         },
         {
+          "name": "accepted",
+          "kind": "variable"
+        },
+        {
           "name": "continued",
+          "kind": "variable"
+        },
+        {
+          "name": "lastReview",
+          "kind": "variable"
+        },
+        {
+          "name": "afterAccept",
+          "kind": "variable"
+        },
+        {
+          "name": "last",
           "kind": "variable"
         },
         {
@@ -5266,7 +5262,7 @@
       "name": "App.tsx",
       "path": "apps/explorer/src/App.tsx",
       "folder": "apps/explorer/src",
-      "lines": 2674,
+      "lines": 2673,
       "language": "tsx",
       "symbols": [
         {
@@ -12508,7 +12504,7 @@
       "name": "inbase.mjs",
       "path": "bin/inbase.mjs",
       "folder": "bin",
-      "lines": 221,
+      "lines": 220,
       "language": "mjs",
       "symbols": [
         {
@@ -12626,7 +12622,7 @@
       "name": "inbase.test.mjs",
       "path": "bin/inbase.test.mjs",
       "folder": "bin",
-      "lines": 1587,
+      "lines": 1593,
       "language": "mjs",
       "symbols": [
         {
@@ -13197,7 +13193,7 @@
       "name": "session.mjs",
       "path": "bin/session.mjs",
       "folder": "bin",
-      "lines": 825,
+      "lines": 587,
       "language": "mjs",
       "symbols": [
         {
@@ -13213,15 +13209,7 @@
           "kind": "function"
         },
         {
-          "name": "createManifestGate",
-          "kind": "function"
-        },
-        {
           "name": "signalAck",
-          "kind": "function"
-        },
-        {
-          "name": "waitingMessage",
           "kind": "function"
         },
         {
@@ -13242,10 +13230,6 @@
         },
         {
           "name": "emitStopped",
-          "kind": "function"
-        },
-        {
-          "name": "emitTargetExplain",
           "kind": "function"
         },
         {
@@ -13277,10 +13261,6 @@
           "kind": "function"
         },
         {
-          "name": "waitForApproval",
-          "kind": "function"
-        },
-        {
           "name": "goProposal",
           "kind": "function"
         },
@@ -13301,18 +13281,6 @@
           "kind": "function"
         },
         {
-          "name": "waitForExplain",
-          "kind": "function"
-        },
-        {
-          "name": "wake",
-          "kind": "function"
-        },
-        {
-          "name": "dropWatcher",
-          "kind": "function"
-        },
-        {
           "name": "storePath",
           "kind": "variable"
         },
@@ -13322,18 +13290,6 @@
         },
         {
           "name": "configPath",
-          "kind": "variable"
-        },
-        {
-          "name": "dir",
-          "kind": "variable"
-        },
-        {
-          "name": "watcher",
-          "kind": "variable"
-        },
-        {
-          "name": "timer",
           "kind": "variable"
         },
         {
@@ -13354,34 +13310,6 @@
         },
         {
           "name": "id",
-          "kind": "variable"
-        },
-        {
-          "name": "consumed",
-          "kind": "variable"
-        },
-        {
-          "name": "label",
-          "kind": "variable"
-        },
-        {
-          "name": "quoted",
-          "kind": "variable"
-        },
-        {
-          "name": "current",
-          "kind": "variable"
-        },
-        {
-          "name": "reviewing",
-          "kind": "variable"
-        },
-        {
-          "name": "target",
-          "kind": "variable"
-        },
-        {
-          "name": "waiting",
           "kind": "variable"
         },
         {
@@ -13485,10 +13413,6 @@
           "kind": "variable"
         },
         {
-          "name": "explain",
-          "kind": "variable"
-        },
-        {
           "name": "sessionParsed",
           "kind": "variable"
         },
@@ -13502,54 +13426,6 @@
         },
         {
           "name": "existing",
-          "kind": "variable"
-        },
-        {
-          "name": "timeoutMs",
-          "kind": "variable"
-        },
-        {
-          "name": "started",
-          "kind": "variable"
-        },
-        {
-          "name": "initialDiff",
-          "kind": "variable"
-        },
-        {
-          "name": "explainFile",
-          "kind": "variable"
-        },
-        {
-          "name": "gate",
-          "kind": "variable"
-        },
-        {
-          "name": "explainGate",
-          "kind": "variable"
-        },
-        {
-          "name": "lastWaiting",
-          "kind": "variable"
-        },
-        {
-          "name": "pendingStart",
-          "kind": "variable"
-        },
-        {
-          "name": "seenGlobal",
-          "kind": "variable"
-        },
-        {
-          "name": "seenLocal",
-          "kind": "variable"
-        },
-        {
-          "name": "globalChanged",
-          "kind": "variable"
-        },
-        {
-          "name": "localChanged",
           "kind": "variable"
         },
         {
@@ -13589,6 +13465,22 @@
           "kind": "variable"
         },
         {
+          "name": "explain",
+          "kind": "variable"
+        },
+        {
+          "name": "current",
+          "kind": "variable"
+        },
+        {
+          "name": "parent",
+          "kind": "variable"
+        },
+        {
+          "name": "pending",
+          "kind": "variable"
+        },
+        {
           "name": "proposal",
           "kind": "variable"
         },
@@ -13601,26 +13493,6 @@
           "kind": "variable"
         },
         {
-          "name": "request",
-          "kind": "variable"
-        },
-        {
-          "name": "asked",
-          "kind": "variable"
-        },
-        {
-          "name": "insertParent",
-          "kind": "variable"
-        },
-        {
-          "name": "aboutId",
-          "kind": "variable"
-        },
-        {
-          "name": "about",
-          "kind": "variable"
-        },
-        {
           "name": "store",
           "kind": "variable"
         },
@@ -13630,10 +13502,6 @@
         },
         {
           "name": "config",
-          "kind": "variable"
-        },
-        {
-          "name": "manifestPath",
           "kind": "variable"
         },
         {
@@ -13660,7 +13528,7 @@
       "name": "accept.md",
       "path": "skill/commands/accept.md",
       "folder": "skill/commands",
-      "lines": 25,
+      "lines": 26,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13810,7 +13678,7 @@
       "name": "SKILL.md",
       "path": "skill/inbase/SKILL.md",
       "folder": "skill/inbase",
-      "lines": 293,
+      "lines": 241,
       "language": "md",
       "symbols": [],
       "imports": []

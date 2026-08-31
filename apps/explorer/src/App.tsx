@@ -40,12 +40,9 @@ import {
   explainTargetQuestion,
   fetchExplain,
   mergeExplainPoll,
-  persistExplainAsk,
   persistExplainStart,
   persistExplainStep,
   persistExplainStop,
-  stripExplainSubSteps,
-  topLevelExplainStepId,
 } from './explain'
 import {
   fetchUserContext,
@@ -1189,27 +1186,6 @@ function Explorer({
       current.active ? { ...current, currentStep: step } : current,
     )
     void persistExplainStep(step)
-  }, [])
-
-  const askExplainStep = useCallback((step: string, question: string) => {
-    const parent = topLevelExplainStepId(step)
-    setExplain((current) => {
-      if (!current.active) return current
-      const clicked = current.steps.find((item) => item.index === step)
-      return {
-        ...current,
-        steps: stripExplainSubSteps(current.steps),
-        currentStep: parent,
-        pendingQuestion: {
-          parent,
-          question,
-          from: step,
-          fromTitle: clicked?.title ?? '',
-        },
-        answering: false,
-      }
-    })
-    void persistExplainAsk(step, question)
   }, [])
 
   const exitExplain = useCallback(() => {
@@ -2554,7 +2530,6 @@ function Explorer({
           <ExplainHud
             explain={explain}
             onStep={goExplainStep}
-            onAsk={askExplainStep}
             onExit={exitExplain}
           />
           {explainFile && explainStep ? (

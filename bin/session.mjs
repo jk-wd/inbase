@@ -30,47 +30,6 @@ function printAck(kind, detail) {
   console.log(`VISUAL_CODER_ACK ${kind}: ${detail}`)
 }
 
-export function createManifestGate(manifestPath, watch = fs.watch) {
-  const dir = path.dirname(manifestPath)
-  let wake = () => {}
-  let watcher = null
-
-  const dropWatcher = () => {
-    try {
-      watcher?.close()
-    } catch {
-      // Already closed after an error, or never opened.
-    }
-    watcher = null
-  }
-
-  try {
-    watcher = watch(dir, () => wake())
-    watcher?.on?.('error', () => {
-      // EMFILE and sandbox limits must not crash wait-for-approval. Poll instead.
-      dropWatcher()
-      wake()
-    })
-  } catch {
-    dropWatcher()
-  }
-
-  return {
-    wait(ms) {
-      return new Promise((resolve) => {
-        const timer = setTimeout(resolve, ms)
-        wake = () => {
-          clearTimeout(timer)
-          resolve()
-        }
-      })
-    },
-    close() {
-      dropWatcher()
-    },
-  }
-}
-
 function signalAck(store, dataDir, sessionId, kind, detail) {
   printAck(kind, detail)
   try {
@@ -78,18 +37,6 @@ function signalAck(store, dataDir, sessionId, kind, detail) {
   } catch {
     // Session folder may already be gone.
   }
-}
-
-function waitingMessage(sessionId, manifest) {
-  if (manifest.phase === 'plan_ready') {
-    return `Waiting for the user to /go step ${manifest.currentStep}...`
-  }
-  if (manifest.phase === 'review' && manifest.diffs?.at(-1)) {
-    return manifest.stepByStep === false
-      ? `Waiting for the user to /accept the proposal after ${manifest.diffs.at(-1).id}...`
-      : `Waiting for the user to /accept the proposal on ${manifest.diffs.at(-1).id}...`
-  }
-  return `Waiting for the visual workflow in session ${sessionId}...`
 }
 
 function requireVisualizer(store, config) {
@@ -143,24 +90,9 @@ function emitStopped(store, dataDir, sessionId) {
   process.exit(2)
 }
 
-function emitTargetExplain(store, explain, dataDir, sessionId) {
-  const consumed = explain.consumeExplainStart(dataDir)
-  if (!consumed) return false
-  const label = explain.explainTargetLabel(consumed)
-  signalAck(store, dataDir, sessionId, 'explain', label)
-  const quoted = JSON.stringify(consumed.question)
-  console.log(
-    `VISUAL_CODER_EXPLAIN The user clicked Explain on the ${label}. Do not edit project files. Do not accept or invoke the next step. Do not start the map walk overlay. The visualizer shows a single-explanation card. Run: npx inbase explain start --question ${quoted} Then inspect that ${consumed.kind} and where it fits in the codebase, and report one explanation with npx inbase explain report --question ${quoted} --step "..." --body "...". Use a single --step. After reporting, run npx inbase explain wait. If explain wait returns VISUAL_CODER_EXPLAIN for another file or folder, replace the explanation with one new step. When explain wait returns stopped or timeout, run wait-for-approval again.`,
-  )
-  process.exit(7)
-}
-
-function emitApprovalHandshake(store, explain, dataDir, sessionId, manifest, initialDiff, pendingStart) {
+function emitApprovalHandshake(store, dataDir, sessionId, manifest) {
   manifest = store.readManifest(dataDir, sessionId) ?? manifest
-  const current = initialDiff
-    ? manifest?.diffs.find((entry) => entry.id === initialDiff.id)
-    : null
-  if (!manifest || manifest.phase === 'stopped' || current?.status === 'rejected') {
+  if (!manifest || manifest.phase === 'stopped') {
     emitStopped(store, dataDir, sessionId)
     return
   }
@@ -170,35 +102,6 @@ function emitApprovalHandshake(store, explain, dataDir, sessionId, manifest, ini
       `VISUAL_CODER_FINISHED The final step was applied. Feature is done. Run inbase propose-patch --session ${sessionId} --clear, then tell the user it is finished.`,
     )
     process.exit(5)
-  }
-  if (pendingStart) {
-    emitTargetExplain(store, explain, dataDir, sessionId)
-  }
-  if (manifest.pendingExplain) {
-    const reviewing = manifest.phase === 'review'
-    const active = reviewing ? manifest.diffs?.at(-1) : null
-    const step = active?.step ?? manifest.currentStep
-    const title =
-      manifest.steps?.find((item) => item.index === step)?.title ||
-      active?.title ||
-      `step ${step}`
-    signalAck(
-      store,
-      dataDir,
-      sessionId,
-      'explain',
-      `the proposal for ${title}`,
-    )
-    const target = reviewing
-      ? 'inspect the live files this proposal changed'
-      : 'inspect the live files and folders this plan step will use'
-    const waiting = reviewing
-      ? 'The proposal is still waiting for /accept.'
-      : 'The plan is still waiting for /go.'
-    console.log(
-      `VISUAL_CODER_EXPLAIN The user invoked /explain for step ${step}: ${title}. Do not edit project files. Do not accept or invoke the next step. Start explain mode and report this proposal once. Do not walk the map after reporting — the UI reads the steps and the user navigates them. Run: npx inbase explain start --question "Explain the current proposal: ${title}" Then ${target} and report every step in one npx inbase explain report --question "Explain the current proposal: ${title}" --step "..." --body "..." --files path [--folders path] [--select path] [--zoom path] [--relations from:to] [--info] [--highlight function:name] [--point function:name]. After reporting, run npx inbase explain wait. If the user asks about a step, report sub-steps with --parent and wait again. When explain wait returns stopped or timeout, run wait-for-approval again. ${waiting}`,
-    )
-    process.exit(7)
   }
   if (manifest.phase === 'working') {
     const next = manifest.steps.find((step) => step.index === manifest.currentStep)
@@ -230,8 +133,8 @@ function emitApprovalHandshake(store, explain, dataDir, sessionId, manifest, ini
     } else {
       console.log(
         continuing
-          ? `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Continue immediately: edit live files for this step only, then inbase propose-patch --session ${sessionId} with no patch file. Do not explore, re-plan, or run wait-for-blueprint.`
-          : `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Re-read the global blueprint.json and this session's local blueprint before implementing; the user can place files and islands at any time. Edit the live project files for this step only (Write, StrReplace, Delete). Then record the step with inbase propose-patch --session ${sessionId} — no patch file. Inbase diffs those edits against the invoke snapshot and stores the patch. Do not write a unified diff yourself.`,
+          ? `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Continue immediately: edit live files for this step only, then inbase propose-patch --session ${sessionId} with no patch file. Then stop and wait for the user to /accept in chat.`
+          : `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Re-read the global blueprint.json and this session's local blueprint before implementing; the user can place files and islands at any time. Edit the live project files for this step only (Write, StrReplace, Delete). Then record the step with inbase propose-patch --session ${sessionId} — no patch file. Then stop and wait for the user to /accept in chat.`,
       )
     }
     process.exit(0)
@@ -285,8 +188,8 @@ export async function attachSession(args) {
   printAck('attached', colorName || manifest.name || manifest.sessionId)
   console.log(
     colorName
-      ? `VISUAL_CODER_ATTACHED Attached to the ${colorName} session (${manifest.phase}). Tell the user you connected to the ${colorName} chat. Use --session ${manifest.sessionId} for every later command. Run inbase wait-for-blueprint --session ${manifest.sessionId} to read the optional blueprint, instruction, and attached files; it does not wait. Then run wait-for-approval so map Explain clicks are heard.`
-      : `VISUAL_CODER_ATTACHED Attached to the next waiting visualizer session ${manifest.name || manifest.sessionId} (${manifest.phase}). Use --session ${manifest.sessionId} for every later command. Run inbase wait-for-blueprint --session ${manifest.sessionId} to read the optional blueprint, instruction, and attached files; it does not wait. Then run wait-for-approval so map Explain clicks are heard.`,
+      ? `VISUAL_CODER_ATTACHED Attached to the ${colorName} session (${manifest.phase}). Tell the user you connected to the ${colorName} chat. Use --session ${manifest.sessionId} for every later command. Run inbase wait-for-blueprint --session ${manifest.sessionId} to read the optional blueprint, instruction, and attached files; it does not wait. Then report a plan if you can. Stop after report-plan — the user types /go, /accept, or /explain in chat.`
+      : `VISUAL_CODER_ATTACHED Attached to the next waiting visualizer session ${manifest.name || manifest.sessionId} (${manifest.phase}). Use --session ${manifest.sessionId} for every later command. Run inbase wait-for-blueprint --session ${manifest.sessionId} to read the optional blueprint, instruction, and attached files; it does not wait. Then report a plan if you can. Stop after report-plan — the user types /go, /accept, or /explain in chat.`,
   )
 }
 
@@ -406,10 +309,6 @@ export async function waitForBlueprint(args) {
       console.log('VISUAL_CODER_CONTEXT_FILE_END')
     }
   }
-  const explain = await loadExplainStore()
-  if (explain.readExplain(config.dataDir).pendingStart) {
-    emitTargetExplain(store, explain, config.dataDir, sessionId)
-  }
   process.exit(0)
 }
 
@@ -438,97 +337,8 @@ export async function reportPlan(args) {
   console.log(
     manifest.phase === 'working'
       ? `VISUAL_CODER_PLAN_READY Reported ${manifest.steps.length} plan step(s) for session ${sessionId}. Step by step is off, so step ${manifest.currentStep} is already invoked. Edit the live files for that step, then inbase propose-patch --session ${sessionId} with no patch file.`
-      : `VISUAL_CODER_PLAN_READY Reported ${manifest.steps.length} plan step(s) for session ${sessionId}. Wait for the user to /go step ${manifest.currentStep}.`,
+      : `VISUAL_CODER_PLAN_READY Reported ${manifest.steps.length} plan step(s) for session ${sessionId}. Stop. Wait for the user to type /go step ${manifest.currentStep} in chat.`,
   )
-}
-
-export async function waitForApproval(args) {
-  const { store, config } = await loadExplorer()
-  const sessionId = takeFlagValue(args, '--session')
-  const timeoutMs = Number(takeFlagValue(args, '--timeout') ?? 600000)
-  if (!sessionId) usage('wait-for-approval', '--session <cursor-chat-id> [--timeout ms]')
-
-  const started = Date.now()
-  const initial = store.readManifest(config.dataDir, sessionId)
-  const initialDiff = initial?.diffs?.at(-1)
-  if (store.isWorkflowStopped(config.dataDir, sessionId)) {
-    emitStopped(store, config.dataDir, sessionId)
-  }
-  if (!initial) {
-    console.error(`No workflow session found for ${sessionId}`)
-    process.exit(1)
-  }
-  store.autoAdvance(config.dataDir, sessionId, config.targetRoot)
-
-  const explain = await loadExplainStore()
-  const { manifest: manifestPath } = store.sessionPaths(config.dataDir, sessionId)
-  const explainFile = path.join(config.dataDir, explain.EXPLAIN_FILE)
-  const gate = createManifestGate(manifestPath)
-  const explainGate = createManifestGate(explainFile)
-  let lastWaiting = null
-  try {
-    while (Date.now() - started < timeoutMs) {
-      store.touchSessionConnection(config.dataDir, sessionId)
-      store.autoAdvance(config.dataDir, sessionId, config.targetRoot)
-      const manifest = store.readManifest(config.dataDir, sessionId)
-      const pendingStart = explain.readExplain(config.dataDir).pendingStart
-      emitApprovalHandshake(
-        store,
-        explain,
-        config.dataDir,
-        sessionId,
-        manifest,
-        initialDiff,
-        pendingStart,
-      )
-      if (!manifest) continue
-      const global = store.readBlueprint(config.dataDir)
-      const local = store.readLocalBlueprint(config.dataDir, sessionId)
-      const seenGlobal = manifest.blueprintRevision ?? 0
-      const seenLocal = manifest.localBlueprintRevision ?? 0
-      const globalChanged = global.revision > seenGlobal
-      const localChanged = local.revision > seenLocal
-      if (globalChanged || localChanged) {
-        const dumped = printSessionBlueprints(store, config.dataDir, sessionId)
-        const colorName = dumped.colorName
-        signalAck(
-          store,
-          config.dataDir,
-          sessionId,
-          'blueprint',
-          dumped.detail,
-        )
-        if (globalChanged && localChanged) {
-          console.log(
-            `VISUAL_CODER_BLUEPRINT The global blueprint and the ${colorName} session blueprint changed. Follow the latest files, islands, functions, variables, imports, and notes from both. Do not omit, rename, relocate, or replace them. The ${colorName} blueprint is only for this chat. If this would differ from the current plan, ask the user before replacing the plan. Then run wait-for-approval again.`,
-          )
-        } else if (localChanged) {
-          console.log(
-            `VISUAL_CODER_BLUEPRINT The ${colorName} session blueprint changed. This local blueprint is only for this chat. Follow its latest files, islands, functions, variables, imports, and notes together with the global blueprint. Do not omit, rename, relocate, or replace them. If this would differ from the current plan, ask the user before replacing the plan. Then run wait-for-approval again.`,
-          )
-        } else {
-          console.log(
-            'VISUAL_CODER_BLUEPRINT The global blueprint changed. Follow the latest files, islands, functions, variables, imports, and notes. Do not omit, rename, relocate, or replace them. If this would differ from the current plan, ask the user before replacing the plan. Then run wait-for-approval again.',
-          )
-        }
-        process.exit(6)
-      }
-      const waiting = waitingMessage(sessionId, manifest)
-      if (waiting !== lastWaiting) {
-        console.log(waiting)
-        lastWaiting = waiting
-      }
-      await Promise.race([gate.wait(50), explainGate.wait(50)])
-    }
-  } finally {
-    gate.close()
-    explainGate.close()
-  }
-
-  signalAck(store, config.dataDir, sessionId, 'timeout', 'no visualizer signal')
-  store.stopSession(config.dataDir, sessionId, config.targetRoot)
-  console.error('Timed out waiting for visualizer review. Do not modify files.')
-  process.exit(3)
 }
 
 export async function goProposal(args) {
@@ -560,16 +370,7 @@ export async function goProposal(args) {
     console.error(error instanceof Error ? error.message : error)
     process.exit(1)
   }
-  const explain = await loadExplainStore()
-  emitApprovalHandshake(
-    store,
-    explain,
-    config.dataDir,
-    sessionId,
-    next,
-    null,
-    null,
-  )
+  emitApprovalHandshake(store, config.dataDir, sessionId, next)
 }
 
 export async function acceptProposal(args) {
@@ -596,34 +397,34 @@ export async function acceptProposal(args) {
   }
   let next
   try {
-    next =
-      active.step >= manifest.steps.length
-        ? store.continueDiff(
-            config.dataDir,
-            config.targetRoot,
-            sessionId,
-            active.id,
-          )
-        : store.invokeStep(
-            config.dataDir,
-            sessionId,
-            active.step + 1,
-            config.targetRoot,
-          )
+    next = store.continueDiff(
+      config.dataDir,
+      config.targetRoot,
+      sessionId,
+      active.id,
+    )
   } catch (error) {
     console.error(error instanceof Error ? error.message : error)
     process.exit(1)
   }
-  const explain = await loadExplainStore()
-  emitApprovalHandshake(
-    store,
-    explain,
-    config.dataDir,
-    sessionId,
-    next,
-    null,
-    null,
-  )
+  if (next?.phase === 'plan_ready') {
+    const step = next.currentStep
+    const title = next.steps.find((item) => item.index === step)?.title
+    signalAck(
+      store,
+      config.dataDir,
+      sessionId,
+      'plan',
+      title
+        ? `waiting for /go on step ${step} — ${title}`
+        : `waiting for /go on step ${step}`,
+    )
+    console.log(
+      `VISUAL_CODER_ACCEPTED Accepted the proposal. Stop. Wait for the user to type /go step ${step}${title ? `: ${title}` : ''} in chat. Do not edit files. The user can still Stop.`,
+    )
+    process.exit(0)
+  }
+  emitApprovalHandshake(store, config.dataDir, sessionId, next)
 }
 
 export async function proposePatch(args) {
@@ -679,10 +480,10 @@ export async function proposePatch(args) {
   const last = entry.step >= manifest.steps.length
   console.log(
     manifest.phase === 'working'
-      ? `VISUAL_CODER_STEP_READY Recorded live edits as patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Do not keep editing until the next EXECUTE. Step by step is off, so the next step is already invoked. Wait again.`
+      ? `VISUAL_CODER_STEP_READY Recorded live edits as patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Step by step is off, so the next step is already invoked. Implement that step now, then propose-patch again.`
       : last
-        ? `VISUAL_CODER_STEP_READY Recorded live edits as patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Do not keep editing. Walk the diffs, then /accept to finish.`
-        : `VISUAL_CODER_STEP_READY Recorded live edits as patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Immediately run wait-for-approval. Do not explore or plan. /accept invokes the next step; when EXECUTE returns, implement that step at once.`,
+        ? `VISUAL_CODER_STEP_READY Recorded live edits as patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Stop. Wait for the user to type /accept in chat to finish.`
+        : `VISUAL_CODER_STEP_READY Recorded live edits as patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Stop. Wait for the user to type /accept in chat. An alternative instruction in chat updates this proposal.`,
   )
 }
 
@@ -704,28 +505,54 @@ export async function runExplain(args) {
     return
   }
   if (parsed.action === 'wait') {
-    await waitForExplain(store, explain, config.dataDir, args)
-    return
+    console.error(
+      'explain wait was removed. The user types /explain in chat for a follow-up or a map ? click.',
+    )
+    process.exit(1)
   }
   if (parsed.action === 'start') {
+    const current = explain.readExplain(config.dataDir)
+    if (current.active && current.steps.length > 0 && parsed.question) {
+      const parent = explain.topLevelExplainStepId(current.currentStep)
+      printAck('question', `step ${current.currentStep}`)
+      console.log(
+        `VISUAL_CODER_EXPLAIN_FOLLOWUP The user asked about the current explanation. Do not replace the whole explanation. Report one-level sub-steps under ${parent} with --parent "${parent}". This replaces any current sub-steps. Do not nest further (no ${parent}.1.1).`,
+      )
+      console.log(`VISUAL_CODER_PARENT ${parent}`)
+      console.log(
+        `VISUAL_CODER_INSTRUCTION_START\n${parsed.question}\nVISUAL_CODER_INSTRUCTION_END`,
+      )
+      console.log(
+        `Run: npx inbase explain report --parent "${parent}" --question ${JSON.stringify(parsed.question)} --step "..." --body "..." --files path [--folders path] [--select path] [--zoom path] [--relations from:to] [--info] [--highlight function:name] [--point function:name]. Repeat --step for ${parent}.1, ${parent}.2, … Then stop. Wait for /explain, /go, or /accept in chat.`,
+      )
+      return
+    }
+    const pending = current.pendingStart
     const proposal = readProposalInfo(store, config.dataDir)
     const question =
       parsed.question ||
+      pending?.question ||
       (proposal ? `Explain the current proposal: ${proposal.title}` : '')
     if (!question) {
       usage('explain start', '--question "How does this work?"')
     }
+    if (pending) {
+      printAck('explain', explain.explainTargetLabel(pending))
+      console.log(
+        `VISUAL_CODER_EXPLAIN The user clicked Explain on the ${explain.explainTargetLabel(pending)}. Do not edit project files. The visualizer shows a single-explanation card. Inspect that ${pending.kind} and report one explanation with a single --step.`,
+      )
+    }
     explain.startExplain(config.dataDir, question)
     store.clearPendingExplain(config.dataDir)
     store.touchExplainConnections(config.dataDir)
-    if (proposal) {
+    if (proposal && !pending) {
       console.log(
         `VISUAL_CODER_PROPOSAL Explain the current proposal for step ${proposal.step}: ${proposal.title}. The user asked: ${question}. Do not edit project files. Walk this proposal on the map.`,
       )
     }
     console.log(`VISUAL_CODER_EXPLAIN_STARTED ${question}`)
     console.log(
-      'The map is in explain mode. Explore the codebase, then run inbase explain report with --step / --body / --files / --folders / --select / --zoom / --relations / --info / --highlight / --point.',
+      'The map is in explain mode. Explore the codebase, then run inbase explain report with --step / --body / --files / --folders / --select / --zoom / --relations / --info / --highlight / --point. After reporting, stop. Wait for /explain, /go, or /accept in chat.',
     )
     return
   }
@@ -754,71 +581,6 @@ export async function runExplain(args) {
     )
   }
   console.log(
-    'Run inbase explain wait for a question about the current step, or until the user exits.',
+    'Stop. Wait for the user to type /explain in chat for a follow-up, or /go /accept to continue the plan.',
   )
-}
-
-async function waitForExplain(store, explain, dataDir, args) {
-  const timeoutMs = Number(takeFlagValue(args, '--timeout') ?? 600000)
-  const started = Date.now()
-  const explainFile = path.join(dataDir, explain.EXPLAIN_FILE)
-  const gate = createManifestGate(explainFile)
-  let lastWaiting = null
-  try {
-    while (Date.now() - started < timeoutMs) {
-      store.touchExplainConnections(dataDir)
-      const current = explain.readExplain(dataDir)
-      if (!current.active) {
-        printAck('stopped', 'explain mode was closed')
-        console.log(
-          'VISUAL_CODER_EXPLAIN_STOPPED The user exited explain mode. Do not report more steps.',
-        )
-        process.exit(2)
-      }
-      if (current.pendingStart) {
-        const request = explain.consumeExplainStart(dataDir)
-        if (!request) continue
-        const quoted = JSON.stringify(request.question)
-        printAck('explain', explain.explainTargetLabel(request))
-        console.log(
-          `VISUAL_CODER_EXPLAIN The user clicked Explain on the ${explain.explainTargetLabel(request)}. Replace the current explanation. Do not edit project files. Do not report sub-steps. Do not start the map walk overlay. The visualizer shows a single-explanation card. Run: npx inbase explain start --question ${quoted} Then inspect that ${request.kind} and where it fits in the codebase, and report one explanation with npx inbase explain report --question ${quoted} --step "..." --body "...". Use a single --step. Then run npx inbase explain wait again.`,
-        )
-        process.exit(0)
-      }
-      if (current.pendingQuestion && !current.answering) {
-        const asked = explain.consumeExplainQuestion(dataDir)
-        if (!asked) continue
-        const insertParent = asked.parent
-        const aboutId = asked.from && asked.from !== asked.parent ? asked.from : asked.parent
-        const about =
-          current.steps.find((step) => step.index === aboutId) ??
-          current.steps.find((step) => step.index === insertParent)
-        const title = asked.fromTitle || about?.title || `step ${aboutId}`
-        printAck('question', `step ${aboutId}`)
-        console.log(
-          `VISUAL_CODER_EXPLAIN_QUESTION The user asked about step ${aboutId}: ${title}. Do not replace the whole explanation. Report one-level sub-steps under ${insertParent} with --parent "${insertParent}". This replaces any current sub-steps. Do not nest further (no ${insertParent}.1.1).`,
-        )
-        console.log(`VISUAL_CODER_PARENT ${insertParent}`)
-        console.log(`VISUAL_CODER_INSTRUCTION_START\n${asked.question}\nVISUAL_CODER_INSTRUCTION_END`)
-        console.log(
-          `Run: npx inbase explain report --parent "${insertParent}" --question ${JSON.stringify(asked.question)} --step "..." --body "..." --files path [--folders path] [--select path] [--zoom path] [--relations from:to] [--info] [--highlight function:name] [--point function:name]. Repeat --step for ${insertParent}.1, ${insertParent}.2, … Then run npx inbase explain wait again.`,
-        )
-        process.exit(0)
-      }
-      const waiting = 'Waiting for a question on an explanation step...'
-      if (waiting !== lastWaiting) {
-        console.log(waiting)
-        lastWaiting = waiting
-      }
-      await gate.wait(50)
-    }
-  } finally {
-    gate.close()
-  }
-
-  printAck('timeout', 'no explain question')
-  console.error(
-    'Timed out waiting for an explain question. Do not report more steps.',
-  )
-  process.exit(3)
 }
