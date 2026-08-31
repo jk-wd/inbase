@@ -1085,7 +1085,16 @@ function SessionPanel({
       data-minimized={minimized}
       data-focused={focused}
       data-attached={llmConnected && !llmDisconnected}
-      onPointerDown={onFocus}
+      onPointerDown={(event) => {
+        const target = event.target
+        if (
+          target instanceof Element &&
+          target.closest('button, textarea, input, a, label')
+        ) {
+          return
+        }
+        onFocus()
+      }}
     >
       <PanelChrome
         title={
@@ -1256,17 +1265,17 @@ function SessionPanel({
                                 type="button"
                                 disabled={creating}
                                 aria-busy={creating}
-                                onClick={() =>
-                                  proposed
-                                    ? lastStep
-                                      ? act('continue')
-                                      : act('invoke', {
-                                          step: step.index + 1,
-                                        })
-                                    : act('invoke', {
-                                        step: step.index,
-                                      })
-                                }
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  if (creating) return
+                                  if (proposed) {
+                                    if (lastStep) act('continue')
+                                    else act('invoke', { step: step.index + 1 })
+                                    return
+                                  }
+                                  act('invoke', { step: step.index })
+                                }}
                               >
                                 {proposed
                                   ? 'Accept proposal'
@@ -1274,29 +1283,35 @@ function SessionPanel({
                                     ? 'Creating proposal…'
                                     : 'Create proposal'}
                               </button>
-                              {!creating && (
-                                <button
-                                  className="hud-button hud-button-approve hud-run-step"
-                                  type="button"
-                                  disabled={explaining}
-                                  aria-busy={explaining}
-                                  onClick={() => {
-                                    setStartingExplain(true)
-                                    void Promise.resolve(
-                                      onWorkflowAction(
-                                        sessionId,
-                                        'explain_proposal',
-                                      ),
-                                    ).then((ok) => {
-                                      if (ok === false) setStartingExplain(false)
-                                    })
-                                  }}
-                                >
-                                  {explaining
-                                    ? 'Starting explanation…'
-                                    : 'Explain proposal'}
-                                </button>
-                              )}
+                              <button
+                                className="hud-button hud-button-approve hud-run-step"
+                                type="button"
+                                disabled={!proposed || explaining}
+                                aria-busy={explaining}
+                                title={
+                                  proposed
+                                    ? undefined
+                                    : 'Available once a proposal exists'
+                                }
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  if (!proposed || explaining) return
+                                  setStartingExplain(true)
+                                  void Promise.resolve(
+                                    onWorkflowAction(
+                                      sessionId,
+                                      'explain_proposal',
+                                    ),
+                                  ).then((ok) => {
+                                    if (ok === false) setStartingExplain(false)
+                                  })
+                                }}
+                              >
+                                {explaining
+                                  ? 'Starting explanation…'
+                                  : 'Explain proposal'}
+                              </button>
                             </span>
                           )}
                         </span>

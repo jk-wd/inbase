@@ -55,7 +55,7 @@ A normal chat request connects to the next empty slot. Use `/coral add a login p
 
 If several slots are waiting, the next Cursor chat attaches the oldest empty session. Sessions that already have an LLM are skipped, and the map window does not need to be focused.
 
-With **Step by step** on, click **Create proposal** to start a step, then **Accept proposal** when the patch is ready. **Explain proposal** sits next to both and has the LLM walk the current plan step or pending patch on the map. With Step by step off, the LLM implements the full plan; you can still walk Previous/Next over the diffs, then **Accept proposal**. Send an alternative instruction from the HUD to update the current proposal, or **Stop** to end the session.
+With **Step by step** on, click **Create proposal** to start a step, then **Accept proposal** when the patch is ready. **Explain proposal** stays greyed out until that patch exists, then has the LLM walk it on the map. With Step by step off, the LLM implements the full plan; you can still walk Previous/Next over the diffs, then **Accept proposal**. Send an alternative instruction from the HUD to update the current proposal, or **Stop** to end the session.
 
 When no LLM is currently making changes, turn on **Show branch changes** (or press **G**) to highlight the current git branch against its base — committed, unstaged, and untracked files — instead of LLM patch files. The control is disabled while an LLM session is writing or reviewing a patch.
 

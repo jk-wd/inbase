@@ -838,6 +838,7 @@ button {
   max-height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
+  pointer-events: auto;
 }
 
 .hud-left-stack .hud-panel-planned[data-minimized='true'] {
@@ -1242,6 +1243,11 @@ button {
   min-width: 0;
 }
 
+.hud-step-title {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
 .hud-steps li[data-active='true']:not([data-done='true']) {
   color: #ffffff;
 }
@@ -1274,11 +1280,20 @@ button {
   text-decoration: none;
 }
 
+.hud-run-step:disabled {
+  opacity: 0.4;
+  border-color: #3a4250;
+  color: #8b95a5;
+}
+
 .hud-step-actions {
   display: flex;
   flex-wrap: wrap;
   flex: 1 1 100%;
   gap: 6px;
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
 }
 
 .hud-panel-planned .hud-section-title {
