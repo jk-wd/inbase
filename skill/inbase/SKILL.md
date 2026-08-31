@@ -50,15 +50,17 @@ action from this chat:
 - An **alternative instruction** in chat while a proposal is waiting: edit those
   live files and `propose-patch` again, then stop for `/go`.
 
-When **Step by step** is off, `report-plan` and `/go` invoke the next step
-immediately (`VISUAL_CODER_EXECUTE`). Implement that step in the same turn.
-After the last recorded step, stop for `/go`.
+**Step by step** is off by default. Then `report-plan` and `/go` invoke the next
+step immediately (`VISUAL_CODER_EXECUTE`). Implement that step in the same turn.
+After the last recorded step, stop for `/go`. When the switch is on, wait for
+`/go` between steps.
 
 **Recorded patches are the session record.** After `VISUAL_CODER_EXECUTE`, edit
 live project files with Write, StrReplace, and Delete for that step only. Then
 run `inbase propose-patch` with no patch file. Inbase diffs the working tree
-against the snapshot taken at invoke and stores that patch. Then **stop** and
-wait for `/go` in chat. Do not write a unified diff yourself.
+against the snapshot taken at invoke and stores that patch. Then **stop**,
+unless Step by step is off and the next step is already invoked. Do not write a
+unified diff yourself.
 
 The visualizer stores immutable diffs under
 `.inbase/diff-sessions/<session-id>/diffs/`. Inbase must already be running
@@ -115,8 +117,9 @@ For later acks, echo the signal, for example: `Got it — running step 2: Show C
 the required tools in the same turn. Do not start with a long analysis. Do not
 call tools before that sentence.
 
-After `propose-patch`, **stop**. Do not explore, search, or re-plan. Wait for
-the user to type `/go`, `/explain`, or an alternative instruction
+After `propose-patch`, **stop** unless Step by step is off and the next step is
+already invoked — then implement that step now. Do not explore, search, or
+re-plan. Otherwise wait for `/go`, `/explain`, or an alternative instruction
 in this chat.
 
 ## Required sequence
@@ -174,11 +177,12 @@ npx inbase report-plan \
   --steps "Show Clock on Home"
 ```
 
-6. **Stop.** Tell the user the plan is on the map and they can type `/go` to
-   start the first step (or `/explain` to walk it). Do **not** run
-   `wait-for-approval`. Do **not** edit project files until `/go` (or Step by
-   step is off and `report-plan` already printed `VISUAL_CODER_EXECUTE` /
-   phase working — then implement that step now).
+6. **Step by step is off by default**, so `report-plan` usually prints that the
+   first step is already invoked (`VISUAL_CODER_EXECUTE` / phase working).
+   Implement that step now. If the switch is on, **stop** and tell the user the
+   plan is on the map and they can type `/go` to start the first step (or
+   `/explain` to walk it). Do **not** run `wait-for-approval`. Do **not** edit
+   project files until the step is invoked.
 7. When the user types **`/go`** (or **`/accept`**), run
    `npx inbase go --session "<session-id>"`.
    If that prints `VISUAL_CODER_EXECUTE`, implement only that step by editing
@@ -190,10 +194,12 @@ npx inbase propose-patch --session "<session-id>"
 ```
 
    Do not write a unified diff. Do not pass a `.patch` file. Never write or
-   replace a patch already stored in the session folder. Then **stop**. Wait
-   for `/go` to accept that proposal (or an alternative instruction) in chat.
-   If that prints `VISUAL_CODER_ACCEPTED`, do not edit files. **Stop.** Wait
-   for `/go` on the next step. The last proposal still needs `/go` to finish.
+   replace a patch already stored in the session folder. Then **stop**, unless
+   Step by step is off and the next step is already invoked — implement that
+   step now. Wait for `/go` to accept the last proposal (or an alternative
+   instruction) in chat. If that prints `VISUAL_CODER_ACCEPTED`, do not edit
+   files. **Stop.** Wait for `/go` on the next step unless it is already
+   invoked. The last proposal still needs `/go` to finish.
    If that prints `VISUAL_CODER_FINISHED`, tell the user the feature is done
    and **stop**. Do not propose another patch.
 8. When the user types **`/explain`**, do not edit project files and do not

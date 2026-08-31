@@ -18,6 +18,7 @@ const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const CONNECTED_TTL_MS = 15_000
 const STALLED_WAIT_MS = 2_000
 export const SESSION_SLOT_COUNT = 5
+export const DEFAULT_STEP_BY_STEP = false
 export const SESSION_COLORS = [
   { id: 'coral', name: 'Coral', hex: '#f87171' },
   { id: 'amber', name: 'Amber', hex: '#fbbf24' },
@@ -681,7 +682,7 @@ export function readManifest(dataDir, sessionId) {
     value.workStartedAt ??= null
   }
   if (typeof value.pendingExplain !== 'boolean') value.pendingExplain = false
-  if (typeof value.stepByStep !== 'boolean') value.stepByStep = true
+  if (typeof value.stepByStep !== 'boolean') value.stepByStep = DEFAULT_STEP_BY_STEP
   value.initialInstruction =
     typeof value.initialInstruction === 'string' ? value.initialInstruction : null
   value.contextFiles = normalizeContextFiles(value.contextFiles)
@@ -1124,7 +1125,7 @@ function planSteps(titles, startAt = 1) {
 }
 
 export function isStepByStep(manifest) {
-  return manifest?.stepByStep !== false
+  return manifest?.stepByStep === true
 }
 
 export function autoAdvance(dataDir, sessionId, targetRoot = null) {
@@ -1183,7 +1184,7 @@ export function startSession(dataDir, input) {
     steps: [],
     status: 'active',
     phase: 'blueprint_ask',
-    stepByStep: true,
+    stepByStep: DEFAULT_STEP_BY_STEP,
     currentStep: 1,
     activeDiffId: null,
     pendingInstruction: null,
@@ -1227,7 +1228,7 @@ export function setupSession(dataDir, input = {}) {
     status: 'active',
     phase: 'blueprint',
     awaitingAttach: true,
-    stepByStep: true,
+    stepByStep: DEFAULT_STEP_BY_STEP,
     currentStep: 1,
     activeDiffId: null,
     pendingInstruction: null,
@@ -1485,7 +1486,10 @@ export function reportPlan(dataDir, input) {
       steps: [],
       status: 'active',
       phase: 'preparing',
-      stepByStep: true,
+      stepByStep:
+        typeof input.stepByStep === 'boolean'
+          ? input.stepByStep
+          : DEFAULT_STEP_BY_STEP,
       currentStep: 1,
       activeDiffId: null,
       pendingInstruction: null,

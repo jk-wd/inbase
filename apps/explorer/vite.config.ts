@@ -660,7 +660,6 @@ export default defineConfig({
       '@react-three/fiber',
       '@react-three/drei',
     ],
-    exclude: ['kokoro-js', '@huggingface/transformers'],
   },
   worker: {
     format: 'es',

@@ -186,14 +186,6 @@ export function explainIsPreparing(explain: ExplainSession) {
   return Boolean(explain.pendingQuestion) || explain.answering
 }
 
-export function explainSpeechText(step: Pick<ExplainStep, 'title' | 'body'> | null) {
-  if (!step) return ''
-  return [step.title, step.body]
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .join('. ')
-}
-
 export function explainCardCopy(explain: ExplainSession) {
   const first =
     explain.steps.find((step) => !step.index.includes('.') && step.body.trim()) ??

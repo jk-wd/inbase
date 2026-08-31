@@ -1,18 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import type { ExplainSession } from '../types'
-import {
-  explainCardCopy,
-  explainSpeechText,
-  explainTargetLabel,
-} from '../explain'
+import { explainCardCopy, explainTargetLabel } from '../explain'
 import { shouldIgnoreShortcut } from '../keyboard'
-import {
-  canSpeak,
-  speakText,
-  stopSpeaking,
-  subscribeSpeakStatus,
-  type SpeakStatus,
-} from '../speech'
 
 export function ExplainAskCard({
   explain,
@@ -26,37 +15,6 @@ export function ExplainAskCard({
   const subtitle = pending
     ? explainTargetLabel(pending)
     : explain.question || 'Explanation'
-  const speechAvailable = canSpeak()
-  const [telling, setTelling] = useState(false)
-  const [speakStatus, setSpeakStatus] = useState<SpeakStatus>('idle')
-  const spoken = explainSpeechText({
-    title: copy.title,
-    body: copy.body,
-  })
-
-  const stopTelling = useCallback(() => {
-    setTelling(false)
-    stopSpeaking()
-  }, [])
-
-  const toggleTell = () => {
-    if (!speechAvailable || !copy.ready) return
-    if (telling) {
-      stopTelling()
-      return
-    }
-    setTelling(true)
-    speakText(spoken, () => setTelling(false))
-  }
-
-  useEffect(() => subscribeSpeakStatus(setSpeakStatus), [])
-
-  useEffect(
-    () => () => {
-      stopSpeaking()
-    },
-    [],
-  )
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -113,29 +71,6 @@ export function ExplainAskCard({
             Preparing an explanation… Type /explain in the Cursor chat.
           </p>
         )}
-        <div className="explain-ask-card-footer">
-          {telling && speakStatus === 'loading' ? (
-            <p className="explain-voice-status">Loading a natural voice…</p>
-          ) : null}
-          <button
-            className="hud-button explain-tell"
-            type="button"
-            data-active={telling}
-            aria-pressed={telling}
-            aria-label={telling ? 'Stop telling' : 'Tell me'}
-            title={
-              speechAvailable
-                ? telling
-                  ? 'Stop reading this explanation'
-                  : 'Read this explanation aloud'
-                : 'Speech is not available in this browser'
-            }
-            disabled={!speechAvailable || !copy.ready}
-            onClick={toggleTell}
-          >
-            {telling ? 'Stop' : 'Tell me'}
-          </button>
-        </div>
       </div>
     </div>
   )

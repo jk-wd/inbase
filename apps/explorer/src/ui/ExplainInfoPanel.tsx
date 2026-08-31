@@ -5,6 +5,10 @@ import {
 } from '../explain'
 import type { ExplainSymbolRef, FileNode } from '../types'
 
+function fileBase(id: string) {
+  return id.split('/').pop() ?? id
+}
+
 function kindLabel(kind: FileNode['symbols'][number]['kind']) {
   if (kind === 'variable') return 'Vars'
   if (kind === 'class') return 'Classes'
@@ -17,19 +21,20 @@ function SymbolList({
   names,
   highlights,
   point,
+  empty,
 }: {
   title: string
   kind: FileNode['symbols'][number]['kind']
   names: string[]
   highlights: ExplainSymbolRef[]
   point: ExplainSymbolRef | null
+  empty: string
 }) {
-  const dimOthers = highlights.length > 0 || Boolean(point)
   return (
     <>
       <div className="hud-section-title">{title}</div>
       {names.length === 0 ? (
-        <p>No {title.toLowerCase()}</p>
+        <p>{empty}</p>
       ) : (
         <ul>
           {names.map((name) => {
@@ -40,8 +45,9 @@ function SymbolList({
               <li
                 key={`${kind}-${name}`}
                 data-explain-target={pointed ? 'true' : undefined}
-                data-explain-highlight={highlighted ? 'true' : undefined}
-                data-explain-dim={dimOthers && !highlighted ? 'true' : undefined}
+                data-explain-highlight={
+                  highlighted && !pointed ? 'true' : undefined
+                }
               >
                 <span>{name}</span>
               </li>
@@ -73,63 +79,86 @@ export function ExplainInfoPanel({
     .filter((symbol) => symbol.kind === 'variable')
     .map((symbol) => symbol.name)
   const pointFile = explainMatchesSymbol(point, 'file', file.id)
+  const highlightFile =
+    pointFile || explainHitsSymbol(highlights, 'file', file.id)
+
+  const highlightKey = highlights
+    .map((item) => `${item.kind}:${item.name}`)
+    .join('|')
 
   useEffect(() => {
-    const target = bodyRef.current?.querySelector('[data-explain-target="true"]')
+    const target = bodyRef.current?.querySelector(
+      '[data-explain-target="true"], [data-explain-highlight="true"]',
+    )
     if (!(target instanceof HTMLElement)) return
     target.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [file.id, point?.kind, point?.name])
+  }, [file.id, point?.kind, point?.name, highlightKey])
 
   return (
-    <div className="hud explain-info-stack">
-      <aside className="hud-panel hud-panel-info explain-info-panel">
-        <div className="hud-panel-chrome">
-          <div className="hud-panel-chrome-heading">
-            <div className="hud-panel-chrome-title-row">
-              <div
-                className="hud-panel-chrome-title"
-                data-explain-target={pointFile ? 'true' : undefined}
-                data-explain-highlight={
-                  pointFile || explainHitsSymbol(highlights, 'file', file.id)
-                    ? 'true'
-                    : undefined
-                }
-              >
-                {file.name}
+    <div className="hud">
+      <div className="hud-right-stack">
+        <aside className="hud-panel hud-panel-info explain-info-panel">
+          <div className="hud-panel-chrome">
+            <div className="hud-panel-chrome-heading">
+              <div className="hud-panel-chrome-title-row">
+                <div
+                  className="hud-panel-chrome-title"
+                  data-explain-target={pointFile ? 'true' : undefined}
+                  data-explain-highlight={
+                    highlightFile && !pointFile ? 'true' : undefined
+                  }
+                >
+                  {file.name}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        <div ref={bodyRef} className="hud-panel-body">
-          <p className="path">{file.path}</p>
-          <p>
-            {file.lines} lines · {file.language}
-          </p>
-          {classes.length > 0 && (
+          <div ref={bodyRef} className="hud-panel-body">
+            <p className="path">{file.path}</p>
+            <p>
+              {file.lines} lines · {file.language}
+            </p>
+            {classes.length > 0 && (
+              <SymbolList
+                title={kindLabel('class')}
+                kind="class"
+                names={classes}
+                highlights={highlights}
+                point={point}
+                empty="No classes"
+              />
+            )}
             <SymbolList
-              title={kindLabel('class')}
-              kind="class"
-              names={classes}
+              title={kindLabel('function')}
+              kind="function"
+              names={functions}
               highlights={highlights}
               point={point}
+              empty="No functions"
             />
-          )}
-          <SymbolList
-            title={kindLabel('function')}
-            kind="function"
-            names={functions}
-            highlights={highlights}
-            point={point}
-          />
-          <SymbolList
-            title={kindLabel('variable')}
-            kind="variable"
-            names={variables}
-            highlights={highlights}
-            point={point}
-          />
-        </div>
-      </aside>
+            <SymbolList
+              title={kindLabel('variable')}
+              kind="variable"
+              names={variables}
+              highlights={highlights}
+              point={point}
+              empty="No vars"
+            />
+            <div className="hud-section-title">Imports</div>
+            {file.imports.length === 0 ? (
+              <p>No local imports</p>
+            ) : (
+              <ul>
+                {file.imports.map((id) => (
+                  <li key={id} title={id}>
+                    <span>{fileBase(id)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </aside>
+      </div>
     </div>
   )
 }

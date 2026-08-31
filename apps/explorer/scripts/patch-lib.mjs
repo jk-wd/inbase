@@ -514,7 +514,7 @@ export const emptyIntent = {
   feature: null,
   steps: [],
   step: null,
-  stepByStep: true,
+  stepByStep: false,
   files: [],
   creates: [],
   deletes: [],

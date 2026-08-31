@@ -2538,14 +2538,14 @@ function Explorer({
             onExit={exitExplain}
           />
           {explainFile && explainStep ? (
-            <ExplainInfoPanel
-              file={explainFile}
-              highlights={explainStep.highlights}
-              point={explainStep.point}
-            />
-          ) : null}
-          {explainStep?.point ? (
-            <ExplainPointer stepKey={explain.currentStep} />
+            <>
+              <ExplainInfoPanel
+                file={explainFile}
+                highlights={explainStep.highlights}
+                point={explainStep.point}
+              />
+              <ExplainPointer stepKey={explain.currentStep} />
+            </>
           ) : null}
         </>
       ) : (

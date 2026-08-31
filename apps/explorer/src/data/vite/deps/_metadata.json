@@ -1,55 +1,55 @@
 {
-  "hash": "e4be5397",
-  "configHash": "d5e1e5f7",
-  "lockfileHash": "5bbd6230",
-  "browserHash": "e4a55ce6",
+  "hash": "0dc7fdba",
+  "configHash": "3d28501e",
+  "lockfileHash": "49bac841",
+  "browserHash": "3e3235c0",
   "optimized": {
     "react": {
       "src": "../../../../../../node_modules/react/index.js",
       "file": "react.js",
-      "fileHash": "04d48a7c",
+      "fileHash": "b153e057",
       "needsInterop": true
     },
     "react-dom": {
       "src": "../../../../../../node_modules/react-dom/index.js",
       "file": "react-dom.js",
-      "fileHash": "21e36e53",
+      "fileHash": "f726634d",
       "needsInterop": true
     },
     "three": {
       "src": "../../../../../../node_modules/three/build/three.module.js",
       "file": "three.js",
-      "fileHash": "48746953",
+      "fileHash": "e2cdf170",
       "needsInterop": false
     },
     "@react-three/fiber": {
       "src": "../../../../../../node_modules/@react-three/fiber/dist/react-three-fiber.esm.js",
       "file": "@react-three_fiber.js",
-      "fileHash": "073a82a8",
+      "fileHash": "79b997b9",
       "needsInterop": false
     },
     "@react-three/drei": {
       "src": "../../../../../../node_modules/@react-three/drei/index.js",
       "file": "@react-three_drei.js",
-      "fileHash": "6bc0c695",
+      "fileHash": "c299f6ef",
       "needsInterop": false
     },
     "react/jsx-dev-runtime": {
       "src": "../../../../../../node_modules/react/jsx-dev-runtime.js",
       "file": "react_jsx-dev-runtime.js",
-      "fileHash": "98f0c96c",
+      "fileHash": "1f86edf5",
       "needsInterop": true
     },
     "react/jsx-runtime": {
       "src": "../../../../../../node_modules/react/jsx-runtime.js",
       "file": "react_jsx-runtime.js",
-      "fileHash": "3538926c",
+      "fileHash": "affa8aa8",
       "needsInterop": true
     },
     "react-dom/client": {
       "src": "../../../../../../node_modules/react-dom/client.js",
       "file": "react-dom_client.js",
-      "fileHash": "193e1e0a",
+      "fileHash": "71591363",
       "needsInterop": true
     }
   },

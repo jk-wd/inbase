@@ -992,7 +992,7 @@ function SessionPanel({
     intent.step && intent.steps?.length > 0
       ? `Step ${intent.step} of ${intent.steps.length}`
       : 'Patch'
-  const stepByStep = intent.stepByStep !== false
+  const stepByStep = intent.stepByStep === true
   const addedFunctions = intent.addedFunctions ?? []
   const addedVariables = intent.addedVariables ?? []
   const addedImports = intent.addedImports ?? []

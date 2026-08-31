@@ -152,6 +152,7 @@ test('help prints usage', async () => {
     await main(['help'])
     assert.match(output, /inbase init/)
     assert.match(output, /inbase run/)
+    assert.match(output, /--no-open/)
     assert.match(output, /inbase attach \[--session <id>\] \[--color <name>\]/)
   } finally {
     console.log = log
@@ -331,6 +332,7 @@ function planSession(store, dataDir, target, sessionId, name, stepTitles) {
   )
   assert.equal(started.status, 0, started.stderr)
   store.answerBlueprint(dataDir, sessionId, false)
+  store.setStepByStep(dataDir, sessionId, true)
   store.reportPlan(dataDir, {
     sessionId,
     feature: name,

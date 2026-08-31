@@ -27,7 +27,7 @@
       "name": "README.md",
       "path": "README.md",
       "folder": ".",
-      "lines": 129,
+      "lines": 337,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -150,7 +150,7 @@
       "name": "package.json",
       "path": "apps/explorer/package.json",
       "folder": "apps/explorer",
-      "lines": 31,
+      "lines": 30,
       "language": "json",
       "symbols": [],
       "imports": []
@@ -2114,7 +2114,7 @@
       "name": "patch-lib.test.mjs",
       "path": "apps/explorer/scripts/patch-lib.test.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 205,
+      "lines": 213,
       "language": "mjs",
       "symbols": [
         {
@@ -2700,7 +2700,7 @@
       "name": "session-store.d.ts",
       "path": "apps/explorer/scripts/session-store.d.ts",
       "folder": "apps/explorer/scripts",
-      "lines": 439,
+      "lines": 441,
       "language": "ts",
       "symbols": [
         {
@@ -3056,6 +3056,10 @@
           "kind": "variable"
         },
         {
+          "name": "DEFAULT_STEP_BY_STEP",
+          "kind": "variable"
+        },
+        {
           "name": "SESSION_COLORS",
           "kind": "variable"
         },
@@ -3083,7 +3087,7 @@
       "name": "session-store.mjs",
       "path": "apps/explorer/scripts/session-store.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 2357,
+      "lines": 2361,
       "language": "mjs",
       "symbols": [
         {
@@ -3731,6 +3735,10 @@
           "kind": "variable"
         },
         {
+          "name": "DEFAULT_STEP_BY_STEP",
+          "kind": "variable"
+        },
+        {
           "name": "SESSION_COLORS",
           "kind": "variable"
         },
@@ -4326,11 +4334,19 @@
       "name": "session-store.test.mjs",
       "path": "apps/explorer/scripts/session-store.test.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 2360,
+      "lines": 2398,
       "language": "mjs",
       "symbols": [
         {
           "name": "fixture",
+          "kind": "function"
+        },
+        {
+          "name": "startSession",
+          "kind": "function"
+        },
+        {
+          "name": "reportPlan",
           "kind": "function"
         },
         {
@@ -4366,6 +4382,10 @@
           "kind": "variable"
         },
         {
+          "name": "started",
+          "kind": "variable"
+        },
+        {
           "name": "oneToTwo",
           "kind": "variable"
         },
@@ -4390,7 +4410,7 @@
           "kind": "variable"
         },
         {
-          "name": "started",
+          "name": "visual",
           "kind": "variable"
         },
         {
@@ -4627,6 +4647,10 @@
         },
         {
           "name": "finished",
+          "kind": "variable"
+        },
+        {
+          "name": "accepted",
           "kind": "variable"
         },
         {
@@ -5250,7 +5274,7 @@
       "name": "App.tsx",
       "path": "apps/explorer/src/App.tsx",
       "folder": "apps/explorer/src",
-      "lines": 2648,
+      "lines": 2653,
       "language": "tsx",
       "symbols": [
         {
@@ -5651,6 +5675,10 @@
         },
         {
           "name": "id",
+          "kind": "variable"
+        },
+        {
+          "name": "edge",
           "kind": "variable"
         },
         {
@@ -6830,7 +6858,7 @@
       "name": "explain.ts",
       "path": "apps/explorer/src/explain.ts",
       "folder": "apps/explorer/src",
-      "lines": 352,
+      "lines": 344,
       "language": "ts",
       "symbols": [
         {
@@ -6907,10 +6935,6 @@
         },
         {
           "name": "explainIsPreparing",
-          "kind": "function"
-        },
-        {
-          "name": "explainSpeechText",
           "kind": "function"
         },
         {
@@ -7072,7 +7096,7 @@
       "name": "index.css",
       "path": "apps/explorer/src/index.css",
       "folder": "apps/explorer/src",
-      "lines": 2321,
+      "lines": 2200,
       "language": "css",
       "symbols": [],
       "imports": []
@@ -7113,7 +7137,7 @@
       "name": "layout.ts",
       "path": "apps/explorer/src/layout.ts",
       "folder": "apps/explorer/src",
-      "lines": 674,
+      "lines": 680,
       "language": "ts",
       "symbols": [
         {
@@ -8902,7 +8926,7 @@
       "name": "RelationLines.tsx",
       "path": "apps/explorer/src/scene/RelationLines.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 235,
+      "lines": 247,
       "language": "tsx",
       "symbols": [
         {
@@ -9022,6 +9046,18 @@
           "kind": "variable"
         },
         {
+          "name": "relationIds",
+          "kind": "variable"
+        },
+        {
+          "name": "relationSet",
+          "kind": "variable"
+        },
+        {
+          "name": "amongPlanned",
+          "kind": "variable"
+        },
+        {
           "name": "key",
           "kind": "variable"
         },
@@ -9039,6 +9075,14 @@
         },
         {
           "name": "file",
+          "kind": "variable"
+        },
+        {
+          "name": "id",
+          "kind": "variable"
+        },
+        {
+          "name": "byId",
           "kind": "variable"
         },
         {
@@ -9391,7 +9435,7 @@
       "name": "World.tsx",
       "path": "apps/explorer/src/scene/World.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 553,
+      "lines": 554,
       "language": "tsx",
       "symbols": [
         {
@@ -9889,197 +9933,6 @@
       ]
     },
     {
-      "id": "apps/explorer/src/speech.ts",
-      "name": "speech.ts",
-      "path": "apps/explorer/src/speech.ts",
-      "folder": "apps/explorer/src",
-      "lines": 229,
-      "language": "ts",
-      "symbols": [
-        {
-          "name": "setSpeakStatus",
-          "kind": "function"
-        },
-        {
-          "name": "subscribeSpeakStatus",
-          "kind": "function"
-        },
-        {
-          "name": "canUseWebSpeech",
-          "kind": "function"
-        },
-        {
-          "name": "canSpeak",
-          "kind": "function"
-        },
-        {
-          "name": "isSpeaking",
-          "kind": "function"
-        },
-        {
-          "name": "getAudioContext",
-          "kind": "function"
-        },
-        {
-          "name": "stopPlayback",
-          "kind": "function"
-        },
-        {
-          "name": "stopSpeaking",
-          "kind": "function"
-        },
-        {
-          "name": "voiceScore",
-          "kind": "function"
-        },
-        {
-          "name": "preferredWebVoice",
-          "kind": "function"
-        },
-        {
-          "name": "detectWebGpu",
-          "kind": "function"
-        },
-        {
-          "name": "loadKokoro",
-          "kind": "function"
-        },
-        {
-          "name": "playRawAudio",
-          "kind": "function"
-        },
-        {
-          "name": "speakWithWebSpeech",
-          "kind": "function"
-        },
-        {
-          "name": "speakText",
-          "kind": "function"
-        },
-        {
-          "name": "gpu",
-          "kind": "function"
-        },
-        {
-          "name": "finish",
-          "kind": "function"
-        },
-        {
-          "name": "speakGeneration",
-          "kind": "variable"
-        },
-        {
-          "name": "neuralSpeaking",
-          "kind": "variable"
-        },
-        {
-          "name": "currentSource",
-          "kind": "variable"
-        },
-        {
-          "name": "audioContext",
-          "kind": "variable"
-        },
-        {
-          "name": "kokoroFailed",
-          "kind": "variable"
-        },
-        {
-          "name": "kokoroLoading",
-          "kind": "variable"
-        },
-        {
-          "name": "AUTO_STEP_DELAY_MS",
-          "kind": "variable"
-        },
-        {
-          "name": "KOKORO_MODEL",
-          "kind": "variable"
-        },
-        {
-          "name": "KOKORO_VOICE",
-          "kind": "variable"
-        },
-        {
-          "name": "let",
-          "kind": "variable"
-        },
-        {
-          "name": "statusListeners",
-          "kind": "variable"
-        },
-        {
-          "name": "listener",
-          "kind": "variable"
-        },
-        {
-          "name": "Context",
-          "kind": "variable"
-        },
-        {
-          "name": "label",
-          "kind": "variable"
-        },
-        {
-          "name": "score",
-          "kind": "variable"
-        },
-        {
-          "name": "voices",
-          "kind": "variable"
-        },
-        {
-          "name": "webgpu",
-          "kind": "variable"
-        },
-        {
-          "name": "context",
-          "kind": "variable"
-        },
-        {
-          "name": "samples",
-          "kind": "variable"
-        },
-        {
-          "name": "buffer",
-          "kind": "variable"
-        },
-        {
-          "name": "source",
-          "kind": "variable"
-        },
-        {
-          "name": "utterance",
-          "kind": "variable"
-        },
-        {
-          "name": "voice",
-          "kind": "variable"
-        },
-        {
-          "name": "generation",
-          "kind": "variable"
-        },
-        {
-          "name": "spoken",
-          "kind": "variable"
-        },
-        {
-          "name": "tts",
-          "kind": "variable"
-        },
-        {
-          "name": "audio",
-          "kind": "variable"
-        },
-        {
-          "name": "KokoroTTS",
-          "kind": "variable"
-        }
-      ],
-      "imports": []
-    },
-    {
       "id": "apps/explorer/src/theme.ts",
       "name": "theme.ts",
       "path": "apps/explorer/src/theme.ts",
@@ -10225,15 +10078,11 @@
       "name": "ExplainAskCard.tsx",
       "path": "apps/explorer/src/ui/ExplainAskCard.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 143,
+      "lines": 78,
       "language": "tsx",
       "symbols": [
         {
           "name": "ExplainAskCard",
-          "kind": "function"
-        },
-        {
-          "name": "toggleTell",
           "kind": "function"
         },
         {
@@ -10251,41 +10100,12 @@
         {
           "name": "subtitle",
           "kind": "variable"
-        },
-        {
-          "name": "speechAvailable",
-          "kind": "variable"
-        },
-        {
-          "name": "spoken",
-          "kind": "variable"
-        },
-        {
-          "name": "stopTelling",
-          "kind": "variable"
-        },
-        {
-          "name": "telling",
-          "kind": "variable"
-        },
-        {
-          "name": "setTelling",
-          "kind": "variable"
-        },
-        {
-          "name": "speakStatus",
-          "kind": "variable"
-        },
-        {
-          "name": "setSpeakStatus",
-          "kind": "variable"
         }
       ],
       "imports": [
         "apps/explorer/src/types.ts",
         "apps/explorer/src/explain.ts",
-        "apps/explorer/src/keyboard.ts",
-        "apps/explorer/src/speech.ts"
+        "apps/explorer/src/keyboard.ts"
       ]
     },
     {
@@ -10293,23 +10113,11 @@
       "name": "ExplainHud.tsx",
       "path": "apps/explorer/src/ui/ExplainHud.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 439,
+      "lines": 196,
       "language": "tsx",
       "symbols": [
         {
           "name": "ExplainHud",
-          "kind": "function"
-        },
-        {
-          "name": "tellAgain",
-          "kind": "function"
-        },
-        {
-          "name": "toggleTell",
-          "kind": "function"
-        },
-        {
-          "name": "toggleAutoStep",
           "kind": "function"
         },
         {
@@ -10349,35 +10157,7 @@
           "kind": "variable"
         },
         {
-          "name": "speechAvailable",
-          "kind": "variable"
-        },
-        {
-          "name": "tellingRef",
-          "kind": "variable"
-        },
-        {
-          "name": "autoStepRef",
-          "kind": "variable"
-        },
-        {
-          "name": "autoTimerRef",
-          "kind": "variable"
-        },
-        {
-          "name": "waitTickRef",
-          "kind": "variable"
-        },
-        {
           "name": "idRef",
-          "kind": "variable"
-        },
-        {
-          "name": "goToRef",
-          "kind": "variable"
-        },
-        {
-          "name": "neighborRef",
           "kind": "variable"
         },
         {
@@ -10385,35 +10165,7 @@
           "kind": "variable"
         },
         {
-          "name": "clearAutoTimer",
-          "kind": "variable"
-        },
-        {
           "name": "neighbor",
-          "kind": "variable"
-        },
-        {
-          "name": "scheduleAutoStep",
-          "kind": "variable"
-        },
-        {
-          "name": "endsAt",
-          "kind": "variable"
-        },
-        {
-          "name": "left",
-          "kind": "variable"
-        },
-        {
-          "name": "next",
-          "kind": "variable"
-        },
-        {
-          "name": "speakCurrent",
-          "kind": "variable"
-        },
-        {
-          "name": "item",
           "kind": "variable"
         },
         {
@@ -10421,31 +10173,11 @@
           "kind": "variable"
         },
         {
-          "name": "stopTelling",
-          "kind": "variable"
-        },
-        {
-          "name": "startTelling",
+          "name": "next",
           "kind": "variable"
         },
         {
           "name": "previous",
-          "kind": "variable"
-        },
-        {
-          "name": "frame",
-          "kind": "variable"
-        },
-        {
-          "name": "hud",
-          "kind": "variable"
-        },
-        {
-          "name": "itemBox",
-          "kind": "variable"
-        },
-        {
-          "name": "hudBox",
           "kind": "variable"
         },
         {
@@ -10471,61 +10203,12 @@
         {
           "name": "waitingHere",
           "kind": "variable"
-        },
-        {
-          "name": "telling",
-          "kind": "variable"
-        },
-        {
-          "name": "setTelling",
-          "kind": "variable"
-        },
-        {
-          "name": "autoStep",
-          "kind": "variable"
-        },
-        {
-          "name": "setAutoStep",
-          "kind": "variable"
-        },
-        {
-          "name": "speakStatus",
-          "kind": "variable"
-        },
-        {
-          "name": "setSpeakStatus",
-          "kind": "variable"
-        },
-        {
-          "name": "autoWaitMs",
-          "kind": "variable"
-        },
-        {
-          "name": "setAutoWaitMs",
-          "kind": "variable"
-        },
-        {
-          "name": "autoWaitToken",
-          "kind": "variable"
-        },
-        {
-          "name": "setAutoWaitToken",
-          "kind": "variable"
-        },
-        {
-          "name": "pointerTop",
-          "kind": "variable"
-        },
-        {
-          "name": "setPointerTop",
-          "kind": "variable"
         }
       ],
       "imports": [
         "apps/explorer/src/types.ts",
         "apps/explorer/src/explain.ts",
-        "apps/explorer/src/keyboard.ts",
-        "apps/explorer/src/speech.ts"
+        "apps/explorer/src/keyboard.ts"
       ]
     },
     {
@@ -10533,9 +10216,13 @@
       "name": "ExplainInfoPanel.tsx",
       "path": "apps/explorer/src/ui/ExplainInfoPanel.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 136,
+      "lines": 165,
       "language": "tsx",
       "symbols": [
+        {
+          "name": "fileBase",
+          "kind": "function"
+        },
         {
           "name": "kindLabel",
           "kind": "function"
@@ -10547,10 +10234,6 @@
         {
           "name": "ExplainInfoPanel",
           "kind": "function"
-        },
-        {
-          "name": "dimOthers",
-          "kind": "variable"
         },
         {
           "name": "pointed",
@@ -10581,6 +10264,14 @@
           "kind": "variable"
         },
         {
+          "name": "highlightFile",
+          "kind": "variable"
+        },
+        {
+          "name": "highlightKey",
+          "kind": "variable"
+        },
+        {
           "name": "target",
           "kind": "variable"
         }
@@ -10595,11 +10286,19 @@
       "name": "ExplainPointer.tsx",
       "path": "apps/explorer/src/ui/ExplainPointer.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 74,
+      "lines": 131,
       "language": "tsx",
       "symbols": [
         {
-          "name": "measureArrow",
+          "name": "arrowHead",
+          "kind": "function"
+        },
+        {
+          "name": "measureArrows",
+          "kind": "function"
+        },
+        {
+          "name": "sameArrows",
           "kind": "function"
         },
         {
@@ -10611,27 +10310,43 @@
           "kind": "function"
         },
         {
-          "name": "from",
+          "name": "SHAFT",
           "kind": "variable"
         },
         {
-          "name": "to",
+          "name": "HEAD",
           "kind": "variable"
         },
         {
-          "name": "start",
+          "name": "nodes",
           "kind": "variable"
         },
         {
-          "name": "end",
+          "name": "arrows",
           "kind": "variable"
         },
         {
-          "name": "x1",
+          "name": "seen",
           "kind": "variable"
         },
         {
-          "name": "y1",
+          "name": "node",
+          "kind": "variable"
+        },
+        {
+          "name": "box",
+          "kind": "variable"
+        },
+        {
+          "name": "panel",
+          "kind": "variable"
+        },
+        {
+          "name": "panelBox",
+          "kind": "variable"
+        },
+        {
+          "name": "midY",
           "kind": "variable"
         },
         {
@@ -10643,47 +10358,7 @@
           "kind": "variable"
         },
         {
-          "name": "span",
-          "kind": "variable"
-        },
-        {
-          "name": "c1x",
-          "kind": "variable"
-        },
-        {
-          "name": "c1y",
-          "kind": "variable"
-        },
-        {
-          "name": "c2x",
-          "kind": "variable"
-        },
-        {
-          "name": "c2y",
-          "kind": "variable"
-        },
-        {
-          "name": "angle",
-          "kind": "variable"
-        },
-        {
-          "name": "size",
-          "kind": "variable"
-        },
-        {
-          "name": "hx",
-          "kind": "variable"
-        },
-        {
-          "name": "hy",
-          "kind": "variable"
-        },
-        {
-          "name": "left",
-          "kind": "variable"
-        },
-        {
-          "name": "right",
+          "name": "other",
           "kind": "variable"
         },
         {
@@ -10695,11 +10370,7 @@
           "kind": "variable"
         },
         {
-          "name": "arrow",
-          "kind": "variable"
-        },
-        {
-          "name": "setArrow",
+          "name": "setArrows",
           "kind": "variable"
         }
       ],
@@ -12221,7 +11892,7 @@
       "name": "vite.config.ts",
       "path": "apps/explorer/vite.config.ts",
       "folder": "apps/explorer",
-      "lines": 678,
+      "lines": 677,
       "language": "ts",
       "symbols": [
         {
@@ -12562,7 +12233,7 @@
       "name": "inbase.test.mjs",
       "path": "bin/inbase.test.mjs",
       "folder": "bin",
-      "lines": 569,
+      "lines": 572,
       "language": "mjs",
       "symbols": [
         {
@@ -12984,7 +12655,7 @@
       "name": "session.mjs",
       "path": "bin/session.mjs",
       "folder": "bin",
-      "lines": 546,
+      "lines": 563,
       "language": "mjs",
       "symbols": [
         {
@@ -13309,7 +12980,7 @@
       "name": "package.json",
       "path": "package.json",
       "folder": ".",
-      "lines": 88,
+      "lines": 87,
       "language": "json",
       "symbols": [],
       "imports": []
@@ -13319,7 +12990,7 @@
       "name": "accept.md",
       "path": "skill/commands/accept.md",
       "folder": "skill/commands",
-      "lines": 23,
+      "lines": 24,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13369,7 +13040,7 @@
       "name": "go.md",
       "path": "skill/commands/go.md",
       "folder": "skill/commands",
-      "lines": 24,
+      "lines": 26,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13469,7 +13140,7 @@
       "name": "SKILL.md",
       "path": "skill/inbase/SKILL.md",
       "folder": "skill/inbase",
-      "lines": 239,
+      "lines": 247,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13592,7 +13263,6 @@
         "apps/explorer/src/keyboard.ts",
         "apps/explorer/src/layout.ts",
         "apps/explorer/src/main.tsx",
-        "apps/explorer/src/speech.ts",
         "apps/explorer/src/theme.ts",
         "apps/explorer/src/types.ts",
         "apps/explorer/src/userContext.ts",

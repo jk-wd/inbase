@@ -24,14 +24,14 @@ import {
   readBlueprintSession,
   readDiff,
   readManifest,
-  reportPlan,
+  reportPlan as reportPlanStore,
   requestExplainProposal,
   clearPendingExplain,
   requestReplan,
   sendBlueprint,
   sessionIntent,
   setStepByStep,
-  startSession,
+  startSession as startSessionStore,
   setupSession,
   attachSession,
   listAttachQueue,
@@ -86,6 +86,16 @@ function fixture({ git = false } = {}) {
   }
 }
 
+function startSession(dataDir, input) {
+  const started = startSessionStore(dataDir, input)
+  setStepByStep(dataDir, started.sessionId, true)
+  return readManifest(dataDir, started.sessionId)
+}
+
+function reportPlan(dataDir, input) {
+  return reportPlanStore(dataDir, { stepByStep: true, ...input })
+}
+
 const oneToTwo =
   '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 2\n'
 const oneToThree =
@@ -101,6 +111,21 @@ test('rejects unsafe session identifiers', () => {
   assert.throws(() => assertSessionId('../other-chat'))
   assert.throws(() => assertSessionId('has spaces'))
   assert.equal(assertSessionId('chat_123-abc'), 'chat_123-abc')
+})
+
+test('new sessions default to step-by-step off', () => {
+  const env = fixture()
+  try {
+    const started = startSessionStore(env.dataDir, { sessionId: 'cli-chat' })
+    assert.equal(started.stepByStep, false)
+    assert.equal(sessionIntent(env.dataDir, 'cli-chat').stepByStep, false)
+
+    const visual = setupSession(env.dataDir, { sessionId: 'viz-chat' })
+    assert.equal(visual.stepByStep, false)
+    assert.equal(sessionIntent(env.dataDir, 'viz-chat').stepByStep, false)
+  } finally {
+    env.cleanup()
+  }
 })
 
 test('starts a blueprint handshake before the LLM can prepare', () => {
