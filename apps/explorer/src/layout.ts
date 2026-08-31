@@ -333,7 +333,7 @@ export function withPreviewGraph(
         lines: createLines[id] ?? 12,
         language: id.split('.').pop()?.toLowerCase() ?? 'txt',
         symbols: [],
-        imports: imports.filter((edge) => edge.from === id).map((edge) => edge.to),
+        imports: [],
       })
     }
     const folder = folders.get(folderPath)
@@ -341,6 +341,12 @@ export function withPreviewGraph(
       folder.files.push(id)
       folder.files.sort((left, right) => left.localeCompare(right))
     }
+  }
+
+  for (const edge of imports) {
+    const file = files.get(edge.from)
+    if (!file || file.imports.includes(edge.to)) continue
+    file.imports.push(edge.to)
   }
 
   return {

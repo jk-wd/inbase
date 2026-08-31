@@ -810,6 +810,10 @@ function Explorer({
     for (const id of changeSet.files) ids.add(id)
     for (const id of changeSet.creates) ids.add(id)
     for (const id of changeSet.deletes) ids.add(id)
+    for (const edge of changeSet.imports ?? []) {
+      ids.add(edge.from)
+      ids.add(edge.to)
+    }
     for (const block of mapBlueprint.blocks) ids.add(block.id)
     for (const item of mapBlueprint.functions) ids.add(item.file)
     for (const item of mapBlueprint.variables) ids.add(item.file)
@@ -824,6 +828,7 @@ function Explorer({
     changeSet.creates,
     changeSet.deletes,
     changeSet.files,
+    changeSet.imports,
     mapBlueprint,
   ])
   const changeFolderPaths = useMemo(() => {

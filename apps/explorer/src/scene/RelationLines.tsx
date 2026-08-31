@@ -16,6 +16,7 @@ type RelationLinesProps = {
   files: FileNode[]
   layout: WorldLayout
   extras?: Record<string, PlacedFile>
+  plannedIds?: string[]
   plannedEdges?: PatchImport[]
   extraEdges?: PatchImport[]
   fromAbove?: boolean
@@ -117,6 +118,7 @@ export function RelationLines({
   files,
   layout,
   extras = {},
+  plannedIds = [],
   plannedEdges = [],
   extraEdges = [],
   fromAbove = false,
@@ -128,6 +130,9 @@ export function RelationLines({
     const plannedRadius = fromAbove ? 0.26 : 0.1
     const lines: LineMesh[] = []
     const drawn = new Set<string>()
+    const relationIds = selectedId ? [selectedId] : plannedIds
+    const relationSet = new Set(relationIds)
+    const amongPlanned = !selectedId && relationSet.size > 0
 
     const addLine = (
       fromId: string,
@@ -152,16 +157,22 @@ export function RelationLines({
       addLine(edge.from, edge.to, false, selectedRadius)
     }
 
-    if (selectedId) {
+    if (relationIds.length > 0) {
       if (importedBy) {
         for (const file of files) {
-          if (file.id === selectedId || !file.imports.includes(selectedId)) continue
-          addLine(file.id, selectedId, false, selectedRadius)
+          for (const id of relationIds) {
+            if (file.id === id || !file.imports.includes(id)) continue
+            if (amongPlanned && !relationSet.has(file.id)) continue
+            addLine(file.id, id, false, selectedRadius)
+          }
         }
       } else {
-        const file = files.find((item) => item.id === selectedId)
-        if (file) {
+        const byId = new Map(files.map((file) => [file.id, file]))
+        for (const id of relationIds) {
+          const file = byId.get(id)
+          if (!file) continue
           for (const importId of file.imports) {
+            if (amongPlanned && !relationSet.has(importId)) continue
             addLine(file.id, importId, false, selectedRadius)
           }
         }
@@ -177,6 +188,7 @@ export function RelationLines({
     importedBy,
     layout.files,
     plannedEdges,
+    plannedIds,
     selectedId,
   ])
 

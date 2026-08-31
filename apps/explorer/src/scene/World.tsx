@@ -150,8 +150,8 @@ export function World({
   const related = new Set(
     selectedId
       ? importedBy
-        ? filesImporting(graph.files, selectedId).map((file) => file.id)
-        : (graph.files.find((file) => file.id === selectedId)?.imports ?? [])
+        ? filesImporting(viewGraph.files, selectedId).map((file) => file.id)
+        : (viewGraph.files.find((file) => file.id === selectedId)?.imports ?? [])
       : [],
   )
   const patchLinked = new Set<string>()
@@ -503,6 +503,7 @@ export function World({
         files={viewGraph.files}
         layout={viewLayout}
         extras={ghosts}
+        plannedIds={plannedIds}
         plannedEdges={plannedImports}
         extraEdges={explainFocus?.relations ?? []}
         fromAbove={mapping}

@@ -56,6 +56,10 @@ test('extracts added functions, variables, and import names from a new file', ()
   ])
   assert.deepEqual(additions.changedFunctions, [])
   assert.deepEqual(additions.changedVariables, [])
+  assert.deepEqual(
+    extractPatchImports(parsed.entries, ['src/mocked-api/points.ts']),
+    [{ from: 'src/mocked-api/weeklyVisitors.ts', to: 'src/mocked-api/points.ts' }],
+  )
 })
 
 test('extracts added imports, functions, and variables from a modified file', () => {
@@ -74,6 +78,10 @@ test('extracts added imports, functions, and variables from a modified file', ()
     { name: 'useState', from: 'react', file: 'src/pages/Home.tsx' },
     { name: 'Clock', from: '../components/Clock', file: 'src/pages/Home.tsx' },
   ])
+  assert.deepEqual(
+    extractPatchImports(parsed.entries, ['src/components/Clock.tsx']),
+    [{ from: 'src/pages/Home.tsx', to: 'src/components/Clock.tsx' }],
+  )
 })
 
 test('treats a rewritten existing binding as changed, not added', () => {
