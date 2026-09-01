@@ -135,7 +135,7 @@ export function lightenColor(hex: string, amount = 0.35) {
 export const BLUEPRINT_OVERLAY = {
   folderOpacity: 0.3,
   folderOutlineOpacity: 0.7,
-  fileOpacity: 0.86,
+  fileOpacity: 0.96,
   folderY: 13.2,
   layerStep: 0.14,
   fileLift: 0.35,
@@ -148,7 +148,7 @@ export function blueprintPalette(hex?: string | null) {
   return {
     color,
     wash: lightenColor(color, 0.22),
-    block: dimColor(color, 0.58),
+    block: dimColor(color, 0.88),
     label: lightenColor(color, 0.42),
     labelBg: dimColor(color, 0.78),
     emissive: dimColor(color, 0.45),
