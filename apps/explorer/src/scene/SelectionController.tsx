@@ -56,19 +56,21 @@ export function SelectionController({
   const lastAim = useRef('')
   const lastAimedFile = useRef<string | null>(null)
 
+  useEffect(() => {
+    if (locked) return
+    if (lastAim.current) {
+      lastAim.current = ''
+      onAimRelation?.(null)
+    }
+    if (lastAimedFile.current) {
+      lastAimedFile.current = null
+      onAimFile?.(null)
+    }
+  }, [locked, onAimFile, onAimRelation])
+
   useFrame(() => {
     if (!onAimRelation && !onAimFile) return
-    if (!locked) {
-      if (lastAim.current) {
-        lastAim.current = ''
-        onAimRelation?.(null)
-      }
-      if (lastAimedFile.current) {
-        lastAimedFile.current = null
-        onAimFile?.(null)
-      }
-      return
-    }
+    if (!locked) return
     raycaster.setFromCamera(ndc, camera)
     const hits = raycaster.intersectObjects(scene.children, true)
     const next = aimedRelation(hits, camera.position, files)

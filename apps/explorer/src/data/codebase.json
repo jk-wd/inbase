@@ -27,7 +27,7 @@
       "name": "README.md",
       "path": "README.md",
       "folder": ".",
-      "lines": 340,
+      "lines": 359,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -1199,21 +1199,9 @@
       "name": "js-source.mjs",
       "path": "apps/explorer/scripts/js-source.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 186,
+      "lines": 48,
       "language": "mjs",
       "symbols": [
-        {
-          "name": "extractJsSymbols",
-          "kind": "function"
-        },
-        {
-          "name": "collectImportSpecifiers",
-          "kind": "function"
-        },
-        {
-          "name": "extractImportBindings",
-          "kind": "function"
-        },
         {
           "name": "firstKnownWithPrefix",
           "kind": "function"
@@ -1223,75 +1211,7 @@
           "kind": "function"
         },
         {
-          "name": "destructuredNames",
-          "kind": "function"
-        },
-        {
-          "name": "add",
-          "kind": "function"
-        },
-        {
-          "name": "SOURCE_EXTENSIONS",
-          "kind": "variable"
-        },
-        {
           "name": "RESOLVE_EXTENSIONS",
-          "kind": "variable"
-        },
-        {
-          "name": "symbols",
-          "kind": "variable"
-        },
-        {
-          "name": "seen",
-          "kind": "variable"
-        },
-        {
-          "name": "match",
-          "kind": "variable"
-        },
-        {
-          "name": "ident",
-          "kind": "variable"
-        },
-        {
-          "name": "specifiers",
-          "kind": "variable"
-        },
-        {
-          "name": "bindings",
-          "kind": "variable"
-        },
-        {
-          "name": "specifier",
-          "kind": "variable"
-        },
-        {
-          "name": "key",
-          "kind": "variable"
-        },
-        {
-          "name": "clause",
-          "kind": "variable"
-        },
-        {
-          "name": "from",
-          "kind": "variable"
-        },
-        {
-          "name": "star",
-          "kind": "variable"
-        },
-        {
-          "name": "named",
-          "kind": "variable"
-        },
-        {
-          "name": "defaultPart",
-          "kind": "variable"
-        },
-        {
-          "name": "boundRequires",
           "kind": "variable"
         },
         {
@@ -1309,29 +1229,13 @@
         {
           "name": "indexFile",
           "kind": "variable"
-        },
-        {
-          "name": "names",
-          "kind": "variable"
-        },
-        {
-          "name": "inner",
-          "kind": "variable"
-        },
-        {
-          "name": "part",
-          "kind": "variable"
-        },
-        {
-          "name": "token",
-          "kind": "variable"
-        },
-        {
-          "name": "aliased",
-          "kind": "variable"
         }
       ],
-      "imports": []
+      "imports": [
+        "apps/explorer/scripts/relations/index.mjs",
+        "apps/explorer/scripts/structure/index.mjs",
+        "apps/explorer/scripts/structure/javascript.mjs"
+      ]
     },
     {
       "id": "apps/explorer/scripts/open-editor.d.ts",
@@ -1619,6 +1523,45 @@
       "imports": [
         "apps/explorer/scripts/open-editor.mjs"
       ]
+    },
+    {
+      "id": "apps/explorer/scripts/parse-idents.mjs",
+      "name": "parse-idents.mjs",
+      "path": "apps/explorer/scripts/parse-idents.mjs",
+      "folder": "apps/explorer/scripts",
+      "lines": 28,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "destructuredNames",
+          "kind": "function"
+        },
+        {
+          "name": "names",
+          "kind": "variable"
+        },
+        {
+          "name": "inner",
+          "kind": "variable"
+        },
+        {
+          "name": "part",
+          "kind": "variable"
+        },
+        {
+          "name": "token",
+          "kind": "variable"
+        },
+        {
+          "name": "aliased",
+          "kind": "variable"
+        },
+        {
+          "name": "ident",
+          "kind": "variable"
+        }
+      ],
+      "imports": []
     },
     {
       "id": "apps/explorer/scripts/patch-lib.d.ts",
@@ -2211,6 +2154,254 @@
       ]
     },
     {
+      "id": "apps/explorer/scripts/relations/esm.mjs",
+      "name": "esm.mjs",
+      "path": "apps/explorer/scripts/relations/esm.mjs",
+      "folder": "apps/explorer/scripts/relations",
+      "lines": 65,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "collectSpecifiers",
+          "kind": "function"
+        },
+        {
+          "name": "extractBindings",
+          "kind": "function"
+        },
+        {
+          "name": "add",
+          "kind": "function"
+        },
+        {
+          "name": "id",
+          "kind": "variable"
+        },
+        {
+          "name": "extensions",
+          "kind": "variable"
+        },
+        {
+          "name": "specifiers",
+          "kind": "variable"
+        },
+        {
+          "name": "match",
+          "kind": "variable"
+        },
+        {
+          "name": "bindings",
+          "kind": "variable"
+        },
+        {
+          "name": "seen",
+          "kind": "variable"
+        },
+        {
+          "name": "ident",
+          "kind": "variable"
+        },
+        {
+          "name": "specifier",
+          "kind": "variable"
+        },
+        {
+          "name": "key",
+          "kind": "variable"
+        },
+        {
+          "name": "clause",
+          "kind": "variable"
+        },
+        {
+          "name": "from",
+          "kind": "variable"
+        },
+        {
+          "name": "star",
+          "kind": "variable"
+        },
+        {
+          "name": "named",
+          "kind": "variable"
+        },
+        {
+          "name": "defaultPart",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "apps/explorer/scripts/parse-idents.mjs"
+      ]
+    },
+    {
+      "id": "apps/explorer/scripts/relations/html.mjs",
+      "name": "html.mjs",
+      "path": "apps/explorer/scripts/relations/html.mjs",
+      "folder": "apps/explorer/scripts/relations",
+      "lines": 19,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "collectSpecifiers",
+          "kind": "function"
+        },
+        {
+          "name": "extractBindings",
+          "kind": "function"
+        },
+        {
+          "name": "id",
+          "kind": "variable"
+        },
+        {
+          "name": "extensions",
+          "kind": "variable"
+        },
+        {
+          "name": "SCRIPT_SRC",
+          "kind": "variable"
+        },
+        {
+          "name": "specifiers",
+          "kind": "variable"
+        },
+        {
+          "name": "match",
+          "kind": "variable"
+        }
+      ],
+      "imports": []
+    },
+    {
+      "id": "apps/explorer/scripts/relations/index.mjs",
+      "name": "index.mjs",
+      "path": "apps/explorer/scripts/relations/index.mjs",
+      "folder": "apps/explorer/scripts/relations",
+      "lines": 42,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "analyzerApplies",
+          "kind": "function"
+        },
+        {
+          "name": "collectImportSpecifiers",
+          "kind": "function"
+        },
+        {
+          "name": "extractImportBindings",
+          "kind": "function"
+        },
+        {
+          "name": "relationAnalyzers",
+          "kind": "variable"
+        },
+        {
+          "name": "ext",
+          "kind": "variable"
+        },
+        {
+          "name": "specifiers",
+          "kind": "variable"
+        },
+        {
+          "name": "analyzer",
+          "kind": "variable"
+        },
+        {
+          "name": "specifier",
+          "kind": "variable"
+        },
+        {
+          "name": "bindings",
+          "kind": "variable"
+        },
+        {
+          "name": "seen",
+          "kind": "variable"
+        },
+        {
+          "name": "binding",
+          "kind": "variable"
+        },
+        {
+          "name": "key",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "apps/explorer/scripts/relations/esm.mjs",
+        "apps/explorer/scripts/relations/html.mjs",
+        "apps/explorer/scripts/relations/require.mjs"
+      ]
+    },
+    {
+      "id": "apps/explorer/scripts/relations/require.mjs",
+      "name": "require.mjs",
+      "path": "apps/explorer/scripts/relations/require.mjs",
+      "folder": "apps/explorer/scripts/relations",
+      "lines": 52,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "collectSpecifiers",
+          "kind": "function"
+        },
+        {
+          "name": "extractBindings",
+          "kind": "function"
+        },
+        {
+          "name": "add",
+          "kind": "function"
+        },
+        {
+          "name": "id",
+          "kind": "variable"
+        },
+        {
+          "name": "extensions",
+          "kind": "variable"
+        },
+        {
+          "name": "specifiers",
+          "kind": "variable"
+        },
+        {
+          "name": "match",
+          "kind": "variable"
+        },
+        {
+          "name": "bindings",
+          "kind": "variable"
+        },
+        {
+          "name": "seen",
+          "kind": "variable"
+        },
+        {
+          "name": "boundRequires",
+          "kind": "variable"
+        },
+        {
+          "name": "ident",
+          "kind": "variable"
+        },
+        {
+          "name": "specifier",
+          "kind": "variable"
+        },
+        {
+          "name": "key",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "apps/explorer/scripts/parse-idents.mjs"
+      ]
+    },
+    {
       "id": "apps/explorer/scripts/scan-ignore.mjs",
       "name": "scan-ignore.mjs",
       "path": "apps/explorer/scripts/scan-ignore.mjs",
@@ -2370,7 +2561,7 @@
       "name": "scan-target.mjs",
       "path": "apps/explorer/scripts/scan-target.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 277,
+      "lines": 270,
       "language": "mjs",
       "symbols": [
         {
@@ -2399,10 +2590,6 @@
         },
         {
           "name": "languageOf",
-          "kind": "function"
-        },
-        {
-          "name": "extractSymbols",
           "kind": "function"
         },
         {
@@ -2593,7 +2780,7 @@
       "name": "scan-target.test.mjs",
       "path": "apps/explorer/scripts/scan-target.test.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 223,
+      "lines": 257,
       "language": "mjs",
       "symbols": [
         {
@@ -2634,6 +2821,10 @@
         },
         {
           "name": "value",
+          "kind": "variable"
+        },
+        {
+          "name": "source",
           "kind": "variable"
         },
         {
@@ -2691,6 +2882,8 @@
       ],
       "imports": [
         "apps/explorer/scripts/js-source.mjs",
+        "apps/explorer/scripts/relations/index.mjs",
+        "apps/explorer/scripts/structure/index.mjs",
         "apps/explorer/scripts/scan-ignore.mjs",
         "apps/explorer/scripts/scan-target.mjs"
       ]
@@ -4736,6 +4929,96 @@
       ]
     },
     {
+      "id": "apps/explorer/scripts/structure/index.mjs",
+      "name": "index.mjs",
+      "path": "apps/explorer/scripts/structure/index.mjs",
+      "folder": "apps/explorer/scripts/structure",
+      "lines": 27,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "analyzerApplies",
+          "kind": "function"
+        },
+        {
+          "name": "extractSymbols",
+          "kind": "function"
+        },
+        {
+          "name": "structureAnalyzers",
+          "kind": "variable"
+        },
+        {
+          "name": "ext",
+          "kind": "variable"
+        },
+        {
+          "name": "symbols",
+          "kind": "variable"
+        },
+        {
+          "name": "seen",
+          "kind": "variable"
+        },
+        {
+          "name": "analyzer",
+          "kind": "variable"
+        },
+        {
+          "name": "symbol",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "apps/explorer/scripts/structure/javascript.mjs"
+      ]
+    },
+    {
+      "id": "apps/explorer/scripts/structure/javascript.mjs",
+      "name": "javascript.mjs",
+      "path": "apps/explorer/scripts/structure/javascript.mjs",
+      "folder": "apps/explorer/scripts/structure",
+      "lines": 45,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "extractSymbols",
+          "kind": "function"
+        },
+        {
+          "name": "add",
+          "kind": "function"
+        },
+        {
+          "name": "id",
+          "kind": "variable"
+        },
+        {
+          "name": "extensions",
+          "kind": "variable"
+        },
+        {
+          "name": "symbols",
+          "kind": "variable"
+        },
+        {
+          "name": "seen",
+          "kind": "variable"
+        },
+        {
+          "name": "match",
+          "kind": "variable"
+        },
+        {
+          "name": "ident",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "apps/explorer/scripts/parse-idents.mjs"
+      ]
+    },
+    {
       "id": "apps/explorer/scripts/target-config.d.ts",
       "name": "target-config.d.ts",
       "path": "apps/explorer/scripts/target-config.d.ts",
@@ -5226,7 +5509,7 @@
       "name": "App.tsx",
       "path": "apps/explorer/src/App.tsx",
       "folder": "apps/explorer/src",
-      "lines": 2896,
+      "lines": 2904,
       "language": "tsx",
       "symbols": [
         {
@@ -5595,10 +5878,6 @@
         },
         {
           "name": "selectBlueprintColorRef",
-          "kind": "variable"
-        },
-        {
-          "name": "lastVisibleColorsRef",
           "kind": "variable"
         },
         {
@@ -6218,10 +6497,6 @@
           "kind": "variable"
         },
         {
-          "name": "toggleBlueprintHidden",
-          "kind": "variable"
-        },
-        {
           "name": "clearSharedBlueprint",
           "kind": "variable"
         },
@@ -6471,6 +6746,14 @@
         },
         {
           "name": "setSelectedFolder",
+          "kind": "variable"
+        },
+        {
+          "name": "selectedFolderLayer",
+          "kind": "variable"
+        },
+        {
+          "name": "setSelectedFolderLayer",
           "kind": "variable"
         },
         {
@@ -7125,11 +7408,38 @@
       ]
     },
     {
+      "id": "apps/explorer/src/file-colors.ts",
+      "name": "file-colors.ts",
+      "path": "apps/explorer/src/file-colors.ts",
+      "folder": "apps/explorer/src",
+      "lines": 26,
+      "language": "ts",
+      "symbols": [
+        {
+          "name": "fileColor",
+          "kind": "function"
+        },
+        {
+          "name": "DEFAULT_FILE_COLOR",
+          "kind": "variable"
+        },
+        {
+          "name": "FILE_COLORS",
+          "kind": "variable"
+        },
+        {
+          "name": "key",
+          "kind": "variable"
+        }
+      ],
+      "imports": []
+    },
+    {
       "id": "apps/explorer/src/index.css",
       "name": "index.css",
       "path": "apps/explorer/src/index.css",
       "folder": "apps/explorer/src",
-      "lines": 2291,
+      "lines": 2348,
       "language": "css",
       "symbols": [],
       "imports": []
@@ -8168,7 +8478,7 @@
       "name": "MapView.tsx",
       "path": "apps/explorer/src/scene/MapView.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 1046,
+      "lines": 1051,
       "language": "tsx",
       "symbols": [
         {
@@ -9512,7 +9822,7 @@
       "name": "World.tsx",
       "path": "apps/explorer/src/scene/World.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 731,
+      "lines": 718,
       "language": "tsx",
       "symbols": [
         {
@@ -9589,14 +9899,6 @@
         },
         {
           "name": "edge",
-          "kind": "variable"
-        },
-        {
-          "name": "folderFileIds",
-          "kind": "variable"
-        },
-        {
-          "name": "hasFocus",
           "kind": "variable"
         },
         {
@@ -10094,7 +10396,7 @@
       "name": "theme.ts",
       "path": "apps/explorer/src/theme.ts",
       "folder": "apps/explorer/src",
-      "lines": 183,
+      "lines": 165,
       "language": "ts",
       "symbols": [
         {
@@ -10103,10 +10405,6 @@
         },
         {
           "name": "fileHeight",
-          "kind": "function"
-        },
-        {
-          "name": "fileColor",
           "kind": "function"
         },
         {
@@ -10194,7 +10492,9 @@
           "kind": "variable"
         }
       ],
-      "imports": []
+      "imports": [
+        "apps/explorer/src/file-colors.ts"
+      ]
     },
     {
       "id": "apps/explorer/src/types.ts",
@@ -10385,7 +10685,7 @@
       "name": "ExplainInfoPanel.tsx",
       "path": "apps/explorer/src/ui/ExplainInfoPanel.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 165,
+      "lines": 169,
       "language": "tsx",
       "symbols": [
         {
@@ -10447,7 +10747,8 @@
       ],
       "imports": [
         "apps/explorer/src/explain.ts",
-        "apps/explorer/src/types.ts"
+        "apps/explorer/src/types.ts",
+        "apps/explorer/src/ui/EyeIcon.tsx"
       ]
     },
     {
@@ -10550,7 +10851,7 @@
       "name": "EyeIcon.tsx",
       "path": "apps/explorer/src/ui/EyeIcon.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 64,
+      "lines": 111,
       "language": "tsx",
       "symbols": [
         {
@@ -10558,7 +10859,19 @@
           "kind": "function"
         },
         {
+          "name": "StrokeIcon",
+          "kind": "function"
+        },
+        {
           "name": "EyeIcon",
+          "kind": "function"
+        },
+        {
+          "name": "FileIcon",
+          "kind": "function"
+        },
+        {
+          "name": "FolderIcon",
           "kind": "function"
         },
         {
@@ -10577,7 +10890,7 @@
       "name": "HUD.tsx",
       "path": "apps/explorer/src/ui/HUD.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 3547,
+      "lines": 3691,
       "language": "tsx",
       "symbols": [
         {
@@ -10682,6 +10995,14 @@
         },
         {
           "name": "ExplainButton",
+          "kind": "function"
+        },
+        {
+          "name": "InfoKindTitle",
+          "kind": "function"
+        },
+        {
+          "name": "infoBlueprintStyle",
           "kind": "function"
         },
         {
@@ -11153,7 +11474,47 @@
           "kind": "variable"
         },
         {
+          "name": "selectedBlueprintLayer",
+          "kind": "variable"
+        },
+        {
+          "name": "selectedBlueprintFolder",
+          "kind": "variable"
+        },
+        {
+          "name": "blueprintFolderFiles",
+          "kind": "variable"
+        },
+        {
+          "name": "file",
+          "kind": "variable"
+        },
+        {
+          "name": "blueprintFolderChildren",
+          "kind": "variable"
+        },
+        {
           "name": "folderFiles",
+          "kind": "variable"
+        },
+        {
+          "name": "folderChildren",
+          "kind": "variable"
+        },
+        {
+          "name": "folderInfoName",
+          "kind": "variable"
+        },
+        {
+          "name": "selectedFileBlueprintHex",
+          "kind": "variable"
+        },
+        {
+          "name": "selectedFolderBlueprintHex",
+          "kind": "variable"
+        },
+        {
+          "name": "blueprintOptionName",
           "kind": "variable"
         },
         {
@@ -11421,6 +11782,7 @@
         "apps/explorer/src/ui/NameInput.tsx",
         "apps/explorer/src/types.ts",
         "apps/explorer/src/userCreated.ts",
+        "apps/explorer/src/layout.ts",
         "apps/explorer/src/ui/EyeIcon.tsx",
         "apps/explorer/src/keyboard.ts",
         "apps/explorer/src/devTargets.ts"
@@ -11646,7 +12008,7 @@
       "name": "userCreated.ts",
       "path": "apps/explorer/src/userCreated.ts",
       "folder": "apps/explorer/src",
-      "lines": 947,
+      "lines": 1016,
       "language": "ts",
       "symbols": [
         {
@@ -11714,6 +12076,14 @@
           "kind": "function"
         },
         {
+          "name": "expandFolderWidthToChildren",
+          "kind": "function"
+        },
+        {
+          "name": "ancestorPaths",
+          "kind": "function"
+        },
+        {
           "name": "expandParentsToChildren",
           "kind": "function"
         },
@@ -11727,6 +12097,14 @@
         },
         {
           "name": "uniqueSiblings",
+          "kind": "function"
+        },
+        {
+          "name": "overlayAwareFolders",
+          "kind": "function"
+        },
+        {
+          "name": "expandOverlayParents",
           "kind": "function"
         },
         {
@@ -11910,11 +12288,35 @@
           "kind": "variable"
         },
         {
-          "name": "parentPaths",
+          "name": "left",
+          "kind": "variable"
+        },
+        {
+          "name": "right",
+          "kind": "variable"
+        },
+        {
+          "name": "startLeft",
+          "kind": "variable"
+        },
+        {
+          "name": "startRight",
+          "kind": "variable"
+        },
+        {
+          "name": "child",
+          "kind": "variable"
+        },
+        {
+          "name": "paths",
           "kind": "variable"
         },
         {
           "name": "current",
+          "kind": "variable"
+        },
+        {
+          "name": "parentPaths",
           "kind": "variable"
         },
         {
@@ -11930,19 +12332,15 @@
           "kind": "variable"
         },
         {
-          "name": "extent",
-          "kind": "variable"
-        },
-        {
-          "name": "child",
-          "kind": "variable"
-        },
-        {
-          "name": "width",
+          "name": "expanded",
           "kind": "variable"
         },
         {
           "name": "bridges",
+          "kind": "variable"
+        },
+        {
+          "name": "width",
           "kind": "variable"
         },
         {
@@ -11983,6 +12381,10 @@
         },
         {
           "name": "seen",
+          "kind": "variable"
+        },
+        {
+          "name": "already",
           "kind": "variable"
         },
         {
@@ -12368,6 +12770,56 @@
       ]
     },
     {
+      "id": "bin/editors/cursor.mjs",
+      "name": "cursor.mjs",
+      "path": "bin/editors/cursor.mjs",
+      "folder": "bin/editors",
+      "lines": 19,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "install",
+          "kind": "function"
+        },
+        {
+          "name": "id",
+          "kind": "variable"
+        },
+        {
+          "name": "skillDir",
+          "kind": "variable"
+        },
+        {
+          "name": "commandDir",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "bin/project.mjs"
+      ]
+    },
+    {
+      "id": "bin/editors/index.mjs",
+      "name": "index.mjs",
+      "path": "bin/editors/index.mjs",
+      "folder": "bin/editors",
+      "lines": 9,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "installEditors",
+          "kind": "function"
+        },
+        {
+          "name": "editors",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "bin/editors/cursor.mjs"
+      ]
+    },
+    {
       "id": "bin/inbase.mjs",
       "name": "inbase.mjs",
       "path": "bin/inbase.mjs",
@@ -12404,11 +12856,11 @@
           "kind": "variable"
         },
         {
-          "name": "skillDir",
+          "name": "installed",
           "kind": "variable"
         },
         {
-          "name": "commandDir",
+          "name": "cursor",
           "kind": "variable"
         },
         {
@@ -12482,6 +12934,7 @@
       ],
       "imports": [
         "bin/project.mjs",
+        "bin/editors/index.mjs",
         "bin/session.mjs"
       ]
     },
@@ -12490,7 +12943,7 @@
       "name": "inbase.test.mjs",
       "path": "bin/inbase.test.mjs",
       "folder": "bin",
-      "lines": 650,
+      "lines": 672,
       "language": "mjs",
       "symbols": [
         {
@@ -12624,6 +13077,7 @@
       ],
       "imports": [
         "bin/inbase.mjs",
+        "bin/editors/index.mjs",
         "bin/project.mjs"
       ]
     },
@@ -12924,7 +13378,7 @@
       "name": "session.mjs",
       "path": "bin/session.mjs",
       "folder": "bin",
-      "lines": 539,
+      "lines": 542,
       "language": "mjs",
       "symbols": [
         {
@@ -13241,7 +13695,7 @@
       "name": "package.json",
       "path": "package.json",
       "folder": ".",
-      "lines": 87,
+      "lines": 91,
       "language": "json",
       "symbols": [],
       "imports": []
@@ -13401,7 +13855,7 @@
       "name": "SKILL.md",
       "path": "skill/inbase/SKILL.md",
       "folder": "skill/inbase",
-      "lines": 255,
+      "lines": 267,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13492,6 +13946,7 @@
         "apps/explorer/scripts/open-editor.d.ts",
         "apps/explorer/scripts/open-editor.mjs",
         "apps/explorer/scripts/open-editor.test.mjs",
+        "apps/explorer/scripts/parse-idents.mjs",
         "apps/explorer/scripts/patch-lib.d.ts",
         "apps/explorer/scripts/patch-lib.mjs",
         "apps/explorer/scripts/patch-lib.test.mjs",
@@ -13507,6 +13962,31 @@
         "apps/explorer/scripts/tree-diff.mjs",
         "apps/explorer/scripts/tree-diff.test.mjs"
       ],
+      "children": [
+        "apps/explorer/scripts/relations",
+        "apps/explorer/scripts/structure"
+      ]
+    },
+    {
+      "path": "apps/explorer/scripts/relations",
+      "name": "relations",
+      "parent": "apps/explorer/scripts",
+      "files": [
+        "apps/explorer/scripts/relations/esm.mjs",
+        "apps/explorer/scripts/relations/html.mjs",
+        "apps/explorer/scripts/relations/index.mjs",
+        "apps/explorer/scripts/relations/require.mjs"
+      ],
+      "children": []
+    },
+    {
+      "path": "apps/explorer/scripts/structure",
+      "name": "structure",
+      "parent": "apps/explorer/scripts",
+      "files": [
+        "apps/explorer/scripts/structure/index.mjs",
+        "apps/explorer/scripts/structure/javascript.mjs"
+      ],
       "children": []
     },
     {
@@ -13520,6 +14000,7 @@
         "apps/explorer/src/codebase.ts",
         "apps/explorer/src/devTargets.ts",
         "apps/explorer/src/explain.ts",
+        "apps/explorer/src/file-colors.ts",
         "apps/explorer/src/index.css",
         "apps/explorer/src/keyboard.ts",
         "apps/explorer/src/layout.ts",
@@ -13574,6 +14055,16 @@
       "children": []
     },
     {
+      "path": "bin/editors",
+      "name": "editors",
+      "parent": "bin",
+      "files": [
+        "bin/editors/cursor.mjs",
+        "bin/editors/index.mjs"
+      ],
+      "children": []
+    },
+    {
       "path": "bin",
       "name": "bin",
       "parent": ".",
@@ -13584,7 +14075,9 @@
         "bin/project.test.mjs",
         "bin/session.mjs"
       ],
-      "children": []
+      "children": [
+        "bin/editors"
+      ]
     },
     {
       "path": "skill/commands",

@@ -31,9 +31,12 @@ the next unconnected slot. You do not need `/inbase`.
   still needs `/go` to finish.
 - **`/accept`**: same as `/go`.
 - **`/explain [question]`**: explain mode on the map. If a plan or proposal is
-  waiting, explain that proposal; the question is optional extra focus. After a
-  `?` click on the map, `/explain` explains that file or folder. During explain
-  mode, `/explain [question]` reports follow-up sub-steps.
+  waiting, or the map is showing a proposal diff, explain what has changed in
+  that proposal; the question is optional extra focus. If branch changes (diff
+  mode) is on, `/explain` with no question explains what has changed in that
+  git diff. After a `?` click on the map, `/explain` explains that file or
+  folder. During explain mode, `/explain [question]` reports follow-up
+  sub-steps.
 - **`/skipinbase`**: do the user's request without Inbase. Do not attach or
   record patches.
 - **Any other file-change request**, or this conversation already has a
@@ -48,8 +51,8 @@ action from this chat:
   After accept, stop; another `/go` starts the next step. The last proposal
   still needs `/go` to finish.
 - **`/accept`**: same as `/go`.
-- **`/explain`**: explain the current proposal, a pending map `?` click, or a
-  follow-up question.
+- **`/explain`**: explain the current proposal or git diff (what has changed),
+  a pending map `?` click, or a follow-up question.
 
 **Step by step** is off by default. Then `report-plan` and `/go` invoke the next
 step immediately (`VISUAL_CODER_EXECUTE`). Implement that step in the same turn.
@@ -226,10 +229,11 @@ npx inbase propose-patch --session "<session-id>"
    they provided one). If that prints `VISUAL_CODER_EXPLAIN` for a map `?`
    click, inspect that path and report one `--step`. If it prints
    `VISUAL_CODER_EXPLAIN_FOLLOWUP`, report sub-steps with `--parent`. If it
-   prints `VISUAL_CODER_PROPOSAL`, report every map step for that proposal.
-   Then `npx inbase explain report`. After reporting, **stop**. The user
-   navigates the map. They type `/explain` again for a follow-up, or `/go`
-   to continue the plan.
+   prints `VISUAL_CODER_PROPOSAL` or `VISUAL_CODER_DIFF`, walk the listed
+   changes (between `VISUAL_CODER_CHANGES_START` / `END` when present). Then
+   `npx inbase explain report`. After reporting, **stop**. The user navigates
+   the map. They type `/explain` again for a follow-up, or `/go` to continue
+   the plan.
 10. After a finished handshake, the explorer already removed stored session
     diffs. The global blueprint remains. Optionally run:
 

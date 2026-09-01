@@ -9,6 +9,8 @@ import {
   extractJsSymbols,
   resolveSpecifierAgainst,
 } from './js-source.mjs'
+import { relationAnalyzers } from './relations/index.mjs'
+import { structureAnalyzers } from './structure/index.mjs'
 import { shouldIgnoreRelativePath } from './scan-ignore.mjs'
 import { scanTarget } from './scan-target.mjs'
 
@@ -27,6 +29,13 @@ test('resolves specifiers to any known file, not only JS extensions', () => {
   assert.equal(resolveSpecifierAgainst('src/Header.astro', known), 'src/Header.astro')
   assert.equal(resolveSpecifierAgainst('src/Header', known), 'src/Header.astro')
   assert.equal(resolveSpecifierAgainst('src/lib', known), 'src/lib/index.vue')
+})
+
+test('registers a JavaScript structure analyzer', () => {
+  assert.deepEqual(
+    structureAnalyzers.map((analyzer) => analyzer.id),
+    ['javascript'],
+  )
 })
 
 test('extracts classes alongside functions and variables', () => {
@@ -55,6 +64,25 @@ test('collects relative require() specifiers', () => {
     `),
     ['./other', './helper', './boot'],
   )
+})
+
+test('registers ESM, require, and HTML relation analyzers', () => {
+  assert.deepEqual(
+    relationAnalyzers.map((analyzer) => analyzer.id),
+    ['esm', 'require', 'html'],
+  )
+})
+
+test('collects HTML script src specifiers only for HTML files', () => {
+  const source = `
+    <script type="module" src="./boot.js"></script>
+    <script src="https://cdn.example.com/x.js"></script>
+  `
+  assert.deepEqual(collectImportSpecifiers(source, 'index.html'), [
+    './boot.js',
+    'https://cdn.example.com/x.js',
+  ])
+  assert.deepEqual(collectImportSpecifiers(source, 'app.ts'), [])
 })
 
 test('extracts CommonJS require bindings', () => {
@@ -102,6 +130,11 @@ test('scans every text file and language-specific extras', () => {
       path.join(root, 'page.astro'),
       "---\nimport Header from './Header'\n---\n<Header />\n",
     )
+    fs.writeFileSync(path.join(root, 'boot.js'), 'export const boot = 1\n')
+    fs.writeFileSync(
+      path.join(root, 'index.html'),
+      '<script type="module" src="./boot.js"></script>\n<script src="https://cdn.example.com/x.js"></script>\n',
+    )
     fs.writeFileSync(path.join(root, 'photo.bin'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x0d]))
 
     const graph = scanQuiet({ root, dest })
@@ -127,6 +160,7 @@ test('scans every text file and language-specific extras', () => {
     assert.deepEqual(byId['server.cjs'].imports, ['helper.cjs'])
     assert.deepEqual(byId['index.astro'].imports, ['Header.astro'])
     assert.deepEqual(byId['page.astro'].imports, ['Header.astro'])
+    assert.deepEqual(byId['index.html'].imports, ['boot.js'])
     assert.deepEqual(byId['styles.scss'].symbols, [])
     assert.deepEqual(byId['script.py'].symbols, [])
     assert.equal(byId['styles.scss'].language, 'scss')

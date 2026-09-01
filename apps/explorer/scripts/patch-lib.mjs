@@ -3,7 +3,7 @@ import path from 'node:path'
 import {
   collectImportSpecifiers,
   extractImportBindings,
-  extractJsSymbols,
+  extractSymbols as extractLanguageSymbols,
   resolveSpecifierAgainst,
 } from './js-source.mjs'
 import { targetPathPrefix } from './target-config.mjs'
@@ -166,10 +166,10 @@ function removedSource(entry) {
   return taggedSource(entry, '-')
 }
 
-function extractSymbols(source) {
+function extractSymbols(source, filePath) {
   // Patch previews only have function/variable buckets, so classes ride along
   // as functions rather than disappearing from the HUD.
-  return extractJsSymbols(source).map((symbol) =>
+  return extractLanguageSymbols(source, filePath).map((symbol) =>
     symbol.kind === 'class' ? { ...symbol, kind: 'function' } : symbol,
   )
 }
@@ -292,8 +292,8 @@ function applyEntriesToAdditions(current, entries) {
       continue
     }
 
-    const removedSymbols = extractSymbols(removedSource(entry))
-    const addedSymbols = extractSymbols(addedSource(entry))
+    const removedSymbols = extractSymbols(removedSource(entry), entry.id)
+    const addedSymbols = extractSymbols(addedSource(entry), entry.id)
     const keptSymbolKeys = new Set(
       addedSymbols.map((symbol) => `${symbol.kind}:${symbol.name}`),
     )
@@ -334,8 +334,8 @@ function applyEntriesToAdditions(current, entries) {
       markChanged(symbol.kind, entry.id, symbol.name)
     }
 
-    const removedBindings = extractImportBindings(removedSource(entry))
-    const addedBindings = extractImportBindings(addedSource(entry))
+    const removedBindings = extractImportBindings(removedSource(entry), entry.id)
+    const addedBindings = extractImportBindings(addedSource(entry), entry.id)
     const keptImportKeys = new Set(
       addedBindings.map((binding) => `${binding.name}\0${binding.from}`),
     )
@@ -406,7 +406,7 @@ export function extractPatchImports(entries, knownFileIds = []) {
   for (const entry of entries) {
     if (entry.kind === 'delete') continue
     const fromDir = folderOfFileId(entry.id)
-    for (const specifier of collectImportSpecifiers(addedSource(entry))) {
+    for (const specifier of collectImportSpecifiers(addedSource(entry), entry.id)) {
       if (!specifier.startsWith('.')) continue
       const to = resolveSpecifierAgainst(posixJoin(fromDir, specifier), known)
       if (!to || to === entry.id) continue

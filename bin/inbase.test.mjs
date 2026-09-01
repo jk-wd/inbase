@@ -5,6 +5,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { initProject, isCliEntry, main } from './inbase.mjs'
+import { editors } from './editors/index.mjs'
 import {
   applyHostEnv,
   copyDir,
@@ -13,6 +14,7 @@ import {
   skillTemplateDir,
   writeRunningInstance,
 } from './project.mjs'
+import { initGitRepo, runGit } from '../apps/explorer/scripts/git-test.mjs'
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -35,6 +37,13 @@ function restoreEnv(snapshot) {
   }
 }
 
+test('registers the Cursor editor adapter', () => {
+  assert.deepEqual(
+    editors.map((editor) => editor.id),
+    ['cursor'],
+  )
+})
+
 test('copyDir installs the skill template', () => {
   const { root, cleanup } = tempProject()
   try {
@@ -51,6 +60,7 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /I see on the blueprint/)
     assert.match(skillText, /VISUAL_CODER_BLUEPRINT_ONLY/)
     assert.match(skillText, /VISUAL_CODER_NO_REQUEST/)
+    assert.match(skillText, /VISUAL_CODER_DIFF/)
   } finally {
     cleanup()
   }
@@ -63,6 +73,10 @@ test('init copies the Cursor skill and gitignores .inbase', () => {
     const result = initProject(root)
     const skill = path.join(root, '.cursor/skills/inbase/SKILL.md')
     assert.equal(result.skillDir, path.join(root, '.cursor/skills/inbase'))
+    assert.deepEqual(
+      result.editors.map((editor) => editor.id),
+      ['cursor'],
+    )
     assert.equal(fs.existsSync(skill), true)
     const skillText = fs.readFileSync(skill, 'utf8')
     assert.match(skillText, /npx inbase attach/)
@@ -76,6 +90,7 @@ test('init copies the Cursor skill and gitignores .inbase', () => {
     assert.match(skillText, /I see on the blueprint/)
     assert.match(skillText, /VISUAL_CODER_BLUEPRINT_ONLY/)
     assert.match(skillText, /VISUAL_CODER_NO_REQUEST/)
+    assert.match(skillText, /VISUAL_CODER_DIFF/)
     assert.doesNotMatch(skillText, /npx inbase wait-for-approval/)
     assert.doesNotMatch(skillText, /npx inbase explain wait/)
     assert.doesNotMatch(skillText, /direct chat interaction not allowed/)
@@ -106,6 +121,10 @@ test('init copies the Cursor skill and gitignores .inbase', () => {
     assert.match(
       fs.readFileSync(path.join(root, '.cursor/commands/explain.md'), 'utf8'),
       /VISUAL_CODER_PROPOSAL/,
+    )
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/explain.md'), 'utf8'),
+      /VISUAL_CODER_DIFF/,
     )
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/go.md')), true)
     assert.match(
@@ -653,6 +672,86 @@ test('explain start detects a waiting proposal', async () => {
       withoutQuestion.stdout,
       /VISUAL_CODER_EXPLAIN_STARTED Explain the current proposal: Bump value/,
     )
+  } finally {
+    cleanup()
+  }
+})
+
+test('explain start without a question walks a pending proposal diff', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    planSession(store, dataDir, target, 'explain-review', 'Explain review', [
+      'Bump value',
+    ])
+    store.invokeStep(dataDir, 'explain-review', 1, target)
+    store.appendDiff(dataDir, target, {
+      sessionId: 'explain-review',
+      patchText:
+        '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 2\n',
+    })
+    writeRunningInstance({ dataDir, targetRoot: target })
+    const result = runCli(['explain', 'start'], { cwd: root, env })
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /VISUAL_CODER_PROPOSAL What has changed in this proposal/)
+    assert.match(result.stdout, /Bump value/)
+    assert.match(
+      result.stdout,
+      /VISUAL_CODER_EXPLAIN_STARTED What has changed in this proposal\?/,
+    )
+    assert.match(result.stdout, /VISUAL_CODER_CHANGES_START/)
+    assert.match(result.stdout, /"src\/a.ts"/)
+    assert.match(result.stdout, /VISUAL_CODER_CHANGES_END/)
+  } finally {
+    cleanup()
+  }
+})
+
+test('explain start without a question walks the git branch diff', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  initGitRepo(target)
+  runGit(target, ['add', '.'])
+  runGit(target, ['commit', '-m', 'base'])
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 2\n')
+  fs.writeFileSync(path.join(target, 'src/Clock.ts'), 'export function Clock() {}\n')
+  fs.mkdirSync(dataDir, { recursive: true })
+  fs.writeFileSync(
+    path.join(dataDir, 'user-context.json'),
+    `${JSON.stringify({ showBranchChanges: true }, null, 2)}\n`,
+  )
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    writeRunningInstance({ dataDir, targetRoot: target })
+    const result = runCli(['explain', 'start'], { cwd: root, env })
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /VISUAL_CODER_DIFF What has changed in this git diff/)
+    assert.match(
+      result.stdout,
+      /VISUAL_CODER_EXPLAIN_STARTED What has changed in this diff\?/,
+    )
+    assert.match(result.stdout, /VISUAL_CODER_CHANGES_START/)
+    assert.match(result.stdout, /"src\/a.ts"/)
+    assert.match(result.stdout, /"src\/Clock.ts"/)
+    assert.doesNotMatch(result.stdout, /VISUAL_CODER_PROPOSAL/)
   } finally {
     cleanup()
   }

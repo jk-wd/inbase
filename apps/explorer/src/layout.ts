@@ -157,6 +157,16 @@ export function relationTravelTarget(
   return distFrom <= distTo ? toId : fromId
 }
 
+export function relationPairLabel(fromName: string, toName: string) {
+  return `${fromName} <- ${toName}`
+}
+
+export function fileDisplayName(id: string, files: FileNode[]) {
+  const file = files.find((item) => item.id === id)
+  if (file) return file.name
+  return id.split('/').pop() ?? id
+}
+
 export function filesImporting(files: FileNode[], id: string) {
   return files.filter((file) => file.imports.includes(id))
 }

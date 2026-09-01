@@ -1,17 +1,59 @@
 {
-  "updatedAt": "2026-09-01T05:53:48.203Z",
+  "updatedAt": "2026-09-01T07:09:33.938Z",
   "mode": "map",
   "island": {
-    "path": null,
-    "name": "open ground"
+    "path": "apps/explorer/scripts/relations",
+    "name": "relations"
   },
-  "lookingAt": null,
-  "lookingAtFiles": [],
-  "selected": null,
-  "filesOnIsland": [],
+  "lookingAt": {
+    "id": "apps/explorer/scripts/relations/require.mjs",
+    "name": "require.mjs",
+    "path": "apps/explorer/scripts/relations/require.mjs",
+    "folder": "apps/explorer/scripts/relations"
+  },
+  "lookingAtFiles": [
+    {
+      "id": "apps/explorer/scripts/relations/require.mjs",
+      "name": "require.mjs",
+      "path": "apps/explorer/scripts/relations/require.mjs",
+      "folder": "apps/explorer/scripts/relations"
+    }
+  ],
+  "selected": {
+    "id": "apps/explorer/scripts/relations/require.mjs",
+    "name": "require.mjs",
+    "path": "apps/explorer/scripts/relations/require.mjs",
+    "folder": "apps/explorer/scripts/relations"
+  },
+  "filesOnIsland": [
+    {
+      "id": "apps/explorer/scripts/relations/esm.mjs",
+      "name": "esm.mjs",
+      "path": "apps/explorer/scripts/relations/esm.mjs",
+      "folder": "apps/explorer/scripts/relations"
+    },
+    {
+      "id": "apps/explorer/scripts/relations/html.mjs",
+      "name": "html.mjs",
+      "path": "apps/explorer/scripts/relations/html.mjs",
+      "folder": "apps/explorer/scripts/relations"
+    },
+    {
+      "id": "apps/explorer/scripts/relations/index.mjs",
+      "name": "index.mjs",
+      "path": "apps/explorer/scripts/relations/index.mjs",
+      "folder": "apps/explorer/scripts/relations"
+    },
+    {
+      "id": "apps/explorer/scripts/relations/require.mjs",
+      "name": "require.mjs",
+      "path": "apps/explorer/scripts/relations/require.mjs",
+      "folder": "apps/explorer/scripts/relations"
+    }
+  ],
   "position": {
-    "x": 0,
-    "z": 151.58
+    "x": -39.29,
+    "z": 229.69
   },
-  "showBranchChanges": false
+  "showBranchChanges": true
 }

@@ -30,9 +30,24 @@ Inbase does not call a model. The coding loop works in **Cursor**. `inbase init`
 
 ---
 
+## Support overview
+
+The map draws every text file. Colors, relations, structure, and editor install are plug-in modules.
+
+| | Today | Fallback | Add more |
+| --- | --- | --- | --- |
+| Colors | JS, TS, CSS, SCSS, JSON, HTML | Dark grey | `apps/explorer/src/file-colors.ts` |
+| Relations | ESM `import`, `require()`, HTML `<script src>` | Packages and remote URLs | `apps/explorer/scripts/relations/` |
+| Structure | Functions, classes, vars in JS/TS | Block with no cubes | `apps/explorer/scripts/structure/` |
+| Editors | Cursor (`inbase init`) | Map still runs in the browser | `bin/editors/` |
+
+Relative import specifiers become edges when they resolve on disk. `inbase init` copies the Cursor skill and slash commands.
+
+---
+
 ## Manual
 
-Keep `inbase run` open while you work.
+Keep `inbase run` open while you work. Language colors, import analyzers, and editor install are summarized in [Support overview](#support-overview).
 
 1. [Install and start](#install-and-start)
 2. [The map](#the-map)
@@ -195,7 +210,7 @@ With **Step by step** on:
 
 While a proposal is waiting:
 
-- Type **`/explain`** to walk the current proposal on the map instead of accepting it.
+- Type **`/explain`** to walk what has changed in the current proposal on the map instead of accepting it.
 - **Stop** ends the session.
 
 ![Pending proposal with changed files and added functions](docs/manual-proposal.png)
@@ -223,7 +238,11 @@ Type `/explain How does login work?` while the map is open. The HUD hides and an
 
 **From a proposal**
 
-If a plan or proposal is waiting, `/explain` explains that proposal. Add a question for extra focus.
+If a plan or proposal is waiting, `/explain` with no question explains **what has changed in that proposal**. Add a question for extra focus.
+
+**From a git diff**
+
+When **Show branch changes** is on, `/explain` with no question explains **what has changed in this diff**. Add a question for extra focus.
 
 **From a `?` click**
 
@@ -246,12 +265,13 @@ Every recorded patch is a step on the session chain.
 - The session panel lists changed, added, and removed files, plus functions, vars, and imports for the current diff.
 - The map highlights those files. Press **C** to show only changed paths.
 - Click a highlighted block to see which functions and vars that patch added or edited.
+- Type **`/explain`** with no question to walk what has changed in the current diff.
 
 Inbase stores patches under `.inbase/` and applies them on every step update. You do not write unified diffs.
 
 ### Branch changes
 
-When no LLM is making changes, turn on **Show branch changes** (or press **G**) to highlight the current git branch against its base: committed, unstaged, and untracked files, in place of LLM patch files.
+When no LLM is making changes, turn on **Show branch changes** (or press **G**) to highlight the current git branch against its base: committed, unstaged, and untracked files, in place of LLM patch files. Type **`/explain`** with no question to walk what has changed in that diff.
 
 ![Branch changes panel on the map](docs/manual-branch.png)
 
@@ -292,7 +312,7 @@ The in-app **Instructions** overlay (bottom of the HUD) lists the same controls 
 | `inbase run --target <dir>` | Map another folder |
 | `inbase accept [--session <id>]` | Start the waiting step, or accept a ready proposal (`/accept`) |
 | `inbase go [--session <id>]` | Same as `accept` (`/go`) |
-| `inbase explain start [--question "..."]` | Open map-only explain mode |
+| `inbase explain start [--question "..."]` | Open map-only explain mode. Omit `--question` to explain the current proposal or git diff |
 | `inbase explain report --step "..."` | Publish explanation steps and map focus |
 | `inbase explain stop` | Exit explain mode |
 
@@ -300,11 +320,11 @@ The Cursor skill runs session commands (`attach`, `read-blueprint`, `report-plan
 
 ## Editor support
 
-The map runs in the browser. The LLM plan and patch loop works in **Cursor** only (`inbase init` installs a skill into `.cursor/skills/inbase/`).
+The map runs in the browser. The LLM plan and patch loop works in **Cursor** only. `inbase init` uses the Cursor editor adapter in `bin/editors/` to install the skill and slash commands. Other editors can be added as adapters there.
 
 ## Language support
 
-Inbase draws every text file in the project as a block. JavaScript and TypeScript (`.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`) also get **functions**, **classes**, and **variables**. Relative `import` / `require()` specifiers become edges when they resolve, including `.astro` and other JS-style modules. Package names like `react` or `@angular/core` do not. Binary files are skipped.
+Inbase draws every text file in the project as a block. Unknown extensions use the default dark grey. JavaScript and TypeScript also get **functions**, **classes**, and **variables** from the structure analyzer. Relation analyzers turn relative ESM `import`s, `require()` calls, and HTML `<script src>` into edges when they resolve, including `.astro` and other JS-style modules. Package names like `react` or `@angular/core` do not. Binary files are skipped. See [Support overview](#support-overview).
 
 ## Develop Inbase itself
 

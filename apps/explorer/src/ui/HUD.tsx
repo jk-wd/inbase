@@ -17,6 +17,7 @@ import {
   type ExplainTargetKind,
   type PatchImportAddition,
   type PatchSymbolAddition,
+  type RelationMode,
   type ViewMode,
   type WorkflowAction,
 } from '../types'
@@ -26,6 +27,13 @@ import { folderOfFile, folderParent } from '../layout'
 import { EyeIcon, FileIcon, FolderIcon } from './EyeIcon'
 import { beginKeyboardIsolation, shouldIgnoreShortcut } from '../keyboard'
 import type { DevTargetsState } from '../devTargets'
+
+const RELATION_MODE_OPTIONS: { id: RelationMode; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'off', label: 'Off' },
+  { id: 'changed', label: 'Changed' },
+  { id: 'targeted', label: 'Targeted' },
+]
 
 function reviewTitle(status: AgentIntentStatus) {
   if (status === 'blueprint_ask') return 'Setup blueprint'
@@ -1715,6 +1723,8 @@ function explorerInstructions({
   selectedUserCreated,
   infoVisible,
   importedBy,
+  canToggleImportedBy,
+  relationMode,
   showBranchChanges,
   canShowBranchChanges,
 }: {
@@ -1724,6 +1734,8 @@ function explorerInstructions({
   selectedUserCreated: boolean
   infoVisible: boolean
   importedBy: boolean
+  canToggleImportedBy: boolean
+  relationMode: RelationMode
   showBranchChanges: boolean
   canShowBranchChanges: boolean
 }): ExplorerInstructionSection[] {
@@ -1741,11 +1753,15 @@ function explorerInstructions({
       ? [{ id: 'scroll-info', keys: ['↑', '↓'], label: 'Scroll info' }]
       : []),
   ]
-  const imported: ExplorerInstruction = {
-    id: 'imported',
-    keys: ['K'],
-    label: importedBy ? 'Show imports' : 'Show imported by',
-  }
+  const imported: ExplorerInstruction[] = canToggleImportedBy
+    ? [
+        {
+          id: 'imported',
+          keys: ['K'],
+          label: importedBy ? 'Show imports' : 'Show imported by',
+        },
+      ]
+    : []
   const branch: ExplorerInstruction[] = canShowBranchChanges
     ? [
         {
@@ -1782,7 +1798,7 @@ function explorerInstructions({
         },
         { id: 'aim-line', keys: ['Click'], label: 'Aim a line to fly' },
         ...info,
-        imported,
+        ...imported,
         ...branch,
         {
           id: 'update-model',
@@ -1861,6 +1877,14 @@ function explorerInstructions({
           keys: [],
           label: 'Gold pin is your walk position',
         },
+        {
+          id: 'show-relations',
+          keys: ['R'],
+          label: `Relations: ${
+            RELATION_MODE_OPTIONS.find((option) => option.id === relationMode)
+              ?.label ?? 'Off'
+          }`,
+        },
         ...(hasChangeSet
           ? [
               {
@@ -1874,7 +1898,7 @@ function explorerInstructions({
           : []),
         ...backspace,
         ...info,
-        imported,
+        ...imported,
         ...branch,
         {
           id: 'update-model',
@@ -1955,6 +1979,8 @@ type HUDProps = {
   updatingModel?: boolean
   importedBy: boolean
   onToggleImportedBy: () => void
+  relationMode?: RelationMode
+  onRelationModeChange?: (mode: RelationMode) => void
   changePathsOnly?: boolean
   hasChangeSet?: boolean
   onToggleChangePathsOnly?: () => void
@@ -2052,6 +2078,8 @@ export function HUD({
   updatingModel = false,
   importedBy,
   onToggleImportedBy,
+  relationMode = 'changed',
+  onRelationModeChange,
   changePathsOnly = false,
   hasChangeSet = false,
   onToggleChangePathsOnly,
@@ -2181,6 +2209,9 @@ export function HUD({
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false)
   const [actionsMenuPosition, setActionsMenuPosition] = useState<CSSProperties>()
   const actionsMenuRef = useRef<HTMLDivElement>(null)
+  const [relationsMenuOpen, setRelationsMenuOpen] = useState(false)
+  const [relationsMenuPosition, setRelationsMenuPosition] = useState<CSSProperties>()
+  const relationsMenuRef = useRef<HTMLDivElement>(null)
   const [noteEditor, setNoteEditor] = useState<{
     file: string
     kind: BlueprintNoteKind
@@ -2437,6 +2468,22 @@ export function HUD({
     return () => window.removeEventListener('resize', updatePosition)
   }, [actionsMenuOpen])
 
+  useLayoutEffect(() => {
+    if (!relationsMenuOpen) return
+    const updatePosition = () => {
+      const trigger = relationsMenuRef.current
+      if (!trigger) return
+      const rect = trigger.getBoundingClientRect()
+      setRelationsMenuPosition({
+        left: rect.left,
+        bottom: window.innerHeight - rect.top + 8,
+      })
+    }
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    return () => window.removeEventListener('resize', updatePosition)
+  }, [relationsMenuOpen])
+
   useEffect(() => {
     if (!actionsMenuOpen) return
     const onKey = (event: KeyboardEvent) => {
@@ -2465,6 +2512,35 @@ export function HUD({
     }
   }, [actionsMenuOpen])
 
+  useEffect(() => {
+    if (!relationsMenuOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code !== 'Escape') return
+      if (shouldIgnoreShortcut(event)) return
+      event.preventDefault()
+      event.stopPropagation()
+      setRelationsMenuOpen(false)
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (
+        target instanceof Element &&
+        (relationsMenuRef.current?.contains(target) ||
+          target.closest('[data-relations-menu]'))
+      ) {
+        return
+      }
+      setRelationsMenuOpen(false)
+    }
+    window.addEventListener('keydown', onKey, true)
+    window.addEventListener('pointerdown', onPointerDown, true)
+    return () => {
+      window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('pointerdown', onPointerDown, true)
+    }
+  }, [relationsMenuOpen])
+
+  const canToggleImportedBy = Boolean(selectedId)
   const instructionSections = explorerInstructions({
     canPlace,
     hasChangeSet,
@@ -2475,6 +2551,8 @@ export function HUD({
       Boolean(selectedFolderNode?.userCreated),
     infoVisible,
     importedBy,
+    canToggleImportedBy,
+    relationMode,
     showBranchChanges,
     canShowBranchChanges,
   })
@@ -3503,6 +3581,81 @@ export function HUD({
           )}
         </div>
         <div className="hud-icon-row">
+          {mapping && onRelationModeChange && (
+            <div className="hud-actions-menu" ref={relationsMenuRef}>
+              <button
+                className="hud-button hud-icon-button"
+                data-active={relationMode !== 'off'}
+                aria-label={`Relations, ${
+                  RELATION_MODE_OPTIONS.find((option) => option.id === relationMode)
+                    ?.label ?? 'Off'
+                }`}
+                aria-keyshortcuts="R"
+                aria-haspopup="menu"
+                aria-expanded={relationsMenuOpen}
+                type="button"
+                onClick={() => {
+                  setActionsMenuOpen(false)
+                  setRelationsMenuOpen((open) => !open)
+                }}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="18"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect x="3" y="4" width="5" height="6" rx="1" />
+                  <rect x="16" y="4" width="5" height="6" rx="1" />
+                  <rect x="3" y="14" width="5" height="6" rx="1" />
+                  <rect x="16" y="14" width="5" height="6" rx="1" />
+                  <path d="M8 7h8" />
+                  <path d="M8 17h8" />
+                  <path d="M5.5 10v4" />
+                  <path d="M18.5 10v4" />
+                </svg>
+                <span className="hud-tooltip">
+                  {`R relations · ${
+                    RELATION_MODE_OPTIONS.find((option) => option.id === relationMode)
+                      ?.label ?? 'Off'
+                  }`}
+                </span>
+              </button>
+              {relationsMenuOpen &&
+                relationsMenuPosition &&
+                createPortal(
+                  <div
+                    className="hud-actions-menu-list"
+                    data-relations-menu="true"
+                    role="menu"
+                    aria-label="Relations"
+                    style={relationsMenuPosition}
+                  >
+                    {RELATION_MODE_OPTIONS.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={relationMode === option.id}
+                        data-active={relationMode === option.id}
+                        onClick={() => {
+                          onRelationModeChange(option.id)
+                          setRelationsMenuOpen(false)
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>,
+                  document.body,
+                )}
+            </div>
+          )}
           {mapping && hasChangeSet && onToggleChangePathsOnly && (
             <button
               className="hud-button hud-icon-button"
@@ -3544,14 +3697,22 @@ export function HUD({
           )}
           <button
             className="hud-button hud-icon-button"
-            data-active={importedBy}
+            data-active={importedBy && canToggleImportedBy}
             aria-label={
-              importedBy ? 'Show imports' : 'Show imported by'
+              !canToggleImportedBy
+                ? 'Show imported by unavailable until a file is selected'
+                : importedBy
+                  ? 'Show imports'
+                  : 'Show imported by'
             }
             aria-keyshortcuts="K"
-            aria-pressed={importedBy}
+            aria-pressed={importedBy && canToggleImportedBy}
+            aria-disabled={!canToggleImportedBy}
             type="button"
-            onClick={onToggleImportedBy}
+            onClick={() => {
+              if (!canToggleImportedBy) return
+              onToggleImportedBy()
+            }}
           >
             <svg
               viewBox="0 0 24 24"
@@ -3569,7 +3730,11 @@ export function HUD({
               <path d="M8 8l4 4-4 4" />
             </svg>
             <span className="hud-tooltip">
-              {importedBy ? 'K show imports' : 'K show imported by'}
+              {!canToggleImportedBy
+                ? 'Select a file to show imported by'
+                : importedBy
+                  ? 'K show imports'
+                  : 'K show imported by'}
             </span>
           </button>
           <button
@@ -3627,7 +3792,10 @@ export function HUD({
               aria-label="More actions"
               aria-haspopup="menu"
               aria-expanded={actionsMenuOpen}
-              onClick={() => setActionsMenuOpen((open) => !open)}
+              onClick={() => {
+                setRelationsMenuOpen(false)
+                setActionsMenuOpen((open) => !open)
+              }}
             >
               <svg
                 viewBox="0 0 24 24"

@@ -78,6 +78,120 @@ function readProposalInfo(store, dataDir, sessionId = null) {
   return proposalInfo(store.readManifest(dataDir, id))
 }
 
+function readKnownFileIds(dataDir) {
+  try {
+    const parsed = JSON.parse(
+      fs.readFileSync(path.join(dataDir, 'codebase.json'), 'utf8'),
+    )
+    return Array.isArray(parsed?.files)
+      ? parsed.files
+          .map((file) => file?.id)
+          .filter((id) => typeof id === 'string' && id)
+      : []
+  } catch {
+    return []
+  }
+}
+
+function readShowBranchChanges(dataDir) {
+  try {
+    const parsed = JSON.parse(
+      fs.readFileSync(path.join(dataDir, 'user-context.json'), 'utf8'),
+    )
+    return parsed?.showBranchChanges === true
+  } catch {
+    return false
+  }
+}
+
+function llmHidesBranchChanges(intent) {
+  if (!intent) return false
+  return (
+    intent.working ||
+    intent.preview ||
+    intent.status === 'preparing' ||
+    intent.status === 'working' ||
+    intent.status === 'replanning' ||
+    intent.status === 'pending' ||
+    intent.status === 'extend' ||
+    intent.status === 'extended'
+  )
+}
+
+function changeSummary(source) {
+  return {
+    files: source?.files ?? [],
+    creates: source?.creates ?? [],
+    deletes: source?.deletes ?? [],
+    createFolders: source?.createFolders ?? [],
+    addedFunctions: source?.addedFunctions ?? [],
+    addedVariables: source?.addedVariables ?? [],
+    addedImports: source?.addedImports ?? [],
+    changedFunctions: source?.changedFunctions ?? [],
+    changedVariables: source?.changedVariables ?? [],
+    imports: source?.imports ?? [],
+  }
+}
+
+function hasChangeSummary(summary) {
+  return (
+    summary.files.length > 0 ||
+    summary.creates.length > 0 ||
+    summary.deletes.length > 0
+  )
+}
+
+function printChangeSummary(summary) {
+  console.log('VISUAL_CODER_CHANGES_START')
+  console.log(JSON.stringify(summary, null, 2))
+  console.log('VISUAL_CODER_CHANGES_END')
+}
+
+async function readVisibleChanges(store, config) {
+  const dataDir = config.dataDir
+  const known = readKnownFileIds(dataDir)
+  const intents = store.listSessionIntents(dataDir, known)
+  const llmOverlay = intents.find((intent) => llmHidesBranchChanges(intent))
+  if (readShowBranchChanges(dataDir) && !llmOverlay) {
+    const branchMod = await import(
+      pathToFileURL(path.join(explorerRoot, 'scripts/branch-changes.mjs')).href
+    )
+    const branch = branchMod.readBranchChanges(config.targetRoot, known)
+    if (branch.available) {
+      const vs =
+        branch.branch && branch.base
+          ? ` (${branch.branch} vs ${branch.base})`
+          : ''
+      return {
+        kind: 'diff',
+        question: 'What has changed in this diff?',
+        headline: `What has changed in this git diff${vs}`,
+        summary: changeSummary(branch),
+      }
+    }
+  }
+  const sessionId = store.readActiveSession(dataDir)
+  const intent =
+    (sessionId && store.sessionIntent(dataDir, sessionId, known)) ||
+    llmOverlay ||
+    null
+  if (!intent?.preview) return null
+  const summary = changeSummary(intent)
+  if (!hasChangeSummary(summary)) return null
+  const selected =
+    intent.chainIndex != null ? intent.chain?.[intent.chainIndex] : null
+  const title =
+    selected?.title || intent.reason || intent.feature || 'this proposal'
+  const stepNo = selected?.step ?? intent.step
+  const step = stepNo != null ? ` for step ${stepNo}` : ''
+  return {
+    kind: 'proposal',
+    question: 'What has changed in this proposal?',
+    headline: `What has changed in this proposal${step}: ${title}`,
+    summary,
+  }
+}
+
 function emitStopped(store, dataDir, sessionId) {
   if (store && dataDir && sessionId) {
     signalAck(store, dataDir, sessionId, 'stopped', 'the workflow was stopped')
@@ -483,10 +597,12 @@ export async function runExplain(args) {
       return
     }
     const pending = current.pendingStart
-    const proposal = readProposalInfo(store, config.dataDir)
+    const visible = pending ? null : await readVisibleChanges(store, config)
+    const proposal = pending || visible ? null : readProposalInfo(store, config.dataDir)
     const question =
       parsed.question ||
       pending?.question ||
+      visible?.question ||
       (proposal ? `Explain the current proposal: ${proposal.title}` : '')
     if (!question) {
       usage('explain start', '--question "How does this work?"')
@@ -500,7 +616,23 @@ export async function runExplain(args) {
     explain.startExplain(config.dataDir, question)
     store.clearPendingExplain(config.dataDir)
     store.touchExplainConnections(config.dataDir)
-    if (proposal && !pending) {
+    if (visible?.kind === 'diff') {
+      const asked = parsed.question
+        ? ` The user asked: ${parsed.question}.`
+        : ''
+      console.log(
+        `VISUAL_CODER_DIFF ${visible.headline}.${asked} Do not edit project files. Walk the added, updated, and removed files on the map.`,
+      )
+      printChangeSummary(visible.summary)
+    } else if (visible?.kind === 'proposal') {
+      const asked = parsed.question
+        ? ` The user asked: ${parsed.question}.`
+        : ''
+      console.log(
+        `VISUAL_CODER_PROPOSAL ${visible.headline}.${asked} Do not edit project files. Walk these changes on the map.`,
+      )
+      printChangeSummary(visible.summary)
+    } else if (proposal) {
       console.log(
         `VISUAL_CODER_PROPOSAL Explain the current proposal for step ${proposal.step}: ${proposal.title}. The user asked: ${question}. Do not edit project files. Walk this proposal on the map.`,
       )

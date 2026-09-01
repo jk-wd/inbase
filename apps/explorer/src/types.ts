@@ -71,6 +71,8 @@ export type WorldLayout = {
 
 export type ViewMode = 'map' | 'walk'
 
+export type RelationMode = 'all' | 'off' | 'changed' | 'targeted'
+
 export type FlyTo = {
   nonce: number
   from: [number, number]

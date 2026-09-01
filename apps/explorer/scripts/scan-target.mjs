@@ -2,10 +2,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  SOURCE_EXTENSIONS,
   RESOLVE_EXTENSIONS,
   collectImportSpecifiers,
-  extractJsSymbols,
+  extractSymbols,
 } from './js-source.mjs'
 import {
   collectGitignoreSets,
@@ -115,11 +114,6 @@ function languageOf(filePath) {
   return ext || 'txt'
 }
 
-function extractSymbols(source, ext) {
-  if (!SOURCE_EXTENSIONS.has(ext)) return []
-  return extractJsSymbols(source)
-}
-
 function isUsableFile(filePath) {
   return fs.existsSync(filePath) && fs.statSync(filePath).isFile() && !isBinaryFile(filePath)
 }
@@ -215,7 +209,6 @@ export function scanTarget({
 
   const files = absoluteFiles.map((absolutePath) => {
     const relative = toPosix(path.relative(root, absolutePath))
-    const ext = path.extname(relative)
     const source = fs.readFileSync(absolutePath, 'utf8')
     const folder = relative.includes('/') ? relative.split('/').slice(0, -1).join('/') : '.'
 
@@ -228,8 +221,8 @@ export function scanTarget({
       folder,
       lines: source.split(/\r?\n/).length,
       language: languageOf(relative),
-      symbols: extractSymbols(source, ext),
-      imports: collectImportSpecifiers(source)
+      symbols: extractSymbols(source, relative),
+      imports: collectImportSpecifiers(source, relative)
         .map((specifier) => resolveImport(absolutePath, specifier, root))
         .filter(Boolean),
     }

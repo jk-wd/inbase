@@ -100,6 +100,7 @@ import {
   type UserCreatedBlock,
   type UserCreatedIsland,
   type ViewMode,
+  type RelationMode,
   type WorkflowAction,
   type WorldLayout,
 } from './types'
@@ -1029,6 +1030,7 @@ function Explorer({
   const [flyTo, setFlyTo] = useState<FlyTo | null>(null)
   const [locked, setLocked] = useState(false)
   const [importedBy, setImportedBy] = useState(false)
+  const [relationMode, setRelationMode] = useState<RelationMode>('changed')
   const [changePathsOnly, setChangePathsOnly] = useState(false)
   const lastIntentSig = useRef<string | null>(null)
   const viewedDiffId = useRef<Record<string, string | null>>({})
@@ -2094,7 +2096,25 @@ function Explorer({
   }, [branchChanges.available, llmBusy, wantBranchChanges])
 
   const toggleImportedBy = useCallback(() => {
+    if (!selectedId) return
     setImportedBy((current) => !current)
+  }, [selectedId])
+
+  useEffect(() => {
+    if (!selectedId) setImportedBy(false)
+  }, [selectedId])
+
+  const setRelationModeAndClearAim = useCallback((mode: RelationMode) => {
+    setRelationMode(mode)
+    setAimedRelation(null)
+  }, [])
+
+  const cycleRelationMode = useCallback(() => {
+    setRelationMode((current) => {
+      const order: RelationMode[] = ['all', 'off', 'changed', 'targeted']
+      return order[(order.indexOf(current) + 1) % order.length]
+    })
+    setAimedRelation(null)
   }, [])
 
   const toggleChangePathsOnly = useCallback(() => {
@@ -2145,6 +2165,18 @@ function Explorer({
       window.clearInterval(timer)
     }
   }, [llmBusy, updatingModel, wantBranchChanges])
+
+  useEffect(() => {
+    if (mode !== 'map') return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.repeat || event.code !== 'KeyR') return
+      if (shouldIgnoreShortcut(event)) return
+      event.preventDefault()
+      cycleRelationMode()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [mode, cycleRelationMode])
 
   useEffect(() => {
     if (mode !== 'map' || !hasChangeSet) return
@@ -2745,6 +2777,7 @@ function Explorer({
             onInspect={inspectBlock}
             onTravelTo={flyAlongRelation}
             importedBy={mapImportedBy}
+            relationMode={relationMode}
             namingId={namingId}
             namingIslandId={namingIslandId}
             onBlueprintMenu={
@@ -2835,6 +2868,8 @@ function Explorer({
         updatingModel={updatingModel}
         importedBy={importedBy}
         onToggleImportedBy={toggleImportedBy}
+        relationMode={relationMode}
+        onRelationModeChange={setRelationModeAndClearAim}
         changePathsOnly={changePathsOnly}
         hasChangeSet={hasChangeSet}
         onToggleChangePathsOnly={toggleChangePathsOnly}

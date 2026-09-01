@@ -468,6 +468,20 @@ button {
   z-index: 70;
 }
 
+.map-relation-layer {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 60;
+}
+
+.map-relation-hover {
+  z-index: 91;
+  max-width: 360px;
+  pointer-events: none;
+}
+
 .map-file-label {
   position: absolute;
   top: 0;
@@ -801,9 +815,10 @@ button {
   outline: none;
 }
 
-.hud-actions-menu-list button:disabled {
-  opacity: 0.55;
-  cursor: default;
+.hud-actions-menu-list button[data-active='true'],
+.hud-actions-menu-list button[aria-checked='true'] {
+  background: var(--vc-surface);
+  color: #d7eef8;
 }
 
 .hud-panel {

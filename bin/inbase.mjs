@@ -5,16 +5,14 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
   applyHostEnv,
-  copyDir,
   ensureDataDir,
   ensureGitignoreEntry,
   explorerRoot,
   isolatedViteConfig,
   resolveFromPackage,
-  skillTemplateDir,
-  commandTemplateDir,
   takeFlagValue,
 } from './project.mjs'
+import { installEditors } from './editors/index.mjs'
 import {
   proposePatch,
   reportPlan,
@@ -56,14 +54,10 @@ function printHelp() {
 }
 
 export function initProject(projectRoot = process.cwd()) {
-  if (!fs.existsSync(skillTemplateDir)) {
-    throw new Error(`Inbase skill template missing at ${skillTemplateDir}`)
-  }
-  const skillDir = path.join(projectRoot, '.cursor/skills/inbase')
-  copyDir(skillTemplateDir, skillDir)
-  const commandDir = path.join(projectRoot, '.cursor/commands')
-  if (fs.existsSync(commandTemplateDir)) {
-    copyDir(commandTemplateDir, commandDir)
+  const installed = installEditors(projectRoot)
+  const cursor = installed.find((editor) => editor.id === 'cursor') ?? installed[0]
+  if (!cursor) {
+    throw new Error('No editor adapters are registered')
   }
   const { dataDir } = applyHostEnv({
     cwd: projectRoot,
@@ -72,7 +66,13 @@ export function initProject(projectRoot = process.cwd()) {
   })
   ensureDataDir(dataDir)
   const gitignoreAdded = ensureGitignoreEntry(projectRoot)
-  return { skillDir, commandDir, dataDir, gitignoreAdded }
+  return {
+    skillDir: cursor.skillDir,
+    commandDir: cursor.commandDir,
+    dataDir,
+    gitignoreAdded,
+    editors: installed,
+  }
 }
 
 function explorerHref(relative) {

@@ -33,6 +33,7 @@ import type {
   PatchImport,
   PlacedBridge,
   PlacedFile,
+  RelationMode,
   UserContext,
   UserCreatedBlock,
   UserCreatedIsland,
@@ -70,6 +71,7 @@ type WorldProps = {
   onInspect?: (fileId: string) => void
   onTravelTo: (fromId: string, toId: string) => void
   importedBy?: boolean
+  relationMode?: RelationMode
   namingId?: string | null
   onBlueprintMenu?: (menu: MapBlueprintMenu) => void
   userCreatedBlocks?: UserCreatedBlock[]
@@ -119,6 +121,7 @@ export function World({
   onInspect,
   onTravelTo,
   importedBy = false,
+  relationMode = 'changed',
   namingId = null,
   namingIslandId = null,
   onBlueprintMenu,
@@ -152,17 +155,70 @@ export function World({
   const placing = Boolean(namingId || namingIslandId)
   const planned = new Set(plannedIds)
   const ghosts = previewFiles
+  const extraKey = Object.keys(ghosts).join('|')
+  const folderFocusIds = useMemo(() => {
+    if (!selectedFolder || selectedId) return [] as string[]
+    const ids = new Set<string>()
+    const overlay = selectedFolderLayer
+      ? overlayLayers.find((layer) => layer.id === selectedFolderLayer)
+      : undefined
+    if (overlay) {
+      for (const id of Object.keys(overlay.files)) {
+        if (folderOfFile(id) === selectedFolder) ids.add(id)
+      }
+      return [...ids]
+    }
+    const folderNode = viewGraph.folders.find(
+      (folder) => folder.path === selectedFolder,
+    )
+    if (folderNode) {
+      for (const id of folderNode.files) ids.add(id)
+    }
+    for (const file of viewGraph.files) {
+      if (file.folder === selectedFolder) ids.add(file.id)
+    }
+    if (extraKey) {
+      for (const id of extraKey.split('|')) {
+        if (folderOfFile(id) === selectedFolder) ids.add(id)
+      }
+    }
+    return [...ids]
+  }, [
+    extraKey,
+    overlayLayers,
+    selectedFolder,
+    selectedFolderLayer,
+    selectedId,
+    viewGraph.files,
+    viewGraph.folders,
+  ])
+  const selectionFocus = Boolean(selectedId || folderFocusIds.length > 0)
+  const hideMapRelations = mapping && relationMode === 'off'
+  const showExistingRelations =
+    !mapping || explainActive || relationMode === 'all'
+  const fileImportedBy = Boolean(importedBy && selectedId)
   const related = new Set(
-    selectedId
-      ? importedBy
+    hideMapRelations || (!showExistingRelations && !selectionFocus && relationMode !== 'changed')
+      ? []
+      : selectedId && showExistingRelations
+      ? fileImportedBy
         ? filesImporting(viewGraph.files, selectedId).map((file) => file.id)
         : (viewGraph.files.find((file) => file.id === selectedId)?.imports ?? [])
-      : [],
+      : folderFocusIds.length > 0 && showExistingRelations
+        ? viewGraph.files
+            .filter((file) => folderFocusIds.includes(file.id))
+            .flatMap((file) => file.imports)
+        : [],
   )
   const patchLinked = new Set<string>()
   for (const edge of plannedImports) {
     patchLinked.add(edge.from)
     patchLinked.add(edge.to)
+    if (mapping && relationMode === 'off') continue
+    if (mapping && relationMode === 'targeted') {
+      const focus = selectedId ? [selectedId] : folderFocusIds
+      if (!focus.includes(edge.from) && !focus.includes(edge.to)) continue
+    }
     if (!planned.has(edge.to) && !deleted.has(edge.to)) related.add(edge.to)
     if (!planned.has(edge.from) && !deleted.has(edge.from)) related.add(edge.from)
   }
@@ -510,18 +566,39 @@ export function World({
           />
         )
       })}
-      <RelationLines
-        selectedId={selectedId}
-        aimedRelation={aimedRelation}
-        files={viewGraph.files}
-        layout={viewLayout}
-        extras={ghosts}
-        plannedIds={plannedIds}
-        plannedEdges={plannedImports}
-        extraEdges={explainFocus?.relations ?? []}
-        fromAbove={mapping}
-        importedBy={importedBy}
-      />
+      {(!mapping ||
+        explainActive ||
+        relationMode === 'all' ||
+        relationMode === 'changed' ||
+        (relationMode === 'targeted' && selectionFocus)) && (
+        <RelationLines
+          selectedId={
+            mapping && (relationMode === 'all' || relationMode === 'changed')
+              ? null
+              : selectedId
+          }
+          aimedRelation={aimedRelation}
+          onAimRelation={mapping ? onAimRelation : undefined}
+          files={viewGraph.files}
+          layout={viewLayout}
+          extras={ghosts}
+          plannedIds={plannedIds}
+          plannedEdges={plannedImports}
+          extraEdges={explainFocus?.relations ?? []}
+          fromAbove={mapping}
+          importedBy={fileImportedBy}
+          focusIds={relationMode === 'targeted' ? folderFocusIds : []}
+          drawPlanned={
+            !mapping ||
+            explainActive ||
+            relationMode === 'all' ||
+            relationMode === 'changed'
+          }
+          drawExisting={
+            !mapping || explainActive || relationMode === 'all'
+          }
+        />
+      )}
       <Player
         layout={layout}
         mode={mode}

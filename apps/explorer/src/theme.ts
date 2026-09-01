@@ -90,29 +90,11 @@ export function fileHeight(lines: number) {
   )
 }
 
-export function fileColor(language: string) {
-  switch (language) {
-    case 'tsx':
-      return '#3f6f9a'
-    case 'ts':
-      return '#2f6d68'
-    case 'jsx':
-      return '#7d6aa3'
-    case 'js':
-    case 'mjs':
-    case 'cjs':
-      return '#6a5f8f'
-    case 'css':
-    case 'scss':
-      return '#8a5b33'
-    case 'json':
-      return '#7a6a38'
-    case 'html':
-      return '#6d4e38'
-    default:
-      return '#4a5160'
-  }
-}
+export {
+  DEFAULT_FILE_COLOR,
+  FILE_COLORS,
+  fileColor,
+} from './file-colors'
 
 export function dimColor(hex: string, amount = 0.32) {
   const value = hex.replace('#', '')
