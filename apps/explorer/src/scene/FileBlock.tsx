@@ -7,6 +7,7 @@ import type { FileNode } from '../types'
 import type { PlacedFile } from '../types'
 
 const SIDE_LABEL_PAD = 0.05
+const SIDE_LABEL_FOOT_PAD = 0.08
 const SIDE_LABEL_MIN_HEIGHT = CONFIG.eyeHeight * 2.5
 const SIDE_LABELS: { rotationY: number; axis: 'x' | 'z'; sign: 1 | -1 }[] = [
   { rotationY: 0, axis: 'z', sign: 1 },
@@ -296,13 +297,13 @@ export const FileBlock = memo(function FileBlock({
               return (
                 <Text
                   key={`${side.axis}:${side.sign}`}
-                  position={[x, -height / 2 + 0.22, z]}
+                  position={[x, -height / 2 + SIDE_LABEL_FOOT_PAD, z]}
                   rotation={[0, side.rotationY, 0]}
                   fontSize={0.22}
                   color={labelColor}
                   fillOpacity={opacity}
                   anchorX="center"
-                  anchorY="middle"
+                  anchorY="bottom"
                   maxWidth={face - 0.2}
                   overflowWrap="break-word"
                   outlineWidth={0.012}

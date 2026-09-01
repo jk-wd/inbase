@@ -1,125 +1,17 @@
 {
-  "updatedAt": "2026-09-01T12:09:34.199Z",
+  "updatedAt": "2026-09-01T12:22:39.342Z",
   "mode": "map",
   "island": {
-    "path": "apps/explorer/src/scene",
-    "name": "scene"
+    "path": null,
+    "name": "open ground"
   },
-  "lookingAt": {
-    "id": "apps/explorer/src/scene/Bridge.tsx",
-    "name": "Bridge.tsx",
-    "path": "apps/explorer/src/scene/Bridge.tsx",
-    "folder": "apps/explorer/src/scene"
-  },
-  "lookingAtFiles": [
-    {
-      "id": "apps/explorer/src/scene/Bridge.tsx",
-      "name": "Bridge.tsx",
-      "path": "apps/explorer/src/scene/Bridge.tsx",
-      "folder": "apps/explorer/src/scene"
-    }
-  ],
-  "selected": {
-    "id": "apps/explorer/src/scene/Bridge.tsx",
-    "name": "Bridge.tsx",
-    "path": "apps/explorer/src/scene/Bridge.tsx",
-    "folder": "apps/explorer/src/scene"
-  },
-  "filesOnIsland": [
-    {
-      "id": "apps/explorer/src/scene/Bridge.tsx",
-      "name": "Bridge.tsx",
-      "path": "apps/explorer/src/scene/Bridge.tsx",
-      "folder": "apps/explorer/src/scene"
-    },
-    {
-      "id": "apps/explorer/src/scene/collectMapBatches.ts",
-      "name": "collectMapBatches.ts",
-      "path": "apps/explorer/src/scene/collectMapBatches.ts",
-      "folder": "apps/explorer/src/scene"
-    },
-    {
-      "id": "apps/explorer/src/scene/DistantFileBlocks.tsx",
-      "name": "DistantFileBlocks.tsx",
-      "path": "apps/explorer/src/scene/DistantFileBlocks.tsx",
-      "folder": "apps/explorer/src/scene"
-    },
-    {
-      "id": "apps/explorer/src/scene/FileBlock.tsx",
-      "name": "FileBlock.tsx",
-      "path": "apps/explorer/src/scene/FileBlock.tsx",
-      "folder": "apps/explorer/src/scene"
-    },
-    {
-      "id": "apps/explorer/src/scene/FolderArea.tsx",
-      "name": "FolderArea.tsx",
-      "path": "apps/explorer/src/scene/FolderArea.tsx",
-      "folder": "apps/explorer/src/scene"
-    },
-    {
-      "id": "apps/explorer/src/scene/MapBatches.tsx",
-      "name": "MapBatches.tsx",
-      "path": "apps/explorer/src/scene/MapBatches.tsx",
-      "folder": "apps/explorer/src/scene"
-    },
-    {
-      "id": "apps/explorer/src/scene/MapSelectBorder.tsx",
-      "name": "MapSelectBorder.tsx",
-      "path": "apps/explorer/src/scene/MapSelectBorder.tsx",
-      "folder": "apps/explorer/src/scene"
-    },
-    {
-      "id": "apps/explorer/src/scene/MapView.tsx",
-      "name": "MapView.tsx",
-      "path": "apps/explorer/src/scene/MapView.tsx",
-      "folder": "apps/explorer/src/scene"
-    },
-    {
-      "id": "apps/explorer/src/scene/Player.tsx",
-      "name": "Player.tsx",
-      "path": "apps/explorer/src/scene/Player.tsx",
-      "folder": "apps/explorer/src/scene"
-    },
-    {
-      "id": "apps/explorer/src/scene/RelationLines.tsx",
-      "name": "RelationLines.tsx",
-      "path": "apps/explorer/src/scene/RelationLines.tsx",
-      "folder": "apps/explorer/src/scene"
-    },
-    {
-      "id": "apps/explorer/src/scene/SelectionController.tsx",
-      "name": "SelectionController.tsx",
-      "path": "apps/explorer/src/scene/SelectionController.tsx",
-      "folder": "apps/explorer/src/scene"
-    },
-    {
-      "id": "apps/explorer/src/scene/UserContextTracker.tsx",
-      "name": "UserContextTracker.tsx",
-      "path": "apps/explorer/src/scene/UserContextTracker.tsx",
-      "folder": "apps/explorer/src/scene"
-    },
-    {
-      "id": "apps/explorer/src/scene/walkLod.ts",
-      "name": "walkLod.ts",
-      "path": "apps/explorer/src/scene/walkLod.ts",
-      "folder": "apps/explorer/src/scene"
-    },
-    {
-      "id": "apps/explorer/src/scene/WalkLodTracker.tsx",
-      "name": "WalkLodTracker.tsx",
-      "path": "apps/explorer/src/scene/WalkLodTracker.tsx",
-      "folder": "apps/explorer/src/scene"
-    },
-    {
-      "id": "apps/explorer/src/scene/World.tsx",
-      "name": "World.tsx",
-      "path": "apps/explorer/src/scene/World.tsx",
-      "folder": "apps/explorer/src/scene"
-    }
-  ],
+  "lookingAt": null,
+  "lookingAtFiles": [],
+  "selected": null,
+  "filesOnIsland": [],
   "position": {
-    "x": -50.49,
-    "z": 208.82
+    "x": -89.21,
+    "z": 196.03
   },
   "showBranchChanges": true
 }
