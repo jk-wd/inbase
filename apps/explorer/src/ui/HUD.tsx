@@ -21,7 +21,9 @@ import {
   type WorkflowAction,
 } from '../types'
 import { findBlueprintNote, findBlueprintPointer } from '../userCreated'
-import { EyeIcon } from './EyeIcon'
+import type { BlueprintOverlayLayer } from '../userCreated'
+import { folderOfFile, folderParent } from '../layout'
+import { EyeIcon, FileIcon, FolderIcon } from './EyeIcon'
 import { beginKeyboardIsolation, shouldIgnoreShortcut } from '../keyboard'
 import type { DevTargetsState } from '../devTargets'
 
@@ -77,7 +79,8 @@ function ColorConnectHint({
         </>
       ) : null}
       . Aliases: <kbd>/red</kbd>, <kbd>/yellow</kbd>, <kbd>/green</kbd>,{' '}
-      <kbd>/purple</kbd>. <kbd>/blue</kbd> is the global blueprint, not a chat.
+      <kbd>/purple</kbd>. A color command with no extra text starts from the
+      enabled blueprint. <kbd>/blue</kbd> is the global blueprint, not a chat.
     </p>
   )
 }
@@ -103,6 +106,131 @@ function SessionSwatch({
           : undefined
       }
     />
+  )
+}
+
+function defaultAddLayerColor(
+  visible: string[],
+  current: string | null,
+) {
+  if (visible.length === 1) return visible[0]!
+  if (current && visible.includes(current)) return current
+  return visible[0] ?? current ?? GLOBAL_BLUEPRINT_COLOR.id
+}
+
+function AddItemModal({
+  kind,
+  parentLabel,
+  options,
+  visibleColors,
+  currentColor,
+  lockedColor = null,
+  onCommit,
+  onCancel,
+}: {
+  kind: 'file' | 'folder'
+  parentLabel: string
+  options: BlueprintOption[]
+  visibleColors: string[]
+  currentColor: string | null
+  lockedColor?: string | null
+  onCommit: (name: string, color: string) => boolean
+  onCancel: () => void
+}) {
+  const layerOptions = lockedColor
+    ? options.filter((option) => option.id === lockedColor)
+    : options
+  const [color, setColor] = useState(() =>
+    lockedColor ?? defaultAddLayerColor(visibleColors, currentColor),
+  )
+  const colorRef = useRef(color)
+  colorRef.current = lockedColor ?? color
+
+  return (
+    <div
+      className="hud-name-gate"
+      onClick={onCancel}
+    >
+      <div
+        className="hud-add-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={kind === 'folder' ? 'Add folder' : 'Add file'}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <NameInput
+          placeholder={kind === 'folder' ? 'Folder name' : 'File name'}
+          fallbackName={kind === 'folder' ? 'New folder' : 'New file'}
+          commitOnOutside={false}
+          onCommit={(name) => {
+            if (!onCommit(name, colorRef.current)) return
+          }}
+          onCancel={onCancel}
+        />
+        <p className="hud-add-modal-parent">in {parentLabel}</p>
+        {layerOptions.length > 0 && (
+          <div
+            className="hud-add-modal-layers"
+            role="radiogroup"
+            aria-label="Layer"
+          >
+            {layerOptions.map((option) => {
+              const selected = option.id === (lockedColor ?? color)
+              return (
+                <button
+                  key={option.id}
+                  className={
+                    option.kind === 'global'
+                      ? 'hud-button hud-blueprint-option'
+                      : 'hud-button hud-blueprint-option hud-blueprint-option-swatch'
+                  }
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  data-active={selected ? 'true' : undefined}
+                  disabled={Boolean(lockedColor)}
+                  aria-label={
+                    option.kind === 'global'
+                      ? lockedColor
+                        ? 'Adding on the global layer'
+                        : 'Put on the global layer'
+                      : lockedColor
+                        ? `Adding on the ${option.name} layer`
+                        : `Put on the ${option.name} layer`
+                  }
+                  title={
+                    option.kind === 'global'
+                      ? lockedColor
+                        ? 'This blueprint folder is on the global layer'
+                        : 'Global layer'
+                      : lockedColor
+                        ? `This blueprint folder is on the ${option.name} layer`
+                        : `${option.name} layer`
+                  }
+                  style={
+                    {
+                      '--session-color': option.hex,
+                    } as CSSProperties
+                  }
+                  onClick={() => {
+                    if (lockedColor) return
+                    setColor(option.id)
+                  }}
+                >
+                  <SessionSwatch
+                    colorHex={option.hex}
+                    className="hud-session-swatch hud-blueprint-swatch"
+                  />
+                  {option.kind === 'global' ? (
+                    <span className="hud-blueprint-select-label">Global</span>
+                  ) : null}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -710,6 +838,25 @@ function ExplainButton({
   )
 }
 
+function InfoKindTitle({
+  kind,
+  children,
+}: {
+  kind: 'file' | 'folder'
+  children: ReactNode
+}) {
+  return (
+    <span className="hud-info-kind-title">
+      {kind === 'folder' ? <FolderIcon /> : <FileIcon />}
+      {children}
+    </span>
+  )
+}
+
+function infoBlueprintStyle(hex: string | null | undefined): CSSProperties | undefined {
+  return hex ? ({ '--blueprint-color': hex } as CSSProperties) : undefined
+}
+
 function PanelChrome({
   title,
   subtitle,
@@ -962,7 +1109,6 @@ type SessionPanelProps = {
 function SessionPanel({
   intent,
   focused,
-  naming,
   nextAttachSession = null,
   onFocus,
   onWorkflowAction,
@@ -1653,22 +1799,27 @@ function explorerInstructions({
           id: 'blueprint-select',
           keys: ['Blueprint colors'],
           label:
-            'All colors stay visible; the selected color is where new files go',
+            'Selected colors stay visible; click again to hide. New files go on the last color you selected',
         },
         {
           id: 'blueprint-toggle',
           keys: ['Hide/Show'],
-          label: 'Hide this color; other blueprint colors stay visible',
+          label: 'Hide or show every selected blueprint color',
+        },
+        {
+          id: 'blueprint-opacity',
+          keys: ['Opacity'],
+          label: 'How strong every blueprint overlay is',
         },
         {
           id: 'blueprint-clear',
           keys: ['Clear'],
-          label: 'Remove every planned file and folder',
+          label: 'Remove planned files and folders on the selected colors',
         },
         {
           id: 'blueprint-cleanup',
           keys: ['Cleanup'],
-          label: 'Drop blueprint files and folders that already exist',
+          label: 'Drop existing files and folders on the selected colors',
         },
         { id: 'toggle-map', keys: ['M'], label: 'Toggle map' },
         {
@@ -1740,22 +1891,27 @@ function explorerInstructions({
           id: 'blueprint-select',
           keys: ['Blueprint colors'],
           label:
-            'All colors stay visible; the selected color is where new files go',
+            'Selected colors stay visible; click again to hide. New files go on the last color you selected',
         },
         {
           id: 'blueprint-toggle',
           keys: ['Hide/Show'],
-          label: 'Hide this color; other blueprint colors stay visible',
+          label: 'Hide or show every selected blueprint color',
+        },
+        {
+          id: 'blueprint-opacity',
+          keys: ['Opacity'],
+          label: 'How strong every blueprint overlay is',
         },
         {
           id: 'blueprint-clear',
           keys: ['Clear'],
-          label: 'Remove every planned file and folder',
+          label: 'Remove planned files and folders on the selected colors',
         },
         {
           id: 'blueprint-cleanup',
           keys: ['Cleanup'],
-          label: 'Drop blueprint files and folders that already exist',
+          label: 'Drop existing files and folders on the selected colors',
         },
         { id: 'map-walk', keys: ['M'], label: 'Back to walk' },
       ],
@@ -1771,7 +1927,10 @@ type HUDProps = {
   selectedTick?: number
   inspectTick?: number
   selectedFolder?: string | null
+  selectedFolderLayer?: string | null
+  overlayLayers?: BlueprintOverlayLayer[]
   canDeleteSelected?: boolean
+  onSelectFolder?: (folderPath: string | null, layer?: string | null) => void
   aimedRelation: AimedRelation | null
   aimedFileId?: string | null
   intent: AgentIntent
@@ -1800,11 +1959,11 @@ type HUDProps = {
   hasChangeSet?: boolean
   onToggleChangePathsOnly?: () => void
   naming?: boolean
-  namingIsland?: boolean
-  onCommitName?: (name: string) => void
-  onCancelName?: () => void
-  onCommitIslandName?: (name: string) => void
-  onCancelIslandName?: () => void
+  addingKind?: 'file' | 'folder' | null
+  addingParent?: string | null
+  addingLockedColor?: string | null
+  onCommitAdd?: (name: string, color: string) => boolean
+  onCancelAdd?: () => void
   blueprintFunctions?: PatchSymbolAddition[]
   blueprintVariables?: PatchSymbolAddition[]
   blueprintImports?: PatchImportAddition[]
@@ -1835,8 +1994,8 @@ type HUDProps = {
     name?: string
     color?: string
   }) => void
-  onMapAddFile?: (folderPath: string) => void
-  onMapAddFolder?: (folderPath: string) => void
+  onMapAddFile?: (folderPath: string, color?: string) => void
+  onMapAddFolder?: (folderPath: string, color?: string) => void
   onRenameCreatedFile?: (fileId: string, name: string) => string | null
   onInspectFile?: (fileId: string) => void
   onInspectBlock?: (fileId: string) => void
@@ -1845,14 +2004,16 @@ type HUDProps = {
     path: string
     name?: string
   }) => void
-  blueprintHidden?: boolean
+  blueprintOpacity?: number
+  onBlueprintOpacityChange?: (opacity: number) => void
   blueprintHasContent?: boolean
   blueprintCanCleanup?: boolean
   blueprintColor?: string | null
+  blueprintColors?: string[]
   blueprintOptions?: BlueprintOption[]
   blueprintColorPointers?: BlueprintColorOption[]
   onSelectBlueprintColor?: (color: string) => void
-  onToggleBlueprintHidden?: () => void
+  onToggleBlueprintColor?: (color: string) => void
   onClearBlueprint?: () => void
   onCleanupBlueprint?: () => void
   devTargets?: DevTargetsState
@@ -1867,7 +2028,10 @@ export function HUD({
   selectedTick = 0,
   inspectTick = 0,
   selectedFolder = null,
+  selectedFolderLayer = null,
+  overlayLayers = [],
   canDeleteSelected = false,
+  onSelectFolder,
   aimedRelation,
   aimedFileId = null,
   intent,
@@ -1892,11 +2056,11 @@ export function HUD({
   hasChangeSet = false,
   onToggleChangePathsOnly,
   naming = false,
-  namingIsland = false,
-  onCommitName,
-  onCancelName,
-  onCommitIslandName,
-  onCancelIslandName,
+  addingKind = null,
+  addingParent = null,
+  addingLockedColor = null,
+  onCommitAdd,
+  onCancelAdd,
   blueprintFunctions = [],
   blueprintVariables = [],
   blueprintImports = [],
@@ -1918,14 +2082,16 @@ export function HUD({
   onInspectFile,
   onInspectBlock,
   onExplainTarget,
-  blueprintHidden = false,
+  blueprintOpacity = 0.55,
+  onBlueprintOpacityChange,
   blueprintHasContent = false,
   blueprintCanCleanup = false,
   blueprintColor = null,
+  blueprintColors = [],
   blueprintOptions = [],
   blueprintColorPointers = [],
   onSelectBlueprintColor,
-  onToggleBlueprintHidden,
+  onToggleBlueprintColor,
   onClearBlueprint,
   onCleanupBlueprint,
   devTargets,
@@ -1935,13 +2101,68 @@ export function HUD({
   const selectedFolderNode = graph.folders.find(
     (folder) => folder.path === selectedFolder,
   )
-  const folderFiles = selectedFolderNode
-    ? graph.files.filter(
-        (file) =>
-          selectedFolderNode.files.includes(file.id) ||
-          file.folder === selectedFolderNode.path,
-      )
+  const selectedBlueprintLayer = selectedFolderLayer
+    ? overlayLayers.find((layer) => layer.id === selectedFolderLayer)
+    : undefined
+  const selectedBlueprintFolder =
+    selectedFolder && selectedBlueprintLayer
+      ? selectedBlueprintLayer.folders[selectedFolder]
+      : undefined
+  const blueprintFolderFiles = selectedBlueprintLayer
+    ? Object.keys(selectedBlueprintLayer.files)
+        .filter((id) => folderOfFile(id) === selectedFolder)
+        .map((id) => {
+          const file = graph.files.find((item) => item.id === id)
+          return {
+            id,
+            name: file?.name ?? id.split('/').pop() ?? id,
+            userCreated: file?.userCreated,
+          }
+        })
+        .sort((left, right) => left.name.localeCompare(right.name))
     : []
+  const blueprintFolderChildren = selectedBlueprintLayer
+    ? Object.values(selectedBlueprintLayer.folders)
+        .filter(
+          (folder) =>
+            folder.path !== selectedFolder &&
+            folderParent(folder.path) === selectedFolder,
+        )
+        .map((folder) => ({ path: folder.path, name: folder.name }))
+        .sort((left, right) => left.name.localeCompare(right.name))
+    : []
+  const folderFiles = selectedBlueprintLayer
+    ? blueprintFolderFiles
+    : selectedFolderNode
+      ? graph.files.filter(
+          (file) =>
+            selectedFolderNode.files.includes(file.id) ||
+            file.folder === selectedFolderNode.path,
+        )
+      : []
+  const folderChildren = selectedBlueprintLayer
+    ? blueprintFolderChildren
+    : selectedFolderNode
+      ? graph.folders
+          .filter((folder) => folder.parent === selectedFolderNode.path)
+          .map((folder) => ({ path: folder.path, name: folder.name }))
+      : []
+  const folderInfoName =
+    selectedFolderNode?.name ??
+    selectedBlueprintFolder?.name ??
+    selectedFolder ??
+    ''
+  const selectedFileBlueprintHex =
+    selected?.colorHex ??
+    [...overlayLayers]
+      .reverse()
+      .find((layer) => selected && layer.files[selected.id])?.colorHex ??
+    null
+  const selectedFolderBlueprintHex = selectedBlueprintLayer?.colorHex ?? null
+  const blueprintOptionName = selectedFolderLayer
+    ? blueprintOptions.find((option) => option.id === selectedFolderLayer)
+        ?.name
+    : null
   const aimed = graph.files.find((file) => file.id === aimedRelation?.flyTo)
   const importers = selected
     ? graph.files.filter((file) => file.imports.includes(selected.id))
@@ -2110,7 +2331,7 @@ export function HUD({
 
   useEffect(() => {
     infoPanelRef.current?.scrollTo({ top: 0 })
-  }, [selectedId, selectedFolder])
+  }, [selectedId, selectedFolder, selectedFolderLayer])
 
   useEffect(() => {
     if (mode === 'walk') return
@@ -2126,7 +2347,7 @@ export function HUD({
 
   useEffect(() => {
     if (selectedFolder) setInfoVisible(true)
-  }, [selectedFolder])
+  }, [selectedFolder, selectedFolderLayer])
 
   useEffect(() => {
     if (!locked) return
@@ -2139,7 +2360,9 @@ export function HUD({
     onCancelImportPick?.()
   }, [importPickActive, infoVisible, onCancelImportPick])
 
-  const infoOpen = infoVisible && Boolean(selected || selectedFolderNode)
+  const infoOpen =
+    infoVisible &&
+    Boolean(selected || selectedFolderNode || selectedBlueprintFolder)
 
   useEffect(() => {
     if (infoOpen) document.exitPointerLock()
@@ -2256,23 +2479,6 @@ export function HUD({
     canShowBranchChanges,
   })
   const currentInstructionView: InstructionView = mapping ? 'map' : 'walk'
-  const namingFolder = Boolean(
-    namingIsland && onCommitIslandName && onCancelIslandName,
-  )
-  const namingFile = Boolean(
-    naming && !namingIsland && onCommitName && onCancelName,
-  )
-  const namingCommit = namingFolder
-    ? onCommitIslandName
-    : namingFile
-      ? onCommitName
-      : undefined
-  const namingCancel = namingFolder
-    ? onCancelIslandName
-    : namingFile
-      ? onCancelName
-      : undefined
-
   return (
     <div className="hud">
       {mode === 'walk' && !locked && walkIntro && !naming && (
@@ -2293,15 +2499,20 @@ export function HUD({
         </div>
       )}
 
-      {namingCommit && namingCancel && (
-        <div className="hud-name-gate">
-          <NameInput
-            placeholder={namingFolder ? 'Folder name' : 'File name'}
-            fallbackName={namingFolder ? 'New folder' : 'New file'}
-            onCommit={namingCommit}
-            onCancel={namingCancel}
-          />
-        </div>
+      {addingKind && addingParent && onCommitAdd && onCancelAdd && (
+        <AddItemModal
+          key={`${addingKind}:${addingParent}:${addingLockedColor ?? ''}`}
+          kind={addingKind}
+          parentLabel={
+            addingParent === '.' ? graph.targetName : addingParent
+          }
+          options={blueprintOptions}
+          visibleColors={blueprintColors}
+          currentColor={blueprintColor}
+          lockedColor={addingLockedColor}
+          onCommit={onCommitAdd}
+          onCancel={onCancelAdd}
+        />
       )}
 
       {mode === 'walk' && locked && (
@@ -2429,17 +2640,21 @@ export function HUD({
         <aside
           className="hud-panel hud-panel-info"
           data-minimized={infoMinimized}
+          data-blueprint={selectedFileBlueprintHex ? 'true' : undefined}
+          style={infoBlueprintStyle(selectedFileBlueprintHex)}
         >
           <PanelChrome
             title={
-              canRenameSelected ? (
-                <InfoNameField
-                  name={selected.name}
-                  onRename={renameSelectedFile}
-                />
-              ) : (
-                selected.name
-              )
+              <InfoKindTitle kind="file">
+                {canRenameSelected ? (
+                  <InfoNameField
+                    name={selected.name}
+                    onRename={renameSelectedFile}
+                  />
+                ) : (
+                  selected.name
+                )}
+              </InfoKindTitle>
             }
             minimized={infoMinimized}
             onMinimize={() => setInfoMinimized((current) => !current)}
@@ -2822,7 +3037,13 @@ export function HUD({
               <ul>
                 {importers.map((file) => (
                   <li key={file.id} title={file.id}>
-                    {file.name}
+                    <button
+                      className="hud-item-select"
+                      type="button"
+                      onClick={() => onInspectBlock?.(file.id)}
+                    >
+                      {file.name}
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -2833,14 +3054,18 @@ export function HUD({
             <ul>
               {selected.imports.map((id) => (
                 <li key={id}>
-                  <span
+                  <button
                     className={
-                      intendedImportFrom.has(id) ? 'hud-intended' : undefined
+                      intendedImportFrom.has(id)
+                        ? 'hud-item-select hud-intended'
+                        : 'hud-item-select'
                     }
+                    type="button"
                     title={id}
+                    onClick={() => onInspectBlock?.(id)}
                   >
                     {fileBase(id)}
-                  </span>
+                  </button>
                   {canEditBlueprint && intendedImportFrom.has(id) && (
                     <button
                       className="hud-item-remove"
@@ -2910,13 +3135,24 @@ export function HUD({
         </aside>
       )}
 
-      {!selected && selectedFolderNode && infoVisible && (
+      {!selected &&
+        (selectedFolderNode || selectedBlueprintFolder) &&
+        infoVisible && (
         <aside
           className="hud-panel hud-panel-info"
           data-minimized={infoMinimized}
+          data-blueprint={selectedFolderBlueprintHex ? 'true' : undefined}
+          style={infoBlueprintStyle(selectedFolderBlueprintHex)}
         >
           <PanelChrome
-            title={selectedFolderNode.name}
+            title={
+              <InfoKindTitle kind="folder">{folderInfoName}</InfoKindTitle>
+            }
+            subtitle={
+              selectedBlueprintLayer
+                ? `${blueprintOptionName ?? 'Blueprint'} template`
+                : undefined
+            }
             minimized={infoMinimized}
             onMinimize={() => setInfoMinimized((current) => !current)}
             onClose={() => {
@@ -2924,7 +3160,7 @@ export function HUD({
               setInfoMinimized(false)
             }}
             onExplain={
-              onExplainTarget
+              onExplainTarget && selectedFolderNode
                 ? () =>
                     onExplainTarget({
                       kind: 'folder',
@@ -2932,26 +3168,71 @@ export function HUD({
                     })
                 : undefined
             }
-            explainLabel={`Explain ${selectedFolderNode.name}`}
+            explainLabel={`Explain ${folderInfoName}`}
           />
           {!infoMinimized && (
             <div ref={infoPanelRef} className="hud-panel-body">
           <p className="path">
-            {selectedFolderNode.path === '.'
+            {(selectedFolderNode?.path ?? selectedFolder) === '.'
               ? graph.targetName
-              : selectedFolderNode.path}
+              : (selectedFolderNode?.path ?? selectedFolder)}
           </p>
           <p>
             {folderFiles.length} {folderFiles.length === 1 ? 'file' : 'files'}
+            {selectedBlueprintLayer ? ' on this blueprint' : ''}
+            {folderChildren.length > 0
+              ? ` · ${folderChildren.length} ${
+                  folderChildren.length === 1 ? 'folder' : 'folders'
+                }`
+              : ''}
           </p>
+          {folderChildren.length > 0 && (
+            <>
+              <div className="hud-section-title">Folders</div>
+              <ul>
+                {folderChildren.map((folder) => (
+                  <li key={folder.path}>
+                    {onSelectFolder ? (
+                      <button
+                        className="hud-item-select hud-item-kind"
+                        type="button"
+                        onClick={() =>
+                          onSelectFolder(folder.path, selectedFolderLayer)
+                        }
+                      >
+                        <FolderIcon />
+                        <span>{folder.name}</span>
+                      </button>
+                    ) : (
+                      <span className="hud-item-kind">
+                        <FolderIcon />
+                        <span>{folder.name}</span>
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
           <div className="hud-section-title">Files</div>
           {folderFiles.length === 0 ? (
-            <p>No files in this folder</p>
+            <p>
+              {selectedBlueprintLayer
+                ? 'No files on this blueprint'
+                : 'No files in this folder'}
+            </p>
           ) : (
             <ul>
               {folderFiles.map((file) => (
                 <li key={file.id}>
-                  <span>{file.name}</span>
+                  <button
+                    className="hud-item-select hud-item-kind"
+                    type="button"
+                    onClick={() => onInspectBlock?.(file.id)}
+                  >
+                    <FileIcon />
+                    <span>{file.name}</span>
+                  </button>
                   {(onExplainTarget ||
                     canInspectFile(file.id, file.userCreated)) && (
                     <div className="hud-item-actions">
@@ -2979,30 +3260,43 @@ export function HUD({
               ))}
             </ul>
           )}
-          {canPlace && onToggleBlueprintPointer && (
+          {canPlace && onToggleBlueprintPointer && (selectedFolderNode || selectedFolder) && (
             <PointColorControl
-              target={{ kind: 'folder', path: selectedFolderNode.path }}
+              target={{
+                kind: 'folder',
+                path: selectedFolderNode?.path ?? selectedFolder ?? '',
+              }}
               colorPointers={blueprintColorPointers}
               currentColorId={blueprintColor}
               idleLabel="Point to folder"
               pointedLabel="Stop pointing"
-              disabled={naming || selectedFolderNode.path.startsWith('draft:')}
+              disabled={
+                naming ||
+                (selectedFolderNode?.path ?? selectedFolder ?? '').startsWith(
+                  'draft:',
+                )
+              }
               onToggle={(color) =>
                 onToggleBlueprintPointer({
                   kind: 'folder',
-                  path: selectedFolderNode.path,
+                  path: selectedFolderNode?.path ?? selectedFolder ?? '',
                   color,
                 })
               }
             />
           )}
-          {canPlace && mapping && onMapAddFile && onMapAddFolder && (
+          {canPlace && mapping && onMapAddFile && onMapAddFolder && selectedFolder && (
             <div className="hud-decide hud-map-blueprint">
               <button
                 className="hud-button hud-button-approve"
                 type="button"
                 disabled={naming}
-                onClick={() => onMapAddFile(selectedFolderNode.path)}
+                onClick={() =>
+                  onMapAddFile(
+                    selectedFolderNode?.path ?? selectedFolder,
+                    selectedFolderLayer ?? undefined,
+                  )
+                }
               >
                 Add file
               </button>
@@ -3010,7 +3304,12 @@ export function HUD({
                 className="hud-button"
                 type="button"
                 disabled={naming}
-                onClick={() => onMapAddFolder(selectedFolderNode.path)}
+                onClick={() =>
+                  onMapAddFolder(
+                    selectedFolderNode?.path ?? selectedFolder,
+                    selectedFolderLayer ?? undefined,
+                  )
+                }
               >
                 Add folder
               </button>
@@ -3092,14 +3391,15 @@ export function HUD({
 
       <div className="hud-bottom">
         <div className="hud-bottom-actions">
-          {onSelectBlueprintColor && blueprintOptions.length > 0 && (
+          {(onToggleBlueprintColor || onSelectBlueprintColor) &&
+            blueprintOptions.length > 0 && (
             <div
               className="hud-blueprint-select"
-              role="radiogroup"
+              role="group"
               aria-label="Blueprint"
             >
               {blueprintOptions.map((option) => {
-                const selected = (blueprintColor ?? 'global') === option.id
+                const selected = blueprintColors.includes(option.id)
                 return (
                   <button
                     key={option.id}
@@ -3109,25 +3409,37 @@ export function HUD({
                         : 'hud-button hud-blueprint-option hud-blueprint-option-swatch'
                     }
                     type="button"
-                    role="radio"
+                    role="checkbox"
                     aria-checked={selected}
-                    data-active={selected}
+                    data-active={selected ? 'true' : undefined}
                     aria-label={
                       option.kind === 'global'
-                        ? 'Global blueprint'
-                        : `${option.name} session blueprint`
+                        ? selected
+                          ? 'Hide global blueprint'
+                          : 'Show global blueprint'
+                        : selected
+                          ? `Hide ${option.name} session blueprint`
+                          : `Show ${option.name} session blueprint`
                     }
                     title={
                       option.kind === 'global'
-                        ? 'Place on the global blueprint. All colors stay visible.'
-                        : `Place on the ${option.name} blueprint. All colors stay visible.`
+                        ? selected
+                          ? 'Hide the global blueprint. Click again to show it.'
+                          : 'Show the global blueprint. New files go here.'
+                        : selected
+                          ? `Hide the ${option.name} blueprint. Click again to show it.`
+                          : `Show the ${option.name} blueprint. New files go here.`
                     }
                     style={
                       {
                         '--session-color': option.hex,
                       } as CSSProperties
                     }
-                    onClick={() => onSelectBlueprintColor(option.id)}
+                    onClick={() =>
+                      (onToggleBlueprintColor ?? onSelectBlueprintColor)?.(
+                        option.id,
+                      )
+                    }
                   >
                     <SessionSwatch
                       colorHex={option.hex}
@@ -3141,28 +3453,36 @@ export function HUD({
               })}
             </div>
           )}
-          {onToggleBlueprintHidden && (
-            <button
-              className="hud-button"
-              type="button"
-              data-active={!blueprintHidden}
-              aria-label={blueprintHidden ? 'Show blueprint' : 'Hide blueprint'}
-              title={
-                blueprintHidden
-                  ? 'Show this blueprint overlay'
-                  : 'Hide this blueprint overlay; other colors stay visible'
+          <label
+            className="hud-button hud-blueprint-opacity"
+            title="Blueprint overlay opacity"
+          >
+            <span className="hud-blueprint-opacity-label">Opacity</span>
+            <input
+              className="hud-blueprint-opacity-slider"
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={Math.round(blueprintOpacity * 100)}
+              aria-label="Blueprint overlay opacity"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(blueprintOpacity * 100)}
+              onChange={(event) =>
+                onBlueprintOpacityChange?.(Number(event.target.value) / 100)
               }
-              onClick={onToggleBlueprintHidden}
-            >
-              {blueprintHidden ? 'Show' : 'Hide'}
-            </button>
-          )}
+            />
+            <span className="hud-blueprint-opacity-value">
+              {Math.round(blueprintOpacity * 100)}%
+            </span>
+          </label>
           {onClearBlueprint && (
             <button
               className="hud-button"
               type="button"
-              aria-label="Clear blueprint"
-              title="Remove every planned file, folder, and symbol"
+              aria-label="Clear selected blueprints"
+              title="Remove planned files, folders, and symbols on the selected colors"
               disabled={!blueprintHasContent}
               onClick={onClearBlueprint}
             >
@@ -3173,8 +3493,8 @@ export function HUD({
             <button
               className="hud-button"
               type="button"
-              aria-label="Cleanup blueprint"
-              title="Remove blueprint files and folders that already exist"
+              aria-label="Cleanup selected blueprints"
+              title="Remove existing files and folders on the selected colors"
               disabled={!blueprintCanCleanup}
               onClick={onCleanupBlueprint}
             >

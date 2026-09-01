@@ -17,14 +17,14 @@ Inbase is a structured way to collaborate with an LLM. It visualizes the codebas
 
 You draw the intended change on a map of the real codebase before the model writes a file. That drawing is a **blueprint**: planned files, folders, functions, variables, imports, notes, and pointers, laid on the existing code. The LLM must follow that layout.
 
-The model reads the blueprint, reports a plan that matches it, and **stops**. You run the work from Cursor with `/accept`, one map change per command. Inbase records each one as a patch on the map. If a proposal is wrong, change the blueprint or Stop.
+The model reads the blueprint, says what it sees (`I see on the blueprint ...`) so you can confirm the reading, reports a plan that matches it, and **stops**. You run the work from Cursor with `/accept`, one map change per command. Inbase records each one as a patch on the map. If a proposal is wrong, change the blueprint or Stop.
 
 Blueprints have two layers:
 
 - **Global (blue):** shared by every chat. Put structure here that every session should follow.
 - **Session (coral, amber, lime, orange, violet):** local to one Cursor chat. Put the work for that chat here.
 
-Planned files stay on the map after they exist on disk. Hide, clear, or clean them up when you are done. When a session finishes, Inbase discards its slot and opens a new empty one. The global blueprint stays.
+Planned files stay on the map after they exist on disk. Hide a color with its chip, or clear or clean them up when you are done. When a session finishes, Inbase discards its slot and opens a new empty one. The global blueprint stays.
 
 Inbase does not call a model. The coding loop works in **Cursor**. `inbase init` installs a skill so the agent uses the map instead of editing files on its own.
 
@@ -130,7 +130,7 @@ Reading the map:
 
 A regular Cursor chat connects to the next unconnected slot (oldest first). Inbase skips sessions that have an LLM. The map window does not need focus. The cap is 5 connected chats.
 
-Type `/coral add a login page` (or another color) to skip the queue and attach to that slot. The text after the command is the request.
+Type `/coral` (or another color) to skip the queue and attach to that slot. With no text after the command, the agent starts from the enabled blueprint only: create those files and structure, and ask if it needs more information. Add a request after the command, like `/coral add a login page`, when you want extra instruction.
 
 When a session finishes, Inbase discards it and opens a new empty slot. The global blueprint stays. Restarting the visualizer discards leftover sessions and opens 5 new empty slots.
 
@@ -140,7 +140,7 @@ Use `/skipinbase [request]` to work outside the map. If Inbase is not running, s
 
 The blueprint is the spatial plan the LLM must follow. Draw it before a chat connects, or keep placing after the chat has attached.
 
-Pick a color with the chips at the bottom of the HUD. **Global** (blue) is shared across sessions. A session color is local to that chat. All colors stay visible. New files go on the selected color.
+Pick colors with the chips at the bottom of the HUD. **Global** (blue) is shared across sessions. A session color is local to that chat. Selected colors stay visible; click a selected chip to hide it, and click again to show it. New files go on the last color you selected. Clear and cleanup apply to every selected color.
 
 Right-click the map to create a file or folder on the selected blueprint, or to point at a folder.
 
@@ -152,9 +152,8 @@ Open a file's **info panel** (double-click in walk, click in map) to add **funct
 
 The LLM treats an enabled blueprint as leading. It creates those paths and symbols, including ones that are not on disk yet. The agent may edit existing files when the feature needs them. Extra new files that are not in the blueprint are a deviation. The agent must ask before it reports a plan that differs.
 
-Each color has three controls:
+Each color has two controls besides the chip:
 
-- **Hide / Show:** hide this color's overlay. Other colors stay visible.
 - **Clear:** remove every planned file, folder, and symbol on this color.
 - **Cleanup:** drop blueprint files and folders that exist on disk. Planned items that are missing stay.
 
@@ -166,9 +165,9 @@ Each color has three controls:
 </p>
 
 1. Draw a blueprint, then open a Cursor chat. Skip the drawing if the chat request is enough.
-2. Type a change request, or a color command like `/coral add a settings page`.
+2. Type `/coral` (or another color) to connect. That is enough when a blueprint is already on the map. Add a request after the command, like `/coral add a settings page`, when you want extra instruction.
 3. The chat attaches to a slot. The HUD shows **LLM connected** on that color.
-4. The agent reads the global blueprint, that session's local blueprint, and the request, then reports a plan on the map.
+4. The agent reads the global blueprint, that session's local blueprint, and any request. It says what it sees (`I see on the blueprint ...`) so you can confirm the reading. With no request, it plans only from the blueprint: create those files and structure. It can ask if it needs more information.
 5. It **stops**. The plan waits for `/accept`.
 
 The chat request does not override an enabled blueprint. If they conflict, the agent asks before planning.
@@ -297,7 +296,7 @@ The in-app **Instructions** overlay (bottom of the HUD) lists the same controls 
 | `inbase explain report --step "..."` | Publish explanation steps and map focus |
 | `inbase explain stop` | Exit explain mode |
 
-The Cursor skill runs session commands (`attach`, `wait-for-blueprint`, `report-plan`, `go`, `accept`, `propose-patch`, `explain`). You do not need to run them.
+The Cursor skill runs session commands (`attach`, `read-blueprint`, `report-plan`, `go`, `accept`, `propose-patch`, `explain`). You do not need to run them.
 
 ## Editor support
 

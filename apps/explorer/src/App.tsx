@@ -74,7 +74,8 @@ import {
   toggleBlueprintPointer,
   withBlueprintIntent,
   withUserCreatedGraph,
-  withUserCreatedLayout,
+  layoutBlueprintLayers,
+  mergeOverlayOnlyFolders,
 } from './userCreated'
 import {
   isPatchPreview,
@@ -100,7 +101,9 @@ import {
   type UserCreatedIsland,
   type ViewMode,
   type WorkflowAction,
+  type WorldLayout,
 } from './types'
+import { BLUEPRINT_OVERLAY } from './theme'
 
 function emptySharedBlueprint(): SharedBlueprint {
   return {
@@ -324,9 +327,123 @@ function visibleItemsForBlueprint(
   }
 }
 
+function withBlueprintHidden(
+  current: { global: SharedBlueprint; locals: LocalBlueprint[] },
+  color: string,
+  hidden: boolean,
+  options: BlueprintOption[],
+): { global: SharedBlueprint; locals: LocalBlueprint[] } {
+  if (color === GLOBAL_BLUEPRINT_COLOR.id) {
+    return {
+      global: { ...current.global, hidden },
+      locals: current.locals,
+    }
+  }
+  const existing = current.locals.find((item) => item.color === color)
+  if (existing) {
+    return {
+      global: current.global,
+      locals: current.locals.map((item) =>
+        item.color === color ? { ...item, hidden } : item,
+      ),
+    }
+  }
+  const option = options.find((item) => item.id === color)
+  return {
+    global: current.global,
+    locals: [
+      ...current.locals,
+      {
+        color,
+        colorName: option?.name || color,
+        colorHex: option?.hex || '#6b7280',
+        sessionId: option?.sessionId || '',
+        ...emptySharedBlueprint(),
+        hidden,
+      },
+    ],
+  }
+}
+
+function emptiedBlueprint<T extends SharedBlueprint>(current: T): T {
+  return {
+    ...current,
+    enabled: false,
+    userCreatedBlocks: [],
+    userCreatedIslands: [],
+    addedFunctions: [],
+    addedVariables: [],
+    addedImports: [],
+    notes: [],
+    pointers: [],
+  }
+}
+
+function cleanedBlueprint<T extends SharedBlueprint>(
+  current: T,
+  files: Set<string>,
+  folders: Set<string>,
+): T {
+  const nextBlocks = current.userCreatedBlocks.filter(
+    (block) => block.naming || !files.has(block.id),
+  )
+  const nextIslands = current.userCreatedIslands.filter(
+    (island) => island.naming || !folders.has(island.path),
+  )
+  const removed = new Set(
+    current.userCreatedBlocks
+      .filter((block) => !block.naming && files.has(block.id))
+      .map((block) => block.id),
+  )
+  const nextFunctions = current.addedFunctions.filter(
+    (item) => !removed.has(item.file),
+  )
+  const nextVariables = current.addedVariables.filter(
+    (item) => !removed.has(item.file),
+  )
+  const nextImports = current.addedImports.filter(
+    (item) => !removed.has(item.file),
+  )
+  const notes = dropBlueprintFileNotes(current.notes, removed)
+  return {
+    ...current,
+    enabled: blueprintLiveEnabled(
+      nextBlocks,
+      nextIslands,
+      nextFunctions,
+      nextVariables,
+      nextImports,
+      notes,
+      current.pointers,
+    ),
+    userCreatedBlocks: nextBlocks,
+    userCreatedIslands: nextIslands,
+    addedFunctions: nextFunctions,
+    addedVariables: nextVariables,
+    addedImports: nextImports,
+    notes,
+  }
+}
+
+function withPatchedBlueprint(
+  current: { global: SharedBlueprint; locals: LocalBlueprint[] },
+  color: string,
+  patch: (blueprint: SharedBlueprint) => SharedBlueprint,
+): { global: SharedBlueprint; locals: LocalBlueprint[] } {
+  if (color === GLOBAL_BLUEPRINT_COLOR.id) {
+    return { global: patch(current.global), locals: current.locals }
+  }
+  return {
+    global: current.global,
+    locals: current.locals.map((item) =>
+      item.color === color ? { ...item, ...patch(item) } : item,
+    ),
+  }
+}
+
 function collectMapBlueprints(input: {
   selectedColor: string
-  selectedHidden: boolean
+  visibleColors: ReadonlySet<string>
   selectedBlocks: UserCreatedBlock[]
   selectedIslands: UserCreatedIsland[]
   selectedFunctions: PatchSymbolAddition[]
@@ -358,10 +475,7 @@ function collectMapBlueprints(input: {
     {
       id: GLOBAL_BLUEPRINT_COLOR.id,
       hex: GLOBAL_BLUEPRINT_COLOR.hex,
-      hidden:
-        input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
-          ? input.selectedHidden
-          : input.global.hidden,
+      hidden: !input.visibleColors.has(GLOBAL_BLUEPRINT_COLOR.id),
       live: input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id,
       blocks:
         input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
@@ -391,10 +505,7 @@ function collectMapBlueprints(input: {
     ...input.locals.map((local) => ({
       id: local.color,
       hex: local.colorHex || GLOBAL_BLUEPRINT_COLOR.hex,
-      hidden:
-        input.selectedColor === local.color
-          ? input.selectedHidden
-          : local.hidden,
+      hidden: !input.visibleColors.has(local.color),
       live: input.selectedColor === local.color,
       blocks:
         input.selectedColor === local.color
@@ -424,12 +535,30 @@ function collectMapBlueprints(input: {
   ]
 
   sources.sort((left, right) => Number(left.live) - Number(right.live))
+  const layers: Array<{
+    id: string
+    hex: string
+    blocks: UserCreatedBlock[]
+    islands: UserCreatedIsland[]
+  }> = []
   for (const source of sources) {
     const visible = visibleItemsForBlueprint(
       source.hidden,
       source.blocks,
       source.islands,
     )
+    layers.push({
+      id: source.id,
+      hex: source.hex,
+      blocks: visible.blocks.map((block) => ({
+        ...block,
+        colorHex: source.hex,
+      })),
+      islands: visible.islands.map((island) => ({
+        ...island,
+        colorHex: source.hex,
+      })),
+    })
     for (const block of visible.blocks) {
       blocks.set(block.id, { ...block, colorHex: source.hex })
     }
@@ -449,6 +578,7 @@ function collectMapBlueprints(input: {
   return {
     blocks: [...blocks.values()],
     islands: [...islands.values()],
+    layers,
     functions,
     variables,
     imports,
@@ -649,8 +779,14 @@ function Explorer({
     [],
   )
   const [blueprintHidden, setBlueprintHidden] = useState(false)
+  const [blueprintOpacity, setBlueprintOpacity] = useState(
+    BLUEPRINT_OVERLAY.strength,
+  )
   const [blueprintColor, setBlueprintColor] = useState<string>(
     GLOBAL_BLUEPRINT_COLOR.id,
+  )
+  const [visibleBlueprintColors, setVisibleBlueprintColors] = useState<string[]>(
+    [GLOBAL_BLUEPRINT_COLOR.id],
   )
   const [globalBlueprint, setGlobalBlueprint] = useState<SharedBlueprint>(
     emptySharedBlueprint,
@@ -660,12 +796,15 @@ function Explorer({
   blueprintColorRef.current = blueprintColor
   const blueprintHiddenRef = useRef(blueprintHidden)
   blueprintHiddenRef.current = blueprintHidden
+  const visibleBlueprintColorsRef = useRef(visibleBlueprintColors)
+  visibleBlueprintColorsRef.current = visibleBlueprintColors
   const latestBlueprintsRef = useRef({
     global: emptySharedBlueprint(),
     locals: [] as LocalBlueprint[],
   })
   const blueprintOptionsRef = useRef<BlueprintOption[]>([])
   blueprintOptionsRef.current = blueprintOptionsFrom(intents, localBlueprints)
+  const placementLayoutRef = useRef<WorldLayout | null>(null)
   const userBlocksRef = useRef(userBlocks)
   const userIslandsRef = useRef(userIslands)
   const blueprintFunctionsRef = useRef(blueprintFunctions)
@@ -687,7 +826,6 @@ function Explorer({
   blueprintPointersRef.current = blueprintPointers
   const namingId = userBlocks.find((block) => block.naming)?.id ?? null
   const namingIslandId = userIslands.find((island) => island.naming)?.id ?? null
-  const naming = Boolean(namingId || namingIslandId)
   const previewGraph = useMemo(() => {
     if (!previewing) return graph
     return withPreviewGraph(
@@ -713,11 +851,15 @@ function Explorer({
     () => new Set(previewGraph.folders.map((folder) => folder.path)),
     [previewGraph],
   )
+  const visibleBlueprintColorSet = useMemo(
+    () => new Set(visibleBlueprintColors),
+    [visibleBlueprintColors],
+  )
   const mapBlueprint = useMemo(
     () =>
       collectMapBlueprints({
         selectedColor: blueprintColor,
-        selectedHidden: blueprintHidden,
+        visibleColors: visibleBlueprintColorSet,
         selectedBlocks: userBlocks,
         selectedIslands: userIslands,
         selectedFunctions: blueprintFunctions,
@@ -730,7 +872,6 @@ function Explorer({
     [
       blueprintColor,
       blueprintFunctions,
-      blueprintHidden,
       blueprintImports,
       blueprintPointers,
       blueprintVariables,
@@ -738,6 +879,7 @@ function Explorer({
       localBlueprints,
       userBlocks,
       userIslands,
+      visibleBlueprintColorSet,
     ],
   )
   const blueprintOptions = useMemo(
@@ -771,9 +913,6 @@ function Explorer({
   const pendingBlocks = mapBlueprint.blocks.filter(
     (block) => block.naming || !knownFileIds.has(block.id),
   )
-  const overlayBlocks = mapBlueprint.blocks.filter(
-    (block) => !block.naming && knownFileIds.has(block.id),
-  )
   const visibleIslands = mapBlueprint.islands
   const displayGraph = useMemo(
     () =>
@@ -793,18 +932,10 @@ function Explorer({
     ],
   )
   const layout = useMemo(() => {
-    const world = layoutWorld(
-      withUserCreatedGraph(previewGraph, [], visibleIslands),
-    )
+    const world = layoutWorld(previewGraph)
     if (previewing) markCreatedFolders(world, changeSet.createFolders ?? [])
-    return withUserCreatedLayout(world, pendingBlocks, visibleIslands)
-  }, [
-    changeSet.createFolders,
-    pendingBlocks,
-    previewGraph,
-    previewing,
-    visibleIslands,
-  ])
+    return world
+  }, [changeSet.createFolders, previewGraph, previewing])
   const changeFileIds = useMemo(() => {
     const ids = new Set<string>()
     for (const id of changeSet.files) ids.add(id)
@@ -846,28 +977,19 @@ function Explorer({
   const hasChangeSet =
     changeFileIds.length > 0 || changeFolderPaths.length > 0
   const changePathGraph = useMemo(() => {
-    if (!hasChangeSet) return displayGraph
+    if (!hasChangeSet) return previewGraph
     return filterGraphToChangePaths(
-      displayGraph,
+      previewGraph,
       changeFileIds,
       changeFolderPaths,
     )
-  }, [changeFileIds, changeFolderPaths, displayGraph, hasChangeSet])
+  }, [changeFileIds, changeFolderPaths, hasChangeSet, previewGraph])
   const changePathLayout = useMemo(() => {
     if (!hasChangeSet) return layout
     const world = layoutWorld(changePathGraph)
-    markCreatedFolders(world, [
-      ...(changeSet.createFolders ?? []),
-      ...mapBlueprint.islands.map((island) => island.path || island.id),
-    ])
+    markCreatedFolders(world, changeSet.createFolders ?? [])
     return world
-  }, [
-    changePathGraph,
-    changeSet.createFolders,
-    hasChangeSet,
-    layout,
-    mapBlueprint.islands,
-  ])
+  }, [changePathGraph, changeSet.createFolders, hasChangeSet, layout])
   const [mode, setMode] = useState<ViewMode>('map')
   const [explain, setExplain] = useState<ExplainSession>(emptyExplain)
   const [dismissedCardQuestion, setDismissedCardQuestion] = useState<
@@ -888,6 +1010,14 @@ function Explorer({
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedTick, setSelectedTick] = useState(0)
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null)
+  const [selectedFolderLayer, setSelectedFolderLayer] = useState<string | null>(
+    null,
+  )
+  const [addingItem, setAddingItem] = useState<{
+    kind: 'file' | 'folder'
+    parent: string
+    lockedColor: string | null
+  } | null>(null)
   const [importPickFrom, setImportPickFrom] = useState<string | null>(null)
   const importPickFromRef = useRef<string | null>(null)
   importPickFromRef.current = importPickFrom
@@ -1393,73 +1523,29 @@ function Explorer({
     [persistBlueprint],
   )
 
-  const placeBlock = useCallback(
-    (spot: { x: number; z: number; folder: string }) => {
+  const ownerColorForCreatedFolder = useCallback((folderPath: string) => {
+    const matches = (island: UserCreatedIsland) =>
+      !island.naming && createdIslandKey(island) === folderPath
+    if (userIslandsRef.current.some(matches)) return blueprintColorRef.current
+    const { global, locals } = latestBlueprintsRef.current
+    if (global.userCreatedIslands.some(matches)) return GLOBAL_BLUEPRINT_COLOR.id
+    return (
+      locals.find((item) => item.userCreatedIslands.some(matches))?.color ?? null
+    )
+  }, [])
+
+  const beginAddFile = useCallback(
+    (folderPath: string, color?: string) => {
       if (!canPlace) return
-      setUserBlocks((current) => {
-        if (current.some((block) => block.naming)) return current
-        return [
-          ...current,
-          {
-            id: `draft:${Date.now()}`,
-            name: '',
-            path: '',
-            folder: spot.folder,
-            x: spot.x,
-            z: spot.z,
-            naming: true,
-          },
-        ]
+      setAddingItem({
+        kind: 'file',
+        parent: folderPath,
+        lockedColor: color ?? ownerColorForCreatedFolder(folderPath),
       })
       document.exitPointerLock()
     },
-    [canPlace],
+    [canPlace, ownerColorForCreatedFolder],
   )
-
-  const placeBlockOnFolder = useCallback(
-    (folderPath: string) => {
-      if (!canPlace) return
-      const fileCount = displayGraph.files.filter(
-        (file) => file.folder === folderPath,
-      ).length
-      const spot = defaultBlockSpot(layout, folderPath, fileCount)
-      if (!spot) return
-      placeBlock(spot)
-    },
-    [displayGraph.files, canPlace, layout, placeBlock],
-  )
-
-  const commitBlockName = useCallback(
-    (id: string, rawName: string) => {
-      const draft = userBlocks.find((block) => block.id === id)
-      if (!draft) return false
-      const resolved = resolveCreatedFile(rawName, draft.folder)
-      if (!resolved) return false
-      const taken =
-        graph.files.some((file) => file.id === resolved.id) ||
-        userBlocks.some(
-          (block) => block.id === resolved.id && block.id !== id,
-        )
-      if (taken) return false
-      const next = userBlocks.map((block) =>
-        block.id === id
-          ? {
-              ...resolved,
-              x: draft.x,
-              z: draft.z,
-            }
-          : block,
-      )
-      setUserBlocks(next)
-      persistBlueprint(next, userIslands)
-      return true
-    },
-    [graph.files, persistBlueprint, userBlocks, userIslands],
-  )
-
-  const cancelBlockName = useCallback((id: string) => {
-    setUserBlocks((current) => current.filter((block) => block.id !== id))
-  }, [])
 
   const renameCreatedBlock = useCallback(
     (id: string, rawName: string) => {
@@ -1468,9 +1554,9 @@ function Explorer({
       const resolved = resolveCreatedFile(rawName, current.folder)
       if (!resolved) return null
       if (resolved.id === id) return id
-      const taken =
-        graph.files.some((file) => file.id === resolved.id) ||
-        userBlocks.some((block) => block.id === resolved.id && block.id !== id)
+      const taken = userBlocks.some(
+        (block) => block.id === resolved.id && block.id !== id,
+      )
       if (taken) return null
       const nextBlocks = userBlocks.map((block) =>
         block.id === id
@@ -1509,81 +1595,20 @@ function Explorer({
       if (selectedId === id) setSelectedId(resolved.id)
       return resolved.id
     },
-    [graph.files, persistBlueprint, selectedId, userBlocks, userIslands],
+    [persistBlueprint, selectedId, userBlocks, userIslands],
   )
 
-  const placeIsland = useCallback(
-    (parent: string) => {
+  const beginAddFolder = useCallback(
+    (parent: string, color?: string) => {
       if (!canPlace) return
-      let placedId: string | null = null
-      setUserIslands((current) => {
-        if (current.some((island) => island.naming)) return current
-        placedId = `draft:${Date.now()}`
-        return [
-          ...current,
-          {
-            id: placedId,
-            name: '',
-            path: '',
-            parent,
-            naming: true,
-          },
-        ]
+      setAddingItem({
+        kind: 'folder',
+        parent,
+        lockedColor: color ?? ownerColorForCreatedFolder(parent),
       })
-      if (placedId) {
-        setSelectedFolder(placedId)
-        setSelectedId(null)
-      }
       document.exitPointerLock()
     },
-    [canPlace],
-  )
-
-  const placeIslandOnFolder = useCallback(
-    (parent: string) => {
-      if (!canPlace) return
-      placeIsland(parent)
-    },
-    [canPlace, placeIsland],
-  )
-
-  const commitIslandName = useCallback(
-    (id: string, rawName: string) => {
-      const draft = userIslands.find((island) => island.id === id)
-      if (!draft) return false
-      const resolved = resolveCreatedIsland(rawName, draft.parent)
-      if (!resolved) return false
-      const taken =
-        graph.folders.some((folder) => folder.path === resolved.path) ||
-        userIslands.some(
-          (island) => island.path === resolved.path && island.id !== id,
-        )
-      if (taken) return false
-      const next = userIslands.map((island) =>
-        island.id === id
-          ? {
-              ...resolved,
-            }
-          : island,
-      )
-      setUserIslands(next)
-      persistBlueprint(userBlocks, next)
-      setSelectedFolder(resolved.path)
-      setSelectedId(null)
-      return true
-    },
-    [graph.folders, persistBlueprint, userBlocks, userIslands],
-  )
-
-  const cancelIslandName = useCallback(
-    (id: string) => {
-      const draft = userIslands.find((island) => island.id === id)
-      setUserIslands((current) => current.filter((island) => island.id !== id))
-      setSelectedFolder((selected) =>
-        selected === id ? draft?.parent ?? null : selected,
-      )
-    },
-    [userIslands],
+    [canPlace, ownerColorForCreatedFolder],
   )
 
   const createdContentsForColor = useCallback((color: string) => {
@@ -1669,15 +1694,6 @@ function Explorer({
     )
   }, [])
 
-  const ownerColorForCreatedFolder = useCallback((folderPath: string) => {
-    const matches = (island: UserCreatedIsland) =>
-      !island.naming && createdIslandKey(island) === folderPath
-    if (userIslandsRef.current.some(matches)) return blueprintColorRef.current
-    const { global, locals } = latestBlueprintsRef.current
-    if (global.userCreatedIslands.some(matches)) return GLOBAL_BLUEPRINT_COLOR.id
-    return locals.find((item) => item.userCreatedIslands.some(matches))?.color ?? null
-  }, [])
-
   const deleteSelectedCreated = useCallback(() => {
     if (!canPlace) return false
     if (selectedId) {
@@ -1692,7 +1708,8 @@ function Explorer({
       return true
     }
     if (!selectedFolder) return false
-    const color = ownerColorForCreatedFolder(selectedFolder)
+    const color =
+      selectedFolderLayer ?? ownerColorForCreatedFolder(selectedFolder)
     if (!color) return false
     const source = createdContentsForColor(color)
     const selected = source.islands.find(
@@ -1712,6 +1729,7 @@ function Explorer({
       removedIslands.map((island) => createdIslandKey(island)),
     )
     setSelectedFolder(null)
+    setSelectedFolderLayer(null)
     return true
   }, [
     canPlace,
@@ -1720,6 +1738,7 @@ function Explorer({
     ownerColorForCreatedFolder,
     removeCreatedItems,
     selectedFolder,
+    selectedFolderLayer,
     selectedId,
   ])
 
@@ -1733,6 +1752,7 @@ function Explorer({
       setSelectedId(fileId)
       if (fileId) {
         setSelectedFolder(null)
+        setSelectedFolderLayer(null)
         setSelectedTick((tick) => tick + 1)
       }
       if (fileId && canPlace) document.exitPointerLock()
@@ -1748,16 +1768,21 @@ function Explorer({
     [selectFile],
   )
 
-  const selectFolder = useCallback((folderPath: string | null) => {
-    if (importPickFromRef.current) return
-    setSelectedFolder(folderPath)
-    if (folderPath) setSelectedId(null)
-  }, [])
+  const selectFolder = useCallback(
+    (folderPath: string | null, layer?: string | null) => {
+      if (importPickFromRef.current) return
+      setSelectedFolder(folderPath)
+      setSelectedFolderLayer(folderPath ? layer ?? null : null)
+      if (folderPath) setSelectedId(null)
+    },
+    [],
+  )
 
   useEffect(() => {
     if (!changePathsOnly || !hasChangeSet) return
     if (selectedFolder && !changePathLayout.folders[selectedFolder]) {
       setSelectedFolder(null)
+      setSelectedFolderLayer(null)
     }
     if (
       selectedId &&
@@ -2010,23 +2035,22 @@ function Explorer({
   )
 
   useEffect(() => {
-    if (!namingId && !namingIslandId) return
+    if (!addingItem) return
     const onKey = (event: KeyboardEvent) => {
       if (event.code !== 'Escape') return
       if (shouldIgnoreShortcut(event)) return
       event.preventDefault()
-      if (namingId) cancelBlockName(namingId)
-      if (namingIslandId) cancelIslandName(namingIslandId)
+      setAddingItem(null)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [cancelBlockName, cancelIslandName, namingId, namingIslandId])
+  }, [addingItem])
 
   useEffect(() => {
-    if (mode !== 'map' || importedBy || !selectedId || namingId) {
+    if (mode !== 'map' || importedBy || !selectedId || addingItem) {
       setImportPickFrom(null)
     }
-  }, [importedBy, mode, namingId, selectedId])
+  }, [addingItem, importedBy, mode, selectedId])
 
   useEffect(() => {
     if (!importPickFrom) return
@@ -2042,8 +2066,8 @@ function Explorer({
   }, [importPickFrom])
 
   useEffect(() => {
-    if (mode !== 'map' || naming) setMapMenu(null)
-  }, [mode, naming])
+    if (mode !== 'map' || addingItem) setMapMenu(null)
+  }, [addingItem, mode])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -2200,6 +2224,12 @@ function Explorer({
             blueprintColorRef.current = GLOBAL_BLUEPRINT_COLOR.id
             setBlueprintColor(GLOBAL_BLUEPRINT_COLOR.id)
           }
+          const visible = visibleBlueprintColorsRef.current
+          const nextVisible = visible.filter((id) => colorIds.has(id))
+          if (nextVisible.length !== visible.length) {
+            visibleBlueprintColorsRef.current = nextVisible
+            setVisibleBlueprintColors(nextVisible)
+          }
           applyBlueprintContents(
             blueprintForColor(
               blueprintColorRef.current,
@@ -2280,19 +2310,29 @@ function Explorer({
     ...blueprintImportEdges,
   ]
   const deletedIds = previewing ? changeSet.deletes : []
-  const blueprintHasContent =
-    namedCreatedBlocks(userBlocks).length > 0 ||
-    namedCreatedIslands(userIslands).length > 0 ||
-    blueprintFunctions.length > 0 ||
-    blueprintVariables.length > 0 ||
-    blueprintImports.length > 0 ||
-    blueprintNotes.length > 0 ||
-    blueprintPointers.length > 0
-  const blueprintCanCleanup =
-    userBlocks.some((block) => !block.naming && knownFileIds.has(block.id)) ||
-    userIslands.some(
-      (island) => !island.naming && knownFolderPaths.has(island.path),
+  const blueprintHasContent = visibleBlueprintColors.some((color) => {
+    const contents = createdContentsForColor(color)
+    return blueprintLiveEnabled(
+      contents.blocks,
+      contents.islands,
+      contents.functions,
+      contents.variables,
+      contents.imports,
+      contents.notes,
+      contents.pointers,
     )
+  })
+  const blueprintCanCleanup = visibleBlueprintColors.some((color) => {
+    const contents = createdContentsForColor(color)
+    return (
+      contents.blocks.some(
+        (block) => !block.naming && knownFileIds.has(block.id),
+      ) ||
+      contents.islands.some(
+        (island) => !island.naming && knownFolderPaths.has(island.path),
+      )
+    )
+  })
   const canDeleteSelected =
     Boolean(
       selectedId &&
@@ -2302,7 +2342,10 @@ function Explorer({
     ) ||
     Boolean(
       selectedFolder &&
-        mapBlueprint.islands.some(
+        (selectedFolderLayer
+          ? createdContentsForColor(selectedFolderLayer)
+          : mapBlueprint
+        ).islands.some(
           (island) =>
             !island.naming && createdIslandKey(island) === selectedFolder,
         ),
@@ -2320,6 +2363,21 @@ function Explorer({
   )
   const mapLayoutForView =
     !explaining && changePathsOnly && hasChangeSet ? changePathLayout : layout
+  const overlayLayers = useMemo(
+    () => layoutBlueprintLayers(mapLayoutForView, mapBlueprint.layers),
+    [mapBlueprint.layers, mapLayoutForView],
+  )
+  useEffect(() => {
+    if (!selectedFolderLayer) return
+    if (overlayLayers.some((layer) => layer.id === selectedFolderLayer)) return
+    setSelectedFolder(null)
+    setSelectedFolderLayer(null)
+  }, [overlayLayers, selectedFolderLayer])
+  const placementLayout = useMemo(
+    () => mergeOverlayOnlyFolders(mapLayoutForView, overlayLayers),
+    [mapLayoutForView, overlayLayers],
+  )
+  placementLayoutRef.current = placementLayout
   const explainBounds = useMemo(() => {
     if (!explaining || !explainView) return null
     if (
@@ -2339,18 +2397,61 @@ function Explorer({
   const mapSelectedFolder = explaining ? null : selectedFolder
   const explainFile = explaining ? explainInfoFile(explainStep, displayGraph) : null
 
-  const toggleBlueprintHidden = useCallback(() => {
-    const next = !blueprintHidden
-    blueprintHiddenRef.current = next
-    setBlueprintHidden(next)
-    rememberLiveBlueprint(blueprintColorRef.current, { hidden: next })
-    void persistBlueprintHidden(next, blueprintColorRef.current).catch(() => {
-      blueprintHiddenRef.current = !next
-      setBlueprintHidden(!next)
-    })
-  }, [blueprintHidden, rememberLiveBlueprint])
+  const replaceVisibleColors = useCallback((next: string[]) => {
+    visibleBlueprintColorsRef.current = next
+    setVisibleBlueprintColors(next)
+  }, [])
 
-  const selectBlueprintColor = useCallback(
+  const currentVisibleColors = useCallback(
+    () => visibleBlueprintColorsRef.current,
+    [],
+  )
+
+  const replaceStoredBlueprints = useCallback(
+    (next: { global: SharedBlueprint; locals: LocalBlueprint[] }) => {
+      latestBlueprintsRef.current = next
+      setGlobalBlueprint(next.global)
+      setLocalBlueprints(next.locals)
+    },
+    [],
+  )
+
+  const applyHiddenToColors = useCallback(
+    (colors: string[], hidden: boolean) => {
+      if (colors.length === 0) return
+      blueprintPersistGen.current += 1
+      for (const color of colors) {
+        if (color === blueprintColorRef.current) {
+          blueprintHiddenRef.current = hidden
+          setBlueprintHidden(hidden)
+          rememberLiveBlueprint(color, { hidden })
+        } else {
+          replaceStoredBlueprints(
+            withBlueprintHidden(
+              latestBlueprintsRef.current,
+              color,
+              hidden,
+              blueprintOptionsRef.current,
+            ),
+          )
+        }
+        void persistBlueprintHidden(hidden, color)
+      }
+      const visible = visibleBlueprintColorsRef.current
+      if (hidden) {
+        replaceVisibleColors(visible.filter((id) => !colors.includes(id)))
+      } else {
+        const next = [...visible]
+        for (const color of colors) {
+          if (!next.includes(color)) next.push(color)
+        }
+        replaceVisibleColors(next)
+      }
+    },
+    [rememberLiveBlueprint, replaceStoredBlueprints, replaceVisibleColors],
+  )
+
+  const activateBlueprintColor = useCallback(
     (color: string) => {
       if (color === blueprintColorRef.current) return
       persistBlueprint()
@@ -2367,79 +2468,230 @@ function Explorer({
     },
     [applyBlueprintContents, persistBlueprint],
   )
+
+  const selectBlueprintColor = useCallback(
+    (color: string) => {
+      if (!currentVisibleColors().includes(color)) {
+        applyHiddenToColors([color], false)
+      }
+      activateBlueprintColor(color)
+    },
+    [activateBlueprintColor, applyHiddenToColors, currentVisibleColors],
+  )
   selectBlueprintColorRef.current = selectBlueprintColor
 
+  const writeCreatedContents = useCallback(
+    (
+      color: string,
+      next: {
+        blocks: UserCreatedBlock[]
+        islands: UserCreatedIsland[]
+        functions: PatchSymbolAddition[]
+        variables: PatchSymbolAddition[]
+        imports: PatchImportAddition[]
+        notes: BlueprintNote[]
+        pointers: BlueprintPointer[]
+      },
+    ) => {
+      if (color === blueprintColorRef.current) {
+        setUserBlocks(next.blocks)
+        setUserIslands(next.islands)
+      }
+      persistBlueprint(
+        next.blocks,
+        next.islands,
+        next.functions,
+        next.variables,
+        next.imports,
+        next.notes,
+        next.pointers,
+        color,
+      )
+    },
+    [persistBlueprint],
+  )
+
+  const commitAddItem = useCallback(
+    (name: string, requestedColor: string) => {
+      if (!addingItem) return false
+      const color = addingItem.lockedColor ?? requestedColor
+      const stored = createdContentsForColor(color)
+      if (addingItem.kind === 'file') {
+        const resolved = resolveCreatedFile(name, addingItem.parent)
+        if (!resolved) return false
+        if (stored.blocks.some((block) => block.id === resolved.id)) return false
+        const shown = new Set(
+          displayGraph.files
+            .filter((file) => file.folder === addingItem.parent)
+            .map((file) => file.id),
+        )
+        let fileIndex = shown.size
+        for (const block of stored.blocks) {
+          if (block.folder === addingItem.parent && !shown.has(block.id)) {
+            fileIndex += 1
+          }
+        }
+        const spot = defaultBlockSpot(
+          placementLayoutRef.current ?? layout,
+          addingItem.parent,
+          fileIndex,
+        )
+        if (!spot) return false
+        writeCreatedContents(color, {
+          ...stored,
+          blocks: [...stored.blocks, { ...resolved, x: spot.x, z: spot.z }],
+        })
+      } else {
+        const resolved = resolveCreatedIsland(name, addingItem.parent)
+        if (!resolved) return false
+        if (
+          stored.islands.some(
+            (island) =>
+              island.path === resolved.path || island.id === resolved.id,
+          )
+        ) {
+          return false
+        }
+        writeCreatedContents(color, {
+          ...stored,
+          islands: [...stored.islands, resolved],
+        })
+      }
+      if (!visibleBlueprintColorsRef.current.includes(color)) {
+        applyHiddenToColors([color], false)
+      }
+      setAddingItem(null)
+      return true
+    },
+    [
+      addingItem,
+      applyHiddenToColors,
+      createdContentsForColor,
+      displayGraph.files,
+      layout,
+      writeCreatedContents,
+    ],
+  )
+
+  const toggleBlueprintColor = useCallback(
+    (color: string) => {
+      const visible = currentVisibleColors()
+      if (visible.includes(color)) {
+        applyHiddenToColors([color], true)
+        const remaining = visible.filter((id) => id !== color)
+        if (color === blueprintColorRef.current && remaining.length > 0) {
+          activateBlueprintColor(remaining[remaining.length - 1]!)
+        }
+        return
+      }
+      selectBlueprintColor(color)
+    },
+    [
+      activateBlueprintColor,
+      applyHiddenToColors,
+      currentVisibleColors,
+      selectBlueprintColor,
+    ],
+  )
+
   const clearSharedBlueprint = useCallback(() => {
-    setUserBlocks([])
-    setUserIslands([])
-    setBlueprintFunctions([])
-    setBlueprintVariables([])
-    setBlueprintImports([])
-    blueprintNotesRef.current = []
-    blueprintPointersRef.current = []
-    setBlueprintNotes([])
-    setBlueprintPointers([])
-    rememberLiveBlueprint(blueprintColorRef.current, {
-      blocks: [],
-      islands: [],
-      functions: [],
-      variables: [],
-      imports: [],
-      notes: [],
-      pointers: [],
-    })
-    void persistBlueprintClear(blueprintColorRef.current)
-  }, [rememberLiveBlueprint])
+    const colors = currentVisibleColors()
+    if (colors.length === 0) return
+    blueprintPersistGen.current += 1
+    for (const color of colors) {
+      if (color === blueprintColorRef.current) {
+        setUserBlocks([])
+        setUserIslands([])
+        setBlueprintFunctions([])
+        setBlueprintVariables([])
+        setBlueprintImports([])
+        blueprintNotesRef.current = []
+        blueprintPointersRef.current = []
+        setBlueprintNotes([])
+        setBlueprintPointers([])
+        rememberLiveBlueprint(color, {
+          blocks: [],
+          islands: [],
+          functions: [],
+          variables: [],
+          imports: [],
+          notes: [],
+          pointers: [],
+        })
+      } else {
+        replaceStoredBlueprints(
+          withPatchedBlueprint(
+            latestBlueprintsRef.current,
+            color,
+            emptiedBlueprint,
+          ),
+        )
+      }
+      void persistBlueprintClear(color)
+    }
+  }, [currentVisibleColors, rememberLiveBlueprint, replaceStoredBlueprints])
 
   const cleanupSharedBlueprint = useCallback(() => {
+    const colors = currentVisibleColors()
+    if (colors.length === 0) return
+    blueprintPersistGen.current += 1
     const files = knownFileIds
     const folders = knownFolderPaths
-    const nextBlocks = userBlocks.filter(
-      (block) => block.naming || !files.has(block.id),
-    )
-    const nextIslands = userIslands.filter(
-      (island) => island.naming || !folders.has(island.path),
-    )
-    const removed = new Set(
-      userBlocks
-        .filter((block) => !block.naming && files.has(block.id))
-        .map((block) => block.id),
-    )
-    const nextFunctions = blueprintFunctions.filter(
-      (item) => !removed.has(item.file),
-    )
-    const nextVariables = blueprintVariables.filter(
-      (item) => !removed.has(item.file),
-    )
-    const nextImports = blueprintImports.filter(
-      (item) => !removed.has(item.file),
-    )
-    setUserBlocks(nextBlocks)
-    setUserIslands(nextIslands)
-    setBlueprintFunctions(nextFunctions)
-    setBlueprintVariables(nextVariables)
-    setBlueprintImports(nextImports)
-    const notes = dropBlueprintFileNotes(blueprintNotesRef.current, removed)
-    blueprintNotesRef.current = notes
-    setBlueprintNotes(notes)
-    rememberLiveBlueprint(blueprintColorRef.current, {
-      blocks: nextBlocks,
-      islands: nextIslands,
-      functions: nextFunctions,
-      variables: nextVariables,
-      imports: nextImports,
-      notes,
-    })
-    void persistBlueprintCleanup(blueprintColorRef.current)
+    for (const color of colors) {
+      if (color === blueprintColorRef.current) {
+        const source = createdContentsForColor(color)
+        const nextBlocks = source.blocks.filter(
+          (block) => block.naming || !files.has(block.id),
+        )
+        const nextIslands = source.islands.filter(
+          (island) => island.naming || !folders.has(island.path),
+        )
+        const removed = new Set(
+          source.blocks
+            .filter((block) => !block.naming && files.has(block.id))
+            .map((block) => block.id),
+        )
+        const nextFunctions = source.functions.filter(
+          (item) => !removed.has(item.file),
+        )
+        const nextVariables = source.variables.filter(
+          (item) => !removed.has(item.file),
+        )
+        const nextImports = source.imports.filter(
+          (item) => !removed.has(item.file),
+        )
+        const notes = dropBlueprintFileNotes(source.notes, removed)
+        blueprintNotesRef.current = notes
+        setUserBlocks(nextBlocks)
+        setUserIslands(nextIslands)
+        setBlueprintFunctions(nextFunctions)
+        setBlueprintVariables(nextVariables)
+        setBlueprintImports(nextImports)
+        setBlueprintNotes(notes)
+        rememberLiveBlueprint(color, {
+          blocks: nextBlocks,
+          islands: nextIslands,
+          functions: nextFunctions,
+          variables: nextVariables,
+          imports: nextImports,
+          notes,
+        })
+      } else {
+        replaceStoredBlueprints(
+          withPatchedBlueprint(latestBlueprintsRef.current, color, (blueprint) =>
+            cleanedBlueprint(blueprint, files, folders),
+          ),
+        )
+      }
+      void persistBlueprintCleanup(color)
+    }
   }, [
-    blueprintFunctions,
-    blueprintImports,
-    blueprintVariables,
+    createdContentsForColor,
+    currentVisibleColors,
     knownFileIds,
     knownFolderPaths,
     rememberLiveBlueprint,
-    userBlocks,
-    userIslands,
+    replaceStoredBlueprints,
   ])
 
   return (
@@ -2471,6 +2723,7 @@ function Explorer({
             landAt={landAt}
             selectedId={mapSelectedId}
             selectedFolder={mapSelectedFolder}
+            selectedFolderLayer={explaining ? null : selectedFolderLayer}
             locked={locked}
             onSelect={explaining ? () => {} : selectFile}
             onSelectFolder={explaining ? () => {} : selectFolder}
@@ -2499,7 +2752,8 @@ function Explorer({
             }
             userCreatedBlocks={mapBlueprint.blocks}
             userCreatedIslands={mapBlueprint.islands}
-            overlayBlocks={overlayBlocks}
+            overlayLayers={overlayLayers}
+            overlayOpacity={blueprintOpacity}
             pointedFileIds={Object.keys(pointedColors.files)}
             pointedFileColors={pointedColors.files}
             pointedFolderPaths={Object.keys(pointedColors.folders)}
@@ -2557,7 +2811,10 @@ function Explorer({
         selectedTick={selectedTick}
         inspectTick={inspectTick}
         selectedFolder={selectedFolder}
+        selectedFolderLayer={selectedFolderLayer}
+        overlayLayers={overlayLayers}
         canDeleteSelected={canDeleteSelected}
+        onSelectFolder={selectFolder}
         aimedRelation={aimedRelation}
         aimedFileId={aimedFileId}
         intent={intent}
@@ -2581,20 +2838,12 @@ function Explorer({
         changePathsOnly={changePathsOnly}
         hasChangeSet={hasChangeSet}
         onToggleChangePathsOnly={toggleChangePathsOnly}
-        naming={naming}
-        namingIsland={Boolean(namingIslandId)}
-        onCommitName={(name) => {
-          if (namingId) commitBlockName(namingId, name)
-        }}
-        onCancelName={() => {
-          if (namingId) cancelBlockName(namingId)
-        }}
-        onCommitIslandName={(name) => {
-          if (namingIslandId) commitIslandName(namingIslandId, name)
-        }}
-        onCancelIslandName={() => {
-          if (namingIslandId) cancelIslandName(namingIslandId)
-        }}
+        naming={Boolean(addingItem)}
+        addingKind={addingItem?.kind ?? null}
+        addingParent={addingItem?.parent ?? null}
+        addingLockedColor={addingItem?.lockedColor ?? null}
+        onCommitAdd={commitAddItem}
+        onCancelAdd={() => setAddingItem(null)}
         blueprintFunctions={blueprintFunctions}
         blueprintVariables={blueprintVariables}
         blueprintImports={blueprintImports}
@@ -2611,20 +2860,22 @@ function Explorer({
         onRemoveBlueprintImport={removeBlueprintImport}
         onSetBlueprintNote={applyBlueprintNote}
         onToggleBlueprintPointer={applyBlueprintPointer}
-        onMapAddFile={placeBlockOnFolder}
-        onMapAddFolder={placeIslandOnFolder}
+        onMapAddFile={beginAddFile}
+        onMapAddFolder={beginAddFolder}
         onRenameCreatedFile={renameCreatedBlock}
         onInspectFile={inspectFile}
         onInspectBlock={inspectBlock}
         onExplainTarget={canAskLlm ? startExplainTarget : undefined}
-        blueprintHidden={blueprintHidden}
+        blueprintOpacity={blueprintOpacity}
+        onBlueprintOpacityChange={setBlueprintOpacity}
         blueprintHasContent={blueprintHasContent}
         blueprintCanCleanup={blueprintCanCleanup}
         blueprintColor={blueprintColor}
+        blueprintColors={visibleBlueprintColors}
         blueprintOptions={blueprintOptions}
         blueprintColorPointers={blueprintColorPointers}
         onSelectBlueprintColor={selectBlueprintColor}
-        onToggleBlueprintHidden={toggleBlueprintHidden}
+        onToggleBlueprintColor={toggleBlueprintColor}
         onClearBlueprint={clearSharedBlueprint}
         onCleanupBlueprint={cleanupSharedBlueprint}
         devTargets={devTargets}
@@ -2639,8 +2890,8 @@ function Explorer({
             ? findBlueprintPointer(blueprintPointers, 'folder', mapMenu.folder)
             : false
         }
-        onAddFile={placeBlockOnFolder}
-        onAddFolder={placeIslandOnFolder}
+        onAddFile={beginAddFile}
+        onAddFolder={beginAddFolder}
         onPointToFolder={(folder) =>
           applyBlueprintPointer({ kind: 'folder', path: folder })
         }

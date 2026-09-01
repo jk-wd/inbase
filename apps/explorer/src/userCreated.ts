@@ -1,4 +1,4 @@
-import { CONFIG, fileHeight } from './theme'
+import { BLUEPRINT_OVERLAY, CONFIG, fileHeight } from './theme'
 import { folderOfFile, folderParent } from './layout'
 import type {
   BlueprintNote,
@@ -9,11 +9,31 @@ import type {
   FileNode,
   PatchImportAddition,
   PatchSymbolAddition,
+  PlacedBridge,
+  PlacedFile,
   PlacedFolder,
   UserCreatedBlock,
   UserCreatedIsland,
   WorldLayout,
 } from './types'
+
+export type BlueprintLayerSource = {
+  id: string
+  hex: string
+  blocks: UserCreatedBlock[]
+  islands: UserCreatedIsland[]
+}
+
+export type BlueprintOverlayLayer = {
+  id: string
+  colorHex: string
+  folders: Record<string, PlacedFolder>
+  files: Record<string, PlacedFile>
+  bridges: PlacedBridge[]
+  filledIds: string[]
+  folderY: number
+  fileLift: number
+}
 
 export function languageOfName(name: string) {
   const ext = name.split('.').pop()?.toLowerCase()
@@ -236,17 +256,43 @@ function placedFolderParent(
   return folderParent(folder.path)
 }
 
+function expandFolderWidthToChildren(
+  folder: PlacedFolder,
+  children: PlacedFolder[],
+): PlacedFolder | null {
+  let left = folder.x - folder.width / 2
+  let right = folder.x + folder.width / 2
+  const startLeft = left
+  const startRight = right
+  for (const child of children) {
+    left = Math.min(left, child.x - child.width / 2)
+    right = Math.max(right, child.x + child.width / 2)
+  }
+  if (left >= startLeft - 1e-6 && right <= startRight + 1e-6) return null
+  return {
+    ...folder,
+    x: (left + right) / 2,
+    width: right - left,
+  }
+}
+
+function ancestorPaths(start: string | null) {
+  const paths: string[] = []
+  let current = start
+  while (current) {
+    paths.push(current)
+    current = folderParent(current)
+  }
+  return paths
+}
+
 function expandParentsToChildren(
   folders: Record<string, PlacedFolder>,
   islands: UserCreatedIsland[],
 ) {
   const parentPaths = new Set<string>()
   for (const island of islands) {
-    let current: string | null = island.parent
-    while (current) {
-      parentPaths.add(current)
-      current = folderParent(current)
-    }
+    for (const path of ancestorPaths(island.parent)) parentPaths.add(path)
   }
   const ordered = [...parentPaths].sort(
     (left, right) =>
@@ -262,16 +308,8 @@ function expandParentsToChildren(
         placedFolderParent(folder, islands) === parentPath,
     )
     if (children.length === 0) continue
-    let extent = parent.width / 2
-    for (const child of children) {
-      extent = Math.max(
-        extent,
-        Math.abs(child.x - child.width / 2 - parent.x),
-        Math.abs(child.x + child.width / 2 - parent.x),
-      )
-    }
-    const width = extent * 2
-    if (width > parent.width) folders[parentPath] = { ...parent, width }
+    const expanded = expandFolderWidthToChildren(parent, children)
+    if (expanded) folders[parentPath] = expanded
   }
 }
 
@@ -356,6 +394,273 @@ export function withUserCreatedLayout(
     }
   }
   return { ...withIslands, files }
+}
+
+function uniqueSiblings(
+  folders: PlacedFolder[],
+  parentPath: string,
+  selfPath: string,
+  islands: UserCreatedIsland[],
+) {
+  const seen = new Set<string>()
+  const siblings: PlacedFolder[] = []
+  for (const folder of folders) {
+    if (folder.path === selfPath || seen.has(folder.path)) continue
+    const placedIsland = islands.find((item) => islandKey(item) === folder.path)
+    const folderParentPath = placedIsland?.parent ?? folderParent(folder.path)
+    if (folderParentPath !== parentPath) continue
+    seen.add(folder.path)
+    siblings.push(folder)
+  }
+  return siblings
+}
+
+function overlayAwareFolders(
+  base: WorldLayout,
+  overlay: Record<string, PlacedFolder>,
+) {
+  const paths = new Set([
+    ...Object.keys(base.folders),
+    ...Object.keys(overlay),
+  ])
+  return [...paths].map((path) => overlay[path] ?? base.folders[path])
+}
+
+function expandOverlayParents(
+  folders: Record<string, PlacedFolder>,
+  base: WorldLayout,
+  islands: UserCreatedIsland[],
+  colorHex: string,
+) {
+  const parentPaths = new Set<string>()
+  for (const island of islands) {
+    const id = islandKey(island)
+    if (base.folders[id]) continue
+    for (const path of ancestorPaths(island.parent)) parentPaths.add(path)
+  }
+  const ordered = [...parentPaths].sort(
+    (left, right) =>
+      right.split('/').filter(Boolean).length -
+      left.split('/').filter(Boolean).length,
+  )
+  for (const parentPath of ordered) {
+    const current = folders[parentPath] ?? base.folders[parentPath]
+    if (!current) continue
+    const children = uniqueSiblings(
+      overlayAwareFolders(base, folders),
+      parentPath,
+      parentPath,
+      islands,
+    )
+    if (children.length === 0) continue
+    const expanded = expandFolderWidthToChildren(current, children)
+    if (!expanded) continue
+    const already = folders[parentPath]
+    folders[parentPath] = {
+      ...expanded,
+      overlay: true,
+      colorHex: already?.colorHex ?? colorHex,
+      added: already?.added,
+    }
+  }
+}
+
+function placeOverlayIslands(
+  base: WorldLayout,
+  islands: UserCreatedIsland[],
+  colorHex: string,
+): { folders: Record<string, PlacedFolder>; bridges: PlacedBridge[] } {
+  const folders: Record<string, PlacedFolder> = {}
+  const bridges: PlacedBridge[] = []
+  const width = islandWidth()
+  const depth = islandDepth()
+  const lookup = (path: string) => folders[path] ?? base.folders[path]
+
+  for (const island of islands) {
+    const id = islandKey(island)
+    const existing = base.folders[id]
+    if (existing) {
+      folders[id] = {
+        ...existing,
+        added: true,
+        overlay: true,
+        name: island.name || existing.name,
+        colorHex,
+      }
+      continue
+    }
+    const parentPath = island.parent
+    const parent = lookup(parentPath)
+    if (!parent) continue
+    const siblings = uniqueSiblings(
+      [...Object.values(base.folders), ...Object.values(folders)],
+      parentPath,
+      id,
+      islands,
+    )
+    const x =
+      siblings.length === 0
+        ? parent.x
+        : Math.max(...siblings.map((folder) => folder.x + folder.width / 2)) +
+          CONFIG.siblingGap +
+          width / 2
+    const z = parent.z + parent.depth + CONFIG.bridgeLength
+    folders[id] = {
+      path: id,
+      name: island.naming && !island.name ? 'New folder' : island.name,
+      x,
+      z,
+      width,
+      depth,
+      added: true,
+      overlay: true,
+      colorHex,
+    }
+    bridges.push({
+      id: `${parentPath}→${id}`,
+      label: folders[id].name,
+      fromLabel: parent.name,
+      points: [
+        [x, parent.z + parent.depth - CONFIG.bridgeOverlap],
+        [x, z + CONFIG.bridgeOverlap],
+      ],
+    })
+  }
+
+  expandOverlayParents(folders, base, islands, colorHex)
+  return { folders, bridges }
+}
+
+function baseFileCountInFolder(base: WorldLayout, folderPath: string) {
+  let count = 0
+  for (const file of Object.values(base.files)) {
+    if (folderOfFile(file.id) === folderPath) count += 1
+  }
+  return count
+}
+
+function placeOverlayBlocks(
+  base: WorldLayout,
+  overlayFolders: Record<string, PlacedFolder>,
+  blocks: UserCreatedBlock[],
+  fileLift: number,
+): { files: Record<string, PlacedFile>; filledIds: string[] } {
+  const files: Record<string, PlacedFile> = {}
+  const filledIds: string[] = []
+  const height = fileHeight(12)
+  const nextIndex = new Map<string, number>()
+  const foldersForSpot: WorldLayout = {
+    ...base,
+    folders: { ...base.folders, ...overlayFolders },
+  }
+  for (const block of blocks) {
+    const existing = !block.naming ? base.files[block.id] : undefined
+    if (existing) {
+      filledIds.push(block.id)
+      files[block.id] = {
+        ...existing,
+        position: [
+          existing.position[0],
+          fileLift + existing.size[1] / 2,
+          existing.position[2],
+        ],
+      }
+      continue
+    }
+    const folderPath = block.folder
+    const folder = overlayFolders[folderPath] ?? base.folders[folderPath]
+    const index =
+      nextIndex.get(folderPath) ?? baseFileCountInFolder(base, folderPath)
+    nextIndex.set(folderPath, index + 1)
+    const spot = folder
+      ? defaultBlockSpot(foldersForSpot, folderPath, index)
+      : { x: block.x, z: block.z, folder: folderPath }
+    const x = spot?.x ?? block.x
+    const z = spot?.z ?? block.z
+    files[block.id] = {
+      id: block.id,
+      position: [x, fileLift + height / 2, z],
+      size: [CONFIG.fileWidth, height, CONFIG.fileDepth],
+      aisleFace: folder && x >= folder.x ? -1 : 1,
+    }
+  }
+  return { files, filledIds }
+}
+
+function islandsForOverlay(blocks: UserCreatedBlock[], islands: UserCreatedIsland[]) {
+  const have = new Set(islands.map((island) => islandKey(island)))
+  const implied: UserCreatedIsland[] = []
+  for (const block of blocks) {
+    const folder = block.folder
+    if (!folder || have.has(folder)) continue
+    have.add(folder)
+    implied.push({
+      id: folder,
+      name: folder.split('/').pop() ?? folder,
+      path: folder,
+      parent: folderParent(folder) ?? '.',
+    })
+  }
+  return [...islands, ...implied]
+}
+
+export function layoutBlueprintLayers(
+  base: WorldLayout,
+  sources: BlueprintLayerSource[],
+): BlueprintOverlayLayer[] {
+  return sources.map((source, index) => {
+    const { folders, bridges } = placeOverlayIslands(
+      base,
+      islandsForOverlay(source.blocks, source.islands),
+      source.hex,
+    )
+    const folderY =
+      BLUEPRINT_OVERLAY.folderY + index * BLUEPRINT_OVERLAY.layerStep
+    const fileLift = folderY + BLUEPRINT_OVERLAY.fileLift
+    const { files, filledIds } = placeOverlayBlocks(
+      base,
+      folders,
+      source.blocks,
+      fileLift,
+    )
+    return {
+      id: source.id,
+      colorHex: source.hex,
+      folders,
+      files,
+      bridges,
+      filledIds,
+      folderY,
+      fileLift,
+    }
+  })
+}
+
+export function mergeOverlayOnlyFolders(
+  layout: WorldLayout,
+  layers: BlueprintOverlayLayer[],
+): WorldLayout {
+  const folders = { ...layout.folders }
+  const bridges = [...layout.bridges]
+  const seenBridges = new Set(bridges.map((bridge) => bridge.id))
+  for (const layer of layers) {
+    for (const folder of Object.values(layer.folders)) {
+      if (layout.folders[folder.path]) {
+        folders[folder.path] = {
+          ...folders[folder.path],
+          colorHex: folder.colorHex ?? folders[folder.path].colorHex,
+        }
+        continue
+      }
+      folders[folder.path] = folder
+    }
+    for (const bridge of layer.bridges) {
+      if (seenBridges.has(bridge.id)) continue
+      seenBridges.add(bridge.id)
+      bridges.push(bridge)
+    }
+  }
+  return { ...layout, folders, bridges }
 }
 
 export function defaultBlockSpot(

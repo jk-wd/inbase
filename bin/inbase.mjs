@@ -21,7 +21,7 @@ import {
   runExplain,
   startSession,
   attachSession,
-  waitForBlueprint,
+  readBlueprint,
   goProposal,
   acceptProposal,
 } from './session.mjs'
@@ -36,7 +36,7 @@ Usage:
 Agent commands (used by the Cursor skill):
   inbase start-session --session <id> --name "short name"
   inbase attach [--session <id>] [--color <name>]
-  inbase wait-for-blueprint --session <id>
+  inbase read-blueprint --session <id>
   inbase report-plan --session <id> --feature "name" --steps "one"
   inbase go [--session <id>]
   inbase accept [--session <id>]  (same as go)
@@ -153,7 +153,7 @@ export async function main(argv = process.argv.slice(2)) {
   ensureDataDir(process.env.INBASE_DATA_DIR)
   if (host.instance) {
     console.log(
-      `INBASE_ATTACHED Using the running visualizer (${host.instance.dataDir}). Run wait-for-blueprint to read the optional blueprint; it does not wait. Then stop for /go or /explain in chat.`,
+      `INBASE_ATTACHED Using the running visualizer (${host.instance.dataDir}). Run read-blueprint to load the optional blueprint. Then stop for /go or /explain in chat.`,
     )
   }
 
@@ -165,8 +165,8 @@ export async function main(argv = process.argv.slice(2)) {
     await attachSession(args)
     return
   }
-  if (command === 'wait-for-blueprint') {
-    await waitForBlueprint(args)
+  if (command === 'read-blueprint') {
+    await readBlueprint(args)
     return
   }
   if (command === 'report-plan') {

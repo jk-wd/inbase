@@ -48,6 +48,9 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /VISUAL_CODER_CHAT_LIMIT/)
     assert.match(skillText, /VISUAL_CODER_COLOR/)
     assert.match(skillText, /Connecting to the Coral session/)
+    assert.match(skillText, /I see on the blueprint/)
+    assert.match(skillText, /VISUAL_CODER_BLUEPRINT_ONLY/)
+    assert.match(skillText, /VISUAL_CODER_NO_REQUEST/)
   } finally {
     cleanup()
   }
@@ -70,6 +73,9 @@ test('init copies the Cursor skill and gitignores .inbase', () => {
     assert.match(skillText, /\/go/)
     assert.match(skillText, /\/accept/)
     assert.match(skillText, /\/explain/)
+    assert.match(skillText, /I see on the blueprint/)
+    assert.match(skillText, /VISUAL_CODER_BLUEPRINT_ONLY/)
+    assert.match(skillText, /VISUAL_CODER_NO_REQUEST/)
     assert.doesNotMatch(skillText, /npx inbase wait-for-approval/)
     assert.doesNotMatch(skillText, /npx inbase explain wait/)
     assert.doesNotMatch(skillText, /direct chat interaction not allowed/)
@@ -78,6 +84,10 @@ test('init copies the Cursor skill and gitignores .inbase', () => {
     assert.match(
       fs.readFileSync(path.join(root, '.cursor/commands/inbase.md'), 'utf8'),
       /npx inbase attach/,
+    )
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/inbase.md'), 'utf8'),
+      /If this chat has no request text/,
     )
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/skipinbase.md')), true)
     assert.match(
@@ -111,6 +121,18 @@ test('init copies the Cursor skill and gitignores .inbase', () => {
     assert.match(
       fs.readFileSync(path.join(root, '.cursor/commands/coral.md'), 'utf8'),
       /npx inbase attach --color coral/,
+    )
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/coral.md'), 'utf8'),
+      /If `\$ARGUMENTS` is empty/,
+    )
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/coral.md'), 'utf8'),
+      /I see on the blueprint/,
+    )
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/violet.md'), 'utf8'),
+      /If `\$ARGUMENTS` is empty/,
     )
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/red.md')), true)
     assert.match(
@@ -222,7 +244,73 @@ test('wait-for-approval and explain wait are removed', () => {
   }
 })
 
-test('wait-for-blueprint does not consume a pending map explain', async () => {
+test('read-blueprint treats an enabled blueprint as the request when there is no instruction', async () => {
+  const { root, cleanup } = tempProject()
+  const dataDir = path.join(root, '.inbase')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: root,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const started = runCli(
+      ['start-session', '--session', 'blueprint-only', '--name', 'Blueprint only'],
+      { cwd: root, env },
+    )
+    assert.equal(started.status, 0, started.stderr)
+    const empty = runCli(['read-blueprint', '--session', 'blueprint-only'], {
+      cwd: root,
+      env,
+    })
+    assert.equal(empty.status, 0, empty.stderr)
+    assert.match(empty.stdout, /VISUAL_CODER_NO_REQUEST/)
+    assert.match(empty.stdout, /VISUAL_CODER_SAY_BLUEPRINT/)
+    assert.match(empty.stdout, /I see nothing on the blueprint yet/)
+    assert.doesNotMatch(empty.stdout, /VISUAL_CODER_BLUEPRINT_ONLY/)
+    assert.doesNotMatch(empty.stdout, /VISUAL_CODER_INSTRUCTION_START/)
+
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    store.updateBlueprint(dataDir, 'blueprint-only', {
+      userCreatedBlocks: [
+        {
+          id: 'src/Widget.tsx',
+          name: 'Widget.tsx',
+          path: 'src/Widget.tsx',
+          folder: 'src',
+          x: 1,
+          z: 2,
+        },
+      ],
+    })
+    const withBlueprint = runCli(
+      ['read-blueprint', '--session', 'blueprint-only'],
+      { cwd: root, env },
+    )
+    assert.equal(withBlueprint.status, 0, withBlueprint.stderr)
+    assert.match(withBlueprint.stdout, /VISUAL_CODER_BLUEPRINT_ONLY/)
+    assert.match(withBlueprint.stdout, /VISUAL_CODER_SAY_BLUEPRINT/)
+    assert.match(withBlueprint.stdout, /I see on the blueprint/)
+    assert.doesNotMatch(withBlueprint.stdout, /VISUAL_CODER_NO_REQUEST/)
+    assert.doesNotMatch(withBlueprint.stdout, /VISUAL_CODER_INSTRUCTION_START/)
+
+    store.setInitialInstruction(dataDir, 'blueprint-only', 'Add a clock')
+    const withInstruction = runCli(
+      ['read-blueprint', '--session', 'blueprint-only'],
+      { cwd: root, env },
+    )
+    assert.equal(withInstruction.status, 0, withInstruction.stderr)
+    assert.match(withInstruction.stdout, /VISUAL_CODER_INSTRUCTION_START/)
+    assert.match(withInstruction.stdout, /Add a clock/)
+    assert.doesNotMatch(withInstruction.stdout, /VISUAL_CODER_BLUEPRINT_ONLY/)
+    assert.doesNotMatch(withInstruction.stdout, /VISUAL_CODER_NO_REQUEST/)
+  } finally {
+    cleanup()
+  }
+})
+
+test('read-blueprint does not consume a pending map explain', async () => {
   const { root, cleanup } = tempProject()
   const dataDir = path.join(root, '.inbase')
   const env = {
@@ -244,7 +332,7 @@ test('wait-for-blueprint does not consume a pending map explain', async () => {
       path: 'apps/explorer/scripts',
     })
     const result = runCli(
-      ['wait-for-blueprint', '--session', 'explain-pending'],
+      ['read-blueprint', '--session', 'explain-pending'],
       { cwd: root, env },
     )
     assert.equal(result.status, 0, result.stderr)

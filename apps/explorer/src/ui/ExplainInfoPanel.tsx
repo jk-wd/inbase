@@ -4,6 +4,7 @@ import {
   explainMatchesSymbol,
 } from '../explain'
 import type { ExplainSymbolRef, FileNode } from '../types'
+import { FileIcon } from './EyeIcon'
 
 function fileBase(id: string) {
   return id.split('/').pop() ?? id
@@ -108,7 +109,10 @@ export function ExplainInfoPanel({
                     highlightFile && !pointFile ? 'true' : undefined
                   }
                 >
-                  {file.name}
+                  <span className="hud-info-kind-title">
+                    <FileIcon />
+                    {file.name}
+                  </span>
                 </div>
               </div>
             </div>

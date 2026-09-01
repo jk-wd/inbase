@@ -1,6 +1,6 @@
 import { memo, Suspense } from 'react'
 import { Billboard, Edges, Html, Text } from '@react-three/drei'
-import { CHANGE_HIGHLIGHT, CONFIG, blueprintPalette, dimColor, fileColor, FILE_SELECTION, MAP_SELECTION, type ChangeKind } from '../theme'
+import { CHANGE_HIGHLIGHT, CONFIG, blueprintPalette, dimColor, fileColor, fileEmphasisScale, FILE_SELECTION, MAP_SELECTION, type ChangeKind } from '../theme'
 import { BlueprintEyes } from '../ui/EyeIcon'
 import { MapSelectBorder } from './MapSelectBorder'
 import type { FileNode } from '../types'
@@ -33,6 +33,8 @@ type FileBlockProps = {
   pointed?: boolean
   pointedColors?: string[]
   opacity?: number
+  overlay?: boolean
+  overlayFilled?: boolean
 }
 
 function fileLabel(name: string, changeKind: ChangeKind | null, added: boolean) {
@@ -97,15 +99,31 @@ export const FileBlock = memo(function FileBlock({
   pointed = false,
   pointedColors,
   opacity = 1,
+  overlay = false,
+  overlayFilled = false,
 }: FileBlockProps) {
-  const [width, height, depth] = placed.size
   const highlight =
-    changeKind && highlightMapChange && !selected && !file.userCreated && !file.colorHex
+    !overlay &&
+    changeKind &&
+    highlightMapChange &&
+    !selected &&
+    !file.userCreated &&
+    !file.colorHex
       ? CHANGE_HIGHLIGHT[changeKind]
       : null
-  const isAdded = added || Boolean(file.userCreated)
-  const tint = file.colorHex || file.userCreated ? blueprintPalette(file.colorHex) : null
-  const color = tint ? tint.color : isAdded ? '#7ec8e8' : fileColor(file.language)
+  const isAdded = overlay ? !overlayFilled : added || Boolean(file.userCreated)
+  const emphasis = fileEmphasisScale(overlay, changeKind, added || Boolean(file.userCreated))
+  const width = placed.size[0] * emphasis
+  const height = placed.size[1]
+  const depth = placed.size[2] * emphasis
+  const tint = overlay || file.colorHex || file.userCreated ? blueprintPalette(file.colorHex) : null
+  const color = tint
+    ? overlay
+      ? tint.block
+      : tint.color
+    : isAdded
+      ? '#7ec8e8'
+      : fileColor(file.language)
   const muted = dimColor(color, 0.32)
   const label = fileLabel(file.name, changeKind, isAdded)
   const mark = changeMark(changeKind, isAdded)
@@ -140,7 +158,11 @@ export const FileBlock = memo(function FileBlock({
 
   return (
     <group position={placed.position}>
-      <mesh userData={{ fileId: file.id }} scale={[width, height, depth]}>
+      <mesh
+        userData={{ fileId: file.id }}
+        scale={[width, height, depth]}
+        renderOrder={overlay ? 3 : 0}
+      >
         <boxGeometry args={[1, 1, 1]} />
         {mapMode ? (
           <meshBasicMaterial
@@ -192,7 +214,7 @@ export const FileBlock = memo(function FileBlock({
         )}
         {selected && !mapMode && (
           <Edges
-            color="#000000"
+            color="#ffffff"
             dashed
             dashSize={0.18}
             gapSize={0.1}
@@ -207,6 +229,7 @@ export const FileBlock = memo(function FileBlock({
           depth={depth}
           y={height / 2 + 0.03}
           stroke={MAP_SELECTION.blockPad}
+          color={MAP_SELECTION.color}
           userData={{ fileId: file.id }}
         />
       )}

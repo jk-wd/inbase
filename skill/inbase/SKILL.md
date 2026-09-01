@@ -22,6 +22,9 @@ the next unconnected slot. You do not need `/inbase`.
 - **`/coral` `/amber` `/lime` `/orange` `/violet`**: attach this chat to that
   color's empty slot. Aliases: `/red` (Coral), `/yellow` (Amber), `/green`
   (Lime), `/purple` (Violet). The text after the command is the user's request.
+  If there is no text (`/violet` with nothing after it), attach and start from
+  the enabled blueprint only: create those files and structure. Ask if you
+  need more information.
 - **`/blue`**: Blue is the global blueprint, not a chat. Do not attach.
 - **`/go`**: start the waiting plan step, or accept the current proposal.
   After accept, stop; another `/go` starts the next step. The last proposal
@@ -84,7 +87,7 @@ skipped unless you asked for that color — then attach fails with
 No id is passed in; read `VISUAL_CODER_SESSION` from the output and use that
 `--session` value for every later command. Read `VISUAL_CODER_COLOR` and **reply
 in this chat first** with one short sentence that names that color, for example:
-`Connecting to the Coral session.` Then continue from `wait-for-blueprint` below.
+`Connecting to the Coral session.` Then continue from `read-blueprint` below.
 
 If attach fails:
 
@@ -103,7 +106,7 @@ Only 5 Inbase chats can be connected at once. Finish or stop one in the map, the
 - `VISUAL_CODER_COLOR_BUSY` or `VISUAL_CODER_COLOR_UNKNOWN`: reply with the rest
   of that line (it names the color), then **stop**.
 
-Then continue from `wait-for-blueprint` below. Do **not** run `start-session`.
+Then continue from `read-blueprint` below. Do **not** run `start-session`.
 Do **not** wait for a blueprint handshake.
 
 ## Direct response
@@ -111,7 +114,10 @@ Do **not** wait for a blueprint handshake.
 The moment a command prints `VISUAL_CODER_ACK`, **reply in this chat first**
 with one short sentence that acknowledges the signal. After `attach`, name the
 color from `VISUAL_CODER_COLOR`, for example: `Connecting to the Coral session.`
-For later acks, echo the signal, for example: `Got it — running step 2: Show ColorGenerator on Home.` Then continue
+After `read-blueprint`, the ack is what you see: start with
+`I see on the blueprint` and name the files, folders, symbols, imports, notes,
+and pointers. For other later acks, echo the signal, for example:
+`Got it — running step 2: Show ColorGenerator on Home.` Then continue
 the required tools in the same turn. Do not start with a long analysis. Do not
 call tools before that sentence.
 
@@ -123,19 +129,27 @@ re-plan. Otherwise wait for `/go` or `/explain` in this chat.
 
 1. **Read the current layout**. Attach already started the session. Run
    this once to load the optional blueprint, instruction, and attached files — it returns
-   immediately. Do not wait for the user to send a blueprint. If you cannot
-   report a plan yet (no instruction and no enabled blueprint work), **stop**.
-   Wait for the user to type a request, `/go`, or `/explain` in chat.
+   immediately. Do not wait for the user to send a blueprint.
+
+   If the color command or chat has **no instruction** (empty `$ARGUMENTS`, and
+   `read-blueprint` printed no `VISUAL_CODER_INSTRUCTION_*`):
+   - If it prints `VISUAL_CODER_BLUEPRINT_ONLY`, or either blueprint dump has
+     `enabled` true, **that is the request**. Plan only from those files,
+     folders, symbols, imports, notes, and pointers. The goal is to create the
+     structure the user drew. Ask in chat if you need more information before
+     reporting the plan. Do not invent extra files or a larger feature.
+   - If it prints `VISUAL_CODER_NO_REQUEST`, or both blueprints are empty,
+     **stop**. Wait for the user to type a request, `/go`, or `/explain`.
 
 ```bash
-npx inbase wait-for-blueprint --session "<session-id>"
+npx inbase read-blueprint --session "<session-id>"
 ```
 
    The user may have placed files and islands on the map, or left the
    blueprints empty. The **global** (blue) blueprint is shared across sessions.
    This chat also has a **local** blueprint in this session's color; only this
    chat receives it. They can keep placing at any time.
-   If `wait-for-blueprint` prints `VISUAL_CODER_INSTRUCTION_START` /
+   If `read-blueprint` prints `VISUAL_CODER_INSTRUCTION_START` /
    `VISUAL_CODER_INSTRUCTION_END`, that text is the user's request for this
    session. If it prints `VISUAL_CODER_CONTEXT_FILES_START` /
    `VISUAL_CODER_CONTEXT_FILES_END`, those are session-only files the user
@@ -143,7 +157,8 @@ npx inbase wait-for-blueprint --session "<session-id>"
    `VISUAL_CODER_CONTEXT_FILE` contents). They are not project files to create.
    Plan from that instruction, attached files, and the blueprint together. The
    instruction does not override an enabled blueprint; if they conflict,
-   ask the user.
+   ask the user. No instruction is not a conflict: an enabled blueprint alone
+   is enough to start.
 3. Read the handshake output between `VISUAL_CODER_BLUEPRINT_START` and
    `VISUAL_CODER_BLUEPRINT_END` (global, shared), and between
    `VISUAL_CODER_LOCAL_BLUEPRINT_START` and `VISUAL_CODER_LOCAL_BLUEPRINT_END`
@@ -161,10 +176,17 @@ npx inbase wait-for-blueprint --session "<session-id>"
    If the user request, a later request, or your own plan would
    differ from an enabled blueprint, **stop and ask the user in chat** before
    reporting the plan. Do not silently deviate.
-4. List **all** steps needed to finish the feature. Keep steps small enough that
+4. **Say what you see on the blueprint** in this chat before listing steps or
+   calling `report-plan`. Start with `I see on the blueprint` and name every
+   file, folder, function, variable, import, note, and pointer from the dumps —
+   say which are global and which are this session's color. This tells the user
+   you interpreted the drawing correctly. Do not summarize vaguely. If both
+   dumps are empty, say `I see nothing on the blueprint yet.` Then continue
+   (or stop on `VISUAL_CODER_NO_REQUEST`).
+5. List **all** steps needed to finish the feature. Keep steps small enough that
    one recorded step is one landscape change (usually one new file, or a few
    related edits).
-5. Report the plan before editing files:
+6. Report the plan before editing files:
 
 ```bash
 npx inbase report-plan \
@@ -174,13 +196,13 @@ npx inbase report-plan \
   --steps "Show Clock on Home"
 ```
 
-6. **Step by step is off by default**, so `report-plan` usually prints that the
+7. **Step by step is off by default**, so `report-plan` usually prints that the
    first step is already invoked (`VISUAL_CODER_EXECUTE` / phase working).
    Implement that step now. If the switch is on, **stop** and tell the user the
    plan is on the map and they can type `/go` to start the first step (or
    `/explain` to walk it). Do **not** run `wait-for-approval`. Do **not** edit
    project files until the step is invoked.
-7. When the user types **`/go`** (or **`/accept`**), run
+8. When the user types **`/go`** (or **`/accept`**), run
    `npx inbase go --session "<session-id>"`.
    If that prints `VISUAL_CODER_EXECUTE`, implement only that step by editing
    the live project files (Write, StrReplace, Delete). Paths are the same ids as
@@ -199,7 +221,7 @@ npx inbase propose-patch --session "<session-id>"
    still needs `/go` to finish.
    If that prints `VISUAL_CODER_FINISHED`, tell the user the feature is done
    and **stop**. Do not propose another patch.
-8. When the user types **`/explain`**, do not edit project files and do not
+9. When the user types **`/explain`**, do not edit project files and do not
    invoke the next step. Run `npx inbase explain start` (with `--question` when
    they provided one). If that prints `VISUAL_CODER_EXPLAIN` for a map `?`
    click, inspect that path and report one `--step`. If it prints
@@ -208,7 +230,7 @@ npx inbase propose-patch --session "<session-id>"
    Then `npx inbase explain report`. After reporting, **stop**. The user
    navigates the map. They type `/explain` again for a follow-up, or `/go`
    to continue the plan.
-9. After a finished handshake, the explorer already removed stored session
+10. After a finished handshake, the explorer already removed stored session
     diffs. The global blueprint remains. Optionally run:
 
 ```bash
@@ -220,8 +242,12 @@ npx inbase propose-patch --session "<session-id>" --clear
 - Start a visual session from chat with `start-session`; `npx inbase run` already opened 5 empty slots
 - Invent a session id; run `npx inbase attach` with no `--session`, or
   `npx inbase attach --color <name>` when the user invoked a color command
-- Skip `inbase wait-for-blueprint`; it returns immediately and provides the optional blueprint, instruction, and attached files
+- Skip `inbase read-blueprint`; it provides the optional blueprint, instruction, and attached files
+- Skip saying what you see on the blueprint after `read-blueprint`
+- Report a plan before telling the user what you see on the blueprint (`I see on the blueprint ...`)
 - Run `wait-for-approval` or `explain wait`; those commands are gone
+- Wait for a typed request when `/coral` `/amber` `/lime` `/orange` `/violet` (or an alias) has no text and an enabled blueprint is already the request
+- Invent extra files or a larger feature when there is no chat instruction and an enabled blueprint is leading
 - Treat the chat request or your own plan as overriding an enabled blueprint
 - Skip, rename, relocate, or replace files, islands, functions, variables, or imports from the global blueprint or this session's local blueprint when that dump is `enabled`
 - Silently differ from an enabled blueprint; ask the user first

@@ -6,13 +6,14 @@ export type MapContextMenuState = {
   x: number
   y: number
   folder: string
+  color?: string
 }
 
 type MapContextMenuProps = {
   menu: MapContextMenuState | null
   pointed?: boolean
-  onAddFile: (folder: string) => void
-  onAddFolder: (folder: string) => void
+  onAddFile: (folder: string, color?: string) => void
+  onAddFolder: (folder: string, color?: string) => void
   onPointToFolder?: (folder: string) => void
   onClose: () => void
 }
@@ -73,7 +74,7 @@ export function MapContextMenu({
         type="button"
         role="menuitem"
         onClick={() => {
-          onAddFile(menu.folder)
+          onAddFile(menu.folder, menu.color)
           onClose()
         }}
       >
@@ -83,7 +84,7 @@ export function MapContextMenu({
         type="button"
         role="menuitem"
         onClick={() => {
-          onAddFolder(menu.folder)
+          onAddFolder(menu.folder, menu.color)
           onClose()
         }}
       >

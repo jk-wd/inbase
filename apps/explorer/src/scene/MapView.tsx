@@ -12,6 +12,7 @@ export type MapBlueprintMenu = {
   x: number
   y: number
   folder: string
+  color?: string
 }
 
 export type MapFileLabel = {
@@ -27,6 +28,8 @@ export type MapFileLabel = {
   pointedColor?: string
   dimmed?: boolean
   focused?: boolean
+  blueprintHex?: string
+  overlay?: boolean
 }
 
 export type MapFocusBounds = {
@@ -55,6 +58,25 @@ type MapFlight = {
 const FOCUS_FLY_IN_MS = 900
 const FOCUS_FLY_OUT_IN_MS = 1500
 const FOCUS_FLY_SPLIT = 0.4
+
+function mapFolderFromObject(object: THREE.Object3D): {
+  path: string
+  layer?: string
+} | null {
+  let current: THREE.Object3D | null = object
+  while (current) {
+    const path = current.userData?.mapFolderPath
+    if (typeof path === 'string' && path) {
+      const layer = current.userData?.mapFolderLayer
+      return {
+        path,
+        layer: typeof layer === 'string' && layer ? layer : undefined,
+      }
+    }
+    current = current.parent
+  }
+  return null
+}
 
 function poseOf(bounds: MapPose): MapPose {
   return { cx: bounds.cx, cz: bounds.cz, width: bounds.width, depth: bounds.depth }
@@ -121,6 +143,7 @@ function applyMapPose(
 
 type MapViewProps = {
   layout: WorldLayout
+  fitLayout?: WorldLayout
   enabled: boolean
   marker: [number, number] | null
   highlightedFolders?: Partial<Record<string, ChangeKind>>
@@ -138,13 +161,14 @@ type MapViewProps = {
   dimmedFolderPaths?: string[]
   onLand: (x: number, z: number) => void
   onSelect: (fileId: string | null) => void
-  onSelectFolder: (folderPath: string | null) => void
+  onSelectFolder: (folderPath: string | null, layer?: string | null) => void
   pickingImport?: boolean
   onBlueprintMenu?: (menu: MapBlueprintMenu) => void
 }
 
 export function MapView({
   layout,
+  fitLayout = layout,
   enabled,
   marker,
   highlightedFolders,
@@ -171,7 +195,7 @@ export function MapView({
   const gl = useThree((state) => state.gl)
   const invalidate = useThree((state) => state.invalidate)
   const scene = useThree((state) => state.scene)
-  const world = useMemo(() => worldBounds(layout), [layout])
+  const world = useMemo(() => worldBounds(fitLayout), [fitLayout])
   const focusing = Boolean(focusBounds)
   const bounds = focusBounds ?? world
   const drag = useRef({ x: 0, y: 0, moved: false, active: false })
@@ -190,6 +214,7 @@ export function MapView({
   const flightRef = useRef<MapFlight | null>(null)
   const flightKeyRef = useRef<number | string | null>(null)
   const focusingRef = useRef(false)
+  const fittedRef = useRef(false)
   const [flying, setFlying] = useState(false)
 
   const snapTo = (pose: MapPose) => {
@@ -209,7 +234,11 @@ export function MapView({
   }
 
   useLayoutEffect(() => {
-    if (!enabled || !(camera instanceof THREE.OrthographicCamera)) return
+    if (!enabled) {
+      fittedRef.current = false
+      return
+    }
+    if (!(camera instanceof THREE.OrthographicCamera)) return
     const target = poseOf(bounds)
     const key = focusing ? focusFlightKey : 'map'
     const wasFocusing = focusingRef.current
@@ -238,7 +267,27 @@ export function MapView({
 
     if (flightRef.current) return
 
-    snapTo(target)
+    if (focusing) {
+      snapTo(target)
+      fittedRef.current = true
+      return
+    }
+
+    if (!fittedRef.current || prevKey !== 'map') {
+      snapTo(target)
+      fittedRef.current = true
+      return
+    }
+
+    applyMapPose(
+      camera,
+      poseRef.current,
+      viewWidth,
+      viewHeight,
+      hudReserve,
+      controlsRef.current,
+    )
+    invalidate()
   }, [
     bounds.cx,
     bounds.cz,
@@ -321,7 +370,15 @@ export function MapView({
       const hits = raycaster.intersectObjects(scene.children, true)
       const relationHit = hits.find((hit) => hit.object.userData.relationTo)
       const fileHit = hits.find((hit) => hit.object.userData.fileId)
-      return { raycaster, relationHit, fileHit }
+      let folderPick: { path: string; layer?: string } | null = null
+      for (const hit of hits) {
+        const found = mapFolderFromObject(hit.object)
+        if (found) {
+          folderPick = found
+          break
+        }
+      }
+      return { raycaster, relationHit, fileHit, folderPick }
     }
 
     const landAt = (x: number, z: number) => {
@@ -377,12 +434,17 @@ export function MapView({
 
       if (pickingImport) return
 
+      if (pick.folderPick) {
+        onSelectFolder(pick.folderPick.path, pick.folderPick.layer ?? null)
+        return
+      }
+
       const hit = new THREE.Vector3()
       const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
       if (pick.raycaster.ray.intersectPlane(plane, hit)) {
         const folder = folderAt(hit.x, hit.z, layout)
         if (folder) {
-          onSelectFolder(folder.path)
+          onSelectFolder(folder.path, null)
           return
         }
       }
@@ -401,17 +463,20 @@ export function MapView({
       if (!pick) return
       const hit = new THREE.Vector3()
       const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
-      if (!pick.raycaster.ray.intersectPlane(plane, hit)) return
-      const folder =
-        folderAt(hit.x, hit.z, layout) ??
-        (selectedFolder ? layout.folders[selectedFolder] : undefined) ??
-        layout.folders['.']
-      if (!folder) return
-      onSelectFolder(folder.path)
+      const planeHit = pick.raycaster.ray.intersectPlane(plane, hit)
+      const groundFolder = planeHit ? folderAt(hit.x, hit.z, layout) : null
+      const folderPath =
+        pick.folderPick?.path ??
+        groundFolder?.path ??
+        selectedFolder ??
+        layout.folders['.']?.path
+      if (!folderPath) return
+      onSelectFolder(folderPath, pick.folderPick?.layer ?? null)
       onBlueprintMenu({
         x: event.clientX,
         y: event.clientY,
-        folder: folder.path,
+        folder: folderPath,
+        color: pick.folderPick?.layer,
       })
     }
 
@@ -573,9 +638,10 @@ function folderLabelClass(
       ? `map-folder-label-${highlightedFolders[folder.path]}`
       : folder.added
         ? 'map-folder-label-added'
-        : selectedFolder === folder.path
-          ? 'map-folder-label-selected'
+        : folder.colorHex
+          ? 'map-folder-label-blueprint'
           : '',
+    selectedFolder === folder.path ? 'map-folder-label-selected' : '',
     pointed ? 'map-folder-label-pointed' : '',
     dimmed ? 'map-folder-label-dimmed' : '',
   ]
@@ -657,10 +723,10 @@ function MapFolderLabels({
         highlightedFolders?.[folder.path] ?? null,
         folder.added ?? false,
       )
-      if (folder.added && folder.colorHex) {
+      if (folder.colorHex) {
         const tint = blueprintPalette(folder.colorHex)
         el.style.setProperty('--blueprint-color', tint.color)
-        el.style.setProperty('--blueprint-label', tint.label)
+        el.style.setProperty('--blueprint-label-bg', tint.labelBg)
       }
       el.appendChild(name)
       layer.appendChild(el)
@@ -752,6 +818,7 @@ function fileLabelClass(file: MapFileLabel) {
     file.pointed ? 'map-file-label-pointed' : '',
     file.focused ? 'map-file-label-focused' : '',
     file.dimmed ? 'map-file-label-dimmed' : '',
+    file.blueprintHex ? 'map-file-label-blueprint' : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -823,7 +890,7 @@ function MapFileLabels({
       const file = items[i]
       if (file.id === namingRef.current) continue
       const block = Math.min(file.width, file.depth) * zoom
-      const force = file.selected || file.pointed || file.focused
+      const force = file.selected || file.pointed || file.focused || Boolean(file.overlay)
       if (!force && block < MIN_FILE_LABEL_PX) continue
       const screen = projectToScreen(
         file.x,
@@ -913,6 +980,14 @@ function MapFileLabels({
         el.style.setProperty('--session-color', next.file.pointedColor)
       } else {
         el.style.removeProperty('--session-color')
+      }
+      if (next.file.blueprintHex) {
+        const tint = blueprintPalette(next.file.blueprintHex)
+        el.style.setProperty('--blueprint-color', tint.color)
+        el.style.setProperty('--blueprint-label-bg', tint.labelBg)
+      } else {
+        el.style.removeProperty('--blueprint-color')
+        el.style.removeProperty('--blueprint-label-bg')
       }
       if (name && name.textContent !== next.file.name) name.textContent = next.file.name
       el.style.maxWidth = `${Math.round(next.w)}px`

@@ -15,7 +15,7 @@ You are changing files in `apps/example-target`. Follow
 
 - `/skipinbase`: do the request without Inbase.
 - `/inbase`, or this chat already has `VISUAL_CODER_SESSION`: follow the skill
-  from `wait-for-blueprint`.
+  from `read-blueprint`. After that, say what you see on the blueprint.
 - Any other file-change request: attach if needed, then follow the skill.
 
 After `VISUAL_CODER_EXECUTE`, edit `apps/example-target` with Write / StrReplace /

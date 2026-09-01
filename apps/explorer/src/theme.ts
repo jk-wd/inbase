@@ -30,6 +30,19 @@ export const WORLD_VOID = '#000000'
 
 export type ChangeKind = 'add' | 'edit' | 'remove'
 
+export const FILE_EMPHASIS_SCALE = 2
+
+export function fileEmphasisScale(
+  overlay: boolean,
+  changeKind: ChangeKind | null,
+  added = false,
+) {
+  if (overlay || added || changeKind === 'add' || changeKind === 'edit') {
+    return FILE_EMPHASIS_SCALE
+  }
+  return 1
+}
+
 export const CHANGE_HIGHLIGHT: Record<
   ChangeKind,
   { color: string; emissive: string; floor: string; aisle: string }
@@ -55,13 +68,13 @@ export const CHANGE_HIGHLIGHT: Record<
 }
 
 export const FILE_SELECTION = {
-  color: '#c026ff',
-  emissive: '#6d00b8',
+  color: '#ffffff',
+  emissive: '#ffffff',
 }
 
 export const MAP_SELECTION = {
-  color: '#000000',
-  island: FILE_SELECTION.color,
+  color: '#ffffff',
+  island: '#ffffff',
   islandPad: 0.38,
   blockPad: 0.1,
   pointed: '#9ad8ff',
@@ -127,12 +140,25 @@ export function lightenColor(hex: string, amount = 0.35) {
   return `#${channel(0)}${channel(2)}${channel(4)}`
 }
 
+export const BLUEPRINT_OVERLAY = {
+  folderOpacity: 0.3,
+  folderOutlineOpacity: 0.7,
+  fileOpacity: 0.86,
+  folderY: 13.2,
+  layerStep: 0.14,
+  fileLift: 0.35,
+  strength: 0.55,
+}
+
 export function blueprintPalette(hex?: string | null) {
   const color =
     typeof hex === 'string' && /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : '#38bdf8'
   return {
     color,
+    wash: lightenColor(color, 0.22),
+    block: dimColor(color, 0.58),
     label: lightenColor(color, 0.42),
+    labelBg: dimColor(color, 0.78),
     emissive: dimColor(color, 0.45),
     floor: dimColor(color, 0.78),
     aisle: dimColor(color, 0.58),

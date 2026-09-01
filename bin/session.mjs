@@ -136,7 +136,7 @@ export async function startSession(args) {
 
   const manifest = store.startSession(config.dataDir, { sessionId, name, feature })
   console.log(
-    `VISUAL_CODER_BLUEPRINT_WAIT Session ${manifest.name || sessionId} is visible in the visualizer (${manifest.phase}). Wait with inbase wait-for-blueprint before drafting the plan. A running visualizer does not skip this handshake.`,
+    `VISUAL_CODER_BLUEPRINT_WAIT Session ${manifest.name || sessionId} is visible in the visualizer (${manifest.phase}). Run inbase read-blueprint before drafting the plan. A running visualizer does not skip this handshake.`,
   )
 }
 
@@ -156,8 +156,8 @@ export async function attachSession(args) {
   printAck('attached', colorName || manifest.name || manifest.sessionId)
   console.log(
     colorName
-      ? `VISUAL_CODER_ATTACHED Attached to the ${colorName} session (${manifest.phase}). Tell the user you connected to the ${colorName} chat. Use --session ${manifest.sessionId} for every later command. Run inbase wait-for-blueprint --session ${manifest.sessionId} to read the optional blueprint, instruction, and attached files; it does not wait. Then report a plan if you can. Stop after report-plan — the user types /go or /explain in chat.`
-      : `VISUAL_CODER_ATTACHED Attached to the next waiting visualizer session ${manifest.name || manifest.sessionId} (${manifest.phase}). Use --session ${manifest.sessionId} for every later command. Run inbase wait-for-blueprint --session ${manifest.sessionId} to read the optional blueprint, instruction, and attached files; it does not wait. Then report a plan if you can. Stop after report-plan — the user types /go or /explain in chat.`,
+      ? `VISUAL_CODER_ATTACHED Attached to the ${colorName} session (${manifest.phase}). Tell the user you connected to the ${colorName} chat. Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then report a plan if you can. Stop after report-plan — the user types /go or /explain in chat.`
+      : `VISUAL_CODER_ATTACHED Attached to the next waiting visualizer session ${manifest.name || manifest.sessionId} (${manifest.phase}). Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then report a plan if you can. Stop after report-plan — the user types /go or /explain in chat.`,
   )
 }
 
@@ -213,6 +213,9 @@ function printSessionBlueprints(store, dataDir, sessionId) {
     .join('; ')
   printBlueprintDump(global)
   printBlueprintDump(local, { local: true, colorName })
+  console.log(
+    'VISUAL_CODER_SAY_BLUEPRINT Reply in chat now. Start with "I see on the blueprint" and name every file, folder, function, variable, import, note, and pointer from the dumps. Say which items are global and which are this session\'s color. This confirms you interpreted the blueprint correctly. Then continue. If both dumps are empty, say "I see nothing on the blueprint yet."',
+  )
   store.markBlueprintSeen(dataDir, sessionId, global.revision, local.revision)
   return {
     global,
@@ -222,10 +225,10 @@ function printSessionBlueprints(store, dataDir, sessionId) {
   }
 }
 
-export async function waitForBlueprint(args) {
+export async function readBlueprint(args) {
   const { store, config } = await loadExplorer()
   const sessionId = takeFlagValue(args, '--session')
-  if (!sessionId) usage('wait-for-blueprint', '--session <cursor-chat-id>')
+  if (!sessionId) usage('read-blueprint', '--session <cursor-chat-id>')
 
   if (store.isWorkflowStopped(config.dataDir, sessionId)) {
     emitStopped(store, config.dataDir, sessionId)
@@ -262,6 +265,14 @@ export async function waitForBlueprint(args) {
     console.log('VISUAL_CODER_INSTRUCTION_START')
     console.log(instruction)
     console.log('VISUAL_CODER_INSTRUCTION_END')
+  } else if (dumped.global.enabled || dumped.local.enabled) {
+    console.log(
+      'VISUAL_CODER_BLUEPRINT_ONLY No chat instruction. An enabled blueprint is the request: create those files, folders, and symbols. Ask the user if you need more information before reporting the plan. Do not invent extra work.',
+    )
+  } else {
+    console.log(
+      'VISUAL_CODER_NO_REQUEST No chat instruction and no enabled blueprint. Stop. Wait for the user to type a request, /go, or /explain in chat.',
+    )
   }
   const attached = store.contextFileHandshake(config.dataDir, sessionId)
   if (attached.files.length > 0) {

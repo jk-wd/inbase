@@ -4,6 +4,7 @@ import { beginKeyboardIsolation } from '../keyboard'
 type NameInputProps = {
   placeholder: string
   fallbackName?: string
+  commitOnOutside?: boolean
   onCommit: (name: string) => void
   onCancel: () => void
 }
@@ -11,6 +12,7 @@ type NameInputProps = {
 export function NameInput({
   placeholder,
   fallbackName,
+  commitOnOutside = true,
   onCommit,
   onCancel,
 }: NameInputProps) {
@@ -40,6 +42,7 @@ export function NameInput({
   }
 
   useEffect(() => {
+    if (!commitOnOutside) return
     const onPointerDown = (event: PointerEvent) => {
       if (event.button !== 0) return
       const target = event.target
@@ -50,7 +53,7 @@ export function NameInput({
     }
     window.addEventListener('pointerdown', onPointerDown, true)
     return () => window.removeEventListener('pointerdown', onPointerDown, true)
-  }, [])
+  }, [commitOnOutside])
 
   return (
     <form

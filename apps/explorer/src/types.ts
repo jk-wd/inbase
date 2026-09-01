@@ -51,6 +51,7 @@ export type PlacedFolder = {
   width: number
   depth: number
   added?: boolean
+  overlay?: boolean
   colorHex?: string
 }
 

@@ -29,7 +29,7 @@ export function DistantFileBlocks({
       <meshLambertMaterial />
       {items.map(({ file, placed, dimmed }) => {
         const color = file.userCreated || file.colorHex
-          ? blueprintPalette(file.colorHex).color
+          ? blueprintPalette(file.colorHex).block
           : fileColor(file.language)
         return (
           <Instance

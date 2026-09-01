@@ -27,7 +27,7 @@
       "name": "README.md",
       "path": "README.md",
       "folder": ".",
-      "lines": 337,
+      "lines": 340,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -2700,7 +2700,7 @@
       "name": "session-store.d.ts",
       "path": "apps/explorer/scripts/session-store.d.ts",
       "folder": "apps/explorer/scripts",
-      "lines": 441,
+      "lines": 433,
       "language": "ts",
       "symbols": [
         {
@@ -3000,10 +3000,6 @@
           "kind": "function"
         },
         {
-          "name": "requestReplan",
-          "kind": "function"
-        },
-        {
           "name": "notifySessionExplain",
           "kind": "function"
         },
@@ -3087,7 +3083,7 @@
       "name": "session-store.mjs",
       "path": "apps/explorer/scripts/session-store.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 2361,
+      "lines": 2334,
       "language": "mjs",
       "symbols": [
         {
@@ -3560,10 +3556,6 @@
         },
         {
           "name": "continueDiff",
-          "kind": "function"
-        },
-        {
-          "name": "requestReplan",
           "kind": "function"
         },
         {
@@ -4223,10 +4215,6 @@
           "kind": "variable"
         },
         {
-          "name": "guidance",
-          "kind": "variable"
-        },
-        {
           "name": "keep",
           "kind": "variable"
         },
@@ -4334,7 +4322,7 @@
       "name": "session-store.test.mjs",
       "path": "apps/explorer/scripts/session-store.test.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 2398,
+      "lines": 2232,
       "language": "mjs",
       "symbols": [
         {
@@ -4390,19 +4378,7 @@
           "kind": "variable"
         },
         {
-          "name": "oneToThree",
-          "kind": "variable"
-        },
-        {
-          "name": "oneToNine",
-          "kind": "variable"
-        },
-        {
           "name": "twoToThree",
-          "kind": "variable"
-        },
-        {
-          "name": "threeToFour",
           "kind": "variable"
         },
         {
@@ -4690,39 +4666,11 @@
           "kind": "variable"
         },
         {
-          "name": "firstText",
-          "kind": "variable"
-        },
-        {
-          "name": "kept",
-          "kind": "variable"
-        },
-        {
-          "name": "revised",
-          "kind": "variable"
-        },
-        {
-          "name": "replacement",
-          "kind": "variable"
-        },
-        {
           "name": "connected",
           "kind": "variable"
         },
         {
           "name": "explain",
-          "kind": "variable"
-        },
-        {
-          "name": "after",
-          "kind": "variable"
-        },
-        {
-          "name": "still",
-          "kind": "variable"
-        },
-        {
-          "name": "replaced",
           "kind": "variable"
         },
         {
@@ -4739,6 +4687,10 @@
         },
         {
           "name": "afterScan",
+          "kind": "variable"
+        },
+        {
+          "name": "kept",
           "kind": "variable"
         },
         {
@@ -5274,7 +5226,7 @@
       "name": "App.tsx",
       "path": "apps/explorer/src/App.tsx",
       "folder": "apps/explorer/src",
-      "lines": 2653,
+      "lines": 2896,
       "language": "tsx",
       "symbols": [
         {
@@ -5311,6 +5263,22 @@
         },
         {
           "name": "visibleItemsForBlueprint",
+          "kind": "function"
+        },
+        {
+          "name": "withBlueprintHidden",
+          "kind": "function"
+        },
+        {
+          "name": "emptiedBlueprint",
+          "kind": "function"
+        },
+        {
+          "name": "cleanedBlueprint",
+          "kind": "function"
+        },
+        {
+          "name": "withPatchedBlueprint",
           "kind": "function"
         },
         {
@@ -5406,6 +5374,34 @@
           "kind": "variable"
         },
         {
+          "name": "nextBlocks",
+          "kind": "variable"
+        },
+        {
+          "name": "nextIslands",
+          "kind": "variable"
+        },
+        {
+          "name": "removed",
+          "kind": "variable"
+        },
+        {
+          "name": "nextFunctions",
+          "kind": "variable"
+        },
+        {
+          "name": "nextVariables",
+          "kind": "variable"
+        },
+        {
+          "name": "nextImports",
+          "kind": "variable"
+        },
+        {
+          "name": "notes",
+          "kind": "variable"
+        },
+        {
           "name": "blocks",
           "kind": "variable"
         },
@@ -5431,6 +5427,10 @@
         },
         {
           "name": "sources",
+          "kind": "variable"
+        },
+        {
+          "name": "layers",
           "kind": "variable"
         },
         {
@@ -5546,11 +5546,19 @@
           "kind": "variable"
         },
         {
+          "name": "visibleBlueprintColorsRef",
+          "kind": "variable"
+        },
+        {
           "name": "latestBlueprintsRef",
           "kind": "variable"
         },
         {
           "name": "blueprintOptionsRef",
+          "kind": "variable"
+        },
+        {
+          "name": "placementLayoutRef",
           "kind": "variable"
         },
         {
@@ -5590,6 +5598,10 @@
           "kind": "variable"
         },
         {
+          "name": "lastVisibleColorsRef",
+          "kind": "variable"
+        },
+        {
           "name": "notesDirty",
           "kind": "variable"
         },
@@ -5610,10 +5622,6 @@
           "kind": "variable"
         },
         {
-          "name": "naming",
-          "kind": "variable"
-        },
-        {
           "name": "previewGraph",
           "kind": "variable"
         },
@@ -5623,6 +5631,10 @@
         },
         {
           "name": "knownFolderPaths",
+          "kind": "variable"
+        },
+        {
+          "name": "visibleBlueprintColorSet",
           "kind": "variable"
         },
         {
@@ -5643,10 +5655,6 @@
         },
         {
           "name": "pendingBlocks",
-          "kind": "variable"
-        },
-        {
-          "name": "overlayBlocks",
           "kind": "variable"
         },
         {
@@ -5890,35 +5898,19 @@
           "kind": "variable"
         },
         {
-          "name": "notes",
-          "kind": "variable"
-        },
-        {
           "name": "applyBlueprintPointer",
           "kind": "variable"
         },
         {
-          "name": "placeBlock",
+          "name": "ownerColorForCreatedFolder",
           "kind": "variable"
         },
         {
-          "name": "placeBlockOnFolder",
+          "name": "beginAddFile",
           "kind": "variable"
         },
         {
-          "name": "fileCount",
-          "kind": "variable"
-        },
-        {
-          "name": "spot",
-          "kind": "variable"
-        },
-        {
-          "name": "commitBlockName",
-          "kind": "variable"
-        },
-        {
-          "name": "draft",
+          "name": "renameCreatedBlock",
           "kind": "variable"
         },
         {
@@ -5930,39 +5922,11 @@
           "kind": "variable"
         },
         {
-          "name": "cancelBlockName",
-          "kind": "variable"
-        },
-        {
-          "name": "renameCreatedBlock",
-          "kind": "variable"
-        },
-        {
-          "name": "nextBlocks",
-          "kind": "variable"
-        },
-        {
           "name": "remapped",
           "kind": "variable"
         },
         {
-          "name": "placeIsland",
-          "kind": "variable"
-        },
-        {
-          "name": "placedId",
-          "kind": "variable"
-        },
-        {
-          "name": "placeIslandOnFolder",
-          "kind": "variable"
-        },
-        {
-          "name": "commitIslandName",
-          "kind": "variable"
-        },
-        {
-          "name": "cancelIslandName",
+          "name": "beginAddFolder",
           "kind": "variable"
         },
         {
@@ -5979,10 +5943,6 @@
         },
         {
           "name": "ownerColorForCreatedFile",
-          "kind": "variable"
-        },
-        {
-          "name": "ownerColorForCreatedFolder",
           "kind": "variable"
         },
         {
@@ -6078,10 +6038,6 @@
           "kind": "variable"
         },
         {
-          "name": "nextIslands",
-          "kind": "variable"
-        },
-        {
           "name": "drafts",
           "kind": "variable"
         },
@@ -6111,6 +6067,10 @@
         },
         {
           "name": "colorIds",
+          "kind": "variable"
+        },
+        {
+          "name": "nextVisible",
           "kind": "variable"
         },
         {
@@ -6150,6 +6110,10 @@
           "kind": "variable"
         },
         {
+          "name": "contents",
+          "kind": "variable"
+        },
+        {
           "name": "blueprintCanCleanup",
           "kind": "variable"
         },
@@ -6174,6 +6138,14 @@
           "kind": "variable"
         },
         {
+          "name": "overlayLayers",
+          "kind": "variable"
+        },
+        {
+          "name": "placementLayout",
+          "kind": "variable"
+        },
+        {
           "name": "explainBounds",
           "kind": "variable"
         },
@@ -6194,7 +6166,23 @@
           "kind": "variable"
         },
         {
-          "name": "toggleBlueprintHidden",
+          "name": "replaceVisibleColors",
+          "kind": "variable"
+        },
+        {
+          "name": "currentVisibleColors",
+          "kind": "variable"
+        },
+        {
+          "name": "replaceStoredBlueprints",
+          "kind": "variable"
+        },
+        {
+          "name": "applyHiddenToColors",
+          "kind": "variable"
+        },
+        {
+          "name": "activateBlueprintColor",
           "kind": "variable"
         },
         {
@@ -6202,27 +6190,47 @@
           "kind": "variable"
         },
         {
+          "name": "writeCreatedContents",
+          "kind": "variable"
+        },
+        {
+          "name": "commitAddItem",
+          "kind": "variable"
+        },
+        {
+          "name": "shown",
+          "kind": "variable"
+        },
+        {
+          "name": "fileIndex",
+          "kind": "variable"
+        },
+        {
+          "name": "spot",
+          "kind": "variable"
+        },
+        {
+          "name": "toggleBlueprintColor",
+          "kind": "variable"
+        },
+        {
+          "name": "remaining",
+          "kind": "variable"
+        },
+        {
+          "name": "toggleBlueprintHidden",
+          "kind": "variable"
+        },
+        {
           "name": "clearSharedBlueprint",
           "kind": "variable"
         },
         {
+          "name": "colors",
+          "kind": "variable"
+        },
+        {
           "name": "cleanupSharedBlueprint",
-          "kind": "variable"
-        },
-        {
-          "name": "removed",
-          "kind": "variable"
-        },
-        {
-          "name": "nextFunctions",
-          "kind": "variable"
-        },
-        {
-          "name": "nextVariables",
-          "kind": "variable"
-        },
-        {
-          "name": "nextImports",
           "kind": "variable"
         },
         {
@@ -6370,11 +6378,27 @@
           "kind": "variable"
         },
         {
+          "name": "blueprintOpacity",
+          "kind": "variable"
+        },
+        {
+          "name": "setBlueprintOpacity",
+          "kind": "variable"
+        },
+        {
           "name": "blueprintColor",
           "kind": "variable"
         },
         {
           "name": "setBlueprintColor",
+          "kind": "variable"
+        },
+        {
+          "name": "visibleBlueprintColors",
+          "kind": "variable"
+        },
+        {
+          "name": "setVisibleBlueprintColors",
           "kind": "variable"
         },
         {
@@ -6447,6 +6471,14 @@
         },
         {
           "name": "setSelectedFolder",
+          "kind": "variable"
+        },
+        {
+          "name": "addingItem",
+          "kind": "variable"
+        },
+        {
+          "name": "setAddingItem",
           "kind": "variable"
         },
         {
@@ -6560,7 +6592,8 @@
         "apps/explorer/src/explain.ts",
         "apps/explorer/src/userContext.ts",
         "apps/explorer/src/userCreated.ts",
-        "apps/explorer/src/types.ts"
+        "apps/explorer/src/types.ts",
+        "apps/explorer/src/theme.ts"
       ]
     },
     {
@@ -6568,7 +6601,7 @@
       "name": "agentIntent.ts",
       "path": "apps/explorer/src/agentIntent.ts",
       "folder": "apps/explorer/src",
-      "lines": 542,
+      "lines": 541,
       "language": "ts",
       "symbols": [
         {
@@ -7096,7 +7129,7 @@
       "name": "index.css",
       "path": "apps/explorer/src/index.css",
       "folder": "apps/explorer/src",
-      "lines": 2200,
+      "lines": 2291,
       "language": "css",
       "symbols": [],
       "imports": []
@@ -7898,7 +7931,7 @@
       "name": "FileBlock.tsx",
       "path": "apps/explorer/src/scene/FileBlock.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 296,
+      "lines": 319,
       "language": "tsx",
       "symbols": [
         {
@@ -7939,6 +7972,22 @@
         },
         {
           "name": "isAdded",
+          "kind": "variable"
+        },
+        {
+          "name": "emphasis",
+          "kind": "variable"
+        },
+        {
+          "name": "width",
+          "kind": "variable"
+        },
+        {
+          "name": "height",
+          "kind": "variable"
+        },
+        {
+          "name": "depth",
           "kind": "variable"
         },
         {
@@ -7988,18 +8037,6 @@
         {
           "name": "z",
           "kind": "variable"
-        },
-        {
-          "name": "width",
-          "kind": "variable"
-        },
-        {
-          "name": "height",
-          "kind": "variable"
-        },
-        {
-          "name": "depth",
-          "kind": "variable"
         }
       ],
       "imports": [
@@ -8014,7 +8051,7 @@
       "name": "FolderArea.tsx",
       "path": "apps/explorer/src/scene/FolderArea.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 164,
+      "lines": 197,
       "language": "tsx",
       "symbols": [
         {
@@ -8066,6 +8103,10 @@
           "kind": "variable"
         },
         {
+          "name": "wash",
+          "kind": "variable"
+        },
+        {
           "name": "floorMaterial",
           "kind": "variable"
         }
@@ -8082,7 +8123,7 @@
       "name": "MapSelectBorder.tsx",
       "path": "apps/explorer/src/scene/MapSelectBorder.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 60,
+      "lines": 67,
       "language": "tsx",
       "symbols": [
         {
@@ -8127,9 +8168,13 @@
       "name": "MapView.tsx",
       "path": "apps/explorer/src/scene/MapView.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 976,
+      "lines": 1046,
       "language": "tsx",
       "symbols": [
+        {
+          "name": "mapFolderFromObject",
+          "kind": "function"
+        },
         {
           "name": "poseOf",
           "kind": "function"
@@ -8255,6 +8300,18 @@
           "kind": "variable"
         },
         {
+          "name": "current",
+          "kind": "variable"
+        },
+        {
+          "name": "path",
+          "kind": "variable"
+        },
+        {
+          "name": "layer",
+          "kind": "variable"
+        },
+        {
           "name": "t",
           "kind": "variable"
         },
@@ -8343,6 +8400,10 @@
           "kind": "variable"
         },
         {
+          "name": "fittedRef",
+          "kind": "variable"
+        },
+        {
           "name": "target",
           "kind": "variable"
         },
@@ -8395,15 +8456,23 @@
           "kind": "variable"
         },
         {
+          "name": "folderPick",
+          "kind": "variable"
+        },
+        {
+          "name": "hit",
+          "kind": "variable"
+        },
+        {
+          "name": "found",
+          "kind": "variable"
+        },
+        {
           "name": "lock",
           "kind": "variable"
         },
         {
           "name": "pick",
-          "kind": "variable"
-        },
-        {
-          "name": "hit",
           "kind": "variable"
         },
         {
@@ -8416,6 +8485,18 @@
         },
         {
           "name": "startedOnCanvas",
+          "kind": "variable"
+        },
+        {
+          "name": "planeHit",
+          "kind": "variable"
+        },
+        {
+          "name": "groundFolder",
+          "kind": "variable"
+        },
+        {
+          "name": "folderPath",
           "kind": "variable"
         },
         {
@@ -8532,10 +8613,6 @@
         },
         {
           "name": "parent",
-          "kind": "variable"
-        },
-        {
-          "name": "layer",
           "kind": "variable"
         },
         {
@@ -9435,11 +9512,23 @@
       "name": "World.tsx",
       "path": "apps/explorer/src/scene/World.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 554,
+      "lines": 731,
       "language": "tsx",
       "symbols": [
         {
           "name": "World",
+          "kind": "function"
+        },
+        {
+          "name": "OverlayBridgeStrip",
+          "kind": "function"
+        },
+        {
+          "name": "BlueprintOverlay",
+          "kind": "function"
+        },
+        {
+          "name": "labelHex",
           "kind": "function"
         },
         {
@@ -9575,7 +9664,27 @@
           "kind": "variable"
         },
         {
+          "name": "overlayFileHex",
+          "kind": "variable"
+        },
+        {
+          "name": "overlayFolderHex",
+          "kind": "variable"
+        },
+        {
+          "name": "layer",
+          "kind": "variable"
+        },
+        {
           "name": "colors",
+          "kind": "variable"
+        },
+        {
+          "name": "kind",
+          "kind": "variable"
+        },
+        {
+          "name": "scale",
           "kind": "variable"
         },
         {
@@ -9587,15 +9696,23 @@
           "kind": "variable"
         },
         {
-          "name": "block",
+          "name": "hex",
           "kind": "variable"
         },
         {
-          "name": "height",
+          "name": "filled",
+          "kind": "variable"
+        },
+        {
+          "name": "name",
           "kind": "variable"
         },
         {
           "name": "dimmedFolderPaths",
+          "kind": "variable"
+        },
+        {
+          "name": "mapViewLayout",
           "kind": "variable"
         },
         {
@@ -9636,6 +9753,46 @@
         },
         {
           "name": "opacity",
+          "kind": "variable"
+        },
+        {
+          "name": "from",
+          "kind": "variable"
+        },
+        {
+          "name": "to",
+          "kind": "variable"
+        },
+        {
+          "name": "x",
+          "kind": "variable"
+        },
+        {
+          "name": "z",
+          "kind": "variable"
+        },
+        {
+          "name": "alongX",
+          "kind": "variable"
+        },
+        {
+          "name": "length",
+          "kind": "variable"
+        },
+        {
+          "name": "filesById",
+          "kind": "variable"
+        },
+        {
+          "name": "tint",
+          "kind": "variable"
+        },
+        {
+          "name": "existing",
+          "kind": "variable"
+        },
+        {
+          "name": "isFilled",
           "kind": "variable"
         },
         {
@@ -9937,9 +10094,13 @@
       "name": "theme.ts",
       "path": "apps/explorer/src/theme.ts",
       "folder": "apps/explorer/src",
-      "lines": 157,
+      "lines": 183,
       "language": "ts",
       "symbols": [
+        {
+          "name": "fileEmphasisScale",
+          "kind": "function"
+        },
         {
           "name": "fileHeight",
           "kind": "function"
@@ -9989,6 +10150,10 @@
           "kind": "variable"
         },
         {
+          "name": "FILE_EMPHASIS_SCALE",
+          "kind": "variable"
+        },
+        {
           "name": "CHANGE_HIGHLIGHT",
           "kind": "variable"
         },
@@ -10010,6 +10175,10 @@
         },
         {
           "name": "n",
+          "kind": "variable"
+        },
+        {
+          "name": "BLUEPRINT_OVERLAY",
           "kind": "variable"
         },
         {
@@ -10408,7 +10577,7 @@
       "name": "HUD.tsx",
       "path": "apps/explorer/src/ui/HUD.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 3416,
+      "lines": 3547,
       "language": "tsx",
       "symbols": [
         {
@@ -10437,6 +10606,14 @@
         },
         {
           "name": "SessionSwatch",
+          "kind": "function"
+        },
+        {
+          "name": "defaultAddLayerColor",
+          "kind": "function"
+        },
+        {
+          "name": "AddItemModal",
           "kind": "function"
         },
         {
@@ -10600,6 +10777,18 @@
           "kind": "variable"
         },
         {
+          "name": "layerOptions",
+          "kind": "variable"
+        },
+        {
+          "name": "colorRef",
+          "kind": "variable"
+        },
+        {
+          "name": "selected",
+          "kind": "variable"
+        },
+        {
           "name": "gap",
           "kind": "variable"
         },
@@ -10677,10 +10866,6 @@
         },
         {
           "name": "node",
-          "kind": "variable"
-        },
-        {
-          "name": "selected",
           "kind": "variable"
         },
         {
@@ -11120,22 +11305,6 @@
           "kind": "variable"
         },
         {
-          "name": "namingFolder",
-          "kind": "variable"
-        },
-        {
-          "name": "namingFile",
-          "kind": "variable"
-        },
-        {
-          "name": "namingCommit",
-          "kind": "variable"
-        },
-        {
-          "name": "namingCancel",
-          "kind": "variable"
-        },
-        {
           "name": "next",
           "kind": "variable"
         },
@@ -11153,6 +11322,10 @@
         },
         {
           "name": "item",
+          "kind": "variable"
+        },
+        {
+          "name": "setColor",
           "kind": "variable"
         },
         {
@@ -11185,14 +11358,6 @@
         },
         {
           "name": "setMinimized",
-          "kind": "variable"
-        },
-        {
-          "name": "instruction",
-          "kind": "variable"
-        },
-        {
-          "name": "setInstruction",
           "kind": "variable"
         },
         {
@@ -11266,7 +11431,7 @@
       "name": "MapContextMenu.tsx",
       "path": "apps/explorer/src/ui/MapContextMenu.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 109,
+      "lines": 110,
       "language": "tsx",
       "symbols": [
         {
@@ -11315,7 +11480,7 @@
       "name": "NameInput.tsx",
       "path": "apps/explorer/src/ui/NameInput.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 157,
+      "lines": 160,
       "language": "tsx",
       "symbols": [
         {
@@ -11481,7 +11646,7 @@
       "name": "userCreated.ts",
       "path": "apps/explorer/src/userCreated.ts",
       "folder": "apps/explorer/src",
-      "lines": 711,
+      "lines": 947,
       "language": "ts",
       "symbols": [
         {
@@ -11558,6 +11723,34 @@
         },
         {
           "name": "withUserCreatedLayout",
+          "kind": "function"
+        },
+        {
+          "name": "uniqueSiblings",
+          "kind": "function"
+        },
+        {
+          "name": "placeOverlayIslands",
+          "kind": "function"
+        },
+        {
+          "name": "baseFileCountInFolder",
+          "kind": "function"
+        },
+        {
+          "name": "placeOverlayBlocks",
+          "kind": "function"
+        },
+        {
+          "name": "islandsForOverlay",
+          "kind": "function"
+        },
+        {
+          "name": "layoutBlueprintLayers",
+          "kind": "function"
+        },
+        {
+          "name": "mergeOverlayOnlyFolders",
           "kind": "function"
         },
         {
@@ -11642,6 +11835,10 @@
         },
         {
           "name": "withBlueprintIntent",
+          "kind": "function"
+        },
+        {
+          "name": "lookup",
           "kind": "function"
         },
         {
@@ -11785,6 +11982,70 @@
           "kind": "variable"
         },
         {
+          "name": "seen",
+          "kind": "variable"
+        },
+        {
+          "name": "existing",
+          "kind": "variable"
+        },
+        {
+          "name": "count",
+          "kind": "variable"
+        },
+        {
+          "name": "filledIds",
+          "kind": "variable"
+        },
+        {
+          "name": "nextIndex",
+          "kind": "variable"
+        },
+        {
+          "name": "foldersForSpot",
+          "kind": "variable"
+        },
+        {
+          "name": "folderPath",
+          "kind": "variable"
+        },
+        {
+          "name": "index",
+          "kind": "variable"
+        },
+        {
+          "name": "spot",
+          "kind": "variable"
+        },
+        {
+          "name": "have",
+          "kind": "variable"
+        },
+        {
+          "name": "implied",
+          "kind": "variable"
+        },
+        {
+          "name": "folderY",
+          "kind": "variable"
+        },
+        {
+          "name": "fileLift",
+          "kind": "variable"
+        },
+        {
+          "name": "seenBridges",
+          "kind": "variable"
+        },
+        {
+          "name": "layer",
+          "kind": "variable"
+        },
+        {
+          "name": "bridge",
+          "kind": "variable"
+        },
+        {
           "name": "side",
           "kind": "variable"
         },
@@ -11798,10 +12059,6 @@
         },
         {
           "name": "note",
-          "kind": "variable"
-        },
-        {
-          "name": "seen",
           "kind": "variable"
         },
         {
@@ -11892,7 +12149,7 @@
       "name": "vite.config.ts",
       "path": "apps/explorer/vite.config.ts",
       "folder": "apps/explorer",
-      "lines": 677,
+      "lines": 663,
       "language": "ts",
       "symbols": [
         {
@@ -12233,7 +12490,7 @@
       "name": "inbase.test.mjs",
       "path": "bin/inbase.test.mjs",
       "folder": "bin",
-      "lines": 572,
+      "lines": 650,
       "language": "mjs",
       "symbols": [
         {
@@ -12321,6 +12578,22 @@
           "kind": "variable"
         },
         {
+          "name": "empty",
+          "kind": "variable"
+        },
+        {
+          "name": "store",
+          "kind": "variable"
+        },
+        {
+          "name": "withBlueprint",
+          "kind": "variable"
+        },
+        {
+          "name": "withInstruction",
+          "kind": "variable"
+        },
+        {
           "name": "explain",
           "kind": "variable"
         },
@@ -12330,10 +12603,6 @@
         },
         {
           "name": "value",
-          "kind": "variable"
-        },
-        {
-          "name": "store",
           "kind": "variable"
         },
         {
@@ -12655,7 +12924,7 @@
       "name": "session.mjs",
       "path": "bin/session.mjs",
       "folder": "bin",
-      "lines": 563,
+      "lines": 539,
       "language": "mjs",
       "symbols": [
         {
@@ -12715,7 +12984,7 @@
           "kind": "function"
         },
         {
-          "name": "waitForBlueprint",
+          "name": "readBlueprint",
           "kind": "function"
         },
         {
@@ -12776,18 +13045,6 @@
         },
         {
           "name": "next",
-          "kind": "variable"
-        },
-        {
-          "name": "guidance",
-          "kind": "variable"
-        },
-        {
-          "name": "updating",
-          "kind": "variable"
-        },
-        {
-          "name": "instruction",
           "kind": "variable"
         },
         {
@@ -12864,6 +13121,10 @@
         },
         {
           "name": "dumped",
+          "kind": "variable"
+        },
+        {
+          "name": "instruction",
           "kind": "variable"
         },
         {
@@ -13000,7 +13261,7 @@
       "name": "amber.md",
       "path": "skill/commands/amber.md",
       "folder": "skill/commands",
-      "lines": 24,
+      "lines": 26,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13020,7 +13281,7 @@
       "name": "coral.md",
       "path": "skill/commands/coral.md",
       "folder": "skill/commands",
-      "lines": 24,
+      "lines": 26,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13050,7 +13311,7 @@
       "name": "green.md",
       "path": "skill/commands/green.md",
       "folder": "skill/commands",
-      "lines": 24,
+      "lines": 26,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13060,7 +13321,7 @@
       "name": "inbase.md",
       "path": "skill/commands/inbase.md",
       "folder": "skill/commands",
-      "lines": 20,
+      "lines": 22,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13070,7 +13331,7 @@
       "name": "lime.md",
       "path": "skill/commands/lime.md",
       "folder": "skill/commands",
-      "lines": 24,
+      "lines": 26,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13080,7 +13341,7 @@
       "name": "orange.md",
       "path": "skill/commands/orange.md",
       "folder": "skill/commands",
-      "lines": 24,
+      "lines": 26,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13090,7 +13351,7 @@
       "name": "purple.md",
       "path": "skill/commands/purple.md",
       "folder": "skill/commands",
-      "lines": 24,
+      "lines": 26,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13100,7 +13361,7 @@
       "name": "red.md",
       "path": "skill/commands/red.md",
       "folder": "skill/commands",
-      "lines": 24,
+      "lines": 26,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13120,7 +13381,7 @@
       "name": "violet.md",
       "path": "skill/commands/violet.md",
       "folder": "skill/commands",
-      "lines": 24,
+      "lines": 26,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13130,7 +13391,7 @@
       "name": "yellow.md",
       "path": "skill/commands/yellow.md",
       "folder": "skill/commands",
-      "lines": 24,
+      "lines": 26,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13140,7 +13401,7 @@
       "name": "SKILL.md",
       "path": "skill/inbase/SKILL.md",
       "folder": "skill/inbase",
-      "lines": 247,
+      "lines": 255,
       "language": "md",
       "symbols": [],
       "imports": []
