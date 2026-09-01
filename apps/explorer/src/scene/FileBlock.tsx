@@ -1,6 +1,6 @@
 import { memo, Suspense } from 'react'
 import { Billboard, Edges, Html, Text } from '@react-three/drei'
-import { CHANGE_HIGHLIGHT, CONFIG, blueprintPalette, dimColor, fileColor, fileEmphasisScale, FILE_SELECTION, MAP_SELECTION, type ChangeKind } from '../theme'
+import { CHANGE_HIGHLIGHT, CONFIG, EXPLAIN_FOCUS, blueprintPalette, dimColor, fileColor, fileEmphasisScale, FILE_SELECTION, MAP_SELECTION, type ChangeKind } from '../theme'
 import { BlueprintEyes } from '../ui/EyeIcon'
 import { MapSelectBorder } from './MapSelectBorder'
 import type { FileNode } from '../types'
@@ -124,7 +124,7 @@ export const FileBlock = memo(function FileBlock({
     : isAdded
       ? '#7ec8e8'
       : fileColor(file.language)
-  const muted = dimColor(color, 0.32)
+  const muted = dimColor(color, EXPLAIN_FOCUS.dimColorAmount)
   const label = fileLabel(file.name, changeKind, isAdded)
   const mark = changeMark(changeKind, isAdded)
   const eyeColors =
@@ -278,6 +278,7 @@ export const FileBlock = memo(function FileBlock({
             <Text
               fontSize={0.28}
               color={labelColor}
+              fillOpacity={opacity}
               anchorX="center"
               anchorY="bottom"
               maxWidth={3.4}
@@ -299,6 +300,7 @@ export const FileBlock = memo(function FileBlock({
                   rotation={[0, side.rotationY, 0]}
                   fontSize={0.22}
                   color={labelColor}
+                  fillOpacity={opacity}
                   anchorX="center"
                   anchorY="middle"
                   maxWidth={face - 0.2}

@@ -11,6 +11,7 @@ import {
   MAP_SELECTION,
   type ChangeKind,
 } from '../theme'
+import { isBlueprintFolder } from '../layout'
 import type { PlacedFolder } from '../types'
 import { MapSelectBorder } from './MapSelectBorder'
 import { BlueprintEyes } from '../ui/EyeIcon'
@@ -47,7 +48,11 @@ export function FolderArea({
   pickLayer,
 }: FolderAreaProps) {
   const added = Boolean(folder.added)
-  const highlight = !overlay && highlightKind ? CHANGE_HIGHLIGHT[highlightKind] : null
+  const gitKind =
+    overlay || (highlightKind === 'add' && isBlueprintFolder(folder))
+      ? null
+      : highlightKind
+  const highlight = gitKind ? CHANGE_HIGHLIGHT[gitKind] : null
   const addedOnly = added && !highlight
   const tint = overlay || addedOnly ? blueprintPalette(folder.colorHex) : null
   const outline = highlight
@@ -75,9 +80,9 @@ export function FolderArea({
         : []
   const pointedColor = eyeColors[eyeColors.length - 1]
   const label =
-    highlightKind === 'remove'
+    gitKind === 'remove'
       ? `- ${folder.name}`
-      : highlightKind === 'add' || added
+      : gitKind === 'add' || added
         ? `+ ${folder.name}`
         : folder.name
 

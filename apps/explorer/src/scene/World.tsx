@@ -3,6 +3,12 @@ import { FolderArea } from './FolderArea'
 import { FileBlock } from './FileBlock'
 import { DistantFileBlocks } from './DistantFileBlocks'
 import { Bridge } from './Bridge'
+import { MapBatches } from './MapBatches'
+import {
+  collectMapBridgeItems,
+  collectMapFileItems,
+  collectMapFolderItems,
+} from './collectMapBatches'
 import { RelationLines } from './RelationLines'
 import { Player } from './Player'
 import { MapView, type MapBlueprintMenu, type MapFileLabel, type MapFocusBounds } from './MapView'
@@ -15,16 +21,18 @@ import {
   filesImporting,
   folderChangeHighlights,
   folderOfFile,
+  isBlueprintFolder,
   mapPointOntoFolder,
 } from '../layout'
 import {
+  explainBridgeFocused,
   explainFileFocused,
   explainFileHighlighted,
   explainFolderFocused,
   explainHasFocus,
   type ExplainFocus,
 } from '../explain'
-import { BLUEPRINT_OVERLAY, CONFIG, WORLD_VOID, blueprintPalette, fileEmphasisScale } from '../theme'
+import { BLUEPRINT_OVERLAY, CONFIG, WORLD_VOID, blueprintPalette, explainItemOpacity, fileEmphasisScale } from '../theme'
 import type {
   CodebaseGraph,
   FileNode,
@@ -387,6 +395,137 @@ export function World({
       mapping ? mergeOverlayOnlyFolders(viewLayout, overlayLayers) : viewLayout,
     [mapping, overlayLayers, viewLayout],
   )
+  const overlayFileIds = useMemo(() => {
+    if (!mapping) return new Set<string>()
+    const ids = new Set<string>()
+    for (const layer of overlayLayers) {
+      for (const id of Object.keys(layer.files)) ids.add(id)
+    }
+    return ids
+  }, [mapping, overlayLayers])
+  const overlayFolderPaths = useMemo(() => {
+    if (!mapping) return new Set<string>()
+    const paths = new Set<string>()
+    for (const layer of overlayLayers) {
+      for (const path of Object.keys(layer.folders)) paths.add(path)
+    }
+    return paths
+  }, [mapping, overlayLayers])
+  const mapSkipFileIds = useMemo(() => {
+    if (!mapping) return new Set<string>()
+    const ids = new Set<string>()
+    if (selectedId) ids.add(selectedId)
+    if (namingId) ids.add(namingId)
+    if (aimedRelation?.flyTo) ids.add(aimedRelation.flyTo)
+    for (const id of pointedFileIds) ids.add(id)
+    for (const id of related) ids.add(id)
+    for (const id of plannedIds) ids.add(id)
+    for (const id of createdIds) ids.add(id)
+    for (const id of deletedIds) ids.add(id)
+    for (const file of viewGraph.files) {
+      if (file.userCreated && overlayFileIds.has(file.id)) ids.add(file.id)
+      if (
+        explainActive &&
+        explainFileHighlighted(explainFocus, file.id, file.folder)
+      ) {
+        ids.add(file.id)
+      }
+    }
+    return ids
+  }, [
+    aimedRelation?.flyTo,
+    createdIds,
+    deletedIds,
+    explainActive,
+    explainFocus,
+    mapping,
+    namingId,
+    overlayFileIds,
+    plannedIds,
+    pointedFileIds,
+    related,
+    selectedId,
+    viewGraph.files,
+  ])
+  const mapSkipFolderPaths = useMemo(() => {
+    if (!mapping) return new Set<string>()
+    const paths = new Set<string>()
+    if (selectedFolder && !selectedFolderLayer) paths.add(selectedFolder)
+    if (namingIslandId) paths.add(namingIslandId)
+    for (const path of pointedFolderPaths) paths.add(path)
+    for (const path of Object.keys(highlightedFolders)) paths.add(path)
+    for (const folder of Object.values(viewLayout.folders)) {
+      if (folder.added) paths.add(folder.path)
+    }
+    return paths
+  }, [
+    highlightedFolders,
+    mapping,
+    namingIslandId,
+    pointedFolderPaths,
+    selectedFolder,
+    selectedFolderLayer,
+    viewLayout.folders,
+  ])
+  const mapBatches = useMemo(() => {
+    if (!mapping) {
+      return { files: [], floors: [], aisles: [], bridges: [] }
+    }
+    const files = collectMapFileItems(
+      viewGraph.files,
+      viewLayout.files,
+      mapSkipFileIds,
+      (id, folder) =>
+        explainActive && !explainFileFocused(explainFocus, id, folder),
+    )
+    const { floors, aisles } = collectMapFolderItems(
+      viewLayout.folders,
+      mapSkipFolderPaths,
+      (path) => explainActive && !explainFolderFocused(explainFocus, path),
+    )
+    return {
+      files,
+      floors,
+      aisles,
+      bridges: collectMapBridgeItems(
+        viewLayout.bridges,
+        viewLayout.folders,
+        (id) => explainActive && !explainBridgeFocused(explainFocus, id),
+      ),
+    }
+  }, [
+    explainActive,
+    explainFocus,
+    mapSkipFileIds,
+    mapSkipFolderPaths,
+    mapping,
+    viewGraph.files,
+    viewLayout.bridges,
+    viewLayout.files,
+    viewLayout.folders,
+  ])
+
+  const mapDetailFolders = useMemo(() => {
+    if (!mapping) return null
+    return Object.values(viewLayout.folders).filter(
+      (folder) =>
+        mapSkipFolderPaths.has(folder.path) &&
+        !(folder.added && overlayFolderPaths.has(folder.path)),
+    )
+  }, [mapping, mapSkipFolderPaths, overlayFolderPaths, viewLayout.folders])
+  const mapDetailFiles = useMemo(() => {
+    if (!mapping) return null
+    return viewGraph.files.filter((file) => {
+      if (!mapSkipFileIds.has(file.id) || !viewLayout.files[file.id]) return false
+      return !(file.userCreated && overlayFileIds.has(file.id))
+    })
+  }, [
+    mapping,
+    mapSkipFileIds,
+    overlayFileIds,
+    viewGraph.files,
+    viewLayout.files,
+  ])
 
   return (
     <>
@@ -427,15 +566,17 @@ export function World({
         }
       />
 
-      {Object.values(viewLayout.folders).map((folder) => {
+      {mapping && (
+        <MapBatches
+          files={mapBatches.files}
+          floors={mapBatches.floors}
+          aisles={mapBatches.aisles}
+          bridges={mapBatches.bridges}
+        />
+      )}
+
+      {(mapDetailFolders ?? Object.values(viewLayout.folders)).map((folder) => {
         if (lod && !lod.folders.has(folder.path)) return null
-        if (
-          mapping &&
-          folder.added &&
-          overlayLayers.some((layer) => layer.folders[folder.path])
-        ) {
-          return null
-        }
         return (
           <FolderArea
             key={folder.path}
@@ -446,36 +587,33 @@ export function World({
             }
             mapMode={mapping}
             highlightKind={
-              mapping ? highlightedFolders[folder.path] ?? null : null
+              mapping
+                ? isBlueprintFolder(folder) &&
+                  highlightedFolders[folder.path] === 'add'
+                  ? null
+                  : highlightedFolders[folder.path] ?? null
+                : null
             }
             pointed={pointedFolders.has(folder.path)}
             pointedColors={pointedFolderColors[folder.path]}
-            opacity={
-              explainActive && !explainFolderFocused(explainFocus, folder.path)
-                ? 0.5
-                : 1
-            }
+            opacity={explainItemOpacity(
+              explainActive && !explainFolderFocused(explainFocus, folder.path),
+            )}
             labelVisible={!lod || lod.folderLabels.has(folder.path)}
             pickPath={folder.path}
           />
         )
       })}
-      {viewLayout.bridges.map((bridge) => {
-        if (lod && !lod.bridges.has(bridge.id)) return null
-        return (
-          <Bridge key={bridge.id} bridge={bridge} folders={viewLayout.folders} />
-        )
-      })}
-      {viewGraph.files.map((file) => {
+      {!mapping &&
+        viewLayout.bridges.map((bridge) => {
+          if (lod && !lod.bridges.has(bridge.id)) return null
+          return (
+            <Bridge key={bridge.id} bridge={bridge} folders={viewLayout.folders} />
+          )
+        })}
+      {(mapDetailFiles ?? viewGraph.files).map((file) => {
         const placed = viewLayout.files[file.id]
         if (!placed) return null
-        if (
-          mapping &&
-          file.userCreated &&
-          overlayLayers.some((layer) => layer.files[file.id])
-        ) {
-          return null
-        }
         const selected = file.id === selectedId
         const isRelated = related.has(file.id)
         const isPlanned = planned.has(file.id) || deleted.has(file.id)
@@ -497,7 +635,7 @@ export function World({
         const dimmed =
           explainActive &&
           !explainFileFocused(explainFocus, file.id, file.folder)
-        const opacity = explainActive && dimmed ? 0.5 : 1
+        const opacity = explainItemOpacity(dimmed)
         if (lod && !detailed && !lod.labels.has(file.id)) {
           distantFiles.push({ file, placed, dimmed })
           return null
@@ -572,12 +710,10 @@ export function World({
               !explainFileFocused(explainFocus, file.id, file.folder)
             }
             focused={explainFileHighlighted(explainFocus, file.id, file.folder)}
-            opacity={
+            opacity={explainItemOpacity(
               explainActive &&
-              !explainFileFocused(explainFocus, file.id, file.folder)
-                ? 0.5
-                : 1
-            }
+                !explainFileFocused(explainFocus, file.id, file.folder),
+            )}
             mapMode={mapping}
           />
         )
@@ -793,12 +929,10 @@ function BlueprintOverlay({
             mapMode
             overlay
             overlayY={layer.folderY}
-            opacity={
-              overlayOpacity *
-              (explainActive && !explainFolderFocused(explainFocus, folder.path)
-                ? 0.5
-                : 1)
-            }
+            opacity={explainItemOpacity(
+              explainActive && !explainFolderFocused(explainFocus, folder.path),
+              overlayOpacity,
+            )}
             labelVisible={false}
             pickPath={folder.path}
             pickLayer={layer.id}
@@ -811,7 +945,10 @@ function BlueprintOverlay({
           bridge={bridge}
           color={tint.color}
           y={layer.folderY}
-          opacity={overlayOpacity}
+          opacity={explainItemOpacity(
+            explainActive && !explainBridgeFocused(explainFocus, bridge.id),
+            overlayOpacity,
+          )}
         />
       ))}
       {Object.entries(layer.files).map(([id, placed]) => {
@@ -860,12 +997,10 @@ function BlueprintOverlay({
             pointedColors={pointedFileColors[id]}
             dimmed={dimmed}
             focused={explainFileHighlighted(explainFocus, id, file.folder)}
-            opacity={
-              overlayOpacity *
-              (dimmed
-                ? BLUEPRINT_OVERLAY.fileOpacity * 0.5
-                : BLUEPRINT_OVERLAY.fileOpacity)
-            }
+            opacity={explainItemOpacity(
+              dimmed,
+              overlayOpacity * BLUEPRINT_OVERLAY.fileOpacity,
+            )}
             naming={id === namingId}
             mapMode
             labelVisible={false}

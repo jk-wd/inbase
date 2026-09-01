@@ -88,6 +88,7 @@ function placeFolder(
     width,
     depth,
     added: Boolean(folder.userCreated),
+    userCreated: Boolean(folder.userCreated),
     colorHex: folder.colorHex,
   }
 
@@ -657,6 +658,12 @@ export function fileChangeKind(
   return null
 }
 
+/** Blueprint islands are planned structure, not git-added paths. */
+export function isBlueprintFolder(folder: PlacedFolder | undefined) {
+  if (!folder) return false
+  return Boolean(folder.userCreated || (folder.overlay && folder.added))
+}
+
 export function folderChangeHighlights(
   planned: Set<string>,
   created: Set<string>,
@@ -676,11 +683,14 @@ export function folderChangeHighlights(
   }
   for (const id of deleted) addFolderKind(id, 'remove')
   for (const [folder, kinds] of folderKinds) {
-    if (kinds.size === 1) highlighted[folder] = [...kinds][0]
+    if (kinds.size !== 1) continue
+    const kind = [...kinds][0]
+    if (kind === 'add' && isBlueprintFolder(folders[folder])) continue
+    highlighted[folder] = kind
   }
   if (planned.size > 0 || deleted.size > 0) {
     for (const folder of Object.values(folders)) {
-      if (!folder.added) continue
+      if (!folder.added || isBlueprintFolder(folder)) continue
       const kinds = folderKinds.get(folder.path)
       if (!kinds || kinds.size === 1) {
         highlighted[folder.path] ??= 'add'

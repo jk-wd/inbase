@@ -48,6 +48,10 @@ type Segment = {
 
 type WalkPiece = Segment & { color: string }
 
+export type BridgeDeckPiece = WalkPiece
+
+export const BRIDGE_DECK_Y = WALK_Y
+
 function segmentsFromPoints(points: [number, number][]): Segment[] {
   const segments: Segment[] = []
 
@@ -282,9 +286,35 @@ function Gate({
   )
 }
 
+export function bridgeDeckPieces(
+  bridge: PlacedBridge,
+  folders?: Record<string, PlacedFolder>,
+): BridgeDeckPiece[] {
+  const pieces: BridgeDeckPiece[] = segmentsFromPoints(bridge.points).flatMap(
+    (segment) =>
+      splitOverLand(segment).map((piece) => ({
+        ...piece,
+        color:
+          piece.color === LAND_COLOR
+            ? landColorAt(piece.x, piece.z, folders)
+            : piece.color,
+      })),
+  )
+  for (const corner of cornersFromPoints(bridge.points)) {
+    pieces.push({
+      key: `corner-${corner.x}-${corner.z}`,
+      x: corner.x,
+      z: corner.z,
+      width: CORNER_SIZE,
+      depth: CORNER_SIZE,
+      color: SPAN_COLOR,
+    })
+  }
+  return pieces
+}
+
 export function Bridge({ bridge, folders }: BridgeProps) {
-  const segments = segmentsFromPoints(bridge.points)
-  const corners = cornersFromPoints(bridge.points)
+  const deck = bridgeDeckPieces(bridge, folders)
   const start = bridge.points[0]
   const end = bridge.points[bridge.points.length - 1]
   const second = bridge.points[1]
@@ -294,29 +324,14 @@ export function Bridge({ bridge, folders }: BridgeProps) {
 
   return (
     <group>
-      {segments.flatMap(splitOverLand).map((piece) => (
+      {deck.map((piece) => (
         <Walk
           key={piece.key}
           x={piece.x}
           z={piece.z}
           width={piece.width}
           depth={piece.depth}
-          color={
-            piece.color === LAND_COLOR
-              ? landColorAt(piece.x, piece.z, folders)
-              : piece.color
-          }
-        />
-      ))}
-
-      {corners.map((corner) => (
-        <Walk
-          key={`corner-${corner.x}-${corner.z}`}
-          x={corner.x}
-          z={corner.z}
-          width={CORNER_SIZE}
-          depth={CORNER_SIZE}
-          color={SPAN_COLOR}
+          color={piece.color}
         />
       ))}
 

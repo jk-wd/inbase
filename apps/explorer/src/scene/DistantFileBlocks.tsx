@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { Instances, Instance } from '@react-three/drei'
-import { dimColor, fileColor, blueprintPalette } from '../theme'
+import { dimColor, fileColor, blueprintPalette, EXPLAIN_FOCUS } from '../theme'
 import type { FileNode, PlacedFile } from '../types'
 
 type DistantFile = {
@@ -36,7 +36,7 @@ export function DistantFileBlocks({
             key={file.id}
             position={placed.position}
             scale={placed.size}
-            color={dimmed ? dimColor(color, 0.32) : color}
+            color={dimmed ? dimColor(color, EXPLAIN_FOCUS.dimColorAmount) : color}
             userData={{ fileId: file.id }}
           />
         )

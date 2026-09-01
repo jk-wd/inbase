@@ -7504,7 +7504,7 @@
       "name": "layout.ts",
       "path": "apps/explorer/src/layout.ts",
       "folder": "apps/explorer/src",
-      "lines": 692,
+      "lines": 702,
       "language": "ts",
       "symbols": [
         {
@@ -7645,6 +7645,10 @@
         },
         {
           "name": "fileChangeKind",
+          "kind": "function"
+        },
+        {
+          "name": "isBlueprintFolder",
           "kind": "function"
         },
         {
@@ -7966,6 +7970,10 @@
         {
           "name": "kinds",
           "kind": "variable"
+        },
+        {
+          "name": "kind",
+          "kind": "variable"
         }
       ],
       "imports": [
@@ -7996,7 +8004,7 @@
       "name": "Bridge.tsx",
       "path": "apps/explorer/src/scene/Bridge.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 346,
+      "lines": 361,
       "language": "tsx",
       "symbols": [
         {
@@ -8033,6 +8041,10 @@
         },
         {
           "name": "Gate",
+          "kind": "function"
+        },
+        {
+          "name": "bridgeDeckPieces",
           "kind": "function"
         },
         {
@@ -8101,6 +8113,10 @@
         },
         {
           "name": "folder",
+          "kind": "variable"
+        },
+        {
+          "name": "BRIDGE_DECK_Y",
           "kind": "variable"
         },
         {
@@ -8197,6 +8213,18 @@
         },
         {
           "name": "signZ",
+          "kind": "variable"
+        },
+        {
+          "name": "pieces",
+          "kind": "variable"
+        },
+        {
+          "name": "corner",
+          "kind": "variable"
+        },
+        {
+          "name": "deck",
           "kind": "variable"
         },
         {
@@ -8393,7 +8421,7 @@
       "name": "FolderArea.tsx",
       "path": "apps/explorer/src/scene/FolderArea.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 197,
+      "lines": 202,
       "language": "tsx",
       "symbols": [
         {
@@ -8402,6 +8430,10 @@
         },
         {
           "name": "added",
+          "kind": "variable"
+        },
+        {
+          "name": "gitKind",
           "kind": "variable"
         },
         {
@@ -8455,9 +8487,99 @@
       ],
       "imports": [
         "apps/explorer/src/theme.ts",
+        "apps/explorer/src/layout.ts",
         "apps/explorer/src/types.ts",
         "apps/explorer/src/scene/MapSelectBorder.tsx",
         "apps/explorer/src/ui/EyeIcon.tsx"
+      ]
+    },
+    {
+      "id": "apps/explorer/src/scene/MapBatches.tsx",
+      "name": "MapBatches.tsx",
+      "path": "apps/explorer/src/scene/MapBatches.tsx",
+      "folder": "apps/explorer/src/scene",
+      "lines": 162,
+      "language": "tsx",
+      "symbols": [
+        {
+          "name": "useInstanceCap",
+          "kind": "function"
+        },
+        {
+          "name": "splitByOpacity",
+          "kind": "function"
+        },
+        {
+          "name": "MapInstancedBoxes",
+          "kind": "function"
+        },
+        {
+          "name": "MapInstancedPlanes",
+          "kind": "function"
+        },
+        {
+          "name": "MapBatches",
+          "kind": "function"
+        },
+        {
+          "name": "skipRaycast",
+          "kind": "function"
+        },
+        {
+          "name": "DUMMY",
+          "kind": "variable"
+        },
+        {
+          "name": "COLOR",
+          "kind": "variable"
+        },
+        {
+          "name": "cap",
+          "kind": "variable"
+        },
+        {
+          "name": "solid",
+          "kind": "variable"
+        },
+        {
+          "name": "faded",
+          "kind": "variable"
+        },
+        {
+          "name": "item",
+          "kind": "variable"
+        },
+        {
+          "name": "meshRef",
+          "kind": "variable"
+        },
+        {
+          "name": "ids",
+          "kind": "variable"
+        },
+        {
+          "name": "mesh",
+          "kind": "variable"
+        },
+        {
+          "name": "i",
+          "kind": "variable"
+        },
+        {
+          "name": "fileParts",
+          "kind": "variable"
+        },
+        {
+          "name": "floorParts",
+          "kind": "variable"
+        },
+        {
+          "name": "aisleParts",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "apps/explorer/src/scene/collectMapBatches.ts"
       ]
     },
     {
@@ -8510,9 +8632,17 @@
       "name": "MapView.tsx",
       "path": "apps/explorer/src/scene/MapView.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 1051,
+      "lines": 1184,
       "language": "tsx",
       "symbols": [
+        {
+          "name": "mapFolderFromHit",
+          "kind": "function"
+        },
+        {
+          "name": "fileIdFromHit",
+          "kind": "function"
+        },
         {
           "name": "mapFolderFromObject",
           "kind": "function"
@@ -8550,7 +8680,19 @@
           "kind": "function"
         },
         {
+          "name": "folderGitKind",
+          "kind": "function"
+        },
+        {
           "name": "folderLabelClass",
+          "kind": "function"
+        },
+        {
+          "name": "orthoViewPad",
+          "kind": "function"
+        },
+        {
+          "name": "paintFolderLabel",
           "kind": "function"
         },
         {
@@ -8642,11 +8784,31 @@
           "kind": "variable"
         },
         {
-          "name": "current",
+          "name": "fromObject",
+          "kind": "variable"
+        },
+        {
+          "name": "paths",
           "kind": "variable"
         },
         {
           "name": "path",
+          "kind": "variable"
+        },
+        {
+          "name": "fileId",
+          "kind": "variable"
+        },
+        {
+          "name": "ids",
+          "kind": "variable"
+        },
+        {
+          "name": "id",
+          "kind": "variable"
+        },
+        {
+          "name": "current",
           "kind": "variable"
         },
         {
@@ -8794,19 +8956,11 @@
           "kind": "variable"
         },
         {
-          "name": "fileHit",
-          "kind": "variable"
-        },
-        {
           "name": "folderPick",
           "kind": "variable"
         },
         {
           "name": "hit",
-          "kind": "variable"
-        },
-        {
-          "name": "found",
           "kind": "variable"
         },
         {
@@ -8930,47 +9084,31 @@
           "kind": "variable"
         },
         {
-          "name": "layerRef",
+          "name": "kind",
           "kind": "variable"
         },
         {
-          "name": "items",
+          "name": "gitKind",
           "kind": "variable"
         },
         {
-          "name": "pointedKey",
+          "name": "MAX_FOLDER_LABELS",
           "kind": "variable"
         },
         {
-          "name": "pointedFolders",
+          "name": "safeZoom",
           "kind": "variable"
         },
         {
-          "name": "dimmedKey",
+          "name": "pad",
           "kind": "variable"
         },
         {
-          "name": "dimmedFolders",
+          "name": "hw",
           "kind": "variable"
         },
         {
-          "name": "parent",
-          "kind": "variable"
-        },
-        {
-          "name": "pointed",
-          "kind": "variable"
-        },
-        {
-          "name": "dimmed",
-          "kind": "variable"
-        },
-        {
-          "name": "el",
-          "kind": "variable"
-        },
-        {
-          "name": "colors",
+          "name": "hh",
           "kind": "variable"
         },
         {
@@ -8994,11 +9132,95 @@
           "kind": "variable"
         },
         {
-          "name": "nodes",
+          "name": "layerRef",
+          "kind": "variable"
+        },
+        {
+          "name": "foldersRef",
+          "kind": "variable"
+        },
+        {
+          "name": "highlightedRef",
+          "kind": "variable"
+        },
+        {
+          "name": "selectedRef",
+          "kind": "variable"
+        },
+        {
+          "name": "namingRef",
+          "kind": "variable"
+        },
+        {
+          "name": "pointedRef",
+          "kind": "variable"
+        },
+        {
+          "name": "pointedColorsRef",
+          "kind": "variable"
+        },
+        {
+          "name": "dimmedRef",
+          "kind": "variable"
+        },
+        {
+          "name": "parent",
+          "kind": "variable"
+        },
+        {
+          "name": "items",
+          "kind": "variable"
+        },
+        {
+          "name": "highlightedFolders",
+          "kind": "variable"
+        },
+        {
+          "name": "selectedFolder",
+          "kind": "variable"
+        },
+        {
+          "name": "namingFolderPath",
+          "kind": "variable"
+        },
+        {
+          "name": "pointedFolders",
+          "kind": "variable"
+        },
+        {
+          "name": "pointedFolderColors",
+          "kind": "variable"
+        },
+        {
+          "name": "dimmedFolders",
+          "kind": "variable"
+        },
+        {
+          "name": "view",
+          "kind": "variable"
+        },
+        {
+          "name": "candidates",
           "kind": "variable"
         },
         {
           "name": "i",
+          "kind": "variable"
+        },
+        {
+          "name": "pointed",
+          "kind": "variable"
+        },
+        {
+          "name": "dimmed",
+          "kind": "variable"
+        },
+        {
+          "name": "force",
+          "kind": "variable"
+        },
+        {
+          "name": "span",
           "kind": "variable"
         },
         {
@@ -9014,15 +9236,27 @@
           "kind": "variable"
         },
         {
-          "name": "span",
-          "kind": "variable"
-        },
-        {
-          "name": "force",
-          "kind": "variable"
-        },
-        {
           "name": "onScreen",
+          "kind": "variable"
+        },
+        {
+          "name": "visible",
+          "kind": "variable"
+        },
+        {
+          "name": "el",
+          "kind": "variable"
+        },
+        {
+          "name": "nodes",
+          "kind": "variable"
+        },
+        {
+          "name": "next",
+          "kind": "variable"
+        },
+        {
+          "name": "signature",
           "kind": "variable"
         },
         {
@@ -9034,7 +9268,7 @@
           "kind": "variable"
         },
         {
-          "name": "next",
+          "name": "pos",
           "kind": "variable"
         },
         {
@@ -9046,19 +9280,11 @@
           "kind": "variable"
         },
         {
-          "name": "namingRef",
-          "kind": "variable"
-        },
-        {
           "name": "cx",
           "kind": "variable"
         },
         {
           "name": "cy",
-          "kind": "variable"
-        },
-        {
-          "name": "candidates",
           "kind": "variable"
         },
         {
@@ -9090,10 +9316,6 @@
           "kind": "variable"
         },
         {
-          "name": "visible",
-          "kind": "variable"
-        },
-        {
           "name": "left",
           "kind": "variable"
         },
@@ -9111,10 +9333,6 @@
         },
         {
           "name": "className",
-          "kind": "variable"
-        },
-        {
-          "name": "pos",
           "kind": "variable"
         },
         {
@@ -10115,7 +10333,7 @@
       "name": "World.tsx",
       "path": "apps/explorer/src/scene/World.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 878,
+      "lines": 1013,
       "language": "tsx",
       "symbols": [
         {
@@ -10355,6 +10573,42 @@
           "kind": "variable"
         },
         {
+          "name": "overlayFileIds",
+          "kind": "variable"
+        },
+        {
+          "name": "overlayFolderPaths",
+          "kind": "variable"
+        },
+        {
+          "name": "mapSkipFileIds",
+          "kind": "variable"
+        },
+        {
+          "name": "mapSkipFolderPaths",
+          "kind": "variable"
+        },
+        {
+          "name": "folder",
+          "kind": "variable"
+        },
+        {
+          "name": "mapBatches",
+          "kind": "variable"
+        },
+        {
+          "name": "files",
+          "kind": "variable"
+        },
+        {
+          "name": "mapDetailFolders",
+          "kind": "variable"
+        },
+        {
+          "name": "mapDetailFiles",
+          "kind": "variable"
+        },
+        {
           "name": "selected",
           "kind": "variable"
         },
@@ -10493,6 +10747,14 @@
         {
           "name": "setWalkLod",
           "kind": "variable"
+        },
+        {
+          "name": "floors",
+          "kind": "variable"
+        },
+        {
+          "name": "aisles",
+          "kind": "variable"
         }
       ],
       "imports": [
@@ -10500,6 +10762,8 @@
         "apps/explorer/src/scene/FileBlock.tsx",
         "apps/explorer/src/scene/DistantFileBlocks.tsx",
         "apps/explorer/src/scene/Bridge.tsx",
+        "apps/explorer/src/scene/MapBatches.tsx",
+        "apps/explorer/src/scene/collectMapBatches.ts",
         "apps/explorer/src/scene/RelationLines.tsx",
         "apps/explorer/src/scene/Player.tsx",
         "apps/explorer/src/scene/MapView.tsx",
@@ -10512,6 +10776,93 @@
         "apps/explorer/src/theme.ts",
         "apps/explorer/src/types.ts",
         "apps/explorer/src/userCreated.ts"
+      ]
+    },
+    {
+      "id": "apps/explorer/src/scene/collectMapBatches.ts",
+      "name": "collectMapBatches.ts",
+      "path": "apps/explorer/src/scene/collectMapBatches.ts",
+      "folder": "apps/explorer/src/scene",
+      "lines": 125,
+      "language": "ts",
+      "symbols": [
+        {
+          "name": "mapFileInstanceColor",
+          "kind": "function"
+        },
+        {
+          "name": "collectMapFileItems",
+          "kind": "function"
+        },
+        {
+          "name": "collectMapFolderItems",
+          "kind": "function"
+        },
+        {
+          "name": "collectMapBridgeItems",
+          "kind": "function"
+        },
+        {
+          "name": "FLOOR_Y",
+          "kind": "variable"
+        },
+        {
+          "name": "AISLE_Y",
+          "kind": "variable"
+        },
+        {
+          "name": "items",
+          "kind": "variable"
+        },
+        {
+          "name": "file",
+          "kind": "variable"
+        },
+        {
+          "name": "block",
+          "kind": "variable"
+        },
+        {
+          "name": "faded",
+          "kind": "variable"
+        },
+        {
+          "name": "color",
+          "kind": "variable"
+        },
+        {
+          "name": "floors",
+          "kind": "variable"
+        },
+        {
+          "name": "aisles",
+          "kind": "variable"
+        },
+        {
+          "name": "folder",
+          "kind": "variable"
+        },
+        {
+          "name": "opacity",
+          "kind": "variable"
+        },
+        {
+          "name": "z",
+          "kind": "variable"
+        },
+        {
+          "name": "bridge",
+          "kind": "variable"
+        },
+        {
+          "name": "piece",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "apps/explorer/src/theme.ts",
+        "apps/explorer/src/types.ts",
+        "apps/explorer/src/scene/Bridge.tsx"
       ]
     },
     {
@@ -10882,7 +11233,7 @@
       "name": "types.ts",
       "path": "apps/explorer/src/types.ts",
       "folder": "apps/explorer/src",
-      "lines": 448,
+      "lines": 449,
       "language": "ts",
       "symbols": [
         {
@@ -12441,7 +12792,7 @@
       "name": "userCreated.ts",
       "path": "apps/explorer/src/userCreated.ts",
       "folder": "apps/explorer/src",
-      "lines": 1192,
+      "lines": 1197,
       "language": "ts",
       "symbols": [
         {
@@ -14632,9 +14983,11 @@
       "parent": "apps/explorer/src",
       "files": [
         "apps/explorer/src/scene/Bridge.tsx",
+        "apps/explorer/src/scene/collectMapBatches.ts",
         "apps/explorer/src/scene/DistantFileBlocks.tsx",
         "apps/explorer/src/scene/FileBlock.tsx",
         "apps/explorer/src/scene/FolderArea.tsx",
+        "apps/explorer/src/scene/MapBatches.tsx",
         "apps/explorer/src/scene/MapSelectBorder.tsx",
         "apps/explorer/src/scene/MapView.tsx",
         "apps/explorer/src/scene/Player.tsx",

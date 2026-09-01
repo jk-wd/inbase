@@ -329,6 +329,7 @@ function overlayIslands(
       folders[id] = {
         ...folders[id],
         added: true,
+        userCreated: true,
         name: island.name || folders[id].name,
         colorHex: island.colorHex ?? folders[id].colorHex,
       }
@@ -358,6 +359,7 @@ function overlayIslands(
       width,
       depth,
       added: true,
+      userCreated: true,
       colorHex: island.colorHex,
     }
     bridges.push({
@@ -655,6 +657,7 @@ function placeOverlayIslands(
         depth,
         added: true,
         overlay: true,
+        userCreated: true,
         colorHex,
       },
       mapOccupancy(base, folders, {}, id),
@@ -825,6 +828,8 @@ export function mergeOverlayOnlyFolders(
         folders[folder.path] = {
           ...folders[folder.path],
           colorHex: folder.colorHex ?? folders[folder.path].colorHex,
+          userCreated:
+            folders[folder.path].userCreated || folder.userCreated,
         }
         continue
       }

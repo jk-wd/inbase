@@ -52,6 +52,7 @@ export type PlacedFolder = {
   depth: number
   added?: boolean
   overlay?: boolean
+  userCreated?: boolean
   colorHex?: string
 }
 

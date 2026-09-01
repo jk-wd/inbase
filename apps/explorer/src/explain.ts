@@ -247,11 +247,27 @@ export function explainInfoFile(
 export type ExplainFocus = {
   files: Set<string>
   folders: Set<string>
+  islandFolders: Set<string>
   select: string | null
   importedBy: boolean
   relations: PatchImport[]
   zoomFiles: string[]
   zoomFolders: string[]
+}
+
+function pathIsUnder(path: string, parent: string) {
+  if (!path || !parent) return false
+  if (path === parent) return true
+  if (parent === '.') return path !== '.'
+  return path.startsWith(`${parent}/`)
+}
+
+function islandContains(folders: Set<string>, path: string) {
+  if (folders.has(path)) return true
+  for (const folder of folders) {
+    if (pathIsUnder(path, folder)) return true
+  }
+  return false
 }
 
 export function explainFocus(
@@ -261,6 +277,7 @@ export function explainFocus(
   if (!step) return null
   const files = new Set(step.files)
   const folders = new Set(step.folders)
+  const islandFolders = new Set(step.folders)
   if (step.select) files.add(step.select)
   const relations: PatchImport[] = step.relations.map((edge) => ({
     from: edge.from,
@@ -305,6 +322,7 @@ export function explainFocus(
   return {
     files,
     folders,
+    islandFolders,
     select: step.select,
     importedBy: step.importedBy,
     relations,
@@ -320,24 +338,40 @@ export function explainHasFocus(focus: ExplainFocus | null) {
 export function explainFileFocused(
   focus: ExplainFocus | null,
   fileId: string,
-  _folder?: string,
+  folder?: string,
 ) {
   if (!explainHasFocus(focus) || !focus) return true
-  return focus.files.has(fileId)
+  if (focus.files.has(fileId)) return true
+  const parent = folder ?? folderOfFile(fileId)
+  return (
+    islandContains(focus.islandFolders, parent) ||
+    islandContains(focus.islandFolders, fileId)
+  )
 }
 
 export function explainFileHighlighted(
   focus: ExplainFocus | null,
   fileId: string,
-  folder?: string,
+  _folder?: string,
 ) {
-  return explainHasFocus(focus) && explainFileFocused(focus, fileId, folder)
+  return explainHasFocus(focus) && Boolean(focus?.files.has(fileId))
 }
 
 export function explainFolderFocused(focus: ExplainFocus | null, folderPath: string) {
   if (!explainHasFocus(focus) || !focus) return true
+  if (islandContains(focus.islandFolders, folderPath)) return true
   for (const id of focus.files) {
     if (folderOfFile(id) === folderPath) return true
   }
   return false
+}
+
+export function explainBridgeFocused(focus: ExplainFocus | null, bridgeId: string) {
+  if (!explainHasFocus(focus) || !focus) return true
+  const sep = bridgeId.indexOf('→')
+  if (sep <= 0) return true
+  return (
+    explainFolderFocused(focus, bridgeId.slice(0, sep)) ||
+    explainFolderFocused(focus, bridgeId.slice(sep + 1))
+  )
 }

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Html, MapControls, OrthographicCamera } from '@react-three/drei'
 import * as THREE from 'three'
-import { folderAt, worldBounds } from '../layout'
+import { folderAt, isBlueprintFolder, worldBounds } from '../layout'
 import type { ChangeKind } from '../theme'
 import { blueprintPalette } from '../theme'
 import type { PlacedFolder, WorldLayout } from '../types'
@@ -58,6 +58,29 @@ type MapFlight = {
 const FOCUS_FLY_IN_MS = 900
 const FOCUS_FLY_OUT_IN_MS = 1500
 const FOCUS_FLY_SPLIT = 0.4
+
+function mapFolderFromHit(hit: THREE.Intersection): {
+  path: string
+  layer?: string
+} | null {
+  const fromObject = mapFolderFromObject(hit.object)
+  if (fromObject) return fromObject
+  if (typeof hit.instanceId !== 'number') return null
+  const paths = hit.object.userData?.mapFolderPaths
+  if (!Array.isArray(paths)) return null
+  const path = paths[hit.instanceId]
+  return typeof path === 'string' && path ? { path } : null
+}
+
+function fileIdFromHit(hit: THREE.Intersection): string | null {
+  const fileId = hit.object.userData?.fileId
+  if (typeof fileId === 'string' && fileId) return fileId
+  if (typeof hit.instanceId !== 'number') return null
+  const ids = hit.object.userData?.mapFileIds
+  if (!Array.isArray(ids)) return null
+  const id = ids[hit.instanceId]
+  return typeof id === 'string' && id ? id : null
+}
 
 function mapFolderFromObject(object: THREE.Object3D): {
   path: string
@@ -369,16 +392,14 @@ export function MapView({
       raycaster.setFromCamera(ndc, camera)
       const hits = raycaster.intersectObjects(scene.children, true)
       const relationHit = hits.find((hit) => hit.object.userData.relationTo)
-      const fileHit = hits.find((hit) => hit.object.userData.fileId)
+      let fileId: string | null = null
       let folderPick: { path: string; layer?: string } | null = null
       for (const hit of hits) {
-        const found = mapFolderFromObject(hit.object)
-        if (found) {
-          folderPick = found
-          break
-        }
+        if (!fileId) fileId = fileIdFromHit(hit)
+        if (!folderPick) folderPick = mapFolderFromHit(hit)
+        if (fileId && folderPick) break
       }
-      return { raycaster, relationHit, fileHit, folderPick }
+      return { raycaster, relationHit, fileId, folderPick }
     }
 
     const landAt = (x: number, z: number) => {
@@ -392,8 +413,8 @@ export function MapView({
     const landAtPointer = (clientX: number, clientY: number, allowIsland: boolean) => {
       const pick = pickAt(clientX, clientY)
       if (!pick) return false
-      const { raycaster, relationHit, fileHit } = pick
-      if (fileHit) return false
+      const { raycaster, relationHit, fileId } = pick
+      if (fileId) return false
 
       const hit = new THREE.Vector3()
       const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
@@ -426,9 +447,9 @@ export function MapView({
 
       const pick = pickAt(event.clientX, event.clientY)
       if (!pick) return
-      const { fileHit } = pick
-      if (fileHit) {
-        onSelect(fileHit.object.userData.fileId as string)
+      const { fileId } = pick
+      if (fileId) {
+        onSelect(fileId)
         return
       }
 
@@ -625,6 +646,15 @@ function projectToScreen(
   }
 }
 
+function folderGitKind(
+  folder: PlacedFolder,
+  highlightedFolders: Partial<Record<string, ChangeKind>> | undefined,
+): ChangeKind | null {
+  const kind = highlightedFolders?.[folder.path] ?? null
+  if (kind === 'add' && isBlueprintFolder(folder)) return null
+  return kind
+}
+
 function folderLabelClass(
   folder: PlacedFolder,
   highlightedFolders: Partial<Record<string, ChangeKind>> | undefined,
@@ -632,10 +662,11 @@ function folderLabelClass(
   pointed: boolean,
   dimmed: boolean,
 ) {
+  const gitKind = folderGitKind(folder, highlightedFolders)
   return [
     'map-folder-label',
-    highlightedFolders?.[folder.path]
-      ? `map-folder-label-${highlightedFolders[folder.path]}`
+    gitKind
+      ? `map-folder-label-${gitKind}`
       : folder.added
         ? 'map-folder-label-added'
         : folder.colorHex
@@ -647,6 +678,74 @@ function folderLabelClass(
   ]
     .filter(Boolean)
     .join(' ')
+}
+
+const MAX_FOLDER_LABELS = 64
+
+function orthoViewPad(
+  camera: THREE.Camera,
+  width: number,
+  height: number,
+  padPx: number,
+) {
+  const zoom = 'zoom' in camera ? Number(camera.zoom) : 1
+  const safeZoom = Math.max(zoom, 0.001)
+  const pad = padPx / safeZoom
+  const hw = width / (2 * safeZoom)
+  const hh = height / (2 * safeZoom)
+  return {
+    zoom,
+    minX: camera.position.x - hw - pad,
+    maxX: camera.position.x + hw + pad,
+    minZ: camera.position.z - hh - pad,
+    maxZ: camera.position.z + hh + pad,
+  }
+}
+
+function paintFolderLabel(
+  el: HTMLElement,
+  folder: PlacedFolder,
+  highlightedFolders: Partial<Record<string, ChangeKind>> | undefined,
+  selectedFolder: string | null,
+  pointed: boolean,
+  pointedColors: string[],
+  dimmed: boolean,
+) {
+  el.className = folderLabelClass(
+    folder,
+    highlightedFolders,
+    selectedFolder,
+    pointed,
+    dimmed,
+  )
+  el.replaceChildren()
+  if (pointed) {
+    const hex = pointedColors[pointedColors.length - 1]
+    if (hex) el.style.setProperty('--session-color', hex)
+    else el.style.removeProperty('--session-color')
+    for (const color of pointedColors.length > 0 ? pointedColors : ['#9ad8ff']) {
+      const eye = document.createElement('span')
+      eye.className = 'map-folder-eye'
+      eye.style.color = color
+      eye.innerHTML = eyeIconMarkup(13)
+      el.appendChild(eye)
+    }
+  } else {
+    el.style.removeProperty('--session-color')
+  }
+  const gitKind = folderGitKind(folder, highlightedFolders)
+  const name = document.createElement('span')
+  name.className = 'map-folder-name'
+  name.textContent = folderKindLabel(folder.name, gitKind, folder.added ?? false)
+  if (folder.colorHex) {
+    const tint = blueprintPalette(folder.colorHex)
+    el.style.setProperty('--blueprint-color', tint.color)
+    el.style.setProperty('--blueprint-label-bg', tint.labelBg)
+  } else {
+    el.style.removeProperty('--blueprint-color')
+    el.style.removeProperty('--blueprint-label-bg')
+  }
+  el.appendChild(name)
 }
 
 function MapFolderLabels({
@@ -670,17 +769,20 @@ function MapFolderLabels({
   const gl = useThree((state) => state.gl)
   const size = useThree((state) => state.size)
   const layerRef = useRef<HTMLDivElement | null>(null)
-  const items = useMemo(() => Object.values(folders), [folders])
-  const pointedKey = pointedFolderPaths.join('\0')
-  const pointedFolders = useMemo(
-    () => new Set(pointedKey ? pointedKey.split('\0') : []),
-    [pointedKey],
-  )
-  const dimmedKey = dimmedFolderPaths.join('\0')
-  const dimmedFolders = useMemo(
-    () => new Set(dimmedKey ? dimmedKey.split('\0') : []),
-    [dimmedKey],
-  )
+  const foldersRef = useRef(folders)
+  const highlightedRef = useRef(highlightedFolders)
+  const selectedRef = useRef(selectedFolder)
+  const namingRef = useRef(namingFolderPath)
+  const pointedRef = useRef(pointedFolderPaths)
+  const pointedColorsRef = useRef(pointedFolderColors)
+  const dimmedRef = useRef(dimmedFolderPaths)
+  foldersRef.current = folders
+  highlightedRef.current = highlightedFolders
+  selectedRef.current = selectedFolder
+  namingRef.current = namingFolderPath
+  pointedRef.current = pointedFolderPaths
+  pointedColorsRef.current = pointedFolderColors
+  dimmedRef.current = dimmedFolderPaths
 
   useLayoutEffect(() => {
     const parent = gl.domElement.parentElement
@@ -689,73 +791,56 @@ function MapFolderLabels({
     layer.className = 'map-folder-label-layer'
     layer.style.cssText =
       'position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:80;background:transparent;'
-    for (const folder of items) {
-      const pointed = pointedFolders.has(folder.path)
-      const dimmed = dimmedFolders.has(folder.path)
-      const el = document.createElement('div')
-      el.className = folderLabelClass(
-        folder,
-        highlightedFolders,
-        selectedFolder,
-        pointed,
-        dimmed,
-      )
-      el.style.position = 'absolute'
-      el.style.top = '0'
-      el.style.left = '0'
-      el.style.visibility = 'hidden'
-      if (pointed) {
-        const colors = pointedFolderColors[folder.path] ?? []
-        const hex = colors[colors.length - 1]
-        if (hex) el.style.setProperty('--session-color', hex)
-        for (const color of colors.length > 0 ? colors : ['#9ad8ff']) {
-          const eye = document.createElement('span')
-          eye.className = 'map-folder-eye'
-          eye.style.color = color
-          eye.innerHTML = eyeIconMarkup(13)
-          el.appendChild(eye)
-        }
-      }
-      const name = document.createElement('span')
-      name.className = 'map-folder-name'
-      name.textContent = folderKindLabel(
-        folder.name,
-        highlightedFolders?.[folder.path] ?? null,
-        folder.added ?? false,
-      )
-      if (folder.colorHex) {
-        const tint = blueprintPalette(folder.colorHex)
-        el.style.setProperty('--blueprint-color', tint.color)
-        el.style.setProperty('--blueprint-label-bg', tint.labelBg)
-      }
-      el.appendChild(name)
-      layer.appendChild(el)
-    }
     parent.appendChild(layer)
     layerRef.current = layer
     return () => {
       layer.remove()
       layerRef.current = null
     }
-  }, [
-    dimmedFolders,
-    gl,
-    highlightedFolders,
-    items,
-    pointedFolderColors,
-    pointedFolders,
-    selectedFolder,
-  ])
+  }, [gl])
 
   useFrame(() => {
     const layer = layerRef.current
     if (!layer) return
-    const zoom = 'zoom' in camera ? Number(camera.zoom) : 1
-    const nodes = layer.children
+    const items = Object.values(foldersRef.current)
+    const highlightedFolders = highlightedRef.current
+    const selectedFolder = selectedRef.current
+    const namingFolderPath = namingRef.current
+    const pointedFolders = new Set(pointedRef.current)
+    const pointedFolderColors = pointedColorsRef.current
+    const dimmedFolders = new Set(dimmedRef.current)
+    const view = orthoViewPad(camera, size.width, size.height, 120)
+    const candidates: {
+      folder: PlacedFolder
+      x: number
+      y: number
+      span: number
+      pointed: boolean
+      dimmed: boolean
+      rank: number
+    }[] = []
+
     for (let i = 0; i < items.length; i += 1) {
-      const el = nodes[i] as HTMLElement | undefined
       const folder = items[i]
-      if (!el || !folder) continue
+      if (folder.path === namingFolderPath) continue
+      const pointed = pointedFolders.has(folder.path)
+      const dimmed = dimmedFolders.has(folder.path)
+      const gitKind = folderGitKind(folder, highlightedFolders)
+      const force =
+        selectedFolder === folder.path ||
+        pointed ||
+        Boolean(gitKind || folder.added) ||
+        (dimmedFolders.size > 0 && !dimmed)
+      const span = Math.max(folder.width, folder.depth) * view.zoom
+      if (!force && span < MIN_FOLDER_LABEL_PX) continue
+      if (
+        folder.x + folder.width / 2 < view.minX ||
+        folder.x - folder.width / 2 > view.maxX ||
+        folder.z + folder.depth < view.minZ ||
+        folder.z > view.maxZ
+      ) {
+        continue
+      }
       const screen = projectToScreen(
         folder.x,
         14,
@@ -766,32 +851,71 @@ function MapFolderLabels({
       )
       const x = screen.x
       const y = screen.y
-      const span = Math.max(folder.width, folder.depth) * zoom
-      const dimmed = dimmedFolders.has(folder.path)
-      const force =
-        selectedFolder === folder.path ||
-        pointedFolders.has(folder.path) ||
-        Boolean(highlightedFolders?.[folder.path] || folder.added) ||
-        (dimmedFolders.size > 0 && !dimmed)
       const onScreen =
         !screen.behind &&
         x > -120 &&
         x < size.width + 120 &&
         y > -40 &&
         y < size.height + 40
-      if (
-        folder.path === namingFolderPath ||
-        !onScreen ||
-        (!force && span < MIN_FOLDER_LABEL_PX)
-      ) {
+      if (!onScreen) continue
+      candidates.push({
+        folder,
+        x,
+        y,
+        span,
+        pointed,
+        dimmed,
+        rank: selectedFolder === folder.path ? 0 : pointed ? 1 : force ? 2 : 3,
+      })
+    }
+
+    candidates.sort((a, b) => a.rank - b.rank || b.span - a.span)
+    const visible = candidates.slice(0, MAX_FOLDER_LABELS)
+
+    while (layer.children.length < visible.length) {
+      const el = document.createElement('div')
+      el.className = 'map-folder-label'
+      el.style.position = 'absolute'
+      el.style.top = '0'
+      el.style.left = '0'
+      el.style.visibility = 'hidden'
+      layer.appendChild(el)
+    }
+
+    const nodes = layer.children
+    for (let i = 0; i < nodes.length; i += 1) {
+      const el = nodes[i] as HTMLElement
+      const next = visible[i]
+      if (!next) {
         if (el.style.visibility !== 'hidden') el.style.visibility = 'hidden'
         continue
       }
-      const tx = Math.round(x)
-      const ty = Math.round(y)
-      const next = `${tx},${ty}`
-      if (el.dataset.pos !== next) {
-        el.dataset.pos = next
+      const signature = [
+        next.folder.path,
+        selectedFolder === next.folder.path ? '1' : '0',
+        next.pointed ? '1' : '0',
+        next.dimmed ? '1' : '0',
+        folderGitKind(next.folder, highlightedFolders) ?? '',
+        next.folder.added ? '1' : '0',
+        (pointedFolderColors[next.folder.path] ?? []).join(','),
+      ].join('|')
+      if (el.dataset.sig !== signature) {
+        el.dataset.sig = signature
+        paintFolderLabel(
+          el,
+          next.folder,
+          highlightedFolders,
+          selectedFolder,
+          next.pointed,
+          pointedFolderColors[next.folder.path] ?? [],
+          next.dimmed,
+        )
+      }
+      const tx = Math.round(next.x)
+      const ty = Math.round(next.y)
+      const pos = `${tx},${ty}`
+      if (el.dataset.pos !== pos) {
+        el.dataset.pos = pos
         el.style.transform = `translate3d(${tx}px, ${ty}px, 0) translate(-50%, -50%)`
       }
       if (el.style.visibility !== 'visible') el.style.visibility = 'visible'
@@ -874,6 +998,7 @@ function MapFileLabels({
     const items = filesRef.current
     if (!layer) return
     const zoom = 'zoom' in camera ? Number(camera.zoom) : 1
+    const view = orthoViewPad(camera, size.width, size.height, 80)
     const cx = size.width * 0.5
     const cy = size.height * 0.5
     const candidates: {
@@ -892,6 +1017,14 @@ function MapFileLabels({
       const block = Math.min(file.width, file.depth) * zoom
       const force = file.selected || file.pointed || file.focused || Boolean(file.overlay)
       if (!force && block < MIN_FILE_LABEL_PX) continue
+      if (
+        file.x < view.minX ||
+        file.x > view.maxX ||
+        file.z < view.minZ ||
+        file.z > view.maxZ
+      ) {
+        continue
+      }
       const screen = projectToScreen(
         file.x,
         0,

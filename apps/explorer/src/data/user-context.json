@@ -1,65 +1,125 @@
 {
-  "updatedAt": "2026-09-01T09:51:28.347Z",
+  "updatedAt": "2026-09-01T12:09:34.199Z",
   "mode": "map",
   "island": {
-    "path": ".",
-    "name": "inbase"
+    "path": "apps/explorer/src/scene",
+    "name": "scene"
   },
   "lookingAt": {
-    "id": "package.json",
-    "name": "package.json",
-    "path": "package.json",
-    "folder": "."
+    "id": "apps/explorer/src/scene/Bridge.tsx",
+    "name": "Bridge.tsx",
+    "path": "apps/explorer/src/scene/Bridge.tsx",
+    "folder": "apps/explorer/src/scene"
   },
   "lookingAtFiles": [
     {
-      "id": "package.json",
-      "name": "package.json",
-      "path": "package.json",
-      "folder": "."
+      "id": "apps/explorer/src/scene/Bridge.tsx",
+      "name": "Bridge.tsx",
+      "path": "apps/explorer/src/scene/Bridge.tsx",
+      "folder": "apps/explorer/src/scene"
     }
   ],
   "selected": {
-    "id": "package.json",
-    "name": "package.json",
-    "path": "package.json",
-    "folder": "."
+    "id": "apps/explorer/src/scene/Bridge.tsx",
+    "name": "Bridge.tsx",
+    "path": "apps/explorer/src/scene/Bridge.tsx",
+    "folder": "apps/explorer/src/scene"
   },
   "filesOnIsland": [
     {
-      "id": "CONTRIBUTING.md",
-      "name": "CONTRIBUTING.md",
-      "path": "CONTRIBUTING.md",
-      "folder": "."
+      "id": "apps/explorer/src/scene/Bridge.tsx",
+      "name": "Bridge.tsx",
+      "path": "apps/explorer/src/scene/Bridge.tsx",
+      "folder": "apps/explorer/src/scene"
     },
     {
-      "id": "LICENSE",
-      "name": "LICENSE",
-      "path": "LICENSE",
-      "folder": "."
+      "id": "apps/explorer/src/scene/collectMapBatches.ts",
+      "name": "collectMapBatches.ts",
+      "path": "apps/explorer/src/scene/collectMapBatches.ts",
+      "folder": "apps/explorer/src/scene"
     },
     {
-      "id": "package.json",
-      "name": "package.json",
-      "path": "package.json",
-      "folder": "."
+      "id": "apps/explorer/src/scene/DistantFileBlocks.tsx",
+      "name": "DistantFileBlocks.tsx",
+      "path": "apps/explorer/src/scene/DistantFileBlocks.tsx",
+      "folder": "apps/explorer/src/scene"
     },
     {
-      "id": "README.md",
-      "name": "README.md",
-      "path": "README.md",
-      "folder": "."
+      "id": "apps/explorer/src/scene/FileBlock.tsx",
+      "name": "FileBlock.tsx",
+      "path": "apps/explorer/src/scene/FileBlock.tsx",
+      "folder": "apps/explorer/src/scene"
     },
     {
-      "id": "SECURITY.md",
-      "name": "SECURITY.md",
-      "path": "SECURITY.md",
-      "folder": "."
+      "id": "apps/explorer/src/scene/FolderArea.tsx",
+      "name": "FolderArea.tsx",
+      "path": "apps/explorer/src/scene/FolderArea.tsx",
+      "folder": "apps/explorer/src/scene"
+    },
+    {
+      "id": "apps/explorer/src/scene/MapBatches.tsx",
+      "name": "MapBatches.tsx",
+      "path": "apps/explorer/src/scene/MapBatches.tsx",
+      "folder": "apps/explorer/src/scene"
+    },
+    {
+      "id": "apps/explorer/src/scene/MapSelectBorder.tsx",
+      "name": "MapSelectBorder.tsx",
+      "path": "apps/explorer/src/scene/MapSelectBorder.tsx",
+      "folder": "apps/explorer/src/scene"
+    },
+    {
+      "id": "apps/explorer/src/scene/MapView.tsx",
+      "name": "MapView.tsx",
+      "path": "apps/explorer/src/scene/MapView.tsx",
+      "folder": "apps/explorer/src/scene"
+    },
+    {
+      "id": "apps/explorer/src/scene/Player.tsx",
+      "name": "Player.tsx",
+      "path": "apps/explorer/src/scene/Player.tsx",
+      "folder": "apps/explorer/src/scene"
+    },
+    {
+      "id": "apps/explorer/src/scene/RelationLines.tsx",
+      "name": "RelationLines.tsx",
+      "path": "apps/explorer/src/scene/RelationLines.tsx",
+      "folder": "apps/explorer/src/scene"
+    },
+    {
+      "id": "apps/explorer/src/scene/SelectionController.tsx",
+      "name": "SelectionController.tsx",
+      "path": "apps/explorer/src/scene/SelectionController.tsx",
+      "folder": "apps/explorer/src/scene"
+    },
+    {
+      "id": "apps/explorer/src/scene/UserContextTracker.tsx",
+      "name": "UserContextTracker.tsx",
+      "path": "apps/explorer/src/scene/UserContextTracker.tsx",
+      "folder": "apps/explorer/src/scene"
+    },
+    {
+      "id": "apps/explorer/src/scene/walkLod.ts",
+      "name": "walkLod.ts",
+      "path": "apps/explorer/src/scene/walkLod.ts",
+      "folder": "apps/explorer/src/scene"
+    },
+    {
+      "id": "apps/explorer/src/scene/WalkLodTracker.tsx",
+      "name": "WalkLodTracker.tsx",
+      "path": "apps/explorer/src/scene/WalkLodTracker.tsx",
+      "folder": "apps/explorer/src/scene"
+    },
+    {
+      "id": "apps/explorer/src/scene/World.tsx",
+      "name": "World.tsx",
+      "path": "apps/explorer/src/scene/World.tsx",
+      "folder": "apps/explorer/src/scene"
     }
   ],
   "position": {
-    "x": 1.98,
-    "z": 62.89
+    "x": -50.49,
+    "z": 208.82
   },
   "showBranchChanges": true
 }

@@ -83,6 +83,16 @@ export const MAP_SELECTION = {
   explainPad: 0.16,
 }
 
+/** How strongly /explain mode recedes everything outside the focused island. */
+export const EXPLAIN_FOCUS = {
+  dimOpacity: 0.18,
+  dimColorAmount: 0.5,
+}
+
+export function explainItemOpacity(dimmed: boolean, base = 1) {
+  return dimmed ? base * EXPLAIN_FOCUS.dimOpacity : base
+}
+
 export function fileHeight(lines: number) {
   return Math.min(
     CONFIG.maxHeight,

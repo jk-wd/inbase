@@ -5,6 +5,7 @@
   --vc-surface: #272c36;
   --vc-border: #272c36;
   --explain-sidebar-width: min(380px, 42vw);
+  --explain-dim-opacity: 0.18;
 }
 
 html,
@@ -525,7 +526,7 @@ button {
 
 .map-folder-label-dimmed,
 .map-file-label-dimmed {
-  opacity: 0.5;
+  opacity: var(--explain-dim-opacity);
 }
 
 .map-folder-label-dimmed.map-folder-label-selected,
