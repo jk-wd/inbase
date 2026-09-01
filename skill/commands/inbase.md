@@ -18,4 +18,4 @@ If attach fails with `VISUAL_CODER_NOT_RUNNING`, `VISUAL_CODER_CHAT_LIMIT`, `VIS
 
 3. Continue the Inbase visual edits skill from `read-blueprint` onward with that `--session` id. Attach already started the session. `read-blueprint` reads the optional blueprint, instruction, and attached files. After it returns, reply in chat with `I see on the blueprint ...` naming the files, folders, symbols, imports, notes, and pointers so the user can confirm you read it correctly. Then continue.
 
-If this chat has no request text, after `read-blueprint`, if the global or this session's local blueprint is enabled, that is the request: create those files, folders, and symbols. Ask in chat if you need more information. Do not invent extra work. If both blueprints are empty, stop and wait for a request, `/go`, or `/explain`.
+If this chat has no request text, after `read-blueprint`, if the global or this session's local blueprint is enabled, that is the request: create those files, folders, and symbols. Ask in chat if you need more information. Do not invent extra work. If both blueprints are empty, stop and wait for a request, `/accept`, or `/explain`.

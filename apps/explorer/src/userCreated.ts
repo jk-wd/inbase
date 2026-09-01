@@ -415,6 +415,130 @@ function uniqueSiblings(
   return siblings
 }
 
+function overlayNameOf(island: UserCreatedIsland) {
+  return island.naming && !island.name ? 'New folder' : island.name
+}
+
+type OccupiedRect = {
+  left: number
+  right: number
+  top: number
+  bottom: number
+}
+
+function folderOccupancy(folder: PlacedFolder): OccupiedRect {
+  return {
+    left: folder.x - folder.width / 2,
+    right: folder.x + folder.width / 2,
+    top: folder.z,
+    bottom: folder.z + folder.depth,
+  }
+}
+
+function fileOccupancy(file: PlacedFile): OccupiedRect {
+  return {
+    left: file.position[0] - file.size[0] / 2,
+    right: file.position[0] + file.size[0] / 2,
+    top: file.position[2] - file.size[2] / 2,
+    bottom: file.position[2] + file.size[2] / 2,
+  }
+}
+
+function occupancyOverlaps(left: OccupiedRect, right: OccupiedRect) {
+  return (
+    left.left < right.right &&
+    left.right > right.left &&
+    left.top < right.bottom &&
+    left.bottom > right.top
+  )
+}
+
+function mapOccupancy(
+  base: WorldLayout,
+  overlayFolders: Record<string, PlacedFolder>,
+  overlayFiles: Record<string, PlacedFile>,
+  skipFolderPath?: string,
+  skipFileId?: string,
+) {
+  const rects: OccupiedRect[] = []
+  for (const folder of Object.values(base.folders)) {
+    if (folder.path === skipFolderPath) continue
+    rects.push(folderOccupancy(folder))
+  }
+  for (const folder of Object.values(overlayFolders)) {
+    if (folder.path === skipFolderPath) continue
+    rects.push(folderOccupancy(folder))
+  }
+  for (const file of Object.values(base.files)) {
+    if (file.id === skipFileId) continue
+    rects.push(fileOccupancy(file))
+  }
+  for (const file of Object.values(overlayFiles)) {
+    if (file.id === skipFileId) continue
+    rects.push(fileOccupancy(file))
+  }
+  return rects
+}
+
+function shiftToEmptyMapSpace(folder: PlacedFolder, occupied: OccupiedRect[]) {
+  let next = folder
+  const gap = CONFIG.siblingGap
+  for (let step = 0; step < 80; step += 1) {
+    const rect = folderOccupancy(next)
+    const hit = occupied.find((other) => occupancyOverlaps(rect, other))
+    if (!hit) return next
+    next = {
+      ...next,
+      x: hit.right + gap + next.width / 2,
+    }
+  }
+  return next
+}
+
+function existingFolderWithName(
+  folders: PlacedFolder[],
+  parentPath: string,
+  name: string,
+  islands: UserCreatedIsland[],
+) {
+  const needle = name.trim()
+  if (!needle || needle === 'New folder') return null
+  return (
+    folders.find((folder) => {
+      if (folder.name !== needle) return false
+      return placedFolderParent(folder, islands) === parentPath
+    }) ?? null
+  )
+}
+
+function existingFileWithName(
+  files: Record<string, PlacedFile>,
+  folderPath: string,
+  name: string,
+) {
+  const needle = name.trim()
+  if (!needle || needle === 'New file') return null
+  for (const file of Object.values(files)) {
+    if (folderOfFile(file.id) !== folderPath) continue
+    if ((file.id.split('/').pop() ?? file.id) === needle) return file
+  }
+  return null
+}
+function overlayMatchesExistingFolder(
+  island: UserCreatedIsland,
+  existing: PlacedFolder,
+) {
+  if (islandKey(island) !== existing.path) return false
+  if (island.naming || !island.name) return true
+  return island.name === existing.name
+}
+
+function overlayMatchesExistingFile(block: UserCreatedBlock, fileId: string) {
+  if (block.id !== fileId) return false
+  if (block.naming || !block.name) return true
+  return block.name === (fileId.split('/').pop() ?? fileId)
+}
+
 function overlayAwareFolders(
   base: WorldLayout,
   overlay: Record<string, PlacedFolder>,
@@ -478,13 +602,29 @@ function placeOverlayIslands(
 
   for (const island of islands) {
     const id = islandKey(island)
-    const existing = base.folders[id]
-    if (existing) {
+    const name = overlayNameOf(island)
+    const existingByPath = base.folders[id]
+    if (existingByPath && overlayMatchesExistingFolder(island, existingByPath)) {
       folders[id] = {
-        ...existing,
-        added: true,
+        ...existingByPath,
         overlay: true,
-        name: island.name || existing.name,
+        colorHex,
+      }
+      continue
+    }
+    const existingByName = island.naming
+      ? null
+      : existingFolderWithName(
+          overlayAwareFolders(base, folders),
+          island.parent,
+          name,
+          islands,
+        )
+    if (existingByName) {
+      folders[id] = {
+        ...existingByName,
+        path: existingByName.path,
+        overlay: true,
         colorHex,
       }
       continue
@@ -505,24 +645,28 @@ function placeOverlayIslands(
           CONFIG.siblingGap +
           width / 2
     const z = parent.z + parent.depth + CONFIG.bridgeLength
-    folders[id] = {
-      path: id,
-      name: island.naming && !island.name ? 'New folder' : island.name,
-      x,
-      z,
-      width,
-      depth,
-      added: true,
-      overlay: true,
-      colorHex,
-    }
+    const placed = shiftToEmptyMapSpace(
+      {
+        path: id,
+        name,
+        x,
+        z,
+        width,
+        depth,
+        added: true,
+        overlay: true,
+        colorHex,
+      },
+      mapOccupancy(base, folders, {}, id),
+    )
+    folders[id] = placed
     bridges.push({
       id: `${parentPath}→${id}`,
-      label: folders[id].name,
+      label: placed.name,
       fromLabel: parent.name,
       points: [
-        [x, parent.z + parent.depth - CONFIG.bridgeOverlap],
-        [x, z + CONFIG.bridgeOverlap],
+        [placed.x, parent.z + parent.depth - CONFIG.bridgeOverlap],
+        [placed.x, placed.z + CONFIG.bridgeOverlap],
       ],
     })
   }
@@ -554,15 +698,32 @@ function placeOverlayBlocks(
     folders: { ...base.folders, ...overlayFolders },
   }
   for (const block of blocks) {
-    const existing = !block.naming ? base.files[block.id] : undefined
-    if (existing) {
+    const existingById = !block.naming ? base.files[block.id] : undefined
+    if (existingById && overlayMatchesExistingFile(block, existingById.id)) {
       filledIds.push(block.id)
       files[block.id] = {
-        ...existing,
+        ...existingById,
         position: [
-          existing.position[0],
-          fileLift + existing.size[1] / 2,
-          existing.position[2],
+          existingById.position[0],
+          fileLift + existingById.size[1] / 2,
+          existingById.position[2],
+        ],
+      }
+      continue
+    }
+    const existingByName =
+      !block.naming && block.name
+        ? existingFileWithName(base.files, block.folder, block.name) ??
+          existingFileWithName(files, block.folder, block.name)
+        : null
+    if (existingByName) {
+      filledIds.push(existingByName.id)
+      files[block.id] = {
+        ...existingByName,
+        position: [
+          existingByName.position[0],
+          fileLift + existingByName.size[1] / 2,
+          existingByName.position[2],
         ],
       }
       continue
@@ -575,28 +736,43 @@ function placeOverlayBlocks(
     const spot = folder
       ? defaultBlockSpot(foldersForSpot, folderPath, index)
       : { x: block.x, z: block.z, folder: folderPath }
-    const x = spot?.x ?? block.x
+    let x = spot?.x ?? block.x
     const z = spot?.z ?? block.z
-    files[block.id] = {
+    const candidate: PlacedFile = {
       id: block.id,
       position: [x, fileLift + height / 2, z],
       size: [CONFIG.fileWidth, height, CONFIG.fileDepth],
       aisleFace: folder && x >= folder.x ? -1 : 1,
     }
+    const occupied = mapOccupancy(base, overlayFolders, files, undefined, block.id)
+    for (let step = 0; step < 40; step += 1) {
+      const rect = fileOccupancy(candidate)
+      const hit = occupied.find((other) => occupancyOverlaps(rect, other))
+      if (!hit) break
+      x = hit.right + CONFIG.siblingGap + CONFIG.fileWidth / 2
+      candidate.position = [x, candidate.position[1], candidate.position[2]]
+      candidate.aisleFace = folder && x >= folder.x ? -1 : 1
+    }
+    files[block.id] = candidate
   }
   return { files, filledIds }
 }
 
-function islandsForOverlay(blocks: UserCreatedBlock[], islands: UserCreatedIsland[]) {
+function islandsForOverlay(
+  blocks: UserCreatedBlock[],
+  islands: UserCreatedIsland[],
+  base: WorldLayout,
+) {
   const have = new Set(islands.map((island) => islandKey(island)))
   const implied: UserCreatedIsland[] = []
   for (const block of blocks) {
     const folder = block.folder
     if (!folder || have.has(folder)) continue
     have.add(folder)
+    const existing = base.folders[folder]
     implied.push({
       id: folder,
-      name: folder.split('/').pop() ?? folder,
+      name: existing?.name ?? (folder.split('/').pop() ?? folder),
       path: folder,
       parent: folderParent(folder) ?? '.',
     })
@@ -611,7 +787,7 @@ export function layoutBlueprintLayers(
   return sources.map((source, index) => {
     const { folders, bridges } = placeOverlayIslands(
       base,
-      islandsForOverlay(source.blocks, source.islands),
+      islandsForOverlay(source.blocks, source.islands, base),
       source.hex,
     )
     const folderY =

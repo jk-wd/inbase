@@ -33,6 +33,7 @@ import type {
   PatchImport,
   PlacedBridge,
   PlacedFile,
+  PlacedFolder,
   RelationMode,
   UserContext,
   UserCreatedBlock,
@@ -428,6 +429,13 @@ export function World({
 
       {Object.values(viewLayout.folders).map((folder) => {
         if (lod && !lod.folders.has(folder.path)) return null
+        if (
+          mapping &&
+          folder.added &&
+          overlayLayers.some((layer) => layer.folders[folder.path])
+        ) {
+          return null
+        }
         return (
           <FolderArea
             key={folder.path}
@@ -461,6 +469,13 @@ export function World({
       {viewGraph.files.map((file) => {
         const placed = viewLayout.files[file.id]
         if (!placed) return null
+        if (
+          mapping &&
+          file.userCreated &&
+          overlayLayers.some((layer) => layer.files[file.id])
+        ) {
+          return null
+        }
         const selected = file.id === selectedId
         const isRelated = related.has(file.id)
         const isPlanned = planned.has(file.id) || deleted.has(file.id)
@@ -516,6 +531,7 @@ export function World({
             key={`layer:${layer.id}`}
             layer={layer}
             graph={viewGraph}
+            layout={viewLayout}
             selectedId={selectedId}
             selectedFolder={selectedFolder}
             selectedFolderLayer={selectedFolderLayer}
@@ -680,9 +696,54 @@ function OverlayBridgeStrip({
   )
 }
 
+function clipFolderAwayFromUnrelated(
+  folder: PlacedFolder,
+  others: PlacedFolder[],
+): PlacedFolder {
+  let left = folder.x - folder.width / 2
+  let right = folder.x + folder.width / 2
+  for (const other of others) {
+    if (other.path === folder.path) continue
+    if (other.name === folder.name) continue
+    if (
+      folder.z >= other.z + other.depth ||
+      folder.z + folder.depth <= other.z
+    ) {
+      continue
+    }
+    const otherLeft = other.x - other.width / 2
+    const otherRight = other.x + other.width / 2
+    if (left >= otherRight || right <= otherLeft) continue
+    const keepLeft = otherLeft - left
+    const keepRight = right - otherRight
+    if (keepLeft >= keepRight) right = Math.min(right, otherLeft)
+    else left = Math.max(left, otherRight)
+  }
+  const width = right - left
+  if (width < 0.5) return folder
+  return {
+    ...folder,
+    x: (left + right) / 2,
+    width,
+  }
+}
+
+function overlayFolderBounds(
+  folder: PlacedFolder,
+  layoutFolders: Record<string, PlacedFolder>,
+  naming: boolean,
+): PlacedFolder | null {
+  const existing = layoutFolders[folder.path]
+  if (existing && !naming && folder.name && folder.name !== existing.name) {
+    return null
+  }
+  return clipFolderAwayFromUnrelated(folder, Object.values(layoutFolders))
+}
+
 function BlueprintOverlay({
   layer,
   graph,
+  layout,
   selectedId,
   selectedFolder,
   selectedFolderLayer,
@@ -696,6 +757,7 @@ function BlueprintOverlay({
 }: {
   layer: BlueprintOverlayLayer
   graph: CodebaseGraph
+  layout: WorldLayout
   selectedId: string | null
   selectedFolder: string | null
   selectedFolderLayer: string | null
@@ -713,28 +775,36 @@ function BlueprintOverlay({
 
   return (
     <group>
-      {Object.values(layer.folders).map((folder) => (
-        <FolderArea
-          key={`overlay-folder:${layer.id}:${folder.path}`}
-          folder={folder}
-          naming={folder.path === namingIslandId}
-          selected={
-            folder.path === selectedFolder && selectedFolderLayer === layer.id
-          }
-          mapMode
-          overlay
-          overlayY={layer.folderY}
-          opacity={
-            overlayOpacity *
-            (explainActive && !explainFolderFocused(explainFocus, folder.path)
-              ? 0.5
-              : 1)
-          }
-          labelVisible={false}
-          pickPath={folder.path}
-          pickLayer={layer.id}
-        />
-      ))}
+      {Object.values(layer.folders).map((folder) => {
+        const overlayFolder = overlayFolderBounds(
+          folder,
+          layout.folders,
+          folder.path === namingIslandId,
+        )
+        if (!overlayFolder) return null
+        return (
+          <FolderArea
+            key={`overlay-folder:${layer.id}:${folder.path}`}
+            folder={overlayFolder}
+            naming={folder.path === namingIslandId}
+            selected={
+              folder.path === selectedFolder && selectedFolderLayer === layer.id
+            }
+            mapMode
+            overlay
+            overlayY={layer.folderY}
+            opacity={
+              overlayOpacity *
+              (explainActive && !explainFolderFocused(explainFocus, folder.path)
+                ? 0.5
+                : 1)
+            }
+            labelVisible={false}
+            pickPath={folder.path}
+            pickLayer={layer.id}
+          />
+        )
+      })}
       {layer.bridges.map((bridge) => (
         <OverlayBridgeStrip
           key={`overlay-bridge:${layer.id}:${bridge.id}`}
@@ -746,6 +816,19 @@ function BlueprintOverlay({
       ))}
       {Object.entries(layer.files).map(([id, placed]) => {
         const existing = filesById.get(id)
+        const layoutFile = layout.files[id]
+        const overlayPlaced: PlacedFile = layoutFile
+          ? {
+              ...placed,
+              position: [
+                layoutFile.position[0],
+                placed.position[1],
+                layoutFile.position[2],
+              ],
+              size: layoutFile.size,
+              aisleFace: layoutFile.aisleFace,
+            }
+          : placed
         const file = existing
           ? { ...existing, userCreated: true, colorHex: layer.colorHex }
           : toCreatedFile({
@@ -753,8 +836,8 @@ function BlueprintOverlay({
               name: id.split('/').pop() ?? id,
               path: id,
               folder: folderOfFile(id),
-              x: placed.position[0],
-              z: placed.position[2],
+              x: overlayPlaced.position[0],
+              z: overlayPlaced.position[2],
               colorHex: layer.colorHex,
             })
         const isFilled = filled.has(id)
@@ -765,7 +848,7 @@ function BlueprintOverlay({
           <FileBlock
             key={`overlay-file:${layer.id}:${id}`}
             file={{ ...file, colorHex: layer.colorHex, userCreated: true }}
-            placed={placed}
+            placed={overlayPlaced}
             selected={id === selectedId}
             related={false}
             planned={false}

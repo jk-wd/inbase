@@ -87,6 +87,8 @@ function placeFolder(
     z: originZ,
     width,
     depth,
+    added: Boolean(folder.userCreated),
+    colorHex: folder.colorHex,
   }
 
   folder.files.forEach((fileId, index) => {

@@ -1,59 +1,65 @@
 {
-  "updatedAt": "2026-09-01T07:09:33.938Z",
+  "updatedAt": "2026-09-01T09:51:28.347Z",
   "mode": "map",
   "island": {
-    "path": "apps/explorer/scripts/relations",
-    "name": "relations"
+    "path": ".",
+    "name": "inbase"
   },
   "lookingAt": {
-    "id": "apps/explorer/scripts/relations/require.mjs",
-    "name": "require.mjs",
-    "path": "apps/explorer/scripts/relations/require.mjs",
-    "folder": "apps/explorer/scripts/relations"
+    "id": "package.json",
+    "name": "package.json",
+    "path": "package.json",
+    "folder": "."
   },
   "lookingAtFiles": [
     {
-      "id": "apps/explorer/scripts/relations/require.mjs",
-      "name": "require.mjs",
-      "path": "apps/explorer/scripts/relations/require.mjs",
-      "folder": "apps/explorer/scripts/relations"
+      "id": "package.json",
+      "name": "package.json",
+      "path": "package.json",
+      "folder": "."
     }
   ],
   "selected": {
-    "id": "apps/explorer/scripts/relations/require.mjs",
-    "name": "require.mjs",
-    "path": "apps/explorer/scripts/relations/require.mjs",
-    "folder": "apps/explorer/scripts/relations"
+    "id": "package.json",
+    "name": "package.json",
+    "path": "package.json",
+    "folder": "."
   },
   "filesOnIsland": [
     {
-      "id": "apps/explorer/scripts/relations/esm.mjs",
-      "name": "esm.mjs",
-      "path": "apps/explorer/scripts/relations/esm.mjs",
-      "folder": "apps/explorer/scripts/relations"
+      "id": "CONTRIBUTING.md",
+      "name": "CONTRIBUTING.md",
+      "path": "CONTRIBUTING.md",
+      "folder": "."
     },
     {
-      "id": "apps/explorer/scripts/relations/html.mjs",
-      "name": "html.mjs",
-      "path": "apps/explorer/scripts/relations/html.mjs",
-      "folder": "apps/explorer/scripts/relations"
+      "id": "LICENSE",
+      "name": "LICENSE",
+      "path": "LICENSE",
+      "folder": "."
     },
     {
-      "id": "apps/explorer/scripts/relations/index.mjs",
-      "name": "index.mjs",
-      "path": "apps/explorer/scripts/relations/index.mjs",
-      "folder": "apps/explorer/scripts/relations"
+      "id": "package.json",
+      "name": "package.json",
+      "path": "package.json",
+      "folder": "."
     },
     {
-      "id": "apps/explorer/scripts/relations/require.mjs",
-      "name": "require.mjs",
-      "path": "apps/explorer/scripts/relations/require.mjs",
-      "folder": "apps/explorer/scripts/relations"
+      "id": "README.md",
+      "name": "README.md",
+      "path": "README.md",
+      "folder": "."
+    },
+    {
+      "id": "SECURITY.md",
+      "name": "SECURITY.md",
+      "path": "SECURITY.md",
+      "folder": "."
     }
   ],
   "position": {
-    "x": -39.29,
-    "z": 229.69
+    "x": 1.98,
+    "z": 62.89
   },
   "showBranchChanges": true
 }

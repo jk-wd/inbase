@@ -27,7 +27,7 @@
       "name": "README.md",
       "path": "README.md",
       "folder": ".",
-      "lines": 359,
+      "lines": 361,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -5509,7 +5509,7 @@
       "name": "App.tsx",
       "path": "apps/explorer/src/App.tsx",
       "folder": "apps/explorer/src",
-      "lines": 2904,
+      "lines": 2941,
       "language": "tsx",
       "symbols": [
         {
@@ -5941,6 +5941,10 @@
           "kind": "variable"
         },
         {
+          "name": "layoutGraph",
+          "kind": "variable"
+        },
+        {
           "name": "displayGraph",
           "kind": "variable"
         },
@@ -6306,6 +6310,18 @@
         },
         {
           "name": "toggleImportedBy",
+          "kind": "variable"
+        },
+        {
+          "name": "setRelationModeAndClearAim",
+          "kind": "variable"
+        },
+        {
+          "name": "cycleRelationMode",
+          "kind": "variable"
+        },
+        {
+          "name": "order",
           "kind": "variable"
         },
         {
@@ -6826,6 +6842,14 @@
         },
         {
           "name": "setImportedBy",
+          "kind": "variable"
+        },
+        {
+          "name": "relationMode",
+          "kind": "variable"
+        },
+        {
+          "name": "setRelationMode",
           "kind": "variable"
         },
         {
@@ -7439,7 +7463,7 @@
       "name": "index.css",
       "path": "apps/explorer/src/index.css",
       "folder": "apps/explorer/src",
-      "lines": 2348,
+      "lines": 2396,
       "language": "css",
       "symbols": [],
       "imports": []
@@ -7480,7 +7504,7 @@
       "name": "layout.ts",
       "path": "apps/explorer/src/layout.ts",
       "folder": "apps/explorer/src",
-      "lines": 680,
+      "lines": 692,
       "language": "ts",
       "symbols": [
         {
@@ -7525,6 +7549,14 @@
         },
         {
           "name": "relationTravelTarget",
+          "kind": "function"
+        },
+        {
+          "name": "relationPairLabel",
+          "kind": "function"
+        },
+        {
+          "name": "fileDisplayName",
           "kind": "function"
         },
         {
@@ -9313,7 +9345,7 @@
       "name": "RelationLines.tsx",
       "path": "apps/explorer/src/scene/RelationLines.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 247,
+      "lines": 607,
       "language": "tsx",
       "symbols": [
         {
@@ -9337,7 +9369,31 @@
           "kind": "function"
         },
         {
+          "name": "lineColor",
+          "kind": "function"
+        },
+        {
+          "name": "projectToScreen",
+          "kind": "function"
+        },
+        {
+          "name": "closestOnSegment",
+          "kind": "function"
+        },
+        {
+          "name": "MapRelationOverlay",
+          "kind": "function"
+        },
+        {
           "name": "RelationLines",
+          "kind": "function"
+        },
+        {
+          "name": "onMove",
+          "kind": "function"
+        },
+        {
+          "name": "onLeave",
           "kind": "function"
         },
         {
@@ -9370,6 +9426,10 @@
         },
         {
           "name": "UP",
+          "kind": "variable"
+        },
+        {
+          "name": "PROJECT",
           "kind": "variable"
         },
         {
@@ -9409,6 +9469,246 @@
           "kind": "variable"
         },
         {
+          "name": "arrows",
+          "kind": "variable"
+        },
+        {
+          "name": "direction",
+          "kind": "variable"
+        },
+        {
+          "name": "dy",
+          "kind": "variable"
+        },
+        {
+          "name": "len",
+          "kind": "variable"
+        },
+        {
+          "name": "t",
+          "kind": "variable"
+        },
+        {
+          "name": "x",
+          "kind": "variable"
+        },
+        {
+          "name": "y",
+          "kind": "variable"
+        },
+        {
+          "name": "HOVER_HIT_PX",
+          "kind": "variable"
+        },
+        {
+          "name": "camera",
+          "kind": "variable"
+        },
+        {
+          "name": "gl",
+          "kind": "variable"
+        },
+        {
+          "name": "size",
+          "kind": "variable"
+        },
+        {
+          "name": "svgRef",
+          "kind": "variable"
+        },
+        {
+          "name": "labelRef",
+          "kind": "variable"
+        },
+        {
+          "name": "mouseRef",
+          "kind": "variable"
+        },
+        {
+          "name": "lastAimRef",
+          "kind": "variable"
+        },
+        {
+          "name": "onAimRef",
+          "kind": "variable"
+        },
+        {
+          "name": "invalidate",
+          "kind": "variable"
+        },
+        {
+          "name": "parent",
+          "kind": "variable"
+        },
+        {
+          "name": "svg",
+          "kind": "variable"
+        },
+        {
+          "name": "label",
+          "kind": "variable"
+        },
+        {
+          "name": "name",
+          "kind": "variable"
+        },
+        {
+          "name": "mesh",
+          "kind": "variable"
+        },
+        {
+          "name": "group",
+          "kind": "variable"
+        },
+        {
+          "name": "glow",
+          "kind": "variable"
+        },
+        {
+          "name": "path",
+          "kind": "variable"
+        },
+        {
+          "name": "i",
+          "kind": "variable"
+        },
+        {
+          "name": "element",
+          "kind": "variable"
+        },
+        {
+          "name": "rect",
+          "kind": "variable"
+        },
+        {
+          "name": "nodes",
+          "kind": "variable"
+        },
+        {
+          "name": "mouse",
+          "kind": "variable"
+        },
+        {
+          "name": "hover",
+          "kind": "variable"
+        },
+        {
+          "name": "hoverDist",
+          "kind": "variable"
+        },
+        {
+          "name": "hoverX",
+          "kind": "variable"
+        },
+        {
+          "name": "hoverY",
+          "kind": "variable"
+        },
+        {
+          "name": "aimed",
+          "kind": "variable"
+        },
+        {
+          "name": "color",
+          "kind": "variable"
+        },
+        {
+          "name": "d",
+          "kind": "variable"
+        },
+        {
+          "name": "prevX",
+          "kind": "variable"
+        },
+        {
+          "name": "prevY",
+          "kind": "variable"
+        },
+        {
+          "name": "p",
+          "kind": "variable"
+        },
+        {
+          "name": "point",
+          "kind": "variable"
+        },
+        {
+          "name": "screen",
+          "kind": "variable"
+        },
+        {
+          "name": "hit",
+          "kind": "variable"
+        },
+        {
+          "name": "stroke",
+          "kind": "variable"
+        },
+        {
+          "name": "a",
+          "kind": "variable"
+        },
+        {
+          "name": "arrow",
+          "kind": "variable"
+        },
+        {
+          "name": "head",
+          "kind": "variable"
+        },
+        {
+          "name": "from",
+          "kind": "variable"
+        },
+        {
+          "name": "to",
+          "kind": "variable"
+        },
+        {
+          "name": "angle",
+          "kind": "variable"
+        },
+        {
+          "name": "sizePx",
+          "kind": "variable"
+        },
+        {
+          "name": "tipX",
+          "kind": "variable"
+        },
+        {
+          "name": "tipY",
+          "kind": "variable"
+        },
+        {
+          "name": "backX",
+          "kind": "variable"
+        },
+        {
+          "name": "backY",
+          "kind": "variable"
+        },
+        {
+          "name": "px",
+          "kind": "variable"
+        },
+        {
+          "name": "py",
+          "kind": "variable"
+        },
+        {
+          "name": "nextAim",
+          "kind": "variable"
+        },
+        {
+          "name": "nextKey",
+          "kind": "variable"
+        },
+        {
+          "name": "text",
+          "kind": "variable"
+        },
+        {
           "name": "meshes",
           "kind": "variable"
         },
@@ -9433,6 +9733,10 @@
           "kind": "variable"
         },
         {
+          "name": "plannedKeys",
+          "kind": "variable"
+        },
+        {
           "name": "relationIds",
           "kind": "variable"
         },
@@ -9449,15 +9753,15 @@
           "kind": "variable"
         },
         {
-          "name": "from",
-          "kind": "variable"
-        },
-        {
-          "name": "to",
+          "name": "isPlanned",
           "kind": "variable"
         },
         {
           "name": "edge",
+          "kind": "variable"
+        },
+        {
+          "name": "include",
           "kind": "variable"
         },
         {
@@ -9477,23 +9781,12 @@
           "kind": "variable"
         },
         {
-          "name": "aimed",
-          "kind": "variable"
-        },
-        {
-          "name": "color",
-          "kind": "variable"
-        },
-        {
-          "name": "glow",
-          "kind": "variable"
-        },
-        {
           "name": "relation",
           "kind": "variable"
         }
       ],
       "imports": [
+        "apps/explorer/src/layout.ts",
         "apps/explorer/src/types.ts"
       ]
     },
@@ -9502,7 +9795,7 @@
       "name": "SelectionController.tsx",
       "path": "apps/explorer/src/scene/SelectionController.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 131,
+      "lines": 133,
       "language": "tsx",
       "symbols": [
         {
@@ -9822,7 +10115,7 @@
       "name": "World.tsx",
       "path": "apps/explorer/src/scene/World.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 718,
+      "lines": 878,
       "language": "tsx",
       "symbols": [
         {
@@ -9831,6 +10124,14 @@
         },
         {
           "name": "OverlayBridgeStrip",
+          "kind": "function"
+        },
+        {
+          "name": "clipFolderAwayFromUnrelated",
+          "kind": "function"
+        },
+        {
+          "name": "overlayFolderBounds",
           "kind": "function"
         },
         {
@@ -9890,6 +10191,50 @@
           "kind": "variable"
         },
         {
+          "name": "extraKey",
+          "kind": "variable"
+        },
+        {
+          "name": "folderFocusIds",
+          "kind": "variable"
+        },
+        {
+          "name": "ids",
+          "kind": "variable"
+        },
+        {
+          "name": "overlay",
+          "kind": "variable"
+        },
+        {
+          "name": "id",
+          "kind": "variable"
+        },
+        {
+          "name": "folderNode",
+          "kind": "variable"
+        },
+        {
+          "name": "file",
+          "kind": "variable"
+        },
+        {
+          "name": "selectionFocus",
+          "kind": "variable"
+        },
+        {
+          "name": "hideMapRelations",
+          "kind": "variable"
+        },
+        {
+          "name": "showExistingRelations",
+          "kind": "variable"
+        },
+        {
+          "name": "fileImportedBy",
+          "kind": "variable"
+        },
+        {
           "name": "related",
           "kind": "variable"
         },
@@ -9902,6 +10247,10 @@
           "kind": "variable"
         },
         {
+          "name": "focus",
+          "kind": "variable"
+        },
+        {
           "name": "highlightedFolders",
           "kind": "variable"
         },
@@ -9911,14 +10260,6 @@
         },
         {
           "name": "keepFileIds",
-          "kind": "variable"
-        },
-        {
-          "name": "ids",
-          "kind": "variable"
-        },
-        {
-          "name": "id",
           "kind": "variable"
         },
         {
@@ -9987,10 +10328,6 @@
         },
         {
           "name": "scale",
-          "kind": "variable"
-        },
-        {
-          "name": "file",
           "kind": "variable"
         },
         {
@@ -10082,6 +10419,42 @@
           "kind": "variable"
         },
         {
+          "name": "left",
+          "kind": "variable"
+        },
+        {
+          "name": "right",
+          "kind": "variable"
+        },
+        {
+          "name": "other",
+          "kind": "variable"
+        },
+        {
+          "name": "otherLeft",
+          "kind": "variable"
+        },
+        {
+          "name": "otherRight",
+          "kind": "variable"
+        },
+        {
+          "name": "keepLeft",
+          "kind": "variable"
+        },
+        {
+          "name": "keepRight",
+          "kind": "variable"
+        },
+        {
+          "name": "width",
+          "kind": "variable"
+        },
+        {
+          "name": "existing",
+          "kind": "variable"
+        },
+        {
           "name": "filesById",
           "kind": "variable"
         },
@@ -10090,7 +10463,15 @@
           "kind": "variable"
         },
         {
-          "name": "existing",
+          "name": "overlayFolder",
+          "kind": "variable"
+        },
+        {
+          "name": "layoutFile",
+          "kind": "variable"
+        },
+        {
+          "name": "overlayPlaced",
           "kind": "variable"
         },
         {
@@ -10501,7 +10882,7 @@
       "name": "types.ts",
       "path": "apps/explorer/src/types.ts",
       "folder": "apps/explorer/src",
-      "lines": 446,
+      "lines": 448,
       "language": "ts",
       "symbols": [
         {
@@ -10890,7 +11271,7 @@
       "name": "HUD.tsx",
       "path": "apps/explorer/src/ui/HUD.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 3691,
+      "lines": 3893,
       "language": "tsx",
       "symbols": [
         {
@@ -11030,6 +11411,10 @@
           "kind": "function"
         },
         {
+          "name": "latestDiffForStep",
+          "kind": "function"
+        },
+        {
           "name": "SessionPanel",
           "kind": "function"
         },
@@ -11092,6 +11477,10 @@
         {
           "name": "updatePosition",
           "kind": "function"
+        },
+        {
+          "name": "RELATION_MODE_OPTIONS",
+          "kind": "variable"
         },
         {
           "name": "color",
@@ -11270,6 +11659,10 @@
           "kind": "variable"
         },
         {
+          "name": "index",
+          "kind": "variable"
+        },
+        {
           "name": "sessionId",
           "kind": "variable"
         },
@@ -11430,6 +11823,18 @@
           "kind": "variable"
         },
         {
+          "name": "stepDiff",
+          "kind": "variable"
+        },
+        {
+          "name": "canOpenDiff",
+          "kind": "variable"
+        },
+        {
+          "name": "viewing",
+          "kind": "variable"
+        },
+        {
           "name": "showGoHint",
           "kind": "variable"
         },
@@ -11439,6 +11844,10 @@
         },
         {
           "name": "showStepHint",
+          "kind": "variable"
+        },
+        {
+          "name": "stepBody",
           "kind": "variable"
         },
         {
@@ -11543,6 +11952,10 @@
         },
         {
           "name": "actionsMenuRef",
+          "kind": "variable"
+        },
+        {
+          "name": "relationsMenuRef",
           "kind": "variable"
         },
         {
@@ -11658,6 +12071,10 @@
           "kind": "variable"
         },
         {
+          "name": "canToggleImportedBy",
+          "kind": "variable"
+        },
+        {
           "name": "instructionSections",
           "kind": "variable"
         },
@@ -11751,6 +12168,22 @@
         },
         {
           "name": "setActionsMenuPosition",
+          "kind": "variable"
+        },
+        {
+          "name": "relationsMenuOpen",
+          "kind": "variable"
+        },
+        {
+          "name": "setRelationsMenuOpen",
+          "kind": "variable"
+        },
+        {
+          "name": "relationsMenuPosition",
+          "kind": "variable"
+        },
+        {
+          "name": "setRelationsMenuPosition",
           "kind": "variable"
         },
         {
@@ -12008,7 +12441,7 @@
       "name": "userCreated.ts",
       "path": "apps/explorer/src/userCreated.ts",
       "folder": "apps/explorer/src",
-      "lines": 1016,
+      "lines": 1192,
       "language": "ts",
       "symbols": [
         {
@@ -12097,6 +12530,46 @@
         },
         {
           "name": "uniqueSiblings",
+          "kind": "function"
+        },
+        {
+          "name": "overlayNameOf",
+          "kind": "function"
+        },
+        {
+          "name": "folderOccupancy",
+          "kind": "function"
+        },
+        {
+          "name": "fileOccupancy",
+          "kind": "function"
+        },
+        {
+          "name": "occupancyOverlaps",
+          "kind": "function"
+        },
+        {
+          "name": "mapOccupancy",
+          "kind": "function"
+        },
+        {
+          "name": "shiftToEmptyMapSpace",
+          "kind": "function"
+        },
+        {
+          "name": "existingFolderWithName",
+          "kind": "function"
+        },
+        {
+          "name": "existingFileWithName",
+          "kind": "function"
+        },
+        {
+          "name": "overlayMatchesExistingFolder",
+          "kind": "function"
+        },
+        {
+          "name": "overlayMatchesExistingFile",
           "kind": "function"
         },
         {
@@ -12384,11 +12857,47 @@
           "kind": "variable"
         },
         {
+          "name": "rects",
+          "kind": "variable"
+        },
+        {
+          "name": "next",
+          "kind": "variable"
+        },
+        {
+          "name": "gap",
+          "kind": "variable"
+        },
+        {
+          "name": "step",
+          "kind": "variable"
+        },
+        {
+          "name": "rect",
+          "kind": "variable"
+        },
+        {
+          "name": "hit",
+          "kind": "variable"
+        },
+        {
+          "name": "needle",
+          "kind": "variable"
+        },
+        {
           "name": "already",
           "kind": "variable"
         },
         {
-          "name": "existing",
+          "name": "existingByPath",
+          "kind": "variable"
+        },
+        {
+          "name": "existingByName",
+          "kind": "variable"
+        },
+        {
+          "name": "placed",
           "kind": "variable"
         },
         {
@@ -12408,6 +12917,10 @@
           "kind": "variable"
         },
         {
+          "name": "existingById",
+          "kind": "variable"
+        },
+        {
           "name": "folderPath",
           "kind": "variable"
         },
@@ -12420,11 +12933,23 @@
           "kind": "variable"
         },
         {
+          "name": "candidate",
+          "kind": "variable"
+        },
+        {
+          "name": "occupied",
+          "kind": "variable"
+        },
+        {
           "name": "have",
           "kind": "variable"
         },
         {
           "name": "implied",
+          "kind": "variable"
+        },
+        {
+          "name": "existing",
           "kind": "variable"
         },
         {
@@ -12943,7 +13468,7 @@
       "name": "inbase.test.mjs",
       "path": "bin/inbase.test.mjs",
       "folder": "bin",
-      "lines": 672,
+      "lines": 759,
       "language": "mjs",
       "symbols": [
         {
@@ -12964,6 +13489,10 @@
         },
         {
           "name": "planSession",
+          "kind": "function"
+        },
+        {
+          "name": "Clock",
           "kind": "function"
         },
         {
@@ -13078,7 +13607,8 @@
       "imports": [
         "bin/inbase.mjs",
         "bin/editors/index.mjs",
-        "bin/project.mjs"
+        "bin/project.mjs",
+        "apps/explorer/scripts/git-test.mjs"
       ]
     },
     {
@@ -13378,7 +13908,7 @@
       "name": "session.mjs",
       "path": "bin/session.mjs",
       "folder": "bin",
-      "lines": 542,
+      "lines": 674,
       "language": "mjs",
       "symbols": [
         {
@@ -13411,6 +13941,34 @@
         },
         {
           "name": "readProposalInfo",
+          "kind": "function"
+        },
+        {
+          "name": "readKnownFileIds",
+          "kind": "function"
+        },
+        {
+          "name": "readShowBranchChanges",
+          "kind": "function"
+        },
+        {
+          "name": "llmHidesBranchChanges",
+          "kind": "function"
+        },
+        {
+          "name": "changeSummary",
+          "kind": "function"
+        },
+        {
+          "name": "hasChangeSummary",
+          "kind": "function"
+        },
+        {
+          "name": "printChangeSummary",
+          "kind": "function"
+        },
+        {
+          "name": "readVisibleChanges",
           "kind": "function"
         },
         {
@@ -13495,6 +14053,54 @@
         },
         {
           "name": "id",
+          "kind": "variable"
+        },
+        {
+          "name": "parsed",
+          "kind": "variable"
+        },
+        {
+          "name": "dataDir",
+          "kind": "variable"
+        },
+        {
+          "name": "known",
+          "kind": "variable"
+        },
+        {
+          "name": "intents",
+          "kind": "variable"
+        },
+        {
+          "name": "llmOverlay",
+          "kind": "variable"
+        },
+        {
+          "name": "branchMod",
+          "kind": "variable"
+        },
+        {
+          "name": "branch",
+          "kind": "variable"
+        },
+        {
+          "name": "vs",
+          "kind": "variable"
+        },
+        {
+          "name": "intent",
+          "kind": "variable"
+        },
+        {
+          "name": "summary",
+          "kind": "variable"
+        },
+        {
+          "name": "selected",
+          "kind": "variable"
+        },
+        {
+          "name": "stepNo",
           "kind": "variable"
         },
         {
@@ -13630,10 +14236,6 @@
           "kind": "variable"
         },
         {
-          "name": "parsed",
-          "kind": "variable"
-        },
-        {
           "name": "last",
           "kind": "variable"
         },
@@ -13658,11 +14260,19 @@
           "kind": "variable"
         },
         {
+          "name": "visible",
+          "kind": "variable"
+        },
+        {
           "name": "proposal",
           "kind": "variable"
         },
         {
           "name": "question",
+          "kind": "variable"
+        },
+        {
+          "name": "asked",
           "kind": "variable"
         },
         {
@@ -13745,7 +14355,7 @@
       "name": "explain.md",
       "path": "skill/commands/explain.md",
       "folder": "skill/commands",
-      "lines": 75,
+      "lines": 77,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -13855,7 +14465,7 @@
       "name": "SKILL.md",
       "path": "skill/inbase/SKILL.md",
       "folder": "skill/inbase",
-      "lines": 267,
+      "lines": 271,
       "language": "md",
       "symbols": [],
       "imports": []

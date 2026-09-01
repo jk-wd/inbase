@@ -1022,7 +1022,7 @@ function sessionLiveStatus(intent: AgentIntent) {
     return { text: 'Explanation is on the map — /explain for a follow-up', busy: false }
   }
   if (intent.status === 'pending') {
-    return { text: 'Type /go in chat', busy: false }
+    return { text: 'Type /accept in chat', busy: false }
   }
   if (kind === 'execute') {
     return { text: `LLM received ${detail}`, busy: true }
@@ -1045,7 +1045,7 @@ function sessionLiveStatus(intent: AgentIntent) {
     return { text: 'LLM is drafting the plan', busy: true }
   }
   if (kind === 'plan' || intent.status === 'planned') {
-    return { text: 'Type /go in chat', busy: false }
+    return { text: 'Type /accept in chat', busy: false }
   }
   if (
     kind === 'attached' ||
@@ -1112,6 +1112,13 @@ type SessionPanelProps = {
     options?: { step?: number; stepByStep?: boolean },
   ) => void | boolean | AgentIntent | Promise<void | boolean | AgentIntent>
   onNavigateDiff: (sessionId: string, diffId: string) => void
+}
+
+function latestDiffForStep(chain: AgentIntent['chain'], stepIndex: number) {
+  for (let index = chain.length - 1; index >= 0; index -= 1) {
+    if (chain[index].step === stepIndex) return chain[index]
+  }
+  return null
 }
 
 function SessionPanel({
@@ -1282,7 +1289,7 @@ function SessionPanel({
           {!llmDisconnected && !stepByStep && (
             <p className="hud-mode-hint">
               LLM implements the full plan. You can still walk the diffs, then
-              /go.
+              /accept.
             </p>
           )}
           {handshakeSetup ? (
@@ -1372,16 +1379,17 @@ function SessionPanel({
                     const processing = processingStep === step.index
                     const accepted = acceptedSteps.has(step.index) && !proposed
                     const creating = processing && !proposed
+                    const stepDiff = latestDiffForStep(intent.chain, step.index)
+                    const canOpenDiff =
+                      Boolean(stepDiff) && !intent.working
+                    const viewing =
+                      Boolean(stepDiff) && intent.step === step.index
                     const showGoHint =
                       canRunNext && invokeStep?.index === step.index && !creating
                     const showAcceptHint = canAcceptProposal && proposed
                     const showStepHint = creating || showGoHint || showAcceptHint
-                    return (
-                      <li
-                        key={step.index}
-                        data-done={accepted}
-                        data-active={processing || proposed}
-                      >
+                    const stepBody = (
+                      <>
                         <span className="hud-step-index">{step.index}.</span>
                         <span className="hud-step-main">
                           <span className="hud-step-title">{step.title}</span>
@@ -1391,12 +1399,38 @@ function SessionPanel({
                                 {creating
                                   ? 'Creating proposal…'
                                   : showGoHint
-                                    ? '/go'
-                                    : '/go · /explain'}
+                                    ? '/accept'
+                                    : '/accept · /explain'}
                               </span>
                             </span>
                           )}
                         </span>
+                      </>
+                    )
+                    return (
+                      <li
+                        key={step.index}
+                        data-done={accepted}
+                        data-active={processing || proposed || viewing}
+                      >
+                        {canOpenDiff && stepDiff ? (
+                          <button
+                            className="hud-step-link hud-step-row"
+                            type="button"
+                            aria-current={viewing ? 'step' : undefined}
+                            aria-label={`Show diff for step ${step.index}`}
+                            title="Show this step's diff"
+                            onClick={() => {
+                              if (stepDiff.id !== intent.diffId) {
+                                onNavigateDiff(sessionId, stepDiff.id)
+                              }
+                            }}
+                          >
+                            {stepBody}
+                          </button>
+                        ) : (
+                          <div className="hud-step-row">{stepBody}</div>
+                        )}
                       </li>
                     )
                   })}
@@ -1809,7 +1843,7 @@ function explorerInstructions({
           id: 'cursor-chat',
           keys: ['Cursor chat'],
           label:
-            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /go /explain; 5 chats at once',
+            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /accept /explain; 5 chats at once',
         },
         {
           id: 'blueprint-select',
@@ -1909,7 +1943,7 @@ function explorerInstructions({
           id: 'cursor-chat',
           keys: ['Cursor chat'],
           label:
-            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /go /explain; 5 chats at once',
+            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /accept /explain; 5 chats at once',
         },
         {
           id: 'blueprint-select',

@@ -915,28 +915,30 @@ function Explorer({
     (block) => block.naming || !knownFileIds.has(block.id),
   )
   const visibleIslands = mapBlueprint.islands
+  const layoutGraph = useMemo(
+    () => withUserCreatedGraph(previewGraph, pendingBlocks, visibleIslands),
+    [pendingBlocks, previewGraph, visibleIslands],
+  )
   const displayGraph = useMemo(
     () =>
       withBlueprintIntent(
-        withUserCreatedGraph(previewGraph, pendingBlocks, visibleIslands),
+        layoutGraph,
         mapBlueprint.functions,
         mapBlueprint.variables,
         mapBlueprint.imports,
       ),
     [
+      layoutGraph,
       mapBlueprint.functions,
       mapBlueprint.imports,
       mapBlueprint.variables,
-      pendingBlocks,
-      previewGraph,
-      visibleIslands,
     ],
   )
   const layout = useMemo(() => {
-    const world = layoutWorld(previewGraph)
+    const world = layoutWorld(layoutGraph)
     if (previewing) markCreatedFolders(world, changeSet.createFolders ?? [])
     return world
-  }, [changeSet.createFolders, previewGraph, previewing])
+  }, [changeSet.createFolders, layoutGraph, previewing])
   const changeFileIds = useMemo(() => {
     const ids = new Set<string>()
     for (const id of changeSet.files) ids.add(id)
@@ -978,13 +980,13 @@ function Explorer({
   const hasChangeSet =
     changeFileIds.length > 0 || changeFolderPaths.length > 0
   const changePathGraph = useMemo(() => {
-    if (!hasChangeSet) return previewGraph
+    if (!hasChangeSet) return layoutGraph
     return filterGraphToChangePaths(
-      previewGraph,
+      layoutGraph,
       changeFileIds,
       changeFolderPaths,
     )
-  }, [changeFileIds, changeFolderPaths, hasChangeSet, previewGraph])
+  }, [changeFileIds, changeFolderPaths, hasChangeSet, layoutGraph])
   const changePathLayout = useMemo(() => {
     if (!hasChangeSet) return layout
     const world = layoutWorld(changePathGraph)

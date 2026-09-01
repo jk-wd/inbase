@@ -655,7 +655,7 @@ export default defineConfig({
     port: 5173,
     watch: {
       // Session snapshots copy target source into the data dir. If Vite
-      // watches those writes, /go full-reloads the visualizer.
+      // watches those writes, /accept full-reloads the visualizer.
       ignored: ['**/src/data/**', isDataDirPath],
     },
   },

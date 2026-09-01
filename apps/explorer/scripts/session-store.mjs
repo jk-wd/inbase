@@ -1554,8 +1554,8 @@ export function invokeStep(dataDir, sessionId, step, targetRoot = null) {
     if (step !== expected) {
       throw new Error(
         last
-          ? `/go on step ${active.step} to finish`
-          : `/go on step ${active.step} to continue`,
+          ? `/accept on step ${active.step} to finish`
+          : `/accept on step ${active.step} to continue`,
       )
     }
     return continueDiff(dataDir, targetRoot, sessionId, active.id)

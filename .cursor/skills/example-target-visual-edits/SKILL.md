@@ -18,7 +18,7 @@ Skip it for explorer, layout, lighting, or other Visual Coder app work.
 
 Follow `skill/inbase/SKILL.md` for the chat-driven sequence (`attach`,
 `read-blueprint`, say what you see on the blueprint, `report-plan`, then
-stop for `/go` `/explain`).
+stop for `/accept` `/explain`).
 After `VISUAL_CODER_EXECUTE`, edit files under `apps/example-target` with Write,
 StrReplace, and Delete for that step only, then `npx inbase propose-patch` with
 no patch file. Do not run `wait-for-approval` or `explain wait`.

@@ -511,9 +511,9 @@ test('go accepts a waiting proposal and waits to start the next step', async () 
       env,
     })
     assert.equal(result.status, 0, result.stderr)
-    assert.match(result.stdout, /VISUAL_CODER_ACK plan: waiting for \/go on step 2 — Bump again/)
+    assert.match(result.stdout, /VISUAL_CODER_ACK plan: waiting for \/accept on step 2 — Bump again/)
     assert.match(result.stdout, /VISUAL_CODER_ACCEPTED Accepted the proposal/)
-    assert.match(result.stdout, /Wait for the user to type \/go step 2: Bump again/)
+    assert.match(result.stdout, /Wait for the user to type \/accept step 2: Bump again/)
     assert.equal(store.readManifest(dataDir, 'continue-review').phase, 'plan_ready')
     assert.equal(store.readManifest(dataDir, 'continue-review').currentStep, 2)
   } finally {
@@ -552,9 +552,9 @@ test('accept accepts a waiting proposal and waits to start the next step', async
       env,
     })
     assert.equal(result.status, 0, result.stderr)
-    assert.match(result.stdout, /VISUAL_CODER_ACK plan: waiting for \/go on step 2 — Bump again/)
+    assert.match(result.stdout, /VISUAL_CODER_ACK plan: waiting for \/accept on step 2 — Bump again/)
     assert.match(result.stdout, /VISUAL_CODER_ACCEPTED Accepted the proposal/)
-    assert.match(result.stdout, /Wait for the user to type \/go step 2: Bump again/)
+    assert.match(result.stdout, /Wait for the user to type \/accept step 2: Bump again/)
     assert.equal(store.readManifest(dataDir, 'accept-next').phase, 'plan_ready')
     assert.equal(store.readManifest(dataDir, 'accept-next').currentStep, 2)
   } finally {

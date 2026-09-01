@@ -1356,12 +1356,45 @@ button {
 }
 
 .hud-steps li {
+  margin: 0 0 8px;
+}
+
+.hud-step-row {
   display: grid;
   grid-template-columns: 1.6em minmax(0, 1fr);
   align-items: start;
   justify-content: start;
   gap: 8px;
-  margin: 0 0 8px;
+  width: 100%;
+}
+
+.hud-step-link {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+  border-radius: 4px;
+}
+
+.hud-step-link:focus {
+  outline: none;
+}
+
+.hud-step-link:hover .hud-step-title,
+.hud-step-link:focus-visible .hud-step-title {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.hud-step-link:focus-visible {
+  outline: 1px solid #5d9ec4;
+  outline-offset: 2px;
 }
 
 .hud-step-index {

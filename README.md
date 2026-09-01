@@ -81,7 +81,9 @@ inbase init
 inbase run
 ```
 
-Open the printed URL (http://localhost:5173 by default).
+Open the printed URL (http://127.0.0.1:5173 by default). In the Cursor terminal, **Cmd+click** the link (Ctrl+click on Windows/Linux) to open it in Cursor. Hover the URL to see the prompt. You can also paste the URL into an external browser.
+
+![Follow link (Cmd+click) in the Cursor terminal](docs/manual-open-url.png)
 
 ![Map open after inbase run](docs/manual-start.png)
 
@@ -202,7 +204,7 @@ With **Step by step** on:
 5. After the last recorded patch you can `/accept` or **Stop**.
 
 <p>
-  <img src="docs/inbase-llm.png" alt="Plan ready on the HUD with /go on the first step" width="58%" />
+  <img src="docs/inbase-llm.png" alt="Plan ready on the HUD with /accept on the first step" width="58%" />
   <img src="docs/manual-accept-chat.png" alt="Cursor chat with the /accept command" width="40%" />
 </p>
 
@@ -311,12 +313,12 @@ The in-app **Instructions** overlay (bottom of the HUD) lists the same controls 
 | `inbase run --port 5174` | Start on another port |
 | `inbase run --target <dir>` | Map another folder |
 | `inbase accept [--session <id>]` | Start the waiting step, or accept a ready proposal (`/accept`) |
-| `inbase go [--session <id>]` | Same as `accept` (`/go`) |
+| `inbase go [--session <id>]` | Same as `accept` (`/accept`) |
 | `inbase explain start [--question "..."]` | Open map-only explain mode. Omit `--question` to explain the current proposal or git diff |
 | `inbase explain report --step "..."` | Publish explanation steps and map focus |
 | `inbase explain stop` | Exit explain mode |
 
-The Cursor skill runs session commands (`attach`, `read-blueprint`, `report-plan`, `go`, `accept`, `propose-patch`, `explain`). You do not need to run them.
+The Cursor skill runs session commands (`attach`, `read-blueprint`, `report-plan`, `accept`, `go`, `propose-patch`, `explain`). You do not need to run them.
 
 ## Editor support
 
