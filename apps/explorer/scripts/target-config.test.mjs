@@ -150,6 +150,17 @@ test('restores a persisted workspace target when the switcher is on', () => {
       }),
       defaultTarget,
     )
+    assert.equal(
+      resolveInitialTargetRoot({
+        envTarget: '',
+        persistedId: 'repo',
+        switcherEnabled: false,
+        targets,
+        fallback: defaultTarget,
+        configTarget: '/tmp/from-config',
+      }),
+      path.normalize('/tmp/from-config'),
+    )
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }

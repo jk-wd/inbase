@@ -9,6 +9,7 @@ import {
   type BlueprintNote,
   type BlueprintNoteKind,
   GLOBAL_BLUEPRINT_COLOR,
+  compareSessionColorOrder,
   type BlueprintOption,
   type BlueprintPointer,
   type BlueprintPointerKind,
@@ -1002,6 +1003,7 @@ function sessionLiveStatus(intent: AgentIntent) {
   const ack = intent.lastAck
   const kind = ack?.kind
   const detail = ack?.detail?.trim() || ''
+  const browsingHistory = !intent.isActiveDiff && Boolean(intent.diffId)
 
   if (intent.status === 'finished' || kind === 'finished') {
     return { text: 'Finished', busy: false }
@@ -1021,13 +1023,21 @@ function sessionLiveStatus(intent: AgentIntent) {
   if (intent.explainActive || kind === 'explain') {
     return { text: 'Explanation is on the map — /explain for a follow-up', busy: false }
   }
-  if (intent.status === 'pending') {
-    return { text: 'Type /accept in chat', busy: false }
+  if (
+    browsingHistory ||
+    intent.status === 'approved' ||
+    intent.status === 'extended' ||
+    intent.status === 'extend'
+  ) {
+    return { text: 'Reviewing this step', busy: false }
   }
-  if (kind === 'execute') {
+  if (intent.status === 'pending') {
+    return { text: 'Type /go or /accept in chat', busy: false }
+  }
+  if (kind === 'execute' && intent.status === 'working') {
     return { text: `LLM received ${detail}`, busy: true }
   }
-  if (kind === 'invoke') {
+  if (kind === 'invoke' && intent.status === 'working') {
     return { text: 'LLM is starting…', busy: true }
   }
   if (intent.status === 'working') {
@@ -1045,7 +1055,7 @@ function sessionLiveStatus(intent: AgentIntent) {
     return { text: 'LLM is drafting the plan', busy: true }
   }
   if (kind === 'plan' || intent.status === 'planned') {
-    return { text: 'Type /accept in chat', busy: false }
+    return { text: 'Type /go or /accept in chat', busy: false }
   }
   if (
     kind === 'attached' ||
@@ -1289,7 +1299,7 @@ function SessionPanel({
           {!llmDisconnected && !stepByStep && (
             <p className="hud-mode-hint">
               LLM implements the full plan. You can still walk the diffs, then
-              /accept.
+              /go or /accept.
             </p>
           )}
           {handshakeSetup ? (
@@ -1399,8 +1409,8 @@ function SessionPanel({
                                 {creating
                                   ? 'Creating proposal…'
                                   : showGoHint
-                                    ? '/accept'
-                                    : '/accept · /explain'}
+                                    ? '/go'
+                                    : '/go · /accept · /explain'}
                               </span>
                             </span>
                           )}
@@ -1843,7 +1853,7 @@ function explorerInstructions({
           id: 'cursor-chat',
           keys: ['Cursor chat'],
           label:
-            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /accept /explain; 5 chats at once',
+            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /go /accept /explain; 5 chats at once',
         },
         {
           id: 'blueprint-select',
@@ -1943,7 +1953,7 @@ function explorerInstructions({
           id: 'cursor-chat',
           keys: ['Cursor chat'],
           label:
-            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /accept /explain; 5 chats at once',
+            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /go /accept /explain; 5 chats at once',
         },
         {
           id: 'blueprint-select',
@@ -2232,6 +2242,9 @@ export function HUD({
   const mapping = mode === 'map'
   const sessions = (intents ?? [intent]).filter(
     (item) => item.sessionId && isReviewingIntent(item.status),
+  )
+  const sessionTabs = [...sessions].sort((left, right) =>
+    compareSessionColorOrder(left.color, right.color),
   )
   const nextAttachSession =
     sessions.find((session) => session.sessionId === nextAttachSessionId) ??
@@ -2692,7 +2705,7 @@ export function HUD({
         <div className="hud-left-stack">
           {sessions.length > 1 && (
             <div className="hud-session-tabs" role="tablist" aria-label="LLM sessions">
-              {sessions.map((session) => {
+              {sessionTabs.map((session) => {
                 const active =
                   session.sessionId === (focusedSessionId ?? intent.sessionId)
                 const attached = session.awaitingAttach === false

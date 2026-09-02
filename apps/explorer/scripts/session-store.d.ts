@@ -163,9 +163,15 @@ export const MAX_CONTEXT_FILE_BYTES: number
 export const MAX_CONTEXT_TOTAL_BYTES: number
 export const SESSION_SLOT_COUNT: number
 export const DEFAULT_STEP_BY_STEP: boolean
+export function resolveDefaultStepByStep(): boolean
 export const SESSION_COLORS: Array<{ id: string; name: string; hex: string }>
 export const SESSION_COLOR_ALIASES: Record<string, string>
 export const GLOBAL_BLUEPRINT_COLOR: { id: 'global'; name: 'Global'; hex: string }
+export function sessionColorOrderIndex(colorId: string | null | undefined): number
+export function compareSessionColorOrder(
+  left: string | null | undefined,
+  right: string | null | undefined,
+): number
 export function resolveSessionColor(
   colorId: string | null | undefined,
 ): { id: string; name: string; hex: string } | null

@@ -8,6 +8,7 @@ import {
 } from './js-source.mjs'
 import {
   collectGitignoreSets,
+  extraIgnoreSets,
   isIgnoredByGitignore,
   readGitignoreRules,
   shouldIgnoreRelativePath,
@@ -18,6 +19,7 @@ import {
   targetName as defaultTargetName,
   targetRoot as defaultTargetRoot,
 } from './target-config.mjs'
+import { loadInbaseConfig } from '../../../bin/inbase-config.mjs'
 
 const defaultOutPath = path.join(defaultDataDir, 'codebase.json')
 const BINARY_PROBE_BYTES = 8000
@@ -105,8 +107,18 @@ function walk(dir, root, ignoreSets, skipRoot = null, acc = []) {
   return acc
 }
 
-function listSourceAbsolutes(root, skipRoot = null) {
-  return walk(root, root, collectGitignoreSets(root), skipRoot)
+function listSourceAbsolutes(root, skipRoot = null, extraPatterns = []) {
+  return walk(
+    root,
+    root,
+    [...collectGitignoreSets(root), ...extraIgnoreSets(root, extraPatterns)],
+    skipRoot,
+  )
+}
+
+function resolveScanIgnore(root, explicit) {
+  if (Array.isArray(explicit)) return explicit
+  return loadInbaseConfig(root).ignore
 }
 
 function languageOf(filePath) {
@@ -185,10 +197,10 @@ function ensureFolder(folders, folderPath, rootName) {
   if (parent) ensureFolder(folders, parent, rootName)
 }
 
-export function listSourceFiles(root) {
+export function listSourceFiles(root, extraPatterns) {
   if (!root || !fs.existsSync(root) || !fs.statSync(root).isDirectory()) return []
-  return listSourceAbsolutes(root).map((absolutePath) =>
-    toPosix(path.relative(root, absolutePath)),
+  return listSourceAbsolutes(root, null, resolveScanIgnore(root, extraPatterns)).map(
+    (absolutePath) => toPosix(path.relative(root, absolutePath)),
   )
 }
 
@@ -196,6 +208,7 @@ export function scanTarget({
   root = defaultTargetRoot,
   name = path.basename(root),
   dest = defaultOutPath,
+  ignore,
 } = {}) {
   if (!fs.existsSync(root)) {
     throw new Error(
@@ -203,7 +216,8 @@ export function scanTarget({
     )
   }
 
-  const absoluteFiles = listSourceAbsolutes(root, dataDirToSkip(root, dest))
+  const extraPatterns = resolveScanIgnore(root, ignore)
+  const absoluteFiles = listSourceAbsolutes(root, dataDirToSkip(root, dest), extraPatterns)
   const folders = new Map()
   ensureFolder(folders, '.', name)
 

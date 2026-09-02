@@ -3276,7 +3276,7 @@
       "name": "session-store.mjs",
       "path": "apps/explorer/scripts/session-store.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 2334,
+      "lines": 2383,
       "language": "mjs",
       "symbols": [
         {
@@ -3653,6 +3653,14 @@
         },
         {
           "name": "isStepByStep",
+          "kind": "function"
+        },
+        {
+          "name": "pendingReviewDiff",
+          "kind": "function"
+        },
+        {
+          "name": "canRevisePlan",
           "kind": "function"
         },
         {
@@ -4368,7 +4376,23 @@
           "kind": "variable"
         },
         {
+          "name": "pending",
+          "kind": "variable"
+        },
+        {
           "name": "startAt",
+          "kind": "variable"
+        },
+        {
+          "name": "wasWorking",
+          "kind": "variable"
+        },
+        {
+          "name": "remaining",
+          "kind": "variable"
+        },
+        {
+          "name": "title",
           "kind": "variable"
         },
         {
@@ -4377,10 +4401,6 @@
         },
         {
           "name": "expected",
-          "kind": "variable"
-        },
-        {
-          "name": "title",
           "kind": "variable"
         },
         {
@@ -7198,7 +7218,7 @@
       "name": "explain.ts",
       "path": "apps/explorer/src/explain.ts",
       "folder": "apps/explorer/src",
-      "lines": 344,
+      "lines": 378,
       "language": "ts",
       "symbols": [
         {
@@ -7298,6 +7318,14 @@
           "kind": "function"
         },
         {
+          "name": "pathIsUnder",
+          "kind": "function"
+        },
+        {
+          "name": "islandContains",
+          "kind": "function"
+        },
+        {
           "name": "explainFocus",
           "kind": "function"
         },
@@ -7315,6 +7343,10 @@
         },
         {
           "name": "explainFolderFocused",
+          "kind": "function"
+        },
+        {
+          "name": "explainBridgeFocused",
           "kind": "function"
         },
         {
@@ -7386,11 +7418,19 @@
           "kind": "variable"
         },
         {
+          "name": "folder",
+          "kind": "variable"
+        },
+        {
           "name": "files",
           "kind": "variable"
         },
         {
           "name": "folders",
+          "kind": "variable"
+        },
+        {
+          "name": "islandFolders",
           "kind": "variable"
         },
         {
@@ -7414,15 +7454,19 @@
           "kind": "variable"
         },
         {
-          "name": "folder",
-          "kind": "variable"
-        },
-        {
           "name": "zoomFolders",
           "kind": "variable"
         },
         {
           "name": "zoomFiles",
+          "kind": "variable"
+        },
+        {
+          "name": "parent",
+          "kind": "variable"
+        },
+        {
+          "name": "sep",
           "kind": "variable"
         }
       ],
@@ -7463,7 +7507,7 @@
       "name": "index.css",
       "path": "apps/explorer/src/index.css",
       "folder": "apps/explorer/src",
-      "lines": 2396,
+      "lines": 2397,
       "language": "css",
       "symbols": [],
       "imports": []
@@ -8301,7 +8345,7 @@
       "name": "FileBlock.tsx",
       "path": "apps/explorer/src/scene/FileBlock.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 319,
+      "lines": 322,
       "language": "tsx",
       "symbols": [
         {
@@ -8322,6 +8366,10 @@
         },
         {
           "name": "SIDE_LABEL_PAD",
+          "kind": "variable"
+        },
+        {
+          "name": "SIDE_LABEL_FOOT_PAD",
           "kind": "variable"
         },
         {
@@ -8498,7 +8546,7 @@
       "name": "MapBatches.tsx",
       "path": "apps/explorer/src/scene/MapBatches.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 162,
+      "lines": 164,
       "language": "tsx",
       "symbols": [
         {
@@ -8575,6 +8623,10 @@
         },
         {
           "name": "aisleParts",
+          "kind": "variable"
+        },
+        {
+          "name": "bridgeParts",
           "kind": "variable"
         }
       ],
@@ -10783,7 +10835,7 @@
       "name": "collectMapBatches.ts",
       "path": "apps/explorer/src/scene/collectMapBatches.ts",
       "folder": "apps/explorer/src/scene",
-      "lines": 125,
+      "lines": 127,
       "language": "ts",
       "symbols": [
         {
@@ -11128,11 +11180,15 @@
       "name": "theme.ts",
       "path": "apps/explorer/src/theme.ts",
       "folder": "apps/explorer/src",
-      "lines": 165,
+      "lines": 175,
       "language": "ts",
       "symbols": [
         {
           "name": "fileEmphasisScale",
+          "kind": "function"
+        },
+        {
+          "name": "explainItemOpacity",
           "kind": "function"
         },
         {
@@ -11193,6 +11249,10 @@
         },
         {
           "name": "MAP_SELECTION",
+          "kind": "variable"
+        },
+        {
+          "name": "EXPLAIN_FOCUS",
           "kind": "variable"
         },
         {
@@ -11622,7 +11682,7 @@
       "name": "HUD.tsx",
       "path": "apps/explorer/src/ui/HUD.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 3893,
+      "lines": 3902,
       "language": "tsx",
       "symbols": [
         {
@@ -11995,6 +12055,10 @@
         },
         {
           "name": "detail",
+          "kind": "variable"
+        },
+        {
+          "name": "browsingHistory",
           "kind": "variable"
         },
         {
@@ -14259,7 +14323,7 @@
       "name": "session.mjs",
       "path": "bin/session.mjs",
       "folder": "bin",
-      "lines": 674,
+      "lines": 681,
       "language": "mjs",
       "symbols": [
         {
@@ -14563,6 +14627,10 @@
           "kind": "variable"
         },
         {
+          "name": "replacedWaiting",
+          "kind": "variable"
+        },
+        {
           "name": "clear",
           "kind": "variable"
         },
@@ -14658,16 +14726,6 @@
       "folder": ".",
       "lines": 91,
       "language": "json",
-      "symbols": [],
-      "imports": []
-    },
-    {
-      "id": "skill/commands/accept.md",
-      "name": "accept.md",
-      "path": "skill/commands/accept.md",
-      "folder": "skill/commands",
-      "lines": 24,
-      "language": "md",
       "symbols": [],
       "imports": []
     },
@@ -15047,7 +15105,6 @@
       "name": "commands",
       "parent": "skill",
       "files": [
-        "skill/commands/accept.md",
         "skill/commands/amber.md",
         "skill/commands/blue.md",
         "skill/commands/coral.md",

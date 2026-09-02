@@ -2,6 +2,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
+import {
+  loadInbaseConfig,
+  rememberInbaseConfig,
+  resolveConfigPath,
+} from './inbase-config.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 export const packageRoot = path.resolve(here, '..')
@@ -116,15 +121,26 @@ export function applyHostEnv({
   target = process.env.VISUAL_CODER_TARGET,
   dataDir = process.env.INBASE_DATA_DIR,
 } = {}) {
-  const running = !target && !dataDir ? readRunningInstance(cwd) : null
-  const targetRoot = resolveOptionalPath(target, running?.targetRoot ?? cwd)
+  const config = rememberInbaseConfig(loadInbaseConfig(cwd))
+  const explicitTarget = typeof target === 'string' && target.trim() ? target.trim() : ''
+  const running = !explicitTarget && !dataDir ? readRunningInstance(cwd) : null
+  const configTargetRoot =
+    config.target && config.dir ? resolveConfigPath(config.target, config.dir) : null
+  const targetRoot = resolveOptionalPath(
+    explicitTarget || null,
+    running?.targetRoot ?? configTargetRoot ?? cwd,
+  )
+  const kickoffDir = config.dir ?? path.resolve(cwd)
+  const defaultDataDir = explicitTarget
+    ? path.join(targetRoot, '.inbase')
+    : path.join(kickoffDir, '.inbase')
   const resolvedDataDir = resolveOptionalPath(
     dataDir,
-    running?.dataDir ?? path.join(targetRoot, '.inbase'),
+    running?.dataDir ?? defaultDataDir,
   )
   process.env.VISUAL_CODER_TARGET = targetRoot
   process.env.INBASE_DATA_DIR = resolvedDataDir
-  return { cwd, targetRoot, dataDir: resolvedDataDir, instance: running }
+  return { cwd, targetRoot, dataDir: resolvedDataDir, instance: running, config }
 }
 
 export function ensureDataDir(dataDir) {

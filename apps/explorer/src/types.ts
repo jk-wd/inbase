@@ -293,6 +293,29 @@ export const GLOBAL_BLUEPRINT_COLOR = {
   hex: '#38bdf8',
 } as const
 
+export const SESSION_COLOR_ORDER = [
+  'coral',
+  'amber',
+  'lime',
+  'orange',
+  'violet',
+] as const
+
+export function sessionColorOrderIndex(colorId?: string | null) {
+  if (!colorId) return SESSION_COLOR_ORDER.length
+  const index = SESSION_COLOR_ORDER.indexOf(
+    colorId as (typeof SESSION_COLOR_ORDER)[number],
+  )
+  return index === -1 ? SESSION_COLOR_ORDER.length : index
+}
+
+export function compareSessionColorOrder(
+  left?: string | null,
+  right?: string | null,
+) {
+  return sessionColorOrderIndex(left) - sessionColorOrderIndex(right)
+}
+
 export type BlueprintColorId = typeof GLOBAL_BLUEPRINT_COLOR.id | string
 
 export type LocalBlueprint = SharedBlueprint & {

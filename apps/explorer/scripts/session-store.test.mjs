@@ -568,6 +568,33 @@ test('stopping a connected chat opens a new empty slot', () => {
   }
 })
 
+test('session color order stays fixed after a slot is refilled', () => {
+  const env = fixture()
+  try {
+    const created = ensureSessionPool(env.dataDir)
+    assert.deepEqual(
+      listSessionIntents(env.dataDir).map((intent) => intent.color),
+      SESSION_COLORS.map((entry) => entry.id),
+    )
+    attachSession(env.dataDir, created[0].sessionId)
+    stopSession(env.dataDir, created[0].sessionId)
+    const createdOrder = listOpenSessionIds(env.dataDir).map(
+      (sessionId) => readManifest(env.dataDir, sessionId).color,
+    )
+    assert.equal(createdOrder.at(-1), 'coral')
+    assert.deepEqual(
+      listSessionIntents(env.dataDir).map((intent) => intent.color),
+      SESSION_COLORS.map((entry) => entry.id),
+    )
+    assert.equal(
+      listOpenSessionIds(env.dataDir).includes(created[0].sessionId),
+      false,
+    )
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('shares user-placed files with the chat after Send blueprint', () => {
   const env = fixture()
   try {
@@ -1160,6 +1187,107 @@ test('accepting a step waits for go, including the last proposal', () => {
     assert.equal(last.phase, 'review')
     assert.equal(last.diffs.at(-1).status, 'pending')
     assert.equal(sessionIntent(env.dataDir, 'last-go', ['src/a.ts']).status, 'pending')
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('report-plan replaces a waiting last proposal without accepting it', () => {
+  const env = fixture()
+  try {
+    startSession(env.dataDir, { sessionId: 'revise-chat' })
+    answerBlueprint(env.dataDir, 'revise-chat', false)
+    reportPlan(env.dataDir, {
+      sessionId: 'revise-chat',
+      feature: 'Last proposal',
+      stepTitles: ['Build value'],
+      targetRoot: env.targetRoot,
+    })
+    invokeStep(env.dataDir, 'revise-chat', 1, env.targetRoot)
+    fs.writeFileSync(path.join(env.targetRoot, 'src/a.ts'), 'export const value = 2\n')
+    const first = appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'revise-chat',
+    })
+    assert.equal(first.manifest.phase, 'review')
+    assert.equal(first.entry.status, 'pending')
+    assert.throws(
+      () => appendDiff(env.dataDir, env.targetRoot, { sessionId: 'revise-chat' }),
+      /run report-plan with the new remaining steps first/,
+    )
+
+    const revised = reportPlan(env.dataDir, {
+      sessionId: 'revise-chat',
+      feature: 'Last proposal',
+      stepTitles: ['Tint the value', 'Add helper'],
+      targetRoot: env.targetRoot,
+    })
+    assert.equal(revised.phase, 'working')
+    assert.equal(revised.currentStep, 1)
+    assert.equal(revised.status, 'active')
+    assert.equal(revised.diffs[0].status, 'extend')
+    assert.deepEqual(
+      revised.steps.map((step) => `${step.index}:${step.title}`),
+      ['1:Tint the value', '2:Add helper'],
+    )
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
+
+    fs.writeFileSync(path.join(env.targetRoot, 'src/a.ts'), 'export const value = 3\n')
+    const replaced = appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'revise-chat',
+    })
+    assert.equal(replaced.entry.step, 1)
+    assert.equal(replaced.entry.status, 'pending')
+    assert.equal(replaced.manifest.phase, 'review')
+    assert.equal(replaced.manifest.status, 'active')
+    assert.equal(replaced.manifest.diffs[0].status, 'extended')
+    assert.equal(readManifest(env.dataDir, 'revise-chat')?.phase, 'review')
+    assert.match(readDiff(env.dataDir, 'revise-chat', replaced.entry), /export const value = 3/)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('report-plan keeps accepted steps when replacing remaining work', () => {
+  const env = fixture()
+  try {
+    reportPlan(env.dataDir, {
+      sessionId: 'keep-chat',
+      feature: 'Keep accepted',
+      stepTitles: ['Build value', 'Finish value'],
+    })
+    invokeStep(env.dataDir, 'keep-chat', 1)
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'keep-chat',
+      patchText: oneToTwo,
+    })
+    continueDiff(env.dataDir, env.targetRoot, 'keep-chat', '0001')
+    invokeStep(env.dataDir, 'keep-chat', 2)
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'keep-chat',
+      patchText: twoToThree,
+    })
+    assert.equal(readManifest(env.dataDir, 'keep-chat').phase, 'review')
+    assert.throws(
+      () => appendDiff(env.dataDir, env.targetRoot, { sessionId: 'keep-chat' }),
+      /replaces this proposal from step 2/,
+    )
+
+    const revised = reportPlan(env.dataDir, {
+      sessionId: 'keep-chat',
+      feature: 'Keep accepted',
+      stepTitles: ['Tint the finish', 'Add helper'],
+    })
+    assert.equal(revised.phase, 'working')
+    assert.equal(revised.currentStep, 2)
+    assert.equal(revised.diffs.at(-1).status, 'extend')
+    assert.deepEqual(
+      revised.steps.map((step) => `${step.index}:${step.title}`),
+      ['1:Build value', '2:Tint the finish', '3:Add helper'],
+    )
+    assert.equal(revised.diffs[0].status, 'applied')
   } finally {
     env.cleanup()
   }

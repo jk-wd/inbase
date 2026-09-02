@@ -12,6 +12,7 @@ import {
   resolveFromPackage,
   takeFlagValue,
 } from './project.mjs'
+import { resolvePort, writeInbaseConfig } from './inbase-config.mjs'
 import { installEditors } from './editors/index.mjs'
 import {
   proposePatch,
@@ -36,8 +37,8 @@ Agent commands (used by the Cursor skill):
   inbase attach [--session <id>] [--color <name>]
   inbase read-blueprint --session <id>
   inbase report-plan --session <id> --feature "name" --steps "one"
+  inbase go [--session <id>]
   inbase accept [--session <id>]
-  inbase go [--session <id>]  (same as accept)
   inbase propose-patch --session <id> [file.patch|-]
   inbase propose-patch --session <id> --clear
   inbase explain start [--question "How does this work?"]
@@ -45,8 +46,8 @@ Agent commands (used by the Cursor skill):
   inbase explain stop
 
 Options for run:
-  --target <dir>           Project to map (default: current directory)
-  --port <number>          Dev server port (default: 5173)
+  --target <dir>           Project to map (default: inbase.json target, else cwd)
+  --port <number>          Dev server port (default: inbase.json port, else 5173)
 `
 
 function printHelp() {
@@ -66,11 +67,13 @@ export function initProject(projectRoot = process.cwd()) {
   })
   ensureDataDir(dataDir)
   const gitignoreAdded = ensureGitignoreEntry(projectRoot)
+  const configAdded = writeInbaseConfig(projectRoot)
   return {
     skillDir: cursor.skillDir,
     commandDir: cursor.commandDir,
     dataDir,
     gitignoreAdded,
+    configAdded,
     editors: installed,
   }
 }
@@ -80,15 +83,16 @@ function explorerHref(relative) {
 }
 
 async function runServer(args) {
-  const target = takeFlagValue(args, '--target')
-  const portValue = takeFlagValue(args, '--port')
-  const port = portValue ? Number(portValue) : 5173
-  if (portValue && !Number.isInteger(port)) {
-    console.error('inbase run --port must be an integer')
+  const target = takeFlagValue(args, '--target') || undefined
+  const { targetRoot, dataDir, config } = applyHostEnv({ target })
+  let port
+  try {
+    port = resolvePort(takeFlagValue(args, '--port'), config)
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error)
     process.exit(1)
   }
 
-  const { targetRoot, dataDir } = applyHostEnv({ target })
   if (!fs.existsSync(targetRoot)) {
     console.error(`Target not found at ${targetRoot}`)
     process.exit(1)
@@ -101,6 +105,7 @@ async function runServer(args) {
     root: targetRoot,
     name: targetName,
     dest: path.join(dataDir, 'codebase.json'),
+    ignore: config.ignore,
   })
 
   const { createServer } = await import(pathToFileURL(resolveFromPackage('vite')).href)
@@ -140,6 +145,7 @@ export async function main(argv = process.argv.slice(2)) {
       console.log(`Installed /inbase command at ${result.commandDir}`)
     }
     if (result.gitignoreAdded) console.log('Added .inbase/ to .gitignore')
+    if (result.configAdded) console.log('Wrote inbase.json')
     console.log('Next: run `inbase run`, then ask Cursor to change source files.')
     return
   }
@@ -153,7 +159,7 @@ export async function main(argv = process.argv.slice(2)) {
   ensureDataDir(process.env.INBASE_DATA_DIR)
   if (host.instance) {
     console.log(
-      `INBASE_ATTACHED Using the running visualizer (${host.instance.dataDir}). Run read-blueprint to load the optional blueprint. Then stop for /accept or /explain in chat.`,
+      `INBASE_ATTACHED Using the running visualizer (${host.instance.dataDir}). Run read-blueprint to load the optional blueprint. Then stop for /go, /accept, or /explain in chat.`,
     )
   }
 
@@ -175,7 +181,7 @@ export async function main(argv = process.argv.slice(2)) {
   }
   if (command === 'wait-for-approval') {
     console.error(
-      'wait-for-approval was removed. The user types /accept or /explain in chat.',
+      'wait-for-approval was removed. The user types /go, /accept, or /explain in chat.',
     )
     process.exit(1)
   }

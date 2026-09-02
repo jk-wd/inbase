@@ -61,6 +61,10 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /VISUAL_CODER_BLUEPRINT_ONLY/)
     assert.match(skillText, /VISUAL_CODER_NO_REQUEST/)
     assert.match(skillText, /VISUAL_CODER_DIFF/)
+    assert.match(skillText, /Always work via the plan/)
+    assert.match(skillText, /from the point of the last proposal/)
+    assert.match(skillText, /replaces the waiting proposal/)
+    assert.match(skillText, /close the session/)
   } finally {
     cleanup()
   }
@@ -68,9 +72,11 @@ test('copyDir installs the skill template', () => {
 
 test('init copies the Cursor skill and gitignores .inbase', () => {
   const { root, cleanup } = tempProject()
-  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR')
+  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
   try {
     const result = initProject(root)
+    fs.writeFileSync(path.join(root, '.cursor/commands/accept.md'), 'legacy /accept command\n')
+    initProject(root)
     const skill = path.join(root, '.cursor/skills/inbase/SKILL.md')
     assert.equal(result.skillDir, path.join(root, '.cursor/skills/inbase'))
     assert.deepEqual(
@@ -86,11 +92,16 @@ test('init copies the Cursor skill and gitignores .inbase', () => {
     assert.match(skillText, /VISUAL_CODER_COLOR/)
     assert.match(skillText, /\/go/)
     assert.match(skillText, /\/accept/)
+    assert.match(skillText, /same as `\/go`/)
     assert.match(skillText, /\/explain/)
     assert.match(skillText, /I see on the blueprint/)
     assert.match(skillText, /VISUAL_CODER_BLUEPRINT_ONLY/)
     assert.match(skillText, /VISUAL_CODER_NO_REQUEST/)
     assert.match(skillText, /VISUAL_CODER_DIFF/)
+    assert.match(skillText, /Always work via the plan/)
+    assert.match(skillText, /from the point of the last proposal/)
+    assert.match(skillText, /replaces the waiting proposal/)
+    assert.match(skillText, /close the session/)
     assert.doesNotMatch(skillText, /npx inbase wait-for-approval/)
     assert.doesNotMatch(skillText, /npx inbase explain wait/)
     assert.doesNotMatch(skillText, /direct chat interaction not allowed/)
@@ -131,11 +142,28 @@ test('init copies the Cursor skill and gitignores .inbase', () => {
       fs.readFileSync(path.join(root, '.cursor/commands/go.md'), 'utf8'),
       /npx inbase go/,
     )
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/go.md'), 'utf8'),
+      /`\/accept` is the same as `\/go`/,
+    )
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/accept.md')), true)
     assert.match(
       fs.readFileSync(path.join(root, '.cursor/commands/accept.md'), 'utf8'),
       /npx inbase accept/,
     )
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/accept.md'), 'utf8'),
+      /last proposal/,
+    )
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/accept.md'), 'utf8'),
+      /VISUAL_CODER_FINISHED/,
+    )
+    assert.doesNotMatch(
+      fs.readFileSync(path.join(root, '.cursor/commands/accept.md'), 'utf8'),
+      /legacy \/accept command/,
+    )
+    assert.equal(fs.existsSync(path.join(packageRoot, 'skill/commands/accept.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/coral.md')), true)
     assert.match(
       fs.readFileSync(path.join(root, '.cursor/commands/coral.md'), 'utf8'),
@@ -165,6 +193,13 @@ test('init copies the Cursor skill and gitignores .inbase', () => {
     )
     assert.equal(fs.existsSync(path.join(root, '.inbase/user-context.json')), true)
     assert.match(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), /\.inbase\//)
+    assert.equal(result.configAdded, true)
+    const config = JSON.parse(fs.readFileSync(path.join(root, 'inbase.json'), 'utf8'))
+    assert.equal(config.target, '.')
+    assert.equal(config.port, 5173)
+    assert.deepEqual(config.ignore, [])
+    assert.equal(config.stepByStep, false)
+    assert.equal(initProject(root).configAdded, false)
   } finally {
     restoreEnv(env)
     cleanup()
@@ -194,6 +229,8 @@ test('help prints usage', async () => {
     assert.match(output, /inbase init/)
     assert.match(output, /inbase run/)
     assert.match(output, /inbase attach \[--session <id>\] \[--color <name>\]/)
+    assert.match(output, /inbase go \[--session <id>\]/)
+    assert.match(output, /inbase accept \[--session <id>\]/)
   } finally {
     console.log = log
   }
@@ -201,7 +238,7 @@ test('help prints usage', async () => {
 
 test('start-session writes a manifest under .inbase', async () => {
   const { root, cleanup } = tempProject()
-  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR')
+  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
   let output = ''
   const log = console.log
   try {
@@ -511,9 +548,9 @@ test('go accepts a waiting proposal and waits to start the next step', async () 
       env,
     })
     assert.equal(result.status, 0, result.stderr)
-    assert.match(result.stdout, /VISUAL_CODER_ACK plan: waiting for \/accept on step 2 — Bump again/)
+    assert.match(result.stdout, /VISUAL_CODER_ACK plan: waiting for \/go on step 2 — Bump again/)
     assert.match(result.stdout, /VISUAL_CODER_ACCEPTED Accepted the proposal/)
-    assert.match(result.stdout, /Wait for the user to type \/accept step 2: Bump again/)
+    assert.match(result.stdout, /Wait for the user to type \/go step 2: Bump again/)
     assert.equal(store.readManifest(dataDir, 'continue-review').phase, 'plan_ready')
     assert.equal(store.readManifest(dataDir, 'continue-review').currentStep, 2)
   } finally {
@@ -552,9 +589,9 @@ test('accept accepts a waiting proposal and waits to start the next step', async
       env,
     })
     assert.equal(result.status, 0, result.stderr)
-    assert.match(result.stdout, /VISUAL_CODER_ACK plan: waiting for \/accept on step 2 — Bump again/)
+    assert.match(result.stdout, /VISUAL_CODER_ACK plan: waiting for \/go on step 2 — Bump again/)
     assert.match(result.stdout, /VISUAL_CODER_ACCEPTED Accepted the proposal/)
-    assert.match(result.stdout, /Wait for the user to type \/accept step 2: Bump again/)
+    assert.match(result.stdout, /Wait for the user to type \/go step 2: Bump again/)
     assert.equal(store.readManifest(dataDir, 'accept-next').phase, 'plan_ready')
     assert.equal(store.readManifest(dataDir, 'accept-next').currentStep, 2)
   } finally {
@@ -631,6 +668,166 @@ test('go finishes the last proposal', async () => {
     assert.equal(result.status, 5, result.stderr)
     assert.match(result.stdout, /VISUAL_CODER_FINISHED/)
     assert.equal(store.readManifest(dataDir, 'go-last'), null)
+  } finally {
+    cleanup()
+  }
+})
+
+test('report-plan replaces a waiting last proposal', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    planSession(store, dataDir, target, 'revise-last', 'Revise last', [
+      'Bump value',
+    ])
+    store.invokeStep(dataDir, 'revise-last', 1, target)
+    store.appendDiff(dataDir, target, {
+      sessionId: 'revise-last',
+      patchText:
+        '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 2\n',
+    })
+    writeRunningInstance({ dataDir, targetRoot: target })
+    const result = runCli(
+      [
+        'report-plan',
+        '--session',
+        'revise-last',
+        '--feature',
+        'Revise last',
+        '--steps',
+        'Tint the value',
+        '--steps',
+        'Add helper',
+      ],
+      { cwd: root, env },
+    )
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /VISUAL_CODER_PLAN_READY/)
+    assert.match(result.stdout, /from step 1/)
+    assert.match(result.stdout, /New remaining steps: 1\. Tint the value; 2\. Add helper/)
+    assert.match(result.stdout, /Replaced the waiting proposal/)
+    assert.match(result.stdout, /Do not ask the user to \/go the previous last proposal/)
+    assert.match(result.stdout, /VISUAL_CODER_EXECUTE Step 1 is invoked: Tint the value/)
+    const manifest = store.readManifest(dataDir, 'revise-last')
+    assert.equal(manifest.phase, 'working')
+    assert.equal(manifest.currentStep, 1)
+    assert.equal(manifest.diffs[0].status, 'extend')
+    assert.deepEqual(
+      manifest.steps.map((step) => step.title),
+      ['Tint the value', 'Add helper'],
+    )
+  } finally {
+    cleanup()
+  }
+})
+
+test('propose-patch refuses a waiting proposal until report-plan replaces it', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    planSession(store, dataDir, target, 'revise-wait', 'Revise wait', [
+      'Bump value',
+    ])
+    store.invokeStep(dataDir, 'revise-wait', 1, target)
+    store.appendDiff(dataDir, target, {
+      sessionId: 'revise-wait',
+      patchText:
+        '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 2\n',
+    })
+    writeRunningInstance({ dataDir, targetRoot: target })
+    fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 3\n')
+    const refused = runCli(['propose-patch', '--session', 'revise-wait'], {
+      cwd: root,
+      env,
+    })
+    assert.notEqual(refused.status, 0)
+    assert.match(refused.stderr, /A proposal is waiting on step 1/)
+    assert.match(refused.stderr, /run report-plan with the new remaining steps first/)
+    assert.match(refused.stderr, /Do not edit files first/)
+  } finally {
+    cleanup()
+  }
+})
+
+test('report-plan keeps accepted steps when replacing a later proposal', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    planSession(store, dataDir, target, 'keep-later', 'Keep later', [
+      'Build value',
+      'Finish value',
+    ])
+    store.invokeStep(dataDir, 'keep-later', 1, target)
+    store.appendDiff(dataDir, target, {
+      sessionId: 'keep-later',
+      patchText:
+        '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 2\n',
+    })
+    store.continueDiff(dataDir, target, 'keep-later', '0001')
+    store.invokeStep(dataDir, 'keep-later', 2, target)
+    store.appendDiff(dataDir, target, {
+      sessionId: 'keep-later',
+      patchText:
+        '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 2\n+export const value = 3\n',
+    })
+    writeRunningInstance({ dataDir, targetRoot: target })
+    const result = runCli(
+      [
+        'report-plan',
+        '--session',
+        'keep-later',
+        '--feature',
+        'Keep later',
+        '--steps',
+        'Tint the finish',
+        '--steps',
+        'Add helper',
+      ],
+      { cwd: root, env },
+    )
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /from step 2/)
+    assert.match(result.stdout, /Kept step 1/)
+    assert.match(result.stdout, /New remaining steps: 2\. Tint the finish; 3\. Add helper/)
+    assert.match(result.stdout, /VISUAL_CODER_EXECUTE Step 2 is invoked: Tint the finish/)
+    const manifest = store.readManifest(dataDir, 'keep-later')
+    assert.deepEqual(
+      manifest.steps.map((step) => `${step.index}:${step.title}`),
+      ['1:Build value', '2:Tint the finish', '3:Add helper'],
+    )
   } finally {
     cleanup()
   }

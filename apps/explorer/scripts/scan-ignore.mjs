@@ -115,6 +115,13 @@ export function readGitignoreRules(dir) {
   }
 }
 
+export function extraIgnoreSets(root, patterns) {
+  if (!Array.isArray(patterns) || patterns.length === 0) return []
+  const rules = parseGitignore(patterns.filter(Boolean).join('\n'))
+  if (!rules.length) return []
+  return [{ base: path.resolve(root), rules }]
+}
+
 export function collectGitignoreSets(root) {
   const resolved = path.resolve(root)
   if (isIgnoredByEnclosingGitignore(resolved)) {

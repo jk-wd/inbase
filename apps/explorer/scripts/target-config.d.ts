@@ -29,6 +29,7 @@ export function resolveInitialTargetRoot(options?: {
   switcherEnabled?: boolean
   targets?: WorkspaceTarget[]
   fallback?: string
+  configTarget?: string | null
 }): string
 export let targetRoot: string
 export let targetName: string

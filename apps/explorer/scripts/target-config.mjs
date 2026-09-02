@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { loadInbaseConfig, rememberInbaseConfig, resolveConfigPath } from '../../../bin/inbase-config.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const explorerRoot = path.resolve(here, '..')
@@ -115,6 +116,7 @@ export function resolveInitialTargetRoot({
   switcherEnabled = false,
   targets = [],
   fallback = defaultTargetRoot,
+  configTarget = null,
 } = {}) {
   const fromEnv = envTarget?.trim()
   if (fromEnv) return resolveTargetRoot(fromEnv)
@@ -122,6 +124,7 @@ export function resolveInitialTargetRoot({
     const match = targets.find((target) => target.id === persistedId)
     if (match) return match.root
   }
+  if (configTarget) return path.resolve(configTarget)
   return fallback
 }
 
@@ -134,11 +137,17 @@ function applyTargetRoot(root) {
 
 const switcherEnabledAtBoot = isWorkspaceDevSwitcherEnabled()
 const bootTargets = switcherEnabledAtBoot ? listWorkspaceTargets() : []
+const bootConfig = rememberInbaseConfig(loadInbaseConfig())
+const bootConfigTarget =
+  bootConfig.target && bootConfig.dir
+    ? resolveConfigPath(bootConfig.target, bootConfig.dir)
+    : null
 
 export let targetRoot = resolveInitialTargetRoot({
   persistedId: switcherEnabledAtBoot ? readPersistedTargetId() : null,
   switcherEnabled: switcherEnabledAtBoot,
   targets: bootTargets,
+  configTarget: bootConfigTarget,
 })
 export let targetName = path.basename(targetRoot)
 export let targetPathPrefix = null

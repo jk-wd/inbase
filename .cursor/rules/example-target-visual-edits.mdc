@@ -2,8 +2,8 @@
 description: >-
   When changing example-target files, sessions start from the next empty map
   slot or a color command. After EXECUTE, edit example-target files then
-  record the step with propose-patch (no patch file). Stop for /go /accept
-  /explain in chat — do not wait on the visualizer.
+  record the step with propose-patch (no patch file). Stop for /go
+  or /explain in chat — do not wait on the visualizer.
 globs: apps/example-target/**
 alwaysApply: false
 ---
@@ -20,5 +20,5 @@ You are changing files in `apps/example-target`. Follow
 
 After `VISUAL_CODER_EXECUTE`, edit `apps/example-target` with Write / StrReplace /
 Delete, then `npx inbase propose-patch --session <id>` with **no patch file**.
-Then **stop**. Wait for `/go`, `/accept`, or `/explain` in chat. Do not run
+Then **stop**. Wait for `/go` or `/explain` in chat. Do not run
 `wait-for-approval` or `explain wait`.

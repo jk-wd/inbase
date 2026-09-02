@@ -5,7 +5,8 @@ import { shouldIgnoreShortcut } from '../keyboard'
 export type MapContextMenuState = {
   x: number
   y: number
-  folder: string
+  folder?: string
+  file?: string
   color?: string
 }
 
@@ -14,6 +15,7 @@ type MapContextMenuProps = {
   pointed?: boolean
   onAddFile: (folder: string, color?: string) => void
   onAddFolder: (folder: string, color?: string) => void
+  onOpenFile?: (fileId: string) => void
   onPointToFolder?: (folder: string) => void
   onClose: () => void
 }
@@ -23,6 +25,7 @@ export function MapContextMenu({
   pointed = false,
   onAddFile,
   onAddFolder,
+  onOpenFile,
   onPointToFolder,
   onClose,
 }: MapContextMenuProps) {
@@ -51,9 +54,11 @@ export function MapContextMenu({
 
   if (!menu) return null
 
+  const fileId = menu.file
+  const folder = menu.folder
   const pad = 8
   const width = 176
-  const height = onPointToFolder ? 126 : 84
+  const height = fileId ? 44 : onPointToFolder ? 126 : 84
   const left = Math.min(
     Math.max(pad, menu.x),
     window.innerWidth - width - pad,
@@ -70,39 +75,54 @@ export function MapContextMenu({
       style={{ left, top }}
       onContextMenu={(event) => event.preventDefault()}
     >
-      <button
-        type="button"
-        role="menuitem"
-        onClick={() => {
-          onAddFile(menu.folder, menu.color)
-          onClose()
-        }}
-      >
-        Add file
-      </button>
-      <button
-        type="button"
-        role="menuitem"
-        onClick={() => {
-          onAddFolder(menu.folder, menu.color)
-          onClose()
-        }}
-      >
-        Add folder
-      </button>
-      {onPointToFolder && (
+      {fileId ? (
         <button
           type="button"
           role="menuitem"
-          aria-pressed={pointed}
           onClick={() => {
-            onPointToFolder(menu.folder)
+            onOpenFile?.(fileId)
             onClose()
           }}
         >
-          {pointed ? 'Stop pointing' : 'Point to folder'}
+          Open file
         </button>
-      )}
+      ) : folder ? (
+        <>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              onAddFile(folder, menu.color)
+              onClose()
+            }}
+          >
+            Add file
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              onAddFolder(folder, menu.color)
+              onClose()
+            }}
+          >
+            Add folder
+          </button>
+          {onPointToFolder && (
+            <button
+              type="button"
+              role="menuitem"
+              aria-pressed={pointed}
+              onClick={() => {
+                onPointToFolder(folder)
+                onClose()
+              }}
+            >
+              {pointed ? 'Stop pointing' : 'Point to folder'}
+            </button>
+          )}
+        </>
+      ) : null}
     </div>,
     document.body,
   )

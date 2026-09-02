@@ -93,6 +93,7 @@ import {
   type ExplainTargetKind,
   type FlyTo,
   GLOBAL_BLUEPRINT_COLOR,
+  compareSessionColorOrder,
   type LocalBlueprint,
   type PatchImportAddition,
   type PatchSymbolAddition,
@@ -163,7 +164,9 @@ function blueprintOptionsFrom(
       kind: 'global',
       sessionId: null,
     },
-    ...byColor.values(),
+    ...[...byColor.values()].sort((left, right) =>
+      compareSessionColorOrder(left.id, right.id),
+    ),
   ]
 }
 
@@ -2923,12 +2926,13 @@ function Explorer({
       <MapContextMenu
         menu={mapMenu}
         pointed={
-          mapMenu
+          mapMenu?.folder
             ? findBlueprintPointer(blueprintPointers, 'folder', mapMenu.folder)
             : false
         }
         onAddFile={beginAddFile}
         onAddFolder={beginAddFolder}
+        onOpenFile={inspectFile}
         onPointToFolder={(folder) =>
           applyBlueprintPointer({ kind: 'folder', path: folder })
         }

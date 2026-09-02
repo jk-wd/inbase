@@ -13,12 +13,16 @@ import {
 } from './patch-lib.mjs'
 import { diffSourceTrees, snapshotSourceTree } from './tree-diff.mjs'
 import { readExplain } from './explain-store.mjs'
+import { loadInbaseConfig } from '../../../bin/inbase-config.mjs'
 
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const CONNECTED_TTL_MS = 15_000
 const STALLED_WAIT_MS = 2_000
 export const SESSION_SLOT_COUNT = 5
 export const DEFAULT_STEP_BY_STEP = false
+export function resolveDefaultStepByStep() {
+  return loadInbaseConfig().stepByStep === true
+}
 export const SESSION_COLORS = [
   { id: 'coral', name: 'Coral', hex: '#f87171' },
   { id: 'amber', name: 'Amber', hex: '#fbbf24' },
@@ -102,6 +106,15 @@ function resolvedSessionName(manifest) {
 export function resolveSessionColor(colorId) {
   if (typeof colorId !== 'string' || colorId.trim() === '') return null
   return SESSION_COLORS.find((entry) => entry.id === colorId) ?? null
+}
+
+export function sessionColorOrderIndex(colorId) {
+  const index = SESSION_COLORS.findIndex((entry) => entry.id === colorId)
+  return index === -1 ? SESSION_COLORS.length : index
+}
+
+export function compareSessionColorOrder(left, right) {
+  return sessionColorOrderIndex(left) - sessionColorOrderIndex(right)
 }
 
 export function parseSessionColorQuery(value) {
@@ -371,6 +384,7 @@ export function listSessionIntents(dataDir, knownFileIds = []) {
       sessionIntent(dataDir, sessionId, knownFileIds, undefined, waiters),
     )
     .filter(Boolean)
+    .sort((left, right) => compareSessionColorOrder(left.color, right.color))
 }
 
 export function readBlueprintSession(dataDir) {
@@ -682,7 +696,7 @@ export function readManifest(dataDir, sessionId) {
     value.workStartedAt ??= null
   }
   if (typeof value.pendingExplain !== 'boolean') value.pendingExplain = false
-  if (typeof value.stepByStep !== 'boolean') value.stepByStep = DEFAULT_STEP_BY_STEP
+  if (typeof value.stepByStep !== 'boolean') value.stepByStep = resolveDefaultStepByStep()
   value.initialInstruction =
     typeof value.initialInstruction === 'string' ? value.initialInstruction : null
   value.contextFiles = normalizeContextFiles(value.contextFiles)
@@ -1128,6 +1142,25 @@ export function isStepByStep(manifest) {
   return manifest?.stepByStep === true
 }
 
+function pendingReviewDiff(manifest) {
+  if (manifest?.phase !== 'review') return null
+  const active =
+    manifest.diffs.find(
+      (entry) =>
+        entry.id === manifest.activeDiffId && entry.status === 'pending',
+    ) || manifest.diffs.at(-1)
+  return active?.status === 'pending' ? active : null
+}
+
+function canRevisePlan(phase) {
+  return (
+    phase === 'replanning' ||
+    phase === 'review' ||
+    phase === 'plan_ready' ||
+    phase === 'working'
+  )
+}
+
 export function autoAdvance(dataDir, sessionId, targetRoot = null) {
   const manifest = readManifest(dataDir, sessionId)
   if (!manifest || isStepByStep(manifest)) return manifest
@@ -1184,7 +1217,7 @@ export function startSession(dataDir, input) {
     steps: [],
     status: 'active',
     phase: 'blueprint_ask',
-    stepByStep: DEFAULT_STEP_BY_STEP,
+    stepByStep: resolveDefaultStepByStep(),
     currentStep: 1,
     activeDiffId: null,
     pendingInstruction: null,
@@ -1228,7 +1261,7 @@ export function setupSession(dataDir, input = {}) {
     status: 'active',
     phase: 'blueprint',
     awaitingAttach: true,
-    stepByStep: DEFAULT_STEP_BY_STEP,
+    stepByStep: resolveDefaultStepByStep(),
     currentStep: 1,
     activeDiffId: null,
     pendingInstruction: null,
@@ -1489,7 +1522,7 @@ export function reportPlan(dataDir, input) {
       stepByStep:
         typeof input.stepByStep === 'boolean'
           ? input.stepByStep
-          : DEFAULT_STEP_BY_STEP,
+          : resolveDefaultStepByStep(),
       currentStep: 1,
       activeDiffId: null,
       pendingInstruction: null,
@@ -1520,26 +1553,56 @@ export function reportPlan(dataDir, input) {
     return autoAdvance(dataDir, sessionId, input.targetRoot)
   }
 
-  if (existing.phase !== 'replanning') {
+  if (!canRevisePlan(existing.phase)) {
     throw new Error(`Session ${sessionId} is not waiting for a revised plan`)
   }
-  const startAt = existing.currentStep
+
+  const pending = pendingReviewDiff(existing)
+  const startAt = pending?.step ?? existing.currentStep
+  const wasWorking = existing.phase === 'working'
+  if (pending) {
+    pending.status = 'extend'
+    existing.currentStep = pending.step
+    existing.activeDiffId = pending.id
+  }
+  if (input.feature) existing.feature = input.feature
   existing.steps = [
     ...existing.steps.filter((step) => step.index < startAt),
     ...planSteps(input.stepTitles, startAt),
   ]
-  existing.phase = 'plan_ready'
   existing.status = 'active'
   existing.pendingInstruction = null
+
+  const remaining = existing.steps.filter((step) => step.index >= startAt)
+  const title = remaining[0]?.title
+  if (pending) {
+    // Reuse the invoke snapshot so the next propose-patch replaces this proposal.
+    existing.phase = 'working'
+    existing.workStartedAt = new Date().toISOString()
+    writeManifest(dataDir, existing)
+    focusSession(dataDir, sessionId)
+    recordSessionAck(dataDir, sessionId, 'plan', `${remaining.length} step(s)`)
+    recordSessionAck(
+      dataDir,
+      sessionId,
+      'invoke',
+      title ? `step ${startAt} — ${title}` : `step ${startAt}`,
+    )
+    return existing
+  }
+
+  if (wasWorking) {
+    writeManifest(dataDir, existing)
+    focusSession(dataDir, sessionId)
+    recordSessionAck(dataDir, sessionId, 'plan', `${remaining.length} step(s)`)
+    return existing
+  }
+
+  existing.phase = 'plan_ready'
   existing.workStartedAt = null
   writeManifest(dataDir, existing)
   focusSession(dataDir, sessionId)
-  recordSessionAck(
-    dataDir,
-    sessionId,
-    'plan',
-    `${existing.steps.filter((step) => step.index >= startAt).length} step(s)`,
-  )
+  recordSessionAck(dataDir, sessionId, 'plan', `${remaining.length} step(s)`)
   return autoAdvance(dataDir, sessionId, input.targetRoot)
 }
 
@@ -1554,8 +1617,8 @@ export function invokeStep(dataDir, sessionId, step, targetRoot = null) {
     if (step !== expected) {
       throw new Error(
         last
-          ? `/accept on step ${active.step} to finish`
-          : `/accept on step ${active.step} to continue`,
+          ? `/go on step ${active.step} to finish`
+          : `/go on step ${active.step} to continue`,
       )
     }
     return continueDiff(dataDir, targetRoot, sessionId, active.id)
@@ -1604,8 +1667,17 @@ export function appendDiff(dataDir, targetRoot, input) {
     sessionId,
     `Report a plan for session ${sessionId} first`,
   )
+  if (manifest.phase === 'review') {
+    throw new Error(
+      `A proposal is waiting on step ${manifest.currentStep}. If the user asked for a change, run report-plan with the new remaining steps first — that replaces this proposal from step ${manifest.currentStep}. Do not /go the waiting proposal. Do not edit files first. Then implement the invoked step and propose-patch.`,
+    )
+  }
   if (manifest.phase !== 'working') {
-    throw new Error(`Step ${manifest.currentStep} has not been invoked`)
+    throw new Error(
+      manifest.phase === 'plan_ready'
+        ? `Step ${manifest.currentStep} has not been invoked. Wait for /go, or if the user asked for a change, run report-plan with the new remaining steps first.`
+        : `Step ${manifest.currentStep} has not been invoked`,
+    )
   }
 
   const now = new Date().toISOString()
@@ -2231,10 +2303,8 @@ export function listLocalBlueprints(dataDir) {
       ...readLocalBlueprint(dataDir, sessionId),
     })
   }
-  return locals.sort(
-    (left, right) =>
-      SESSION_COLORS.findIndex((entry) => entry.id === left.color) -
-      SESSION_COLORS.findIndex((entry) => entry.id === right.color),
+  return locals.sort((left, right) =>
+    compareSessionColorOrder(left.color, right.color),
   )
 }
 

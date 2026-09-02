@@ -102,10 +102,11 @@ test('readInstanceFile treats EPERM as a live visualizer', () => {
 
 test('applyHostEnv attaches to a running instance when env is unset', () => {
   const { root, cleanup } = tempProject()
-  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR')
+  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
   try {
     delete process.env.VISUAL_CODER_TARGET
     delete process.env.INBASE_DATA_DIR
+    delete process.env.INBASE_CONFIG
     const dataDir = path.join(root, '.inbase')
     const targetRoot = path.join(root, 'app')
     writeRunningInstance({ dataDir, targetRoot, port: 5188 })
@@ -121,7 +122,7 @@ test('applyHostEnv attaches to a running instance when env is unset', () => {
 
 test('applyHostEnv keeps explicit target and data dir over a running instance', () => {
   const { root, cleanup } = tempProject()
-  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR')
+  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
   try {
     writeRunningInstance({
       dataDir: path.join(root, 'viz-data'),

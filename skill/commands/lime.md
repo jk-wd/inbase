@@ -22,4 +22,4 @@ The user's request is:
 
 $ARGUMENTS
 
-If `$ARGUMENTS` is empty, there is no chat instruction. After `read-blueprint`, if the global or this session's local blueprint is enabled, that is the request: create those files, folders, and symbols. Ask in chat if you need more information. Do not invent extra work. If both blueprints are empty, stop and wait for a request, `/accept`, or `/explain`.
+If `$ARGUMENTS` is empty, there is no chat instruction. After `read-blueprint`, if the global or this session's local blueprint is enabled, that is the request: create those files, folders, and symbols. Ask in chat if you need more information. Do not invent extra work. If both blueprints are empty, stop and wait for a request, `/go`, or `/explain`.

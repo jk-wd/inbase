@@ -11,7 +11,8 @@ import { eyeIconMarkup } from '../ui/EyeIcon'
 export type MapBlueprintMenu = {
   x: number
   y: number
-  folder: string
+  folder?: string
+  file?: string
   color?: string
 }
 
@@ -482,6 +483,15 @@ export function MapView({
       event.preventDefault()
       const pick = pickAt(event.clientX, event.clientY)
       if (!pick) return
+      if (pick.fileId) {
+        onSelect(pick.fileId)
+        onBlueprintMenu({
+          x: event.clientX,
+          y: event.clientY,
+          file: pick.fileId,
+        })
+        return
+      }
       const hit = new THREE.Vector3()
       const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
       const planeHit = pick.raycaster.ray.intersectPlane(plane, hit)
