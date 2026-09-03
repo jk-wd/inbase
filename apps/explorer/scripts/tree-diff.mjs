@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
-import { listSourceFiles } from './scan-target.mjs'
+import { isBinaryFile, listSourceFiles } from './scan-target.mjs'
 
 function splitLines(text) {
   if (text === '') return []
@@ -104,13 +104,16 @@ export function diffSourceTrees(beforeRoot, afterRoot) {
     const had = before.has(fileId)
     const has = after.has(fileId)
     if (!had && has) {
+      if (isBinaryFile(afterPath)) continue
       parts.push(fileAsAddPatch(fileId, fs.readFileSync(afterPath, 'utf8')))
       continue
     }
     if (had && !has) {
+      if (isBinaryFile(beforePath)) continue
       parts.push(fileAsDeletePatch(fileId, fs.readFileSync(beforePath, 'utf8')))
       continue
     }
+    if (isBinaryFile(beforePath) || isBinaryFile(afterPath)) continue
     const beforeText = fs.readFileSync(beforePath, 'utf8')
     const afterText = fs.readFileSync(afterPath, 'utf8')
     if (beforeText === afterText) continue

@@ -28,16 +28,15 @@ import {
 const HELP = `inbase — a first-person 3D map of a codebase
 
 Usage:
-  inbase init              Install the Cursor skill in this repo
+  inbase init              Install Cursor, Claude Code, Codex, and Copilot skills
   inbase run               Scan this repo and start the local map
   inbase help              Show this help
 
-Agent commands (used by the Cursor skill):
+Agent commands (used by the installed skill):
   inbase start-session --session <id> --name "short name"
   inbase attach [--session <id>] [--color <name>]
   inbase read-blueprint --session <id>
   inbase report-plan --session <id> --feature "name" --steps "one"
-  inbase go [--session <id>]
   inbase accept [--session <id>]
   inbase propose-patch --session <id> [file.patch|-]
   inbase propose-patch --session <id> --clear
@@ -123,7 +122,9 @@ async function runServer(args) {
   const local = server.resolvedUrls?.local?.[0] ?? `http://localhost:${port}/`
   console.log(`Inbase is mapping ${targetRoot}`)
   console.log(`Open ${local}`)
-  console.log('Leave this running. Open a Cursor chat to connect — 5 chats can be connected at once.')
+  console.log(
+    'Leave this running. Open a Cursor, Claude Code, Codex, or Copilot chat to connect — 5 chats can be connected at once.',
+  )
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -140,13 +141,23 @@ export async function main(argv = process.argv.slice(2)) {
 
   if (command === 'init') {
     const result = initProject()
-    console.log(`Installed Cursor skill at ${result.skillDir}`)
-    if (fs.existsSync(path.join(result.commandDir, 'inbase.md'))) {
-      console.log(`Installed /inbase command at ${result.commandDir}`)
+    for (const editor of result.editors) {
+      const name = editor.label ?? editor.id
+      console.log(`Installed ${name} skill at ${editor.skillDir}`)
+      if (!editor.commandDir) continue
+      if (fs.existsSync(path.join(editor.commandDir, 'accept/SKILL.md'))) {
+        console.log(`Installed command skills at ${editor.commandDir}`)
+      } else if (fs.existsSync(path.join(editor.commandDir, 'inbase.md'))) {
+        console.log(`Installed /inbase command at ${editor.commandDir}`)
+      } else {
+        console.log(`Installed slash commands at ${editor.commandDir}`)
+      }
     }
     if (result.gitignoreAdded) console.log('Added .inbase/ to .gitignore')
     if (result.configAdded) console.log('Wrote inbase.json')
-    console.log('Next: run `inbase run`, then ask Cursor to change source files.')
+    console.log(
+      'Next: run `inbase run`, then ask Cursor, Claude Code, Codex, or Copilot to change source files.',
+    )
     return
   }
 
@@ -159,7 +170,7 @@ export async function main(argv = process.argv.slice(2)) {
   ensureDataDir(process.env.INBASE_DATA_DIR)
   if (host.instance) {
     console.log(
-      `INBASE_ATTACHED Using the running visualizer (${host.instance.dataDir}). Run read-blueprint to load the optional blueprint. Then stop for /go, /accept, or /explain in chat.`,
+      `INBASE_ATTACHED Using the running visualizer (${host.instance.dataDir}). Run read-blueprint to load the optional blueprint. Then stop for /accept or /explain in chat.`,
     )
   }
 
@@ -181,7 +192,7 @@ export async function main(argv = process.argv.slice(2)) {
   }
   if (command === 'wait-for-approval') {
     console.error(
-      'wait-for-approval was removed. The user types /go, /accept, or /explain in chat.',
+      'wait-for-approval was removed. The user types /accept or /explain in chat.',
     )
     process.exit(1)
   }

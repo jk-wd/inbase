@@ -3,6 +3,7 @@ import {
   explainHitsSymbol,
   explainMatchesSymbol,
 } from '../explain'
+import { fileInfoMeta } from '../layout'
 import type { ExplainSymbolRef, FileNode } from '../types'
 import { FileIcon } from './EyeIcon'
 
@@ -119,46 +120,48 @@ export function ExplainInfoPanel({
           </div>
           <div ref={bodyRef} className="hud-panel-body">
             <p className="path">{file.path}</p>
-            <p>
-              {file.lines} lines · {file.language}
-            </p>
-            {classes.length > 0 && (
-              <SymbolList
-                title={kindLabel('class')}
-                kind="class"
-                names={classes}
-                highlights={highlights}
-                point={point}
-                empty="No classes"
-              />
-            )}
-            <SymbolList
-              title={kindLabel('function')}
-              kind="function"
-              names={functions}
-              highlights={highlights}
-              point={point}
-              empty="No functions"
-            />
-            <SymbolList
-              title={kindLabel('variable')}
-              kind="variable"
-              names={variables}
-              highlights={highlights}
-              point={point}
-              empty="No vars"
-            />
-            <div className="hud-section-title">Imports</div>
-            {file.imports.length === 0 ? (
-              <p>No local imports</p>
-            ) : (
-              <ul>
-                {file.imports.map((id) => (
-                  <li key={id} title={id}>
-                    <span>{fileBase(id)}</span>
-                  </li>
-                ))}
-              </ul>
+            <p>{fileInfoMeta(file)}</p>
+            {!file.binary && (
+              <>
+                {classes.length > 0 && (
+                  <SymbolList
+                    title={kindLabel('class')}
+                    kind="class"
+                    names={classes}
+                    highlights={highlights}
+                    point={point}
+                    empty="No classes"
+                  />
+                )}
+                <SymbolList
+                  title={kindLabel('function')}
+                  kind="function"
+                  names={functions}
+                  highlights={highlights}
+                  point={point}
+                  empty="No functions"
+                />
+                <SymbolList
+                  title={kindLabel('variable')}
+                  kind="variable"
+                  names={variables}
+                  highlights={highlights}
+                  point={point}
+                  empty="No vars"
+                />
+                <div className="hud-section-title">Imports</div>
+                {file.imports.length === 0 ? (
+                  <p>No local imports</p>
+                ) : (
+                  <ul>
+                    {file.imports.map((id) => (
+                      <li key={id} title={id}>
+                        <span>{fileBase(id)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
             )}
           </div>
         </aside>

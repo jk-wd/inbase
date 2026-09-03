@@ -24,17 +24,23 @@ import {
 } from '../types'
 import { findBlueprintNote, findBlueprintPointer } from '../userCreated'
 import type { BlueprintOverlayLayer } from '../userCreated'
-import { folderOfFile, folderParent } from '../layout'
+import { fileInfoMeta, folderOfFile, folderParent } from '../layout'
 import { EyeIcon, FileIcon, FolderIcon } from './EyeIcon'
 import { beginKeyboardIsolation, shouldIgnoreShortcut } from '../keyboard'
 import type { DevTargetsState } from '../devTargets'
 
 const RELATION_MODE_OPTIONS: { id: RelationMode; label: string }[] = [
+  { id: 'targeted', label: 'Targeted' },
   { id: 'all', label: 'All' },
   { id: 'off', label: 'Off' },
   { id: 'changed', label: 'Changed' },
-  { id: 'targeted', label: 'Targeted' },
 ]
+
+function relationModesForView(mapping: boolean, current: RelationMode) {
+  return RELATION_MODE_OPTIONS.filter(
+    (option) => option.id !== 'changed' || mapping || current === 'changed',
+  )
+}
 
 function reviewTitle(status: AgentIntentStatus) {
   if (status === 'blueprint_ask') return 'Setup blueprint'
@@ -75,7 +81,7 @@ function ColorConnectHint({
     <p>
       {queued && colorCommand ? (
         <>
-          Type <kbd>{colorCommand}</kbd> in a Cursor chat to skip the queue and
+          Type <kbd>{colorCommand}</kbd> in a chat to skip the queue and
           connect here.{' '}
         </>
       ) : null}
@@ -978,7 +984,7 @@ function HandshakeSetup({
         {awaitingAttach && nextAttachLabel ? (
           <>
             <p>
-              The next Cursor chat connects to {nextAttachLabel} first. This
+              The next chat connects to {nextAttachLabel} first. This
               session stays in the queue.
             </p>
             <ColorConnectHint colorCommand={colorCommand} queued />
@@ -986,13 +992,13 @@ function HandshakeSetup({
         ) : awaitingAttach ? (
           <>
             <p>
-              Open a Cursor chat to connect and start. A regular chat takes
+              Open a chat to connect and start. A regular chat takes
               the next empty slot.
             </p>
             <ColorConnectHint colorCommand={colorCommand} />
           </>
         ) : (
-          <p>This window is attached. Starting from the Cursor chat…</p>
+          <p>This window is attached. Starting from the chat…</p>
         )}
       </section>
     </div>
@@ -1015,7 +1021,7 @@ function sessionLiveStatus(intent: AgentIntent) {
     return { text: 'Stopped', busy: false }
   }
   if (intent.awaitingAttach) {
-    return { text: 'Waiting for a Cursor chat', busy: false }
+    return { text: 'Waiting for a chat', busy: false }
   }
   if (intent.pendingExplain) {
     return { text: 'Type /explain in chat', busy: false }
@@ -1032,7 +1038,7 @@ function sessionLiveStatus(intent: AgentIntent) {
     return { text: 'Reviewing this step', busy: false }
   }
   if (intent.status === 'pending') {
-    return { text: 'Type /go or /accept in chat', busy: false }
+    return { text: 'Type /accept in chat', busy: false }
   }
   if (kind === 'execute' && intent.status === 'working') {
     return { text: `LLM received ${detail}`, busy: true }
@@ -1055,7 +1061,7 @@ function sessionLiveStatus(intent: AgentIntent) {
     return { text: 'LLM is drafting the plan', busy: true }
   }
   if (kind === 'plan' || intent.status === 'planned') {
-    return { text: 'Type /go or /accept in chat', busy: false }
+    return { text: 'Type /accept in chat', busy: false }
   }
   if (
     kind === 'attached' ||
@@ -1299,7 +1305,7 @@ function SessionPanel({
           {!llmDisconnected && !stepByStep && (
             <p className="hud-mode-hint">
               LLM implements the full plan. You can still walk the diffs, then
-              /go or /accept.
+              /accept.
             </p>
           )}
           {handshakeSetup ? (
@@ -1313,7 +1319,7 @@ function SessionPanel({
             queuedBehind ? (
               <div className="hud-mode-hint">
                 <p>
-                  The next Cursor chat connects to {queuedBehind} first. This
+                  The next chat connects to {queuedBehind} first. This
                   session stays in the queue.
                 </p>
                 <ColorConnectHint
@@ -1324,7 +1330,7 @@ function SessionPanel({
             ) : (
               <div className="hud-mode-hint">
                 <p>
-                  No LLM is attached. Open a Cursor chat — it connects to the
+                  No LLM is attached. Open a chat — it connects to the
                   next waiting session.
                 </p>
                 <ColorConnectHint colorCommand={sessionSlashCommand(intent)} />
@@ -1409,8 +1415,8 @@ function SessionPanel({
                                 {creating
                                   ? 'Creating proposal…'
                                   : showGoHint
-                                    ? '/go'
-                                    : '/go · /accept · /explain'}
+                                    ? '/accept'
+                                    : '/accept · /explain'}
                               </span>
                             </span>
                           )}
@@ -1843,6 +1849,14 @@ function explorerInstructions({
         { id: 'aim-line', keys: ['Click'], label: 'Aim a line to fly' },
         ...info,
         ...imported,
+        {
+          id: 'show-relations',
+          keys: ['R'],
+          label: `Relations: ${
+            RELATION_MODE_OPTIONS.find((option) => option.id === relationMode)
+              ?.label ?? 'Off'
+          }`,
+        },
         ...branch,
         {
           id: 'update-model',
@@ -1851,9 +1865,9 @@ function explorerInstructions({
         },
         {
           id: 'cursor-chat',
-          keys: ['Cursor chat'],
+          keys: ['Chat'],
           label:
-            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /go /accept /explain; 5 chats at once',
+            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /accept /explain; 5 chats at once',
         },
         {
           id: 'blueprint-select',
@@ -1951,9 +1965,9 @@ function explorerInstructions({
         },
         {
           id: 'cursor-chat',
-          keys: ['Cursor chat'],
+          keys: ['Chat'],
           label:
-            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /go /accept /explain; 5 chats at once',
+            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /accept /explain; 5 chats at once',
         },
         {
           id: 'blueprint-select',
@@ -2122,7 +2136,7 @@ export function HUD({
   updatingModel = false,
   importedBy,
   onToggleImportedBy,
-  relationMode = 'changed',
+  relationMode = 'targeted',
   onRelationModeChange,
   changePathsOnly = false,
   hasChangeSet = false,
@@ -2791,9 +2805,7 @@ export function HUD({
           {!infoMinimized && (
             <div ref={infoPanelRef} className="hud-panel-body">
           <p className="path">{selected.path}</p>
-          <p>
-            {selected.lines} lines · {selected.language}
-          </p>
+          <p>{fileInfoMeta(selected)}</p>
           {(onExplainTarget ||
             canInspectFile(selected.id, selected.userCreated)) && (
             <div className="hud-file-actions">
@@ -2874,7 +2886,7 @@ export function HUD({
                 />
               </>
             )}
-          {selectedClasses.length > 0 && (
+          {!selected.binary && selectedClasses.length > 0 && (
             <>
               <div className="hud-section-title">Classes</div>
               <ul>
@@ -2908,6 +2920,8 @@ export function HUD({
               </ul>
             </>
           )}
+          {!selected.binary && (
+            <>
           <div className="hud-section-title">Functions</div>
           {selectedFunctions.length === 0 &&
           extraAddedFunctions.length === 0 &&
@@ -3152,6 +3166,10 @@ export function HUD({
               onAdd={(name) => onAddBlueprintVariable(selected.id, name)}
             />
           )}
+            </>
+          )}
+          {(!selected.binary || importedBy) && (
+            <>
           <div className="hud-section-title">
             {importedBy ? 'Imported by' : 'Imports'}
           </div>
@@ -3253,6 +3271,8 @@ export function HUD({
                   Click a file to import it. Esc to cancel.
                 </p>
               )}
+            </>
+          )}
             </>
           )}
             </div>
@@ -3628,7 +3648,7 @@ export function HUD({
           )}
         </div>
         <div className="hud-icon-row">
-          {mapping && onRelationModeChange && (
+          {onRelationModeChange && (
             <div className="hud-actions-menu" ref={relationsMenuRef}>
               <button
                 className="hud-button hud-icon-button"
@@ -3683,7 +3703,7 @@ export function HUD({
                     aria-label="Relations"
                     style={relationsMenuPosition}
                   >
-                    {RELATION_MODE_OPTIONS.map((option) => (
+                    {relationModesForView(mapping, relationMode).map((option) => (
                       <button
                         key={option.id}
                         type="button"

@@ -33,6 +33,6 @@ npm run dev:target
 - Do not commit `.inbase/`, session data, or `*.tgz` packs.
 - Match the style of nearby code. No drive-by refactors or formatting-only diffs.
 
-The Cursor skill in `skill/inbase/` is what `inbase init` copies into other
+The skill in `skill/inbase/` is what `inbase init` copies into other
 repos. If you change that loop, keep `skill/inbase/SKILL.md` and the CLI
 session commands in sync.

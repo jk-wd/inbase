@@ -381,6 +381,40 @@ test('attach without an id uses the oldest waiting session', () => {
   }
 })
 
+test('re-attach to the same session keeps a waiting last proposal', () => {
+  const env = fixture()
+  try {
+    const slot = setupSession(env.dataDir)
+    setupSession(env.dataDir)
+    attachSession(env.dataDir, slot.sessionId)
+    setStepByStep(env.dataDir, slot.sessionId, true)
+    reportPlan(env.dataDir, {
+      sessionId: slot.sessionId,
+      feature: 'Keep session',
+      stepTitles: ['Build value'],
+    })
+    invokeStep(env.dataDir, slot.sessionId, 1)
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: slot.sessionId,
+      patchText: oneToTwo,
+    })
+    assert.equal(readManifest(env.dataDir, slot.sessionId).phase, 'review')
+    const before = sessionIntent(env.dataDir, slot.sessionId)
+    assert.equal(before.status, 'pending')
+    assert.notEqual(before.lastAck.kind, 'attached')
+
+    const again = attachSession(env.dataDir, slot.sessionId)
+    assert.equal(again.sessionId, slot.sessionId)
+    assert.equal(again.phase, 'review')
+    const after = sessionIntent(env.dataDir, slot.sessionId)
+    assert.equal(after.lastAck.kind, before.lastAck.kind)
+    assert.equal(after.status, 'pending')
+    assert.equal(readManifest(env.dataDir, slot.sessionId).diffs.at(-1).status, 'pending')
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('parseSessionColorQuery maps aliases and rejects blue', () => {
   assert.equal(parseSessionColorQuery('red').id, 'coral')
   assert.equal(parseSessionColorQuery('Coral').id, 'coral')

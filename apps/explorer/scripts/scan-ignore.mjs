@@ -9,6 +9,7 @@ export const IGNORE_DIR_NAMES = new Set([
   'coverage',
   '.git',
   '.inbase',
+  '.next',
 ])
 
 export const IGNORE_FILE_NAMES = new Set(['package-lock.json'])
@@ -25,19 +26,11 @@ function isViteDepCache(parts) {
     .some((part) => part === 'deps' || part.startsWith('deps_temp'))
 }
 
-/** True when any path segment is ignored, e.g. apps/web/node_modules/pkg/index.js. */
+/** True when any path segment is a junk directory, e.g. apps/web/node_modules/pkg/index.js. Hidden files stay on the map. */
 export function shouldIgnoreRelativePath(relative) {
   const parts = toPosix(relative).split('/').filter(Boolean)
   if (isViteDepCache(parts)) return true
-  if (
-    parts.some(
-      (part) =>
-        IGNORE_DIR_NAMES.has(part) ||
-        (part.startsWith('.') && part !== '.' && part !== '..'),
-    )
-  ) {
-    return true
-  }
+  if (parts.some((part) => IGNORE_DIR_NAMES.has(part))) return true
   return IGNORE_FILE_NAMES.has(parts.at(-1) ?? '')
 }
 

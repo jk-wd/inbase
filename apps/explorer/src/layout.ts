@@ -170,6 +170,15 @@ export function fileDisplayName(id: string, files: FileNode[]) {
   return id.split('/').pop() ?? id
 }
 
+export function fileInfoMeta(file: FileNode) {
+  if (file.binary) {
+    return file.language && file.language !== 'txt'
+      ? `Binary · ${file.language}`
+      : 'Binary file'
+  }
+  return `${file.lines} lines · ${file.language}`
+}
+
 export function filesImporting(files: FileNode[], id: string) {
   return files.filter((file) => file.imports.includes(id))
 }

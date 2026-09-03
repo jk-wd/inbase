@@ -15,6 +15,7 @@ export type FileNode = {
   language: string
   symbols: CodeSymbol[]
   imports: string[]
+  binary?: boolean
   userCreated?: boolean
   colorHex?: string
 }

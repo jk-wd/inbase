@@ -6,6 +6,8 @@ The user invoked `/orange`. Attach this chat to the **Orange** Inbase session, n
 
 Do **not** ask for a session id. Do **not** run `inbase start-session`.
 
+If this conversation already printed `VISUAL_CODER_SESSION`, do **not** run attach. Stay in that session. Skip the attach steps below. Treat a later request (including after the last proposal) as a change request: `report-plan` from the last proposal, then implement. Do not connect to a new chat.
+
 1. Attach to the Orange session:
 
 ```bash
@@ -22,4 +24,4 @@ The user's request is:
 
 $ARGUMENTS
 
-If `$ARGUMENTS` is empty, there is no chat instruction. After `read-blueprint`, if the global or this session's local blueprint is enabled, that is the request: create those files, folders, and symbols. Ask in chat if you need more information. Do not invent extra work. If both blueprints are empty, stop and wait for a request, `/go`, or `/explain`.
+If `$ARGUMENTS` is empty, there is no chat instruction. After `read-blueprint`, if the global or this session's local blueprint is enabled, that is the request: create those files, folders, and symbols. Ask in chat if you need more information. Do not invent extra work. If both blueprints are empty, stop and wait for a request, `/accept`, or `/explain`.

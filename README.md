@@ -17,16 +17,16 @@ Inbase is a structured way to collaborate with an LLM. It visualizes the codebas
 
 You draw the intended change on a map of the real codebase before the model writes a file. That drawing is a **blueprint**: planned files, folders, functions, variables, imports, notes, and pointers, laid on the existing code. The LLM must follow that layout.
 
-The model reads the blueprint, says what it sees (`I see on the blueprint ...`) so you can confirm the reading, reports a plan that matches it, and **stops**. You run the work from Cursor with `/go` or `/accept`, one map change per command. Inbase records each one as a patch on the map. If a proposal is wrong, type the change in the attached chat (that replaces the waiting proposal), change the blueprint, or Stop.
+The model reads the blueprint, says what it sees (`I see on the blueprint ...`) so you can confirm the reading, reports a plan that matches it, and **stops**. You run the work from Cursor, Claude Code, Codex, or Copilot with `/accept`, one map change per command. Inbase records each one as a patch on the map. If a proposal is wrong, type the change in the attached chat (that replaces the waiting proposal), change the blueprint, or Stop.
 
 Blueprints have two layers:
 
 - **Global (blue):** shared by every chat. Put structure here that every session should follow.
-- **Session (coral, amber, lime, orange, violet):** local to one Cursor chat. Put the work for that chat here.
+- **Session (coral, amber, lime, orange, violet):** local to one chat. Put the work for that chat here.
 
 Planned files stay on the map after they exist on disk. Hide a color with its chip, or clear or clean them up when you are done. When a session finishes, Inbase discards its slot and opens a new empty one. The global blueprint stays.
 
-Inbase does not call a model. The coding loop works in **Cursor**. `inbase init` installs a skill so the agent uses the map instead of editing files on its own.
+Inbase does not call a model. The coding loop works in **Cursor**, **Claude Code**, **Codex**, and **GitHub Copilot**. `inbase init` installs a skill so the agent uses the map instead of editing files on its own.
 
 ---
 
@@ -39,9 +39,9 @@ The map draws every text file. Colors, relations, structure, and editor install 
 | Colors | JS, TS, CSS, SCSS, JSON, HTML | Dark grey | `apps/explorer/src/file-colors.ts` |
 | Relations | ESM `import`, `require()`, HTML `<script src>` | Packages and remote URLs | `apps/explorer/scripts/relations/` |
 | Structure | Functions, classes, vars in JS/TS | Block with no cubes | `apps/explorer/scripts/structure/` |
-| Editors | Cursor (`inbase init`) | Map still runs in the browser | `bin/editors/` |
+| Editors | Cursor, Claude Code, Codex, Copilot (`inbase init`) | Map still runs in the browser | `bin/editors/` |
 
-Relative import specifiers become edges when they resolve on disk. `inbase init` copies the Cursor skill and slash commands.
+Relative import specifiers become edges when they resolve on disk. `inbase init` copies editor skills and slash commands.
 
 ---
 
@@ -54,8 +54,8 @@ Keep `inbase run` open while you work. Language colors, import analyzers, and ed
 3. [The map](#the-map)
 4. [Sessions and colors](#sessions-and-colors)
 5. [Drawing a blueprint](#drawing-a-blueprint)
-6. [Connecting a Cursor chat](#connecting-a-cursor-chat)
-7. [The plan and `/go` loop](#the-plan-and-go-loop)
+6. [Connecting a chat](#connecting-a-chat)
+7. [The plan and `/accept` loop](#the-plan-and-accept-loop)
 8. [Step by step vs full plan](#step-by-step-vs-full-plan)
 9. [Explain mode](#explain-mode)
 10. [Reviewing changes](#reviewing-changes)
@@ -82,7 +82,7 @@ inbase init
 inbase run
 ```
 
-Open the printed URL (http://127.0.0.1:5173 by default). In the Cursor terminal, **Cmd+click** the link (Ctrl+click on Windows/Linux) to open it in Cursor. Hover the URL to see the prompt. You can also paste the URL into an external browser.
+Open the printed URL (http://127.0.0.1:5173 by default). In a Cursor or VS Code terminal, **Cmd+click** the link (Ctrl+click on Windows/Linux) to open it in the editor. Hover the URL to see the prompt. You can also paste the URL into an external browser.
 
 ![Follow link (Cmd+click) in the Cursor terminal](docs/manual-open-url.png)
 
@@ -94,7 +94,7 @@ Open the printed URL (http://127.0.0.1:5173 by default). In the Cursor terminal,
 inbase run --target /path/to/your/project
 ```
 
-`inbase init` copies a Cursor skill into `.cursor/skills/inbase/`, writes `inbase.json` if it is missing, and gitignores `.inbase/`. Keep `inbase run` open, then ask Cursor to change source files. The LLM follows the visual plan and patch loop below.
+`inbase init` copies a Cursor skill into `.cursor/skills/inbase/`, a Claude Code skill into `.claude/skills/inbase/`, shared Agent Skills into `.agents/skills/`, Copilot skills into `.github/skills/`, writes `inbase.json` if it is missing, and gitignores `.inbase/`. Keep `inbase run` open, then ask the agent to change source files. The LLM follows the visual plan and patch loop below.
 
 ### Config
 
@@ -114,7 +114,7 @@ Commit an `inbase.json` next to where you run `inbase`. CLI flags and env vars s
 | `target` | Folder the map scans. Use a subfolder in a monorepo, like `"apps/web"`. |
 | `port` | Dev server port. Same as `--port`. |
 | `ignore` | Extra gitignore-style patterns on top of `.gitignore` and the built-in `node_modules` / `dist` skip list. |
-| `stepByStep` | Default for new sessions. `false` implements the full plan; `true` waits for `/go` between steps. |
+| `stepByStep` | Default for new sessions. `false` implements the full plan; `true` waits for `/accept` between steps. |
 
 Runtime data stays in `.inbase/` (gitignored). Do not put session or camera state in `inbase.json`.
 
@@ -168,7 +168,7 @@ Reading the map:
 
 `/blue` selects the global blueprint. There is no Blue LLM session.
 
-A regular Cursor chat connects to the next unconnected slot (oldest first). Inbase skips sessions that have an LLM. The map window does not need focus. The cap is 5 connected chats.
+A regular chat connects to the next unconnected slot (oldest first). Inbase skips sessions that have an LLM. The map window does not need focus. The cap is 5 connected chats.
 
 Type `/coral` (or another color) to skip the queue and attach to that slot. With no text after the command, the agent starts from the enabled blueprint only: create those files and structure, and ask if it needs more information. Add a request after the command, like `/coral add a login page`, when you want extra instruction.
 
@@ -197,56 +197,56 @@ Each color has two controls besides the chip:
 - **Clear:** remove every planned file, folder, and symbol on this color.
 - **Cleanup:** drop blueprint files and folders that exist on disk. Planned items that are missing stay.
 
-### Connecting a Cursor chat
+### Connecting a chat
 
 <p>
-  <img src="docs/manual-blueprint.png" alt="Map waiting for a Cursor chat" width="58%" />
-  <img src="docs/manual-cursor-chat.png" alt="Cursor chat with the /coral command" width="40%" />
+  <img src="docs/manual-blueprint.png" alt="Map waiting for a chat" width="58%" />
+  <img src="docs/manual-cursor-chat.png" alt="Chat with the /coral command" width="40%" />
 </p>
 
-1. Draw a blueprint, then open a Cursor chat. Skip the drawing if the chat request is enough.
+1. Draw a blueprint, then open a Cursor, Claude Code, Codex, or Copilot chat. Skip the drawing if the chat request is enough.
 2. Type `/coral` (or another color) to connect. That is enough when a blueprint is already on the map. Add a request after the command, like `/coral add a settings page`, when you want extra instruction.
 3. The chat attaches to a slot. The HUD shows **LLM connected** on that color.
 4. The agent reads the global blueprint, that session's local blueprint, and any request. It says what it sees (`I see on the blueprint ...`) so you can confirm the reading. With no request, it plans only from the blueprint: create those files and structure. It can ask if it needs more information.
-5. It **stops**. The plan waits for `/go` or `/accept`.
+5. It **stops**. The plan waits for `/accept`.
 
 The chat request does not override an enabled blueprint. If they conflict, the agent asks before planning.
 
 You do not pass a session id or run CLI session commands. The skill does that. If attach fails because Inbase is not running, start it and send the request again.
 
-### The plan and `/go` loop
+### The plan and `/accept` loop
 
-The HUD lists every plan step. With **Step by step** off (the default), the LLM implements the full plan. You can walk **Previous** / **Next** over the diffs; `/go` or `/accept` on the last proposal finishes the session.
+The HUD lists every plan step. With **Step by step** off (the default), the LLM implements the full plan. You can walk **Previous** / **Next** over the diffs; `/accept` on the last proposal finishes the session.
 
 With **Step by step** on:
 
-1. Type **`/go`** or **`/accept`** in the attached Cursor chat to start the waiting step.
+1. Type **`/accept`** in the attached chat to start the waiting step.
 2. The LLM edits live project files for **that step only**, then records a patch. Those stored patches are the session record.
-3. The HUD shows the proposal: added, changed, and removed files, plus functions, vars, and imports. Type **`/go`** or **`/accept`** again to accept it.
-4. After accept, the agent stops. Type **`/go`** or **`/accept`** again to start the next step. The last proposal needs `/go` or `/accept` to finish.
-5. After the last recorded patch you can `/go`, `/accept`, or **Stop**.
+3. The HUD shows the proposal: added, changed, and removed files, plus functions, vars, and imports. Type **`/accept`** again to accept it.
+4. After accept, the agent stops. Type **`/accept`** again to start the next step. The last proposal needs `/accept` to finish.
+5. After the last recorded patch you can `/accept`, type a change in the same chat to replace that last step, or **Stop**. Do not start a new chat to update the work.
 
 <p>
-  <img src="docs/inbase-llm.png" alt="Plan ready on the HUD with /go on the first step" width="58%" />
-  <img src="docs/manual-accept-chat.png" alt="Cursor chat with the /go command" width="40%" />
+  <img src="docs/inbase-llm.png" alt="Plan ready on the HUD with /accept on the first step" width="58%" />
+  <img src="docs/manual-accept-chat.png" alt="Chat with the /accept command" width="40%" />
 </p>
 
 While a proposal is waiting:
 
-- Type the change in the attached Cursor chat to **replace** that proposal. The agent updates the plan from that last step (for example steps A, B, C waiting on C → keep A and B, replace C with one or more new remaining steps), then records a new proposal. Do not `/go` just to finish the session so you can start over.
+- Type the change in the **same** attached chat to **replace** that proposal. The agent updates the plan from that last step (for example steps A, B, C waiting on C → keep A and B, replace C with one or more new remaining steps), then records a new proposal. Do not `/accept` just to finish the session so you can start over. Do not open a new chat.
 - Type **`/explain`** to walk what has changed in the current proposal on the map instead of accepting it.
 - **Stop** ends the session.
 
 ![Pending proposal with changed files and added functions](docs/manual-proposal.png)
 
-With **Step by step** on, the agent waits after each proposal. You sequence the work with plan, `/go`, review, `/go`.
+With **Step by step** on, the agent waits after each proposal. You sequence the work with plan, `/accept`, review, `/accept`.
 
 ### Step by step vs full plan
 
 The **Step by step** switch lives on the session panel. New sessions start with it off.
 
-- **Off (default):** the LLM implements the full plan. You can walk **Previous** / **Next** over the diffs. `/go` or `/accept` on the last proposal finishes the session.
-- **On:** `/go` or `/accept` starts one step, then pauses on the proposal. Another `/go` or `/accept` accepts it. Another starts the next step.
+- **Off (default):** the LLM implements the full plan. You can walk **Previous** / **Next** over the diffs. `/accept` on the last proposal finishes the session.
+- **On:** `/accept` starts one step, then pauses on the proposal. Another `/accept` accepts it. Another starts the next step.
 
 Turn the switch before the plan runs. You accept or finish the work yourself, including when the model writes every step in one pass.
 
@@ -270,7 +270,7 @@ When **Show branch changes** is on, `/explain` with no question explains **what 
 
 **From a `?` click**
 
-Click the **?** next to a file or folder name, then type `/explain` in the Cursor chat. The LLM explains that path and where it fits.
+Click the **?** next to a file or folder name, then type `/explain` in the chat. The LLM explains that path and where it fits.
 
 **On the overlay**
 
@@ -279,7 +279,7 @@ Click the **?** next to a file or folder name, then type `/explain` in the Curso
 - Type `/explain` with a follow-up question to drill into sub-steps (`7.1`, `7.2`) until you return to the next original step.
 - Arrow keys or the step list move through the explanation.
 
-Close with **X**. Type `/go` or `/accept` to continue the plan.
+Close with **X**. Type `/accept` to continue the plan.
 
 ### Reviewing changes
 
@@ -317,8 +317,8 @@ Inbase disables this control while an LLM session is writing or reviewing a patc
 | Show only changed paths | | C |
 | Branch changes | G | G |
 | Release mouse | Double-click, Esc | |
-| Connect a chat | Cursor chat, or `/coral` `/amber` `/lime` `/orange` `/violet` | same |
-| Start or continue a step | `/go` or `/accept` in that chat | |
+| Connect a chat | Chat, or `/coral` `/amber` `/lime` `/orange` `/violet` | same |
+| Start or continue a step | `/accept` in that chat | |
 | Explain | `/explain` in chat, or `?` then `/explain` | same |
 | Skip the map | `/skipinbase` | |
 
@@ -330,21 +330,20 @@ The in-app **Instructions** overlay (bottom of the HUD) lists the same controls 
 
 | Command | What it does |
 | --- | --- |
-| `inbase init` | Install the Cursor skill in this repo and write `inbase.json` if missing |
+| `inbase init` | Install Cursor, Claude Code, Codex, and Copilot skills in this repo and write `inbase.json` if missing |
 | `inbase run` | Scan this repo and start the local map |
 | `inbase run --port 5174` | Start on another port |
 | `inbase run --target <dir>` | Map another folder |
-| `inbase go [--session <id>]` | Start the waiting step, or accept a ready proposal (`/go`) |
-| `inbase accept [--session <id>]` | Same as `go` (`/accept`). The last proposal still needs this to finish |
+| `inbase accept [--session <id>]` | Start the waiting step, or accept a ready proposal (`/accept`). The last proposal still needs this to finish |
 | `inbase explain start [--question "..."]` | Open map-only explain mode. Omit `--question` to explain the current proposal or git diff |
 | `inbase explain report --step "..."` | Publish explanation steps and map focus |
 | `inbase explain stop` | Exit explain mode |
 
-The Cursor skill runs session commands (`attach`, `read-blueprint`, `report-plan`, `go`, `propose-patch`, `explain`). You do not need to run them.
+The installed skill runs session commands (`attach`, `read-blueprint`, `report-plan`, `accept`, `propose-patch`, `explain`). You do not need to run them.
 
 ## Editor support
 
-The map runs in the browser. The LLM plan and patch loop works in **Cursor** only. `inbase init` uses the Cursor editor adapter in `bin/editors/` to install the skill and slash commands. Other editors can be added as adapters there.
+The map runs in the browser. The LLM plan and patch loop works in **Cursor**, **Claude Code**, **Codex**, and **GitHub Copilot**. `inbase init` uses the editor adapters in `bin/editors/` to install the skill and slash commands. Cursor and Claude Code get command files (`/accept`). Codex, Copilot, Gemini CLI, and other SKILL.md agents get skill folders in `.agents/skills/` (and `.github/skills/` for Copilot). In Copilot chat type `/accept`; in Codex use `$accept` or `/skills`. Other editors can be added as adapters there.
 
 ## Language support
 

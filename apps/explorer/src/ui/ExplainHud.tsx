@@ -155,7 +155,7 @@ export function ExplainHud({
                   ) : null}
                   {active && !preparingFollowUp ? (
                     <p className="explain-ask-hint">
-                      Type /explain your question in the Cursor chat.
+                      Type /explain your question in the chat.
                     </p>
                   ) : null}
                 </li>

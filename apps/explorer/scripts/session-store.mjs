@@ -1428,16 +1428,19 @@ export function attachSession(dataDir, sessionId, options = {}) {
   if (isTerminalSession(manifest)) {
     throw sessionStoppedError(safeId)
   }
+  const alreadyAttached = !sessionIsWaitingToAttach(manifest)
   focusSession(dataDir, safeId)
   touchSessionConnection(dataDir, safeId)
   const colored = ensureManifestColor(dataDir, manifest)
   const colorName = resolveSessionColor(colored.color)?.name
-  recordSessionAck(
-    dataDir,
-    safeId,
-    'attached',
-    colorName || resolvedSessionName(colored) || safeId,
-  )
+  if (!alreadyAttached) {
+    recordSessionAck(
+      dataDir,
+      safeId,
+      'attached',
+      colorName || resolvedSessionName(colored) || safeId,
+    )
+  }
   maybeStartVisualizerHandshake(dataDir, safeId)
   return readManifest(dataDir, safeId) ?? colored
 }
@@ -1617,8 +1620,8 @@ export function invokeStep(dataDir, sessionId, step, targetRoot = null) {
     if (step !== expected) {
       throw new Error(
         last
-          ? `/go on step ${active.step} to finish`
-          : `/go on step ${active.step} to continue`,
+          ? `/accept on step ${active.step} to finish`
+          : `/accept on step ${active.step} to continue`,
       )
     }
     return continueDiff(dataDir, targetRoot, sessionId, active.id)
@@ -1669,13 +1672,13 @@ export function appendDiff(dataDir, targetRoot, input) {
   )
   if (manifest.phase === 'review') {
     throw new Error(
-      `A proposal is waiting on step ${manifest.currentStep}. If the user asked for a change, run report-plan with the new remaining steps first — that replaces this proposal from step ${manifest.currentStep}. Do not /go the waiting proposal. Do not edit files first. Then implement the invoked step and propose-patch.`,
+      `A proposal is waiting on step ${manifest.currentStep}. If the user asked for a change, run report-plan with the new remaining steps first — that replaces this proposal from step ${manifest.currentStep}. Do not /accept the waiting proposal. Do not edit files first. Then implement the invoked step and propose-patch.`,
     )
   }
   if (manifest.phase !== 'working') {
     throw new Error(
       manifest.phase === 'plan_ready'
-        ? `Step ${manifest.currentStep} has not been invoked. Wait for /go, or if the user asked for a change, run report-plan with the new remaining steps first.`
+        ? `Step ${manifest.currentStep} has not been invoked. Wait for /accept, or if the user asked for a change, run report-plan with the new remaining steps first.`
         : `Step ${manifest.currentStep} has not been invoked`,
     )
   }

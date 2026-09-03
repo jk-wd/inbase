@@ -24,7 +24,7 @@ import { loadInbaseConfig } from '../../../bin/inbase-config.mjs'
 const defaultOutPath = path.join(defaultDataDir, 'codebase.json')
 const BINARY_PROBE_BYTES = 8000
 
-function isBinaryFile(filePath) {
+export function isBinaryFile(filePath) {
   try {
     const fd = fs.openSync(filePath, 'r')
     try {
@@ -101,7 +101,6 @@ function walk(dir, root, ignoreSets, skipRoot = null, acc = []) {
       continue
     }
     if (!stat.isFile()) continue
-    if (isBinaryFile(absolutePath)) continue
     acc.push(absolutePath)
   }
   return acc
@@ -127,7 +126,7 @@ function languageOf(filePath) {
 }
 
 function isUsableFile(filePath) {
-  return fs.existsSync(filePath) && fs.statSync(filePath).isFile() && !isBinaryFile(filePath)
+  return fs.existsSync(filePath) && fs.statSync(filePath).isFile()
 }
 
 function fileWithStem(dir, stem) {
@@ -223,11 +222,25 @@ export function scanTarget({
 
   const files = absoluteFiles.map((absolutePath) => {
     const relative = toPosix(path.relative(root, absolutePath))
-    const source = fs.readFileSync(absolutePath, 'utf8')
     const folder = relative.includes('/') ? relative.split('/').slice(0, -1).join('/') : '.'
 
     ensureFolder(folders, folder, name)
 
+    if (isBinaryFile(absolutePath)) {
+      return {
+        id: relative,
+        name: path.posix.basename(relative),
+        path: relative,
+        folder,
+        lines: 1,
+        language: languageOf(relative),
+        symbols: [],
+        imports: [],
+        binary: true,
+      }
+    }
+
+    const source = fs.readFileSync(absolutePath, 'utf8')
     return {
       id: relative,
       name: path.posix.basename(relative),

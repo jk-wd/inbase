@@ -100,7 +100,7 @@ test('extracts CommonJS require bindings', () => {
   )
 })
 
-test('scans every text file and language-specific extras', () => {
+test('scans text files, binaries, and hidden files', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'visual-coder-scan-'))
   const dest = path.join(root, 'codebase.json')
   try {
@@ -130,12 +130,18 @@ test('scans every text file and language-specific extras', () => {
       path.join(root, 'page.astro'),
       "---\nimport Header from './Header'\n---\n<Header />\n",
     )
-    fs.writeFileSync(path.join(root, 'boot.js'), 'export const boot = 1\n')
+    fs.writeFileSync(path.join(root, 'boot.js'), "import logo from './logo.png'\nexport const boot = 1\n")
     fs.writeFileSync(
       path.join(root, 'index.html'),
       '<script type="module" src="./boot.js"></script>\n<script src="https://cdn.example.com/x.js"></script>\n',
     )
+    fs.writeFileSync(path.join(root, 'logo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x0d]))
     fs.writeFileSync(path.join(root, 'photo.bin'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x0d]))
+    fs.writeFileSync(path.join(root, '.env'), 'SECRET=1\n')
+    fs.mkdirSync(path.join(root, '.github/workflows'), { recursive: true })
+    fs.writeFileSync(path.join(root, '.github/workflows/ci.yml'), 'name: ci\n')
+    fs.mkdirSync(path.join(root, '.inbase'), { recursive: true })
+    fs.writeFileSync(path.join(root, '.inbase/cache.json'), '{}\n')
 
     const graph = scanQuiet({ root, dest })
 
@@ -152,7 +158,15 @@ test('scans every text file and language-specific extras', () => {
     assert.ok(byId['Header.astro'])
     assert.ok(byId['index.astro'])
     assert.ok(byId['page.astro'])
-    assert.equal(byId['photo.bin'], undefined)
+    assert.ok(byId['logo.png'])
+    assert.equal(byId['logo.png'].binary, true)
+    assert.deepEqual(byId['logo.png'].symbols, [])
+    assert.deepEqual(byId['logo.png'].imports, [])
+    assert.equal(byId['photo.bin'].binary, true)
+    assert.ok(byId['.env'])
+    assert.equal(byId['.env'].binary, undefined)
+    assert.ok(byId['.github/workflows/ci.yml'])
+    assert.equal(byId['.inbase/cache.json'], undefined)
     assert.deepEqual(byId['app.ts'].symbols, [
       { name: 'boot', kind: 'function' },
       { name: 'AppComponent', kind: 'class' },
@@ -161,6 +175,7 @@ test('scans every text file and language-specific extras', () => {
     assert.deepEqual(byId['index.astro'].imports, ['Header.astro'])
     assert.deepEqual(byId['page.astro'].imports, ['Header.astro'])
     assert.deepEqual(byId['index.html'].imports, ['boot.js'])
+    assert.deepEqual(byId['boot.js'].imports, ['logo.png'])
     assert.deepEqual(byId['styles.scss'].symbols, [])
     assert.deepEqual(byId['script.py'].symbols, [])
     assert.equal(byId['styles.scss'].language, 'scss')
@@ -181,6 +196,10 @@ test('ignores node_modules, dist, and lockfiles at any depth', () => {
   assert.equal(shouldIgnoreRelativePath('apps/web/.next/server.js'), true)
   assert.equal(shouldIgnoreRelativePath('apps/web/package-lock.json'), true)
   assert.equal(shouldIgnoreRelativePath('apps/web/src/app.ts'), false)
+  assert.equal(shouldIgnoreRelativePath('.env'), false)
+  assert.equal(shouldIgnoreRelativePath('.github/workflows/ci.yml'), false)
+  assert.equal(shouldIgnoreRelativePath('src/.gitignore'), false)
+  assert.equal(shouldIgnoreRelativePath('.git/config'), true)
   assert.equal(
     shouldIgnoreRelativePath('apps/explorer/src/data/vite/deps/three.js'),
     true,
@@ -232,7 +251,7 @@ test('honours nested gitignore files in a monorepo', () => {
 
     const graph = scanQuiet({ root, dest })
     const ids = graph.files.map((file) => file.id).sort()
-    assert.deepEqual(ids, ['apps/web/src/ok.ts'])
+    assert.deepEqual(ids, ['apps/web/.gitignore', 'apps/web/src/ok.ts'])
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }

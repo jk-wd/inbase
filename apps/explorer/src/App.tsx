@@ -1035,7 +1035,7 @@ function Explorer({
   const [flyTo, setFlyTo] = useState<FlyTo | null>(null)
   const [locked, setLocked] = useState(false)
   const [importedBy, setImportedBy] = useState(false)
-  const [relationMode, setRelationMode] = useState<RelationMode>('changed')
+  const [relationMode, setRelationMode] = useState<RelationMode>('targeted')
   const [changePathsOnly, setChangePathsOnly] = useState(false)
   const lastIntentSig = useRef<string | null>(null)
   const viewedDiffId = useRef<Record<string, string | null>>({})
@@ -2116,11 +2116,15 @@ function Explorer({
 
   const cycleRelationMode = useCallback(() => {
     setRelationMode((current) => {
-      const order: RelationMode[] = ['all', 'off', 'changed', 'targeted']
-      return order[(order.indexOf(current) + 1) % order.length]
+      const order: RelationMode[] =
+        mode === 'map'
+          ? ['targeted', 'all', 'off', 'changed']
+          : ['targeted', 'all', 'off']
+      const index = order.indexOf(current)
+      return order[index < 0 ? 0 : (index + 1) % order.length]
     })
     setAimedRelation(null)
-  }, [])
+  }, [mode])
 
   const toggleChangePathsOnly = useCallback(() => {
     if (!hasChangeSet) return
@@ -2172,7 +2176,6 @@ function Explorer({
   }, [llmBusy, updatingModel, wantBranchChanges])
 
   useEffect(() => {
-    if (mode !== 'map') return
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat || event.code !== 'KeyR') return
       if (shouldIgnoreShortcut(event)) return
@@ -2181,7 +2184,7 @@ function Explorer({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [mode, cycleRelationMode])
+  }, [cycleRelationMode])
 
   useEffect(() => {
     if (mode !== 'map' || !hasChangeSet) return
