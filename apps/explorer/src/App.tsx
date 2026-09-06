@@ -20,7 +20,7 @@ import {
   mapPointOntoFolder,
   regionBounds,
 } from './layout'
-import { filterGraphHiddenFiles } from './hidden-files'
+import { filterGraphHiddenFiles } from '../scripts/hidden-files.mjs'
 import { World } from './scene/World'
 import { HUD } from './ui/HUD'
 import { ExplainAskCard } from './ui/ExplainAskCard'

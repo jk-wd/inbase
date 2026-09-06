@@ -1,6 +1,6 @@
 {
   "name": "@jkwd/inbase",
-  "version": "0.1.46",
+  "version": "0.1.47",
   "description": "A first-person 3D map of a codebase, with a visual coding workflow for Cursor, Claude Code, Codex, Copilot, and Cline.",
   "license": "MIT",
   "author": "Joris Kuijper",
@@ -53,6 +53,8 @@
     "apps/explorer/scripts/branch-changes.mjs",
     "apps/explorer/scripts/explain-store.d.ts",
     "apps/explorer/scripts/explain-store.mjs",
+    "apps/explorer/scripts/hidden-files.d.ts",
+    "apps/explorer/scripts/hidden-files.mjs",
     "apps/explorer/scripts/js-source.mjs",
     "apps/explorer/scripts/parse-idents.mjs",
     "apps/explorer/scripts/relations",

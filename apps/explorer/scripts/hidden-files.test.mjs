@@ -3,7 +3,7 @@ import test from 'node:test'
 import {
   filterGraphHiddenFiles,
   isHiddenPath,
-} from '../src/hidden-files.ts'
+} from './hidden-files.mjs'
 
 test('treats dotfiles and hidden directories as hidden', () => {
   assert.equal(isHiddenPath('.env'), true)
