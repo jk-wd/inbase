@@ -17,7 +17,7 @@ Inbase is a structured way to collaborate with an LLM. It visualizes the codebas
 
 You draw the intended change on a map of the real codebase before the model writes a file. That drawing is a **blueprint**: planned files, folders, functions, variables, imports, notes, and pointers, laid on the existing code. The LLM must follow that layout.
 
-The model reads the blueprint, says what it sees (`I see on the blueprint ...`) so you can confirm the reading, reports a plan that matches it, and **stops**. You run the work from Cursor, Claude Code, Codex, or Copilot with `/accept`, one map change per command. Inbase records each one as a patch on the map. If a proposal is wrong, type the change in the attached chat (that replaces the waiting proposal), change the blueprint, or Stop.
+The model reads the blueprint, says what it sees (`I see on the blueprint ...`) so you can confirm the reading, reports a plan that matches it, and **stops**. You run the work from Cursor, Claude Code, Codex, Copilot, or Cline with `/accept`, one map change per command. Inbase records each one as a patch on the map. If a proposal is wrong, type the change in the attached chat (that replaces the waiting proposal), change the blueprint, or Stop.
 
 Blueprints have two layers:
 
@@ -26,7 +26,7 @@ Blueprints have two layers:
 
 Planned files stay on the map after they exist on disk. Hide a color with its chip, or clear or clean them up when you are done. When a session finishes, Inbase discards its slot and opens a new empty one. The global blueprint stays.
 
-Inbase does not call a model. The coding loop works in **Cursor**, **Claude Code**, **Codex**, and **GitHub Copilot**. `inbase init` installs a skill so the agent uses the map instead of editing files on its own.
+Inbase does not call a model. The coding loop works in **Cursor**, **Claude Code**, **Codex**, **GitHub Copilot**, and **Cline**. `inbase init` installs a skill so the agent uses the map instead of editing files on its own.
 
 ---
 
@@ -39,7 +39,7 @@ The map draws every text file. Colors, relations, structure, and editor install 
 | Colors | JS, TS, CSS, SCSS, JSON, HTML | Dark grey | `apps/explorer/src/file-colors.ts` |
 | Relations | ESM `import`, `require()`, HTML `<script src>` | Packages and remote URLs | `apps/explorer/scripts/relations/` |
 | Structure | Functions, classes, vars in JS/TS | Block with no cubes | `apps/explorer/scripts/structure/` |
-| Editors | Cursor, Claude Code, Codex, Copilot (`inbase init`) | Map still runs in the browser | `bin/editors/` |
+| Editors | Cursor, Claude Code, Codex, Copilot, Cline (`inbase init`) | Map still runs in the browser | `bin/editors/` |
 
 Relative import specifiers become edges when they resolve on disk. `inbase init` copies editor skills and slash commands.
 
@@ -94,7 +94,7 @@ Open the printed URL (http://127.0.0.1:5173 by default). In a Cursor or VS Code 
 inbase run --target /path/to/your/project
 ```
 
-`inbase init` copies a Cursor skill into `.cursor/skills/inbase/`, a Claude Code skill into `.claude/skills/inbase/`, shared Agent Skills into `.agents/skills/`, Copilot skills into `.github/skills/`, writes `inbase.json` if it is missing, and gitignores `.inbase/`. Keep `inbase run` open, then ask the agent to change source files. The LLM follows the visual plan and patch loop below.
+`inbase init` copies a Cursor skill into `.cursor/skills/inbase/`, a Claude Code skill into `.claude/skills/inbase/`, shared Agent Skills into `.agents/skills/`, Copilot skills into `.github/skills/`, Cline skills into `.cline/skills/`, writes `inbase.json` if it is missing, and gitignores `.inbase/`. Keep `inbase run` open, then ask the agent to change source files. The LLM follows the visual plan and patch loop below.
 
 ### Config
 
@@ -204,7 +204,7 @@ Each color has two controls besides the chip:
   <img src="docs/manual-cursor-chat.png" alt="Chat with the /coral command" width="40%" />
 </p>
 
-1. Draw a blueprint, then open a Cursor, Claude Code, Codex, or Copilot chat. Skip the drawing if the chat request is enough.
+1. Draw a blueprint, then open a Cursor, Claude Code, Codex, Copilot, or Cline chat. Skip the drawing if the chat request is enough.
 2. Type `/coral` (or another color) to connect. That is enough when a blueprint is already on the map. Add a request after the command, like `/coral add a settings page`, when you want extra instruction.
 3. The chat attaches to a slot. The HUD shows **LLM connected** on that color.
 4. The agent reads the global blueprint, that session's local blueprint, and any request. It says what it sees (`I see on the blueprint ...`) so you can confirm the reading. With no request, it plans only from the blueprint: create those files and structure. It can ask if it needs more information.
@@ -330,7 +330,7 @@ The in-app **Instructions** overlay (bottom of the HUD) lists the same controls 
 
 | Command | What it does |
 | --- | --- |
-| `inbase init` | Install Cursor, Claude Code, Codex, and Copilot skills in this repo and write `inbase.json` if missing |
+| `inbase init` | Install Cursor, Claude Code, Codex, Copilot, and Cline skills in this repo and write `inbase.json` if missing |
 | `inbase run` | Scan this repo and start the local map |
 | `inbase run --port 5174` | Start on another port |
 | `inbase run --target <dir>` | Map another folder |
@@ -343,7 +343,7 @@ The installed skill runs session commands (`attach`, `read-blueprint`, `report-p
 
 ## Editor support
 
-The map runs in the browser. The LLM plan and patch loop works in **Cursor**, **Claude Code**, **Codex**, and **GitHub Copilot**. `inbase init` uses the editor adapters in `bin/editors/` to install the skill and slash commands. Cursor and Claude Code get command files (`/accept`). Codex, Copilot, Gemini CLI, and other SKILL.md agents get skill folders in `.agents/skills/` (and `.github/skills/` for Copilot). In Copilot chat type `/accept`; in Codex use `$accept` or `/skills`. Other editors can be added as adapters there.
+The map runs in the browser. The LLM plan and patch loop works in **Cursor**, **Claude Code**, **Codex**, **GitHub Copilot**, and **Cline**. `inbase init` uses the editor adapters in `bin/editors/` to install the skill and slash commands. Cursor and Claude Code get command files (`/accept`). Codex, Copilot, Cline, Gemini CLI, and other SKILL.md agents get skill folders in `.agents/skills/` (`.github/skills/` for Copilot, `.cline/skills/` for Cline). In Copilot or Cline chat type `/accept`; in Codex use `$accept` or `/skills`. Other editors can be added as adapters there.
 
 ## Language support
 

@@ -28,7 +28,7 @@ import {
 const HELP = `inbase — a first-person 3D map of a codebase
 
 Usage:
-  inbase init              Install Cursor, Claude Code, Codex, and Copilot skills
+  inbase init              Install Cursor, Claude Code, Codex, Copilot, and Cline skills
   inbase run               Scan this repo and start the local map
   inbase help              Show this help
 
@@ -123,7 +123,7 @@ async function runServer(args) {
   console.log(`Inbase is mapping ${targetRoot}`)
   console.log(`Open ${local}`)
   console.log(
-    'Leave this running. Open a Cursor, Claude Code, Codex, or Copilot chat to connect — 5 chats can be connected at once.',
+    'Leave this running. Open a Cursor, Claude Code, Codex, Copilot, or Cline chat to connect — 5 chats can be connected at once.',
   )
 }
 
@@ -156,7 +156,7 @@ export async function main(argv = process.argv.slice(2)) {
     if (result.gitignoreAdded) console.log('Added .inbase/ to .gitignore')
     if (result.configAdded) console.log('Wrote inbase.json')
     console.log(
-      'Next: run `inbase run`, then ask Cursor, Claude Code, Codex, or Copilot to change source files.',
+      'Next: run `inbase run`, then ask Cursor, Claude Code, Codex, Copilot, or Cline to change source files.',
     )
     return
   }

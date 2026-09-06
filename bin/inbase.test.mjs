@@ -38,10 +38,10 @@ function restoreEnv(snapshot) {
   }
 }
 
-test('registers Cursor, Claude Code, Agent Skills, and Copilot adapters', () => {
+test('registers Cursor, Claude Code, Agent Skills, Copilot, and Cline adapters', () => {
   assert.deepEqual(
     editors.map((editor) => editor.id),
-    ['cursor', 'claude', 'agents', 'copilot'],
+    ['cursor', 'claude', 'agents', 'copilot', 'cline'],
   )
 })
 
@@ -88,6 +88,7 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /do \*\*not\*\* restart from step 1/)
     assert.match(skillText, /`\.claude`/)
     assert.match(skillText, /`\.agents`/)
+    assert.match(skillText, /`\.cline`/)
     assert.match(skillText, /`\.github\/skills`/)
     assert.doesNotMatch(skillText, /\/go/)
     assert.doesNotMatch(skillText, /user-invocable:/)
@@ -109,7 +110,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.equal(result.skillDir, path.join(root, '.cursor/skills/inbase'))
     assert.deepEqual(
       result.editors.map((editor) => editor.id),
-      ['cursor', 'claude', 'agents', 'copilot'],
+      ['cursor', 'claude', 'agents', 'copilot', 'cline'],
     )
     assert.equal(fs.existsSync(skill), true)
     const skillText = fs.readFileSync(skill, 'utf8')
@@ -135,6 +136,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(skillText, /do \*\*not\*\* restart from step 1/)
     assert.match(skillText, /`\.claude`/)
     assert.match(skillText, /`\.agents`/)
+    assert.match(skillText, /`\.cline`/)
     assert.match(skillText, /`\.github\/skills`/)
     assert.doesNotMatch(skillText, /npx inbase wait-for-approval/)
     assert.doesNotMatch(skillText, /npx inbase explain wait/)
@@ -272,6 +274,23 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.equal(copilot?.label, 'GitHub Copilot')
     assert.equal(copilot?.skillDir, path.join(root, '.github/skills/inbase'))
     assert.equal(fs.existsSync(path.join(root, '.github/skills/coral/SKILL.md')), true)
+    const cline = result.editors.find((editor) => editor.id === 'cline')
+    assert.equal(cline?.label, 'Cline')
+    assert.equal(cline?.skillDir, path.join(root, '.cline/skills/inbase'))
+    assert.equal(fs.existsSync(path.join(root, '.cline/skills/accept/SKILL.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.cline/skills/coral/SKILL.md')), true)
+    const clineSkill = fs.readFileSync(
+      path.join(root, '.cline/skills/inbase/SKILL.md'),
+      'utf8',
+    )
+    assert.match(clineSkill, /npx inbase attach/)
+    assert.match(clineSkill, /allowed-tools: Bash\(npx inbase \*\)/)
+    const clineAccept = fs.readFileSync(
+      path.join(root, '.cline/skills/accept/SKILL.md'),
+      'utf8',
+    )
+    assert.match(clineAccept, /^---\nname: accept\n/)
+    assert.match(clineAccept, /npx inbase accept/)
     assert.equal(fs.existsSync(path.join(root, '.inbase/user-context.json')), true)
     assert.match(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), /\.inbase\//)
     assert.equal(result.configAdded, true)
@@ -345,7 +364,7 @@ test('help prints usage', async () => {
     assert.match(output, /inbase attach \[--session <id>\] \[--color <name>\]/)
     assert.match(output, /inbase accept \[--session <id>\]/)
     assert.doesNotMatch(output, /inbase go \[--session/)
-    assert.match(output, /Install Cursor, Claude Code, Codex, and Copilot skills/)
+    assert.match(output, /Install Cursor, Claude Code, Codex, Copilot, and Cline skills/)
   } finally {
     console.log = log
   }

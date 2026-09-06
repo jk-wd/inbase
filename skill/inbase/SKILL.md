@@ -16,7 +16,7 @@ description: >-
 
 Apply this skill **whenever the work is file changes in this repository**.
 Skip it for git, lockfiles, `.inbase`, `.cursor`, `.claude`, `.agents`,
-`.github/skills`, or questions with no code changes.
+`.cline`, `.github/skills`, or questions with no code changes.
 
 `npx inbase run` creates 5 empty chat slots. A regular chat connects to
 the next unconnected slot. You do not need `/inbase`.
