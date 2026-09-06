@@ -3,10 +3,14 @@ import type {
   AgentIntentBundle,
   BlueprintNote,
   BlueprintPointer,
+  LoadBlueprintInput,
   LocalBlueprint,
   PatchImport,
   PatchImportAddition,
   PatchSymbolAddition,
+  SaveBlueprintInput,
+  SavedBlueprintInfo,
+  SavedBlueprintList,
   UserCreatedBlock,
   UserCreatedIsland,
   WorkflowAction,
@@ -213,13 +217,21 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
   }
 }
 
-function normalizeBlueprint(data: Partial<AgentIntentBundle['blueprint']> | null | undefined) {
+function normalizeBlueprint(
+  data:
+    | (Partial<AgentIntentBundle['blueprint']> & {
+        userCreatedBlocks?: unknown
+        userCreatedIslands?: unknown
+      })
+    | null
+    | undefined,
+) {
   return {
     hidden: Boolean(data?.hidden),
     revision: typeof data?.revision === 'number' ? data.revision : 0,
     enabled: Boolean(data?.enabled),
-    userCreatedBlocks: parseUserCreatedBlocks(data?.userCreatedBlocks),
-    userCreatedIslands: parseUserCreatedIslands(data?.userCreatedIslands),
+    files: parseUserCreatedBlocks(data?.files ?? data?.userCreatedBlocks),
+    folders: parseUserCreatedIslands(data?.folders ?? data?.userCreatedIslands),
     addedFunctions: normalizeSymbolAdditions(data?.addedFunctions),
     addedVariables: normalizeSymbolAdditions(data?.addedVariables),
     addedImports: normalizeImportAdditions(data?.addedImports),
@@ -303,8 +315,8 @@ export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
         intent.blueprintImports.length > 0 ||
         intent.blueprintNotes.length > 0 ||
         intent.blueprintPointers.length > 0,
-      userCreatedBlocks: intent.userCreatedBlocks,
-      userCreatedIslands: intent.userCreatedIslands,
+      files: intent.userCreatedBlocks,
+      folders: intent.userCreatedIslands,
       addedFunctions: intent.blueprintFunctions,
       addedVariables: intent.blueprintVariables,
       addedImports: intent.blueprintImports,
@@ -360,8 +372,8 @@ export function persistSessionBlueprint(
   sessionId: string | null | undefined,
   payload: {
     color?: string | null
-    userCreatedBlocks: UserCreatedBlock[]
-    userCreatedIslands: UserCreatedIsland[]
+    files: UserCreatedBlock[]
+    folders: UserCreatedIsland[]
     addedFunctions?: PatchSymbolAddition[]
     addedVariables?: PatchSymbolAddition[]
     addedImports?: PatchImportAddition[]
@@ -536,5 +548,96 @@ export async function inspectTargetFile(payload: {
     path: string | null
     uri: string | null
     opened: boolean
+  }
+}
+
+async function readApiError(response: Response, fallback: string) {
+  const detail = await response.text()
+  try {
+    const parsed = JSON.parse(detail) as { error?: string }
+    if (parsed?.error) return parsed.error
+  } catch {
+    // Use the raw body when it is not JSON.
+  }
+  return detail || fallback
+}
+
+export async function fetchSavedBlueprints(): Promise<SavedBlueprintList> {
+  const query = new URLSearchParams({ t: String(Date.now()) })
+  const response = await fetch(`/api/blueprints?${query}`)
+  if (!response.ok) {
+    throw new Error(await readApiError(response, 'Could not list blueprints'))
+  }
+  const data = (await response.json()) as Partial<SavedBlueprintList>
+  return {
+    directory: typeof data.directory === 'string' ? data.directory : 'blueprints',
+    items: Array.isArray(data.items)
+      ? data.items.filter(
+          (item): item is SavedBlueprintList['items'][number] =>
+            Boolean(
+              item &&
+                typeof item === 'object' &&
+                typeof item.name === 'string' &&
+                typeof item.fileName === 'string' &&
+                typeof item.path === 'string' &&
+                typeof item.relativePath === 'string',
+            ),
+        )
+      : [],
+  }
+}
+
+export async function saveBlueprintFile(
+  input: SaveBlueprintInput & {
+    global: AgentIntentBundle['blueprint']
+    locals: LocalBlueprint[]
+  },
+): Promise<SavedBlueprintInfo> {
+  const response = await fetch('/api/blueprints', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'save', ...input }),
+  })
+  if (!response.ok) {
+    throw new Error(await readApiError(response, 'Could not save blueprint'))
+  }
+  return (await response.json()) as SavedBlueprintInfo
+}
+
+export async function loadBlueprintFile(input: LoadBlueprintInput): Promise<{
+  name: string
+  fileName: string | null
+  savedAt: string | null
+  path: string | null
+  relativePath: string | null
+  global: AgentIntentBundle['blueprint']
+  localBlueprints: LocalBlueprint[]
+}> {
+  const response = await fetch('/api/blueprints', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'load', ...input }),
+  })
+  if (!response.ok) {
+    throw new Error(await readApiError(response, 'Could not load blueprint'))
+  }
+  const data = (await response.json()) as {
+    name?: string
+    fileName?: string | null
+    savedAt?: string | null
+    path?: string | null
+    relativePath?: string | null
+    global?: Partial<AgentIntentBundle['blueprint']>
+    localBlueprints?: unknown
+  }
+  return {
+    name: typeof data.name === 'string' ? data.name : 'Blueprint',
+    fileName: typeof data.fileName === 'string' ? data.fileName : null,
+    savedAt: typeof data.savedAt === 'string' ? data.savedAt : null,
+    path: typeof data.path === 'string' ? data.path : null,
+    relativePath:
+      typeof data.relativePath === 'string' ? data.relativePath : null,
+    global: normalizeBlueprint(data.global),
+    localBlueprints: normalizeLocalBlueprints(data.localBlueprints),
   }
 }

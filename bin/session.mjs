@@ -233,7 +233,7 @@ function emitApprovalHandshake(store, dataDir, sessionId, manifest) {
     console.log(
       continuing
         ? `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Continue immediately: edit live files for this step only, then inbase propose-patch --session ${sessionId} with no patch file. Then stop and wait for /accept, /explain, or a change request in chat.`
-        : `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Re-read the global blueprint.json and this session's local blueprint before implementing; the user can place files and islands at any time. Edit the live project files for this step only (Write, StrReplace, Delete). Then record the step with inbase propose-patch --session ${sessionId} — no patch file. Then stop and wait for /accept, /explain, or a change request in chat.`,
+        : `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Re-read the global blueprint.json and this session's local blueprint before implementing; the user can place files and folders at any time. Edit the live project files for this step only (Write, StrReplace, Delete). Then record the step with inbase propose-patch --session ${sessionId} — no patch file. Then stop and wait for /accept, /explain, or a change request in chat.`,
     )
     process.exit(0)
   }
@@ -286,8 +286,8 @@ export async function attachSession(args) {
 }
 
 function printBlueprintDump(blueprint, options = {}) {
-  const blocks = blueprint.userCreatedBlocks ?? []
-  const islands = blueprint.userCreatedIslands ?? []
+  const files = blueprint.files ?? []
+  const folders = blueprint.folders ?? []
   const local = options.local === true
   const colorName = options.colorName || 'session'
   const readyTag = local
@@ -302,14 +302,14 @@ function printBlueprintDump(blueprint, options = {}) {
   if (local) {
     console.log(
       blueprint.enabled
-        ? `${readyTag} The ${colorName} session blueprint has ${blocks.length} file(s) and ${islands.length} island(s). This local blueprint is only for this ${colorName} chat. It is leading together with the global blueprint: create those paths and honor addedFunctions, addedVariables, addedImports, and notes even if they are not on disk. Do not omit, rename, relocate, or replace them. Extra new files not in either blueprint are a deviation. If you would differ from this local blueprint, ask the user first.`
+        ? `${readyTag} The ${colorName} session blueprint has ${files.length} file(s) and ${folders.length} folder(s). This local blueprint is only for this ${colorName} chat. It is leading together with the global blueprint: create those paths and honor addedFunctions, addedVariables, addedImports, and notes even if they are not on disk. Do not omit, rename, relocate, or replace them. Extra new files not in either blueprint are a deviation. If you would differ from this local blueprint, ask the user first.`
         : `${readyTag} The ${colorName} session blueprint is empty. Only this ${colorName} chat can see a local blueprint if the user places one later.`,
     )
   } else {
     console.log(
       blueprint.enabled
-        ? `${readyTag} The global blueprint has ${blocks.length} file(s) and ${islands.length} island(s). The global blueprint is shared with every session and is leading: create those paths and honor addedFunctions, addedVariables, addedImports, and notes even if they are not on disk. Notes are extra instructions or pseudo code for a file, function, or variable — follow them when implementing those items. Do not omit, rename, relocate, or replace them. Extra new files that are not in the global or this session's local blueprint are a deviation. If you would differ from the blueprint, ask the user first; do not silently deviate. The user can keep placing files and islands; re-read the global blueprint.json when it is printed again.`
-        : `${readyTag} The global blueprint is empty. The user can still place files and islands on the global or this session's color; re-read the global blueprint.json when it is printed again. Continue without user-placed files until that file has content.`,
+        ? `${readyTag} The global blueprint has ${files.length} file(s) and ${folders.length} folder(s). The global blueprint is shared with every session and is leading: create those paths and honor addedFunctions, addedVariables, addedImports, and notes even if they are not on disk. Notes are extra instructions or pseudo code for a file, function, or variable — follow them when implementing those items. Do not omit, rename, relocate, or replace them. Extra new files that are not in the global or this session's local blueprint are a deviation. If you would differ from the blueprint, ask the user first; do not silently deviate. The user can keep placing files and folders; re-read the global blueprint.json when it is printed again.`
+        : `${readyTag} The global blueprint is empty. The user can still place files and folders on the global or this session's color; re-read the global blueprint.json when it is printed again. Continue without user-placed files until that file has content.`,
     )
   }
   console.log(startTag)
@@ -323,14 +323,14 @@ function printSessionBlueprints(store, dataDir, sessionId) {
   const colorName =
     store.resolveSessionColor(store.readManifest(dataDir, sessionId)?.color)?.name ||
     'session'
-  const blocks = (global.userCreatedBlocks ?? []).length
-  const islands = (global.userCreatedIslands ?? []).length
-  const localBlocks = (local.userCreatedBlocks ?? []).length
-  const localIslands = (local.userCreatedIslands ?? []).length
+  const files = (global.files ?? []).length
+  const folders = (global.folders ?? []).length
+  const localFiles = (local.files ?? []).length
+  const localFolders = (local.folders ?? []).length
   const detail = [
-    global.enabled ? `global ${blocks} file(s), ${islands} island(s)` : null,
+    global.enabled ? `global ${files} file(s), ${folders} folder(s)` : null,
     local.enabled
-      ? `${colorName} ${localBlocks} file(s), ${localIslands} island(s)`
+      ? `${colorName} ${localFiles} file(s), ${localFolders} folder(s)`
       : null,
   ]
     .filter(Boolean)

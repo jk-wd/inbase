@@ -200,6 +200,8 @@ test('ignores node_modules, dist, and lockfiles at any depth', () => {
   assert.equal(shouldIgnoreRelativePath('.github/workflows/ci.yml'), false)
   assert.equal(shouldIgnoreRelativePath('src/.gitignore'), false)
   assert.equal(shouldIgnoreRelativePath('.git/config'), true)
+  assert.equal(shouldIgnoreRelativePath('blueprints/login.json'), true)
+  assert.equal(shouldIgnoreRelativePath('apps/web/blueprints/auth.json'), true)
   assert.equal(
     shouldIgnoreRelativePath('apps/explorer/src/data/vite/deps/three.js'),
     true,

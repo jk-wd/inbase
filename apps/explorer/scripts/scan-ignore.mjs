@@ -10,6 +10,7 @@ export const IGNORE_DIR_NAMES = new Set([
   '.git',
   '.inbase',
   '.next',
+  'blueprints',
 ])
 
 export const IGNORE_FILE_NAMES = new Set(['package-lock.json'])

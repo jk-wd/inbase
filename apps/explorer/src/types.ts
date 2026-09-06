@@ -93,8 +93,8 @@ export type UserCreatedBlock = {
   name: string
   path: string
   folder: string
-  x: number
-  z: number
+  x?: number
+  z?: number
   naming?: boolean
   colorHex?: string
 }
@@ -280,8 +280,8 @@ export type SharedBlueprint = {
   hidden: boolean
   revision: number
   enabled: boolean
-  userCreatedBlocks: UserCreatedBlock[]
-  userCreatedIslands: UserCreatedIsland[]
+  files: UserCreatedBlock[]
+  folders: UserCreatedIsland[]
   addedFunctions: PatchSymbolAddition[]
   addedVariables: PatchSymbolAddition[]
   addedImports: PatchImportAddition[]
@@ -325,6 +325,38 @@ export type LocalBlueprint = SharedBlueprint & {
   colorName: string
   colorHex: string
   sessionId: string
+}
+
+export type SavedBlueprintInfo = {
+  name: string
+  fileName: string | null
+  savedAt: string | null
+  path: string | null
+  relativePath: string | null
+}
+
+export type SavedBlueprintListItem = SavedBlueprintInfo & {
+  fileName: string
+  savedAt: string
+  path: string
+  relativePath: string
+}
+
+export type SavedBlueprintList = {
+  directory: string
+  items: SavedBlueprintListItem[]
+}
+
+export type SaveBlueprintInput = {
+  name: string
+  directory?: string
+  filePath?: string
+}
+
+export type LoadBlueprintInput = {
+  name?: string
+  filePath?: string
+  document?: unknown
 }
 
 export type BlueprintOption = {

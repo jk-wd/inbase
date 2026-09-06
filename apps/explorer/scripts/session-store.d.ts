@@ -223,8 +223,8 @@ export type SessionBlueprint = {
   revision: number
   enabled: boolean
   sent: boolean
-  userCreatedBlocks: unknown[]
-  userCreatedIslands: unknown[]
+  files: unknown[]
+  folders: unknown[]
   addedFunctions: unknown[]
   addedVariables: unknown[]
   addedImports: unknown[]
@@ -295,6 +295,8 @@ export function updateBlueprint(
   sessionId?: string | null,
   input?: {
     color?: string | null
+    files?: unknown[]
+    folders?: unknown[]
     userCreatedBlocks?: unknown[]
     userCreatedIslands?: unknown[]
     addedFunctions?: unknown[]

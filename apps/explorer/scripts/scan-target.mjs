@@ -203,20 +203,23 @@ export function listSourceFiles(root, extraPatterns) {
   )
 }
 
-export function scanTarget({
+export function buildScanGraph({
   root = defaultTargetRoot,
   name = path.basename(root),
-  dest = defaultOutPath,
   ignore,
+  skipRoot = null,
 } = {}) {
   if (!fs.existsSync(root)) {
     throw new Error(
       `Target not found at ${root}. Set VISUAL_CODER_TARGET to the project you want to map.`,
     )
   }
+  if (!fs.statSync(root).isDirectory()) {
+    throw new Error(`Target is not a folder: ${root}`)
+  }
 
   const extraPatterns = resolveScanIgnore(root, ignore)
-  const absoluteFiles = listSourceAbsolutes(root, dataDirToSkip(root, dest), extraPatterns)
+  const absoluteFiles = listSourceAbsolutes(root, skipRoot, extraPatterns)
   const folders = new Map()
   ensureFolder(folders, '.', name)
 
@@ -277,16 +280,30 @@ export function scanTarget({
     folder.children.sort((a, b) => a.localeCompare(b))
   }
 
-  const graph = {
+  return {
     root: '.',
     targetName: name,
     files,
     folders: [...folders.values()],
   }
+}
+
+export function scanTarget({
+  root = defaultTargetRoot,
+  name = path.basename(root),
+  dest = defaultOutPath,
+  ignore,
+} = {}) {
+  const graph = buildScanGraph({
+    root,
+    name,
+    ignore,
+    skipRoot: dataDirToSkip(root, dest),
+  })
 
   fs.mkdirSync(path.dirname(dest), { recursive: true })
   fs.writeFileSync(dest, `${JSON.stringify(graph, null, 2)}\n`)
-  console.log(`Scanned ${files.length} files -> ${path.relative(process.cwd(), dest)}`)
+  console.log(`Scanned ${graph.files.length} files -> ${path.relative(process.cwd(), dest)}`)
   return graph
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { BlueprintLoadDialog, BlueprintSaveDialog } from './BlueprintFileDialogs'
 import { InfoNameField, NameInput } from './NameInput'
 import {
   isReviewingIntent,
@@ -18,16 +19,21 @@ import {
   type ExplainTargetKind,
   type PatchImportAddition,
   type PatchSymbolAddition,
+  type LoadBlueprintInput,
   type RelationMode,
+  type SaveBlueprintInput,
+  type SavedBlueprintInfo,
+  type SavedBlueprintListItem,
   type ViewMode,
   type WorkflowAction,
 } from '../types'
 import { findBlueprintNote, findBlueprintPointer } from '../userCreated'
 import type { BlueprintOverlayLayer } from '../userCreated'
 import { fileInfoMeta, folderOfFile, folderParent } from '../layout'
-import { EyeIcon, FileIcon, FolderIcon } from './EyeIcon'
+import { EyeIcon, FileIcon, FolderIcon, PanelToggleIcon } from './EyeIcon'
 import { beginKeyboardIsolation, shouldIgnoreShortcut } from '../keyboard'
 import type { DevTargetsState } from '../devTargets'
+import { fetchSavedBlueprints } from '../agentIntent'
 
 const RELATION_MODE_OPTIONS: { id: RelationMode; label: string }[] = [
   { id: 'targeted', label: 'Targeted' },
@@ -870,6 +876,39 @@ function InfoKindTitle({
 
 function infoBlueprintStyle(hex: string | null | undefined): CSSProperties | undefined {
   return hex ? ({ '--blueprint-color': hex } as CSSProperties) : undefined
+}
+
+function HidePanelsButton({
+  side,
+  hidden,
+  onToggle,
+}: {
+  side: 'left' | 'right'
+  hidden: boolean
+  onToggle: () => void
+}) {
+  const label = hidden
+    ? side === 'left'
+      ? 'Show left panels'
+      : 'Show right panels'
+    : side === 'left'
+      ? 'Hide left panels'
+      : 'Hide right panels'
+  return (
+    <button
+      className="hud-button hud-icon-button hud-hide-panels"
+      type="button"
+      data-side={side}
+      data-active={hidden}
+      aria-label={label}
+      aria-pressed={hidden}
+      title={label}
+      onClick={onToggle}
+    >
+      <PanelToggleIcon side={side} hidden={hidden} />
+      <span className="hud-tooltip">{label}</span>
+    </button>
+  )
 }
 
 function PanelChrome({
@@ -1778,6 +1817,8 @@ function explorerInstructions({
   showBranchChanges,
   canShowBranchChanges,
   showHiddenFiles,
+  leftPanelsHidden,
+  rightPanelsHidden,
 }: {
   canPlace: boolean
   hasChangeSet: boolean
@@ -1790,6 +1831,8 @@ function explorerInstructions({
   showBranchChanges: boolean
   canShowBranchChanges: boolean
   showHiddenFiles: boolean
+  leftPanelsHidden: boolean
+  rightPanelsHidden: boolean
 }): ExplorerInstructionSection[] {
   const backspace: ExplorerInstruction[] =
     selectedUserCreated && canPlace
@@ -1832,6 +1875,18 @@ function explorerInstructions({
       label: showHiddenFiles ? 'Hide hidden files' : 'Show hidden files',
     },
   ]
+  const panels: ExplorerInstruction[] = [
+    {
+      id: 'hide-left-panels',
+      keys: ['['],
+      label: leftPanelsHidden ? 'Show left panels' : 'Hide left panels',
+    },
+    {
+      id: 'hide-right-panels',
+      keys: [']'],
+      label: rightPanelsHidden ? 'Show right panels' : 'Hide right panels',
+    },
+  ]
   return [
     {
       id: 'walk',
@@ -1868,6 +1923,7 @@ function explorerInstructions({
         },
         ...branch,
         ...hidden,
+        ...panels,
         {
           id: 'update-model',
           keys: ['Update model'],
@@ -1904,6 +1960,21 @@ function explorerInstructions({
           id: 'blueprint-cleanup',
           keys: ['Cleanup'],
           label: 'Drop existing files and folders on the selected colors',
+        },
+        {
+          id: 'blueprint-save',
+          keys: ['More', 'Save blueprint'],
+          label: 'Save the current blueprint into the project blueprints folder',
+        },
+        {
+          id: 'blueprint-save-as',
+          keys: ['More', 'Save blueprint as'],
+          label: 'Save the current blueprint to another folder',
+        },
+        {
+          id: 'blueprint-load',
+          keys: ['More', 'Load blueprint'],
+          label: 'Load a saved blueprint onto the map',
         },
         { id: 'toggle-map', keys: ['M'], label: 'Toggle map' },
         {
@@ -1969,6 +2040,7 @@ function explorerInstructions({
         ...imported,
         ...branch,
         ...hidden,
+        ...panels,
         {
           id: 'update-model',
           keys: ['Update model'],
@@ -2005,6 +2077,21 @@ function explorerInstructions({
           id: 'blueprint-cleanup',
           keys: ['Cleanup'],
           label: 'Drop existing files and folders on the selected colors',
+        },
+        {
+          id: 'blueprint-save',
+          keys: ['More', 'Save blueprint'],
+          label: 'Save the current blueprint into the project blueprints folder',
+        },
+        {
+          id: 'blueprint-save-as',
+          keys: ['More', 'Save blueprint as'],
+          label: 'Save the current blueprint to another folder',
+        },
+        {
+          id: 'blueprint-load',
+          keys: ['More', 'Load blueprint'],
+          label: 'Load a saved blueprint onto the map',
         },
         { id: 'map-walk', keys: ['M'], label: 'Back to walk' },
       ],
@@ -2113,6 +2200,9 @@ type HUDProps = {
   onToggleBlueprintColor?: (color: string) => void
   onClearBlueprint?: () => void
   onCleanupBlueprint?: () => void
+  savedBlueprint?: SavedBlueprintInfo | null
+  onSaveBlueprint?: (input: SaveBlueprintInput) => Promise<void>
+  onLoadBlueprint?: (input: LoadBlueprintInput) => Promise<void>
   devTargets?: DevTargetsState
   onSelectDevTarget?: (id: string) => void
 }
@@ -2195,6 +2285,9 @@ export function HUD({
   onToggleBlueprintColor,
   onClearBlueprint,
   onCleanupBlueprint,
+  savedBlueprint = null,
+  onSaveBlueprint,
+  onLoadBlueprint,
   devTargets,
   onSelectDevTarget,
 }: HUDProps) {
@@ -2296,10 +2389,73 @@ export function HUD({
     subtitle: string
     placeholder: string
   } | null>(null)
+  const [blueprintFileDialog, setBlueprintFileDialog] = useState<
+    null | 'save' | 'save-as' | 'load'
+  >(null)
+  const [blueprintFileBusy, setBlueprintFileBusy] = useState(false)
+  const [blueprintFileError, setBlueprintFileError] = useState<string | null>(
+    null,
+  )
+  const [savedBlueprintList, setSavedBlueprintList] = useState<{
+    directory: string
+    items: SavedBlueprintListItem[]
+  }>({ directory: 'blueprints', items: [] })
   const [infoVisible, setInfoVisible] = useState(false)
   const [infoMinimized, setInfoMinimized] = useState(false)
+  const [leftPanelsHidden, setLeftPanelsHidden] = useState(false)
+  const [rightPanelsHidden, setRightPanelsHidden] = useState(false)
   const infoPanelRef = useRef<HTMLDivElement>(null)
   const canPlace = true
+  const closeBlueprintFileDialog = () => {
+    if (blueprintFileBusy) return
+    setBlueprintFileDialog(null)
+    setBlueprintFileError(null)
+  }
+  const runSaveBlueprint = async (
+    input: SaveBlueprintInput,
+    openOnError = false,
+  ) => {
+    if (!onSaveBlueprint) return
+    setBlueprintFileBusy(true)
+    setBlueprintFileError(null)
+    try {
+      await onSaveBlueprint(input)
+      setBlueprintFileDialog(null)
+    } catch (error) {
+      setBlueprintFileError(
+        error instanceof Error ? error.message : 'Could not save blueprint',
+      )
+      if (openOnError) setBlueprintFileDialog('save')
+    } finally {
+      setBlueprintFileBusy(false)
+    }
+  }
+  const runLoadBlueprint = async (input: LoadBlueprintInput) => {
+    if (!onLoadBlueprint) return
+    setBlueprintFileBusy(true)
+    setBlueprintFileError(null)
+    try {
+      await onLoadBlueprint(input)
+      setBlueprintFileDialog(null)
+    } catch (error) {
+      setBlueprintFileError(
+        error instanceof Error ? error.message : 'Could not load blueprint',
+      )
+    } finally {
+      setBlueprintFileBusy(false)
+    }
+  }
+  const openLoadBlueprint = () => {
+    setBlueprintFileError(null)
+    setBlueprintFileDialog('load')
+    void fetchSavedBlueprints()
+      .then(setSavedBlueprintList)
+      .catch((error) => {
+        setBlueprintFileError(
+          error instanceof Error ? error.message : 'Could not list blueprints',
+        )
+      })
+  }
   const overlay = showBranchChanges && branchChanges ? branchChanges : intent
   const previewing = intent.preview || showBranchChanges
   const addedFunctions = overlay.addedFunctions ?? []
@@ -2469,6 +2625,7 @@ export function HUD({
 
   const infoOpen =
     infoVisible &&
+    !rightPanelsHidden &&
     Boolean(selected || selectedFolderNode || selectedBlueprintFolder)
 
   useEffect(() => {
@@ -2480,6 +2637,19 @@ export function HUD({
       if (event.repeat || event.code !== 'KeyI') return
       if (shouldIgnoreShortcut(event)) return
       event.preventDefault()
+      if (rightPanelsHidden) {
+        setRightPanelsHidden(false)
+        if (!infoVisible) {
+          const blockId = aimedFileId ?? selectedId
+          if (mode === 'walk') {
+            if (!blockId) return
+            onInspectBlock?.(blockId)
+          }
+          setInfoMinimized(false)
+          setInfoVisible(true)
+        }
+        return
+      }
       if (infoVisible) {
         setInfoVisible(false)
         setInfoMinimized(false)
@@ -2495,7 +2665,26 @@ export function HUD({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [aimedFileId, infoVisible, mode, onInspectBlock, selectedId])
+  }, [aimedFileId, infoVisible, mode, onInspectBlock, rightPanelsHidden, selectedId])
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.repeat) return
+      if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return
+      if (shouldIgnoreShortcut(event)) return
+      if (event.code === 'BracketLeft') {
+        event.preventDefault()
+        setLeftPanelsHidden((current) => !current)
+        return
+      }
+      if (event.code === 'BracketRight') {
+        event.preventDefault()
+        setRightPanelsHidden((current) => !current)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   useEffect(() => {
     if (!infoVisible || (!selectedId && !selectedFolder)) return
@@ -2632,6 +2821,8 @@ export function HUD({
     showBranchChanges,
     canShowBranchChanges,
     showHiddenFiles,
+    leftPanelsHidden,
+    rightPanelsHidden,
   })
   const currentInstructionView: InstructionView = mapping ? 'map' : 'walk'
   return (
@@ -2696,6 +2887,11 @@ export function HUD({
             Walk
           </button>
         </div>
+        <HidePanelsButton
+          side="left"
+          hidden={leftPanelsHidden}
+          onToggle={() => setLeftPanelsHidden((current) => !current)}
+        />
         {(selected ||
           (devTargets?.enabled &&
             onSelectDevTarget &&
@@ -2729,10 +2925,15 @@ export function HUD({
               )}
           </div>
         )}
+        <HidePanelsButton
+          side="right"
+          hidden={rightPanelsHidden}
+          onToggle={() => setRightPanelsHidden((current) => !current)}
+        />
       </div>
 
       {(sessions.length > 0 || showBranchChanges) && (
-        <div className="hud-left-stack">
+        <div className="hud-left-stack" hidden={leftPanelsHidden}>
           {sessions.length > 1 && (
             <div className="hud-session-tabs" role="tablist" aria-label="LLM sessions">
               {sessionTabs.map((session) => {
@@ -2790,7 +2991,7 @@ export function HUD({
         </div>
       )}
 
-      <div className="hud-right-stack">
+      <div className="hud-right-stack" hidden={rightPanelsHidden}>
       {selected && infoVisible && (
         <aside
           className="hud-panel hud-panel-info"
@@ -3506,6 +3707,35 @@ export function HUD({
         />
       )}
 
+      {(blueprintFileDialog === 'save' || blueprintFileDialog === 'save-as') &&
+        onSaveBlueprint && (
+          <BlueprintSaveDialog
+            mode={blueprintFileDialog}
+            defaultName={savedBlueprint?.name ?? ''}
+            defaultDirectory="blueprints"
+            busy={blueprintFileBusy}
+            error={blueprintFileError}
+            onSubmit={(input) => void runSaveBlueprint(input)}
+            onClose={closeBlueprintFileDialog}
+          />
+        )}
+      {blueprintFileDialog === 'load' && onLoadBlueprint && (
+        <BlueprintLoadDialog
+          directory={savedBlueprintList.directory}
+          items={savedBlueprintList.items}
+          busy={blueprintFileBusy}
+          error={blueprintFileError}
+          onLoad={(item) =>
+            void runLoadBlueprint({
+              name: item.name,
+              filePath: item.path,
+            })
+          }
+          onLoadDocument={(document) => void runLoadBlueprint({ document })}
+          onClose={closeBlueprintFileDialog}
+        />
+      )}
+
       {instructionsOpen && (
         <div
           className="hud-instructions-overlay"
@@ -3948,6 +4178,61 @@ export function HUD({
                   >
                     Instructions
                   </button>
+                  {onSaveBlueprint && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      aria-label={
+                        savedBlueprint?.name
+                          ? `Save blueprint ${savedBlueprint.name}`
+                          : 'Save blueprint'
+                      }
+                      onClick={() => {
+                        setActionsMenuOpen(false)
+                        setBlueprintFileError(null)
+                        if (savedBlueprint?.name && savedBlueprint.path) {
+                          void runSaveBlueprint(
+                            {
+                              name: savedBlueprint.name,
+                              filePath: savedBlueprint.path,
+                            },
+                            true,
+                          )
+                          return
+                        }
+                        setBlueprintFileDialog('save')
+                      }}
+                    >
+                      Save blueprint
+                    </button>
+                  )}
+                  {onSaveBlueprint && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      aria-label="Save blueprint as"
+                      onClick={() => {
+                        setActionsMenuOpen(false)
+                        setBlueprintFileError(null)
+                        setBlueprintFileDialog('save-as')
+                      }}
+                    >
+                      Save blueprint as
+                    </button>
+                  )}
+                  {onLoadBlueprint && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      aria-label="Load blueprint"
+                      onClick={() => {
+                        setActionsMenuOpen(false)
+                        openLoadBlueprint()
+                      }}
+                    >
+                      Load blueprint
+                    </button>
+                  )}
                   <button
                     type="button"
                     role="menuitem"

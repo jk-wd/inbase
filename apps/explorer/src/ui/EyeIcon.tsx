@@ -79,6 +79,42 @@ export function FolderIcon({
   )
 }
 
+export function PanelToggleIcon({
+  side,
+  hidden,
+  size = 18,
+}: {
+  side: 'left' | 'right'
+  hidden: boolean
+  size?: number
+}) {
+  const open = hidden
+  return (
+    <StrokeIcon size={size}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      {side === 'left' ? (
+        <>
+          <path d="M9 3v18" />
+          {open ? (
+            <path d="m14 9 3 3-3 3" />
+          ) : (
+            <path d="m16 15-3-3 3-3" />
+          )}
+        </>
+      ) : (
+        <>
+          <path d="M15 3v18" />
+          {open ? (
+            <path d="m10 15-3-3 3-3" />
+          ) : (
+            <path d="m8 9 3 3-3 3" />
+          )}
+        </>
+      )}
+    </StrokeIcon>
+  )
+}
+
 export function BlueprintEyes({
   colors,
   mapMode,

@@ -94,7 +94,7 @@ Open the printed URL (http://127.0.0.1:5173 by default). In a Cursor or VS Code 
 inbase run --target /path/to/your/project
 ```
 
-`inbase init` copies a Cursor skill into `.cursor/skills/inbase/`, a Claude Code skill into `.claude/skills/inbase/`, shared Agent Skills into `.agents/skills/`, Copilot skills into `.github/skills/`, Cline skills into `.cline/skills/`, writes `inbase.json` if it is missing, and gitignores `.inbase/`. Keep `inbase run` open, then ask the agent to change source files. The LLM follows the visual plan and patch loop below.
+`inbase init` copies a Cursor skill into `.cursor/skills/inbase/`, a Claude Code skill into `.claude/skills/inbase/`, shared Agent Skills into `.agents/skills/`, Copilot skills into `.github/skills/`, Cline skills into `.cline/skills/`, Cline workflows into `.cline/workflows/` and `.clinerules/workflows/`, Cline rules into `.cline/rules/` and `.clinerules/`, writes `inbase.json` if it is missing, and gitignores `.inbase/`. Keep `inbase run` open, then ask the agent to change source files. The LLM follows the visual plan and patch loop below.
 
 ### Config
 
@@ -191,12 +191,16 @@ Open a file's **info panel** (double-click in walk, click in map) to add **funct
 
 **Point to** a file, folder, or function to keep it in mind for that color. Pointers travel with the blueprint the chat receives.
 
+To capture an existing area as a blueprint, type **`/extract-blueprint [folder] [output file]`** in chat, or run `inbase extract-blueprint <folder> <output-file>`. The agent scans the folder, then keeps only the architecture that belongs on a blueprint: important folders, files, functions, vars, and notes. It does not dump the whole tree.
+
 The LLM treats an enabled blueprint as leading. It creates those paths and symbols, including ones that are not on disk yet. The agent may edit existing files when the feature needs them. Extra new files that are not in the blueprint are a deviation. The agent must ask before it reports a plan that differs.
 
 Each color has two controls besides the chip:
 
 - **Clear:** remove every planned file, folder, and symbol on this color.
 - **Cleanup:** drop blueprint files and folders that exist on disk. Planned items that are missing stay.
+
+The hamburger **More** menu has **Save blueprint**, **Save blueprint as**, and **Load blueprint**. Save writes the current global and session-colored layers into a `blueprints/` folder at the project root (created on first save). Name the blueprint, then save. Save as writes the same file to another folder. Load lists saved blueprints from that folder; **Choose file…** loads one from somewhere else. Saved blueprints are skipped on the map scan so they do not appear as files.
 
 ### Connecting a chat
 
@@ -315,6 +319,7 @@ Inbase disables this control while an LLM session is writing or reviewing a patc
 | Walk into a folder | | Option-click |
 | Place file or folder | | Right-click |
 | Point to a target | Point to | Right-click, Point to folder |
+| Save / load blueprint | More menu | same |
 | Show only changed paths | | C |
 | Hidden files | H | H |
 | Branch changes | G | G |
@@ -323,6 +328,7 @@ Inbase disables this control while an LLM session is writing or reviewing a patc
 | Start or continue a step | `/accept` in that chat | |
 | Explain | `/explain` in chat, or `?` then `/explain` | same |
 | Skip the map | `/skipinbase` | |
+| Extract a blueprint | `/extract-blueprint` | |
 
 The in-app **Instructions** overlay (bottom of the HUD) lists the same controls for the view you are in.
 
@@ -340,12 +346,13 @@ The in-app **Instructions** overlay (bottom of the HUD) lists the same controls 
 | `inbase explain start [--question "..."]` | Open map-only explain mode. Omit `--question` to explain the current proposal or git diff |
 | `inbase explain report --step "..."` | Publish explanation steps and map focus |
 | `inbase explain stop` | Exit explain mode |
+| `inbase extract-blueprint <folder> <file>` | Scan a folder and print an inventory for `/extract-blueprint`. `--write` saves the curated blueprint |
 
-The installed skill runs session commands (`attach`, `read-blueprint`, `report-plan`, `accept`, `propose-patch`, `explain`). You do not need to run them.
+The installed skill runs session commands (`attach`, `read-blueprint`, `report-plan`, `accept`, `propose-patch`, `explain`, `extract-blueprint`). You do not need to run them.
 
 ## Editor support
 
-The map runs in the browser. The LLM plan and patch loop works in **Cursor**, **Claude Code**, **Codex**, **GitHub Copilot**, and **Cline**. `inbase init` uses the editor adapters in `bin/editors/` to install the skill and slash commands. Cursor and Claude Code get command files (`/accept`). Codex, Copilot, Cline, Gemini CLI, and other SKILL.md agents get skill folders in `.agents/skills/` (`.github/skills/` for Copilot, `.cline/skills/` for Cline). In Copilot or Cline chat type `/accept`; in Codex use `$accept` or `/skills`. Other editors can be added as adapters there.
+The map runs in the browser. The LLM plan and patch loop works in **Cursor**, **Claude Code**, **Codex**, **GitHub Copilot**, and **Cline**. `inbase init` uses the editor adapters in `bin/editors/` to install the skill and slash commands. Cursor and Claude Code get command files (`/accept`). Codex, Copilot, Gemini CLI, and other SKILL.md agents get skill folders in `.agents/skills/` (`.github/skills/` for Copilot). Cline gets a skill in `.cline/skills/`, slash-command workflows in `.cline/workflows/` (and `.clinerules/workflows/`), and an always-on rule so a regular chat follows the map. In Copilot or Cline chat type `/accept`; in Codex use `$accept` or `/skills`. Other editors can be added as adapters there.
 
 ## Language support
 

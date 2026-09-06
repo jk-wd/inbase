@@ -165,11 +165,13 @@ button {
   top: 20px;
   left: 20px;
   right: 20px;
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: center;
-  flex-wrap: wrap;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  column-gap: 16px;
+  row-gap: 8px;
+  align-items: start;
 }
 
 .hud-top-end {
@@ -178,8 +180,41 @@ button {
   gap: 12px;
   flex-wrap: wrap;
   justify-content: flex-end;
-  margin-left: auto;
+  grid-column: 3;
+  grid-row: 1;
   pointer-events: auto;
+}
+
+.hud-hide-panels {
+  pointer-events: auto;
+}
+
+.hud-hide-panels[data-side='left'] {
+  grid-column: 1;
+  grid-row: 2;
+  justify-self: start;
+}
+
+.hud-hide-panels[data-side='right'] {
+  grid-column: 3;
+  grid-row: 2;
+  justify-self: end;
+}
+
+.hud-hide-panels .hud-tooltip {
+  bottom: auto;
+  top: calc(100% + 8px);
+  transform: translateY(-4px);
+}
+
+.hud-hide-panels[data-side='left'] .hud-tooltip {
+  right: auto;
+  left: 0;
+}
+
+.hud-hide-panels[data-side='right'] .hud-tooltip {
+  right: 0;
+  left: auto;
 }
 
 .hud-target-select {
@@ -214,7 +249,8 @@ button {
   gap: 8px;
   pointer-events: auto;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  grid-column: 1;
+  grid-row: 1;
 }
 
 .hud-button {
@@ -824,7 +860,7 @@ button {
 
 .hud-panel {
   position: absolute;
-  top: 68px;
+  top: 112px;
   right: 20px;
   z-index: 4;
   width: min(320px, calc(100% - 40px));
@@ -873,7 +909,7 @@ button {
 
 .hud-right-stack {
   position: absolute;
-  top: 68px;
+  top: 112px;
   right: 20px;
   bottom: 72px;
   z-index: 5;
@@ -904,7 +940,7 @@ button {
 
 .hud-left-stack {
   position: absolute;
-  top: 68px;
+  top: 112px;
   left: 20px;
   bottom: 72px;
   z-index: 5;
@@ -915,6 +951,11 @@ button {
   pointer-events: none;
   overflow-x: hidden;
   overflow-y: auto;
+}
+
+.hud-left-stack[hidden],
+.hud-right-stack[hidden] {
+  display: none;
 }
 
 .hud-session-tabs {
@@ -2001,6 +2042,96 @@ button {
 
 .hud-note-field:focus {
   border-color: #9ad8ff;
+}
+
+.hud-blueprint-file-card {
+  width: min(480px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px 24px 20px;
+  background: var(--vc-editor);
+  border: 1px solid var(--vc-border);
+}
+
+.hud-blueprint-file-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #8b95a5;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.hud-blueprint-file-field input {
+  padding: 8px 10px;
+  color: #e7ebf2;
+  background: rgba(25, 28, 34, 0.96);
+  border: 1px solid #3a4250;
+  font: 14px/1.4 ui-sans-serif, system-ui, sans-serif;
+  text-transform: none;
+  letter-spacing: normal;
+  outline: none;
+}
+
+.hud-blueprint-file-field input:focus {
+  border-color: #9ad8ff;
+}
+
+.hud-blueprint-file-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: min(40dvh, 320px);
+  overflow: auto;
+}
+
+.hud-blueprint-file-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+}
+
+.hud-blueprint-file-item-name {
+  color: #e7ebf2;
+}
+
+.hud-blueprint-file-item-path {
+  color: #8b95a5;
+  font-size: 12px;
+}
+
+.hud-blueprint-file-empty,
+.hud-blueprint-file-error {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.hud-blueprint-file-error {
+  color: #fca5a5;
+}
+
+.hud-blueprint-file-empty {
+  color: #b7c0ce;
+}
+
+.hud-blueprint-file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.hud-blueprint-file-hidden {
+  display: none;
 }
 
 .hud-add-row {

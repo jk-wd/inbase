@@ -24,12 +24,14 @@ import {
   goProposal,
   acceptProposal,
 } from './session.mjs'
+import { extractBlueprint } from './extract-blueprint.mjs'
 
 const HELP = `inbase — a first-person 3D map of a codebase
 
 Usage:
   inbase init              Install Cursor, Claude Code, Codex, Copilot, and Cline skills
   inbase run               Scan this repo and start the local map
+  inbase extract-blueprint <folder> <output-file>
   inbase help              Show this help
 
 Agent commands (used by the installed skill):
@@ -43,6 +45,7 @@ Agent commands (used by the installed skill):
   inbase explain start [--question "How does this work?"]
   inbase explain report --step "..." --body "..."
   inbase explain stop
+  inbase extract-blueprint <folder> <output-file> [--write [layer.json|-]]
 
 Options for run:
   --target <dir>           Project to map (default: inbase.json target, else cwd)
@@ -163,6 +166,12 @@ export async function main(argv = process.argv.slice(2)) {
 
   if (command === 'run') {
     await runServer(args)
+    return
+  }
+
+  if (command === 'extract-blueprint') {
+    const host = applyHostEnv()
+    await extractBlueprint(args, host)
     return
   }
 

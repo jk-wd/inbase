@@ -3,6 +3,279 @@
   "targetName": "inbase",
   "files": [
     {
+      "id": ".cursor/commands/accept.md",
+      "name": "accept.md",
+      "path": ".cursor/commands/accept.md",
+      "folder": ".cursor/commands",
+      "lines": 26,
+      "language": "md",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": ".cursor/commands/amber.md",
+      "name": "amber.md",
+      "path": ".cursor/commands/amber.md",
+      "folder": ".cursor/commands",
+      "lines": 28,
+      "language": "md",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": ".cursor/commands/blue.md",
+      "name": "blue.md",
+      "path": ".cursor/commands/blue.md",
+      "folder": ".cursor/commands",
+      "lines": 14,
+      "language": "md",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": ".cursor/commands/coral.md",
+      "name": "coral.md",
+      "path": ".cursor/commands/coral.md",
+      "folder": ".cursor/commands",
+      "lines": 28,
+      "language": "md",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": ".cursor/commands/explain.md",
+      "name": "explain.md",
+      "path": ".cursor/commands/explain.md",
+      "folder": ".cursor/commands",
+      "lines": 77,
+      "language": "md",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": ".cursor/commands/extract-blueprint.md",
+      "name": "extract-blueprint.md",
+      "path": ".cursor/commands/extract-blueprint.md",
+      "folder": ".cursor/commands",
+      "lines": 57,
+      "language": "md",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": ".cursor/commands/green.md",
+      "name": "green.md",
+      "path": ".cursor/commands/green.md",
+      "folder": ".cursor/commands",
+      "lines": 28,
+      "language": "md",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": ".cursor/commands/inbase.md",
+      "name": "inbase.md",
+      "path": ".cursor/commands/inbase.md",
+      "folder": ".cursor/commands",
+      "lines": 24,
+      "language": "md",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": ".cursor/commands/lime.md",
+      "name": "lime.md",
+      "path": ".cursor/commands/lime.md",
+      "folder": ".cursor/commands",
+      "lines": 28,
+      "language": "md",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": ".cursor/commands/orange.md",
+      "name": "orange.md",
+      "path": ".cursor/commands/orange.md",
+      "folder": ".cursor/commands",
+      "lines": 28,
+      "language": "md",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": ".cursor/commands/purple.md",
+      "name": "purple.md",
+      "path": ".cursor/commands/purple.md",
+      "folder": ".cursor/commands",
+      "lines": 28,
+      "language": "md",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": ".cursor/commands/red.md",
+      "name": "red.md",
+      "path": ".cursor/commands/red.md",
+      "folder": ".cursor/commands",
+      "lines": 28,
+      "language": "md",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": ".cursor/commands/skipinbase.md",
+      "name": "skipinbase.md",
+      "path": ".cursor/commands/skipinbase.md",
+      "folder": ".cursor/commands",
+      "lines": 10,
+      "language": "md",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": ".cursor/commands/violet.md",
+      "name": "violet.md",
+      "path": ".cursor/commands/violet.md",
+      "folder": ".cursor/commands",
+      "lines": 28,
+      "language": "md",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": ".cursor/commands/yellow.md",
+      "name": "yellow.md",
+      "path": ".cursor/commands/yellow.md",
+      "folder": ".cursor/commands",
+      "lines": 28,
+      "language": "md",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": ".cursor/rules/example-target-visual-edits.mdc",
+      "name": "example-target-visual-edits.mdc",
+      "path": ".cursor/rules/example-target-visual-edits.mdc",
+      "folder": ".cursor/rules",
+      "lines": 25,
+      "language": "mdc",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": ".cursor/skills/example-target-visual-edits/SKILL.md",
+      "name": "SKILL.md",
+      "path": ".cursor/skills/example-target-visual-edits/SKILL.md",
+      "folder": ".cursor/skills/example-target-visual-edits",
+      "lines": 32,
+      "language": "md",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": ".cursor/skills/example-target-visual-edits/scripts/attach.mjs",
+      "name": "attach.mjs",
+      "path": ".cursor/skills/example-target-visual-edits/scripts/attach.mjs",
+      "folder": ".cursor/skills/example-target-visual-edits/scripts",
+      "lines": 3,
+      "language": "mjs",
+      "symbols": [],
+      "imports": [
+        ".cursor/skills/example-target-visual-edits/scripts/run-inbase.mjs"
+      ]
+    },
+    {
+      "id": ".cursor/skills/example-target-visual-edits/scripts/propose-patch.mjs",
+      "name": "propose-patch.mjs",
+      "path": ".cursor/skills/example-target-visual-edits/scripts/propose-patch.mjs",
+      "folder": ".cursor/skills/example-target-visual-edits/scripts",
+      "lines": 3,
+      "language": "mjs",
+      "symbols": [],
+      "imports": [
+        ".cursor/skills/example-target-visual-edits/scripts/run-inbase.mjs"
+      ]
+    },
+    {
+      "id": ".cursor/skills/example-target-visual-edits/scripts/read-blueprint.mjs",
+      "name": "read-blueprint.mjs",
+      "path": ".cursor/skills/example-target-visual-edits/scripts/read-blueprint.mjs",
+      "folder": ".cursor/skills/example-target-visual-edits/scripts",
+      "lines": 3,
+      "language": "mjs",
+      "symbols": [],
+      "imports": [
+        ".cursor/skills/example-target-visual-edits/scripts/run-inbase.mjs"
+      ]
+    },
+    {
+      "id": ".cursor/skills/example-target-visual-edits/scripts/report-plan.mjs",
+      "name": "report-plan.mjs",
+      "path": ".cursor/skills/example-target-visual-edits/scripts/report-plan.mjs",
+      "folder": ".cursor/skills/example-target-visual-edits/scripts",
+      "lines": 3,
+      "language": "mjs",
+      "symbols": [],
+      "imports": [
+        ".cursor/skills/example-target-visual-edits/scripts/run-inbase.mjs"
+      ]
+    },
+    {
+      "id": ".cursor/skills/example-target-visual-edits/scripts/run-inbase.mjs",
+      "name": "run-inbase.mjs",
+      "path": ".cursor/skills/example-target-visual-edits/scripts/run-inbase.mjs",
+      "folder": ".cursor/skills/example-target-visual-edits/scripts",
+      "lines": 13,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "command",
+          "kind": "variable"
+        },
+        {
+          "name": "repoRoot",
+          "kind": "variable"
+        },
+        {
+          "name": "result",
+          "kind": "variable"
+        }
+      ],
+      "imports": []
+    },
+    {
+      "id": ".cursor/skills/example-target-visual-edits/scripts/start-session.mjs",
+      "name": "start-session.mjs",
+      "path": ".cursor/skills/example-target-visual-edits/scripts/start-session.mjs",
+      "folder": ".cursor/skills/example-target-visual-edits/scripts",
+      "lines": 3,
+      "language": "mjs",
+      "symbols": [],
+      "imports": [
+        ".cursor/skills/example-target-visual-edits/scripts/run-inbase.mjs"
+      ]
+    },
+    {
+      "id": ".github/workflows/publish.yml",
+      "name": "publish.yml",
+      "path": ".github/workflows/publish.yml",
+      "folder": ".github/workflows",
+      "lines": 34,
+      "language": "yml",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": ".gitignore",
+      "name": ".gitignore",
+      "path": ".gitignore",
+      "folder": ".",
+      "lines": 16,
+      "language": "txt",
+      "symbols": [],
+      "imports": []
+    },
+    {
       "id": "CONTRIBUTING.md",
       "name": "CONTRIBUTING.md",
       "path": "CONTRIBUTING.md",
@@ -27,7 +300,7 @@
       "name": "README.md",
       "path": "README.md",
       "folder": ".",
-      "lines": 361,
+      "lines": 391,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -154,6 +427,351 @@
       "language": "json",
       "symbols": [],
       "imports": []
+    },
+    {
+      "id": "apps/explorer/scripts/blueprint-files.d.ts",
+      "name": "blueprint-files.d.ts",
+      "path": "apps/explorer/scripts/blueprint-files.d.ts",
+      "folder": "apps/explorer/scripts",
+      "lines": 114,
+      "language": "ts",
+      "symbols": [
+        {
+          "name": "defaultBlueprintsDir",
+          "kind": "function"
+        },
+        {
+          "name": "blueprintFileName",
+          "kind": "function"
+        },
+        {
+          "name": "resolveBlueprintSavePath",
+          "kind": "function"
+        },
+        {
+          "name": "serializeBlueprintDocument",
+          "kind": "function"
+        },
+        {
+          "name": "parseBlueprintDocument",
+          "kind": "function"
+        },
+        {
+          "name": "listSavedBlueprints",
+          "kind": "function"
+        },
+        {
+          "name": "saveBlueprintDocument",
+          "kind": "function"
+        },
+        {
+          "name": "readBlueprintDocument",
+          "kind": "function"
+        },
+        {
+          "name": "applyBlueprintDocument",
+          "kind": "function"
+        },
+        {
+          "name": "loadBlueprintDocument",
+          "kind": "function"
+        },
+        {
+          "name": "BLUEPRINTS_DIR_NAME",
+          "kind": "variable"
+        },
+        {
+          "name": "BLUEPRINT_DOCUMENT_KIND",
+          "kind": "variable"
+        },
+        {
+          "name": "BLUEPRINT_DOCUMENT_VERSION",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "apps/explorer/scripts/session-store.d.ts"
+      ]
+    },
+    {
+      "id": "apps/explorer/scripts/blueprint-files.mjs",
+      "name": "blueprint-files.mjs",
+      "path": "apps/explorer/scripts/blueprint-files.mjs",
+      "folder": "apps/explorer/scripts",
+      "lines": 318,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "defaultBlueprintsDir",
+          "kind": "function"
+        },
+        {
+          "name": "blueprintFileName",
+          "kind": "function"
+        },
+        {
+          "name": "withJsonExtension",
+          "kind": "function"
+        },
+        {
+          "name": "resolveBlueprintSavePath",
+          "kind": "function"
+        },
+        {
+          "name": "resolveAgainst",
+          "kind": "function"
+        },
+        {
+          "name": "describePath",
+          "kind": "function"
+        },
+        {
+          "name": "blueprintFileEntry",
+          "kind": "function"
+        },
+        {
+          "name": "blueprintFolderEntry",
+          "kind": "function"
+        },
+        {
+          "name": "layerList",
+          "kind": "function"
+        },
+        {
+          "name": "layerFields",
+          "kind": "function"
+        },
+        {
+          "name": "localLayer",
+          "kind": "function"
+        },
+        {
+          "name": "serializeBlueprintDocument",
+          "kind": "function"
+        },
+        {
+          "name": "parseBlueprintDocument",
+          "kind": "function"
+        },
+        {
+          "name": "readJsonFile",
+          "kind": "function"
+        },
+        {
+          "name": "listSavedBlueprints",
+          "kind": "function"
+        },
+        {
+          "name": "saveBlueprintDocument",
+          "kind": "function"
+        },
+        {
+          "name": "readBlueprintDocument",
+          "kind": "function"
+        },
+        {
+          "name": "applyBlueprintDocument",
+          "kind": "function"
+        },
+        {
+          "name": "loadBlueprintDocument",
+          "kind": "function"
+        },
+        {
+          "name": "BLUEPRINTS_DIR_NAME",
+          "kind": "variable"
+        },
+        {
+          "name": "BLUEPRINT_DOCUMENT_KIND",
+          "kind": "variable"
+        },
+        {
+          "name": "BLUEPRINT_DOCUMENT_VERSION",
+          "kind": "variable"
+        },
+        {
+          "name": "trimmed",
+          "kind": "variable"
+        },
+        {
+          "name": "base",
+          "kind": "variable"
+        },
+        {
+          "name": "safe",
+          "kind": "variable"
+        },
+        {
+          "name": "target",
+          "kind": "variable"
+        },
+        {
+          "name": "filePath",
+          "kind": "variable"
+        },
+        {
+          "name": "fileName",
+          "kind": "variable"
+        },
+        {
+          "name": "directory",
+          "kind": "variable"
+        },
+        {
+          "name": "dir",
+          "kind": "variable"
+        },
+        {
+          "name": "resolved",
+          "kind": "variable"
+        },
+        {
+          "name": "relative",
+          "kind": "variable"
+        },
+        {
+          "name": "inside",
+          "kind": "variable"
+        },
+        {
+          "name": "raw",
+          "kind": "variable"
+        },
+        {
+          "name": "color",
+          "kind": "variable"
+        },
+        {
+          "name": "name",
+          "kind": "variable"
+        },
+        {
+          "name": "locals",
+          "kind": "variable"
+        },
+        {
+          "name": "document",
+          "kind": "variable"
+        },
+        {
+          "name": "items",
+          "kind": "variable"
+        },
+        {
+          "name": "stat",
+          "kind": "variable"
+        },
+        {
+          "name": "parsed",
+          "kind": "variable"
+        },
+        {
+          "name": "described",
+          "kind": "variable"
+        },
+        {
+          "name": "temporary",
+          "kind": "variable"
+        },
+        {
+          "name": "byColor",
+          "kind": "variable"
+        },
+        {
+          "name": "local",
+          "kind": "variable"
+        },
+        {
+          "name": "loaded",
+          "kind": "variable"
+        },
+        {
+          "name": "applied",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "apps/explorer/scripts/scan-ignore.mjs",
+        "apps/explorer/scripts/session-store.mjs"
+      ]
+    },
+    {
+      "id": "apps/explorer/scripts/blueprint-files.test.mjs",
+      "name": "blueprint-files.test.mjs",
+      "path": "apps/explorer/scripts/blueprint-files.test.mjs",
+      "folder": "apps/explorer/scripts",
+      "lines": 215,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "fixture",
+          "kind": "function"
+        },
+        {
+          "name": "root",
+          "kind": "variable"
+        },
+        {
+          "name": "dataDir",
+          "kind": "variable"
+        },
+        {
+          "name": "targetRoot",
+          "kind": "variable"
+        },
+        {
+          "name": "globalFile",
+          "kind": "variable"
+        },
+        {
+          "name": "coralFile",
+          "kind": "variable"
+        },
+        {
+          "name": "globalFolder",
+          "kind": "variable"
+        },
+        {
+          "name": "env",
+          "kind": "variable"
+        },
+        {
+          "name": "saved",
+          "kind": "variable"
+        },
+        {
+          "name": "expected",
+          "kind": "variable"
+        },
+        {
+          "name": "listed",
+          "kind": "variable"
+        },
+        {
+          "name": "document",
+          "kind": "variable"
+        },
+        {
+          "name": "elsewhere",
+          "kind": "variable"
+        },
+        {
+          "name": "loaded",
+          "kind": "variable"
+        },
+        {
+          "name": "parsed",
+          "kind": "variable"
+        },
+        {
+          "name": "filePath",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "apps/explorer/scripts/blueprint-files.mjs",
+        "apps/explorer/scripts/session-store.mjs"
+      ]
     },
     {
       "id": "apps/explorer/scripts/branch-changes.d.ts",
@@ -1193,6 +1811,115 @@
         }
       ],
       "imports": []
+    },
+    {
+      "id": "apps/explorer/scripts/hidden-files.d.ts",
+      "name": "hidden-files.d.ts",
+      "path": "apps/explorer/scripts/hidden-files.d.ts",
+      "folder": "apps/explorer/scripts",
+      "lines": 5,
+      "language": "ts",
+      "symbols": [
+        {
+          "name": "isHiddenPath",
+          "kind": "function"
+        },
+        {
+          "name": "filterGraphHiddenFiles",
+          "kind": "function"
+        }
+      ],
+      "imports": [
+        "apps/explorer/src/types.ts"
+      ]
+    },
+    {
+      "id": "apps/explorer/scripts/hidden-files.mjs",
+      "name": "hidden-files.mjs",
+      "path": "apps/explorer/scripts/hidden-files.mjs",
+      "folder": "apps/explorer/scripts",
+      "lines": 54,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "isHiddenPath",
+          "kind": "function"
+        },
+        {
+          "name": "folderParent",
+          "kind": "function"
+        },
+        {
+          "name": "folderOfFile",
+          "kind": "function"
+        },
+        {
+          "name": "filterGraphHiddenFiles",
+          "kind": "function"
+        },
+        {
+          "name": "addAncestors",
+          "kind": "function"
+        },
+        {
+          "name": "keepFiles",
+          "kind": "variable"
+        },
+        {
+          "name": "paths",
+          "kind": "variable"
+        },
+        {
+          "name": "filesById",
+          "kind": "variable"
+        },
+        {
+          "name": "current",
+          "kind": "variable"
+        },
+        {
+          "name": "id",
+          "kind": "variable"
+        },
+        {
+          "name": "file",
+          "kind": "variable"
+        },
+        {
+          "name": "folder",
+          "kind": "variable"
+        }
+      ],
+      "imports": []
+    },
+    {
+      "id": "apps/explorer/scripts/hidden-files.test.mjs",
+      "name": "hidden-files.test.mjs",
+      "path": "apps/explorer/scripts/hidden-files.test.mjs",
+      "folder": "apps/explorer/scripts",
+      "lines": 128,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "graph",
+          "kind": "variable"
+        },
+        {
+          "name": "visible",
+          "kind": "variable"
+        },
+        {
+          "name": "root",
+          "kind": "variable"
+        },
+        {
+          "name": "src",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "apps/explorer/scripts/hidden-files.mjs"
+      ]
     },
     {
       "id": "apps/explorer/scripts/js-source.mjs",
@@ -2406,7 +3133,7 @@
       "name": "scan-ignore.mjs",
       "path": "apps/explorer/scripts/scan-ignore.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 166,
+      "lines": 167,
       "language": "mjs",
       "symbols": [
         {
@@ -2439,6 +3166,10 @@
         },
         {
           "name": "readGitignoreRules",
+          "kind": "function"
+        },
+        {
+          "name": "extraIgnoreSets",
           "kind": "function"
         },
         {
@@ -2561,7 +3292,7 @@
       "name": "scan-target.mjs",
       "path": "apps/explorer/scripts/scan-target.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 270,
+      "lines": 314,
       "language": "mjs",
       "symbols": [
         {
@@ -2586,6 +3317,10 @@
         },
         {
           "name": "listSourceAbsolutes",
+          "kind": "function"
+        },
+        {
+          "name": "resolveScanIgnore",
           "kind": "function"
         },
         {
@@ -2614,6 +3349,10 @@
         },
         {
           "name": "listSourceFiles",
+          "kind": "function"
+        },
+        {
+          "name": "buildScanGraph",
           "kind": "function"
         },
         {
@@ -2737,6 +3476,10 @@
           "kind": "variable"
         },
         {
+          "name": "extraPatterns",
+          "kind": "variable"
+        },
+        {
           "name": "absoluteFiles",
           "kind": "variable"
         },
@@ -2749,11 +3492,11 @@
           "kind": "variable"
         },
         {
-          "name": "source",
+          "name": "folder",
           "kind": "variable"
         },
         {
-          "name": "folder",
+          "name": "source",
           "kind": "variable"
         },
         {
@@ -2772,7 +3515,8 @@
       "imports": [
         "apps/explorer/scripts/js-source.mjs",
         "apps/explorer/scripts/scan-ignore.mjs",
-        "apps/explorer/scripts/target-config.mjs"
+        "apps/explorer/scripts/target-config.mjs",
+        "bin/inbase-config.mjs"
       ]
     },
     {
@@ -2780,7 +3524,7 @@
       "name": "scan-target.test.mjs",
       "path": "apps/explorer/scripts/scan-target.test.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 257,
+      "lines": 278,
       "language": "mjs",
       "symbols": [
         {
@@ -2893,7 +3637,7 @@
       "name": "session-store.d.ts",
       "path": "apps/explorer/scripts/session-store.d.ts",
       "folder": "apps/explorer/scripts",
-      "lines": 433,
+      "lines": 441,
       "language": "ts",
       "symbols": [
         {
@@ -2998,6 +3742,18 @@
         },
         {
           "name": "setInitialInstruction",
+          "kind": "function"
+        },
+        {
+          "name": "resolveDefaultStepByStep",
+          "kind": "function"
+        },
+        {
+          "name": "sessionColorOrderIndex",
+          "kind": "function"
+        },
+        {
+          "name": "compareSessionColorOrder",
           "kind": "function"
         },
         {
@@ -3276,9 +4032,13 @@
       "name": "session-store.mjs",
       "path": "apps/explorer/scripts/session-store.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 2383,
+      "lines": 2425,
       "language": "mjs",
       "symbols": [
+        {
+          "name": "resolveDefaultStepByStep",
+          "kind": "function"
+        },
         {
           "name": "colorUnknownMessage",
           "kind": "function"
@@ -3317,6 +4077,14 @@
         },
         {
           "name": "resolveSessionColor",
+          "kind": "function"
+        },
+        {
+          "name": "sessionColorOrderIndex",
+          "kind": "function"
+        },
+        {
+          "name": "compareSessionColorOrder",
           "kind": "function"
         },
         {
@@ -3824,11 +4592,11 @@
           "kind": "function"
         },
         {
-          "name": "namedBlueprintBlocks",
+          "name": "namedBlueprintFiles",
           "kind": "function"
         },
         {
-          "name": "namedBlueprintIslands",
+          "name": "namedBlueprintFolders",
           "kind": "function"
         },
         {
@@ -3981,6 +4749,10 @@
         },
         {
           "name": "trimmed",
+          "kind": "variable"
+        },
+        {
+          "name": "index",
           "kind": "variable"
         },
         {
@@ -4161,10 +4933,6 @@
         },
         {
           "name": "paths",
-          "kind": "variable"
-        },
-        {
-          "name": "index",
           "kind": "variable"
         },
         {
@@ -4364,6 +5132,10 @@
           "kind": "variable"
         },
         {
+          "name": "alreadyAttached",
+          "kind": "variable"
+        },
+        {
           "name": "colorName",
           "kind": "variable"
         },
@@ -4468,11 +5240,7 @@
           "kind": "variable"
         },
         {
-          "name": "userCreatedBlocks",
-          "kind": "variable"
-        },
-        {
-          "name": "userCreatedIslands",
+          "name": "folders",
           "kind": "variable"
         },
         {
@@ -4496,7 +5264,11 @@
           "kind": "variable"
         },
         {
-          "name": "folders",
+          "name": "knownFiles",
+          "kind": "variable"
+        },
+        {
+          "name": "knownFolders",
           "kind": "variable"
         },
         {
@@ -4527,7 +5299,8 @@
       "imports": [
         "apps/explorer/scripts/patch-lib.mjs",
         "apps/explorer/scripts/tree-diff.mjs",
-        "apps/explorer/scripts/explain-store.mjs"
+        "apps/explorer/scripts/explain-store.mjs",
+        "bin/inbase-config.mjs"
       ]
     },
     {
@@ -4535,7 +5308,7 @@
       "name": "session-store.test.mjs",
       "path": "apps/explorer/scripts/session-store.test.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 2232,
+      "lines": 2368,
       "language": "mjs",
       "symbols": [
         {
@@ -4675,6 +5448,18 @@
           "kind": "variable"
         },
         {
+          "name": "slot",
+          "kind": "variable"
+        },
+        {
+          "name": "before",
+          "kind": "variable"
+        },
+        {
+          "name": "after",
+          "kind": "variable"
+        },
+        {
           "name": "coral",
           "kind": "variable"
         },
@@ -4719,11 +5504,11 @@
           "kind": "variable"
         },
         {
-          "name": "creating",
+          "name": "createdOrder",
           "kind": "variable"
         },
         {
-          "name": "before",
+          "name": "creating",
           "kind": "variable"
         },
         {
@@ -4856,6 +5641,14 @@
         },
         {
           "name": "last",
+          "kind": "variable"
+        },
+        {
+          "name": "revised",
+          "kind": "variable"
+        },
+        {
+          "name": "replaced",
           "kind": "variable"
         },
         {
@@ -5043,7 +5836,7 @@
       "name": "target-config.d.ts",
       "path": "apps/explorer/scripts/target-config.d.ts",
       "folder": "apps/explorer/scripts",
-      "lines": 44,
+      "lines": 45,
       "language": "ts",
       "symbols": [
         {
@@ -5126,7 +5919,7 @@
       "name": "target-config.mjs",
       "path": "apps/explorer/scripts/target-config.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 187,
+      "lines": 196,
       "language": "mjs",
       "symbols": [
         {
@@ -5274,6 +6067,14 @@
           "kind": "variable"
         },
         {
+          "name": "bootConfig",
+          "kind": "variable"
+        },
+        {
+          "name": "bootConfigTarget",
+          "kind": "variable"
+        },
+        {
           "name": "targetRoot",
           "kind": "variable"
         },
@@ -5306,14 +6107,16 @@
           "kind": "variable"
         }
       ],
-      "imports": []
+      "imports": [
+        "bin/inbase-config.mjs"
+      ]
     },
     {
       "id": "apps/explorer/scripts/target-config.test.mjs",
       "name": "target-config.test.mjs",
       "path": "apps/explorer/scripts/target-config.test.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 167,
+      "lines": 178,
       "language": "mjs",
       "symbols": [
         {
@@ -5358,7 +6161,7 @@
       "name": "tree-diff.mjs",
       "path": "apps/explorer/scripts/tree-diff.mjs",
       "folder": "apps/explorer/scripts",
-      "lines": 122,
+      "lines": 125,
       "language": "mjs",
       "symbols": [
         {
@@ -5529,7 +6332,7 @@
       "name": "App.tsx",
       "path": "apps/explorer/src/App.tsx",
       "folder": "apps/explorer/src",
-      "lines": 2941,
+      "lines": 3073,
       "language": "tsx",
       "symbols": [
         {
@@ -5965,6 +6768,10 @@
           "kind": "variable"
         },
         {
+          "name": "visibleLayoutGraph",
+          "kind": "variable"
+        },
+        {
           "name": "displayGraph",
           "kind": "variable"
         },
@@ -6329,6 +7136,10 @@
           "kind": "variable"
         },
         {
+          "name": "toggleShowHiddenFiles",
+          "kind": "variable"
+        },
+        {
           "name": "toggleImportedBy",
           "kind": "variable"
         },
@@ -6342,6 +7153,10 @@
         },
         {
           "name": "order",
+          "kind": "variable"
+        },
+        {
+          "name": "index",
           "kind": "variable"
         },
         {
@@ -6501,6 +7316,26 @@
           "kind": "variable"
         },
         {
+          "name": "snapshotBlueprints",
+          "kind": "variable"
+        },
+        {
+          "name": "saveCurrentBlueprint",
+          "kind": "variable"
+        },
+        {
+          "name": "saved",
+          "kind": "variable"
+        },
+        {
+          "name": "loadCurrentBlueprint",
+          "kind": "variable"
+        },
+        {
+          "name": "loaded",
+          "kind": "variable"
+        },
+        {
           "name": "selectBlueprintColor",
           "kind": "variable"
         },
@@ -6617,6 +7452,14 @@
           "kind": "variable"
         },
         {
+          "name": "showHiddenFiles",
+          "kind": "variable"
+        },
+        {
+          "name": "setShowHiddenFiles",
+          "kind": "variable"
+        },
+        {
           "name": "branchChanges",
           "kind": "variable"
         },
@@ -6726,6 +7569,14 @@
         },
         {
           "name": "setLocalBlueprints",
+          "kind": "variable"
+        },
+        {
+          "name": "savedBlueprint",
+          "kind": "variable"
+        },
+        {
+          "name": "setSavedBlueprint",
           "kind": "variable"
         },
         {
@@ -6908,6 +7759,7 @@
         "apps/explorer/src/codebase.ts",
         "apps/explorer/src/devTargets.ts",
         "apps/explorer/src/layout.ts",
+        "apps/explorer/scripts/hidden-files.mjs",
         "apps/explorer/src/scene/World.tsx",
         "apps/explorer/src/ui/HUD.tsx",
         "apps/explorer/src/ui/ExplainAskCard.tsx",
@@ -6928,7 +7780,7 @@
       "name": "agentIntent.ts",
       "path": "apps/explorer/src/agentIntent.ts",
       "folder": "apps/explorer/src",
-      "lines": 541,
+      "lines": 644,
       "language": "ts",
       "symbols": [
         {
@@ -7013,6 +7865,22 @@
         },
         {
           "name": "inspectTargetFile",
+          "kind": "function"
+        },
+        {
+          "name": "readApiError",
+          "kind": "function"
+        },
+        {
+          "name": "fetchSavedBlueprints",
+          "kind": "function"
+        },
+        {
+          "name": "saveBlueprintFile",
+          "kind": "function"
+        },
+        {
+          "name": "loadBlueprintFile",
           "kind": "function"
         },
         {
@@ -7507,7 +8375,7 @@
       "name": "index.css",
       "path": "apps/explorer/src/index.css",
       "folder": "apps/explorer/src",
-      "lines": 2397,
+      "lines": 2528,
       "language": "css",
       "symbols": [],
       "imports": []
@@ -7548,7 +8416,7 @@
       "name": "layout.ts",
       "path": "apps/explorer/src/layout.ts",
       "folder": "apps/explorer/src",
-      "lines": 702,
+      "lines": 711,
       "language": "ts",
       "symbols": [
         {
@@ -7601,6 +8469,10 @@
         },
         {
           "name": "fileDisplayName",
+          "kind": "function"
+        },
+        {
+          "name": "fileInfoMeta",
           "kind": "function"
         },
         {
@@ -8684,7 +9556,7 @@
       "name": "MapView.tsx",
       "path": "apps/explorer/src/scene/MapView.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 1184,
+      "lines": 1194,
       "language": "tsx",
       "symbols": [
         {
@@ -10385,7 +11257,7 @@
       "name": "World.tsx",
       "path": "apps/explorer/src/scene/World.tsx",
       "folder": "apps/explorer/src/scene",
-      "lines": 1013,
+      "lines": 1004,
       "language": "tsx",
       "symbols": [
         {
@@ -10493,11 +11365,15 @@
           "kind": "variable"
         },
         {
-          "name": "hideMapRelations",
+          "name": "hideRelations",
           "kind": "variable"
         },
         {
           "name": "showExistingRelations",
+          "kind": "variable"
+        },
+        {
+          "name": "showAllPlanned",
           "kind": "variable"
         },
         {
@@ -11293,7 +12169,7 @@
       "name": "types.ts",
       "path": "apps/explorer/src/types.ts",
       "folder": "apps/explorer/src",
-      "lines": 449,
+      "lines": 506,
       "language": "ts",
       "symbols": [
         {
@@ -11309,15 +12185,125 @@
           "kind": "function"
         },
         {
+          "name": "sessionColorOrderIndex",
+          "kind": "function"
+        },
+        {
+          "name": "compareSessionColorOrder",
+          "kind": "function"
+        },
+        {
           "name": "GLOBAL_BLUEPRINT_COLOR",
           "kind": "variable"
         },
         {
           "name": "export",
           "kind": "variable"
+        },
+        {
+          "name": "SESSION_COLOR_ORDER",
+          "kind": "variable"
+        },
+        {
+          "name": "index",
+          "kind": "variable"
         }
       ],
       "imports": []
+    },
+    {
+      "id": "apps/explorer/src/ui/BlueprintFileDialogs.tsx",
+      "name": "BlueprintFileDialogs.tsx",
+      "path": "apps/explorer/src/ui/BlueprintFileDialogs.tsx",
+      "folder": "apps/explorer/src/ui",
+      "lines": 229,
+      "language": "tsx",
+      "symbols": [
+        {
+          "name": "useDialogKeys",
+          "kind": "function"
+        },
+        {
+          "name": "BlueprintSaveDialog",
+          "kind": "function"
+        },
+        {
+          "name": "BlueprintLoadDialog",
+          "kind": "function"
+        },
+        {
+          "name": "onKeyDown",
+          "kind": "function"
+        },
+        {
+          "name": "submit",
+          "kind": "function"
+        },
+        {
+          "name": "onCloseRef",
+          "kind": "variable"
+        },
+        {
+          "name": "release",
+          "kind": "variable"
+        },
+        {
+          "name": "nameRef",
+          "kind": "variable"
+        },
+        {
+          "name": "timer",
+          "kind": "variable"
+        },
+        {
+          "name": "title",
+          "kind": "variable"
+        },
+        {
+          "name": "trimmed",
+          "kind": "variable"
+        },
+        {
+          "name": "fileRef",
+          "kind": "variable"
+        },
+        {
+          "name": "shownError",
+          "kind": "variable"
+        },
+        {
+          "name": "file",
+          "kind": "variable"
+        },
+        {
+          "name": "name",
+          "kind": "variable"
+        },
+        {
+          "name": "setName",
+          "kind": "variable"
+        },
+        {
+          "name": "directory",
+          "kind": "variable"
+        },
+        {
+          "name": "setDirectory",
+          "kind": "variable"
+        },
+        {
+          "name": "parseError",
+          "kind": "variable"
+        },
+        {
+          "name": "setParseError",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "apps/explorer/src/keyboard.ts",
+        "apps/explorer/src/types.ts"
+      ]
     },
     {
       "id": "apps/explorer/src/ui/CanvasErrorBoundary.tsx",
@@ -11477,7 +12463,7 @@
       "name": "ExplainInfoPanel.tsx",
       "path": "apps/explorer/src/ui/ExplainInfoPanel.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 169,
+      "lines": 172,
       "language": "tsx",
       "symbols": [
         {
@@ -11539,6 +12525,7 @@
       ],
       "imports": [
         "apps/explorer/src/explain.ts",
+        "apps/explorer/src/layout.ts",
         "apps/explorer/src/types.ts",
         "apps/explorer/src/ui/EyeIcon.tsx"
       ]
@@ -11643,7 +12630,7 @@
       "name": "EyeIcon.tsx",
       "path": "apps/explorer/src/ui/EyeIcon.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 111,
+      "lines": 147,
       "language": "tsx",
       "symbols": [
         {
@@ -11667,11 +12654,19 @@
           "kind": "function"
         },
         {
+          "name": "PanelToggleIcon",
+          "kind": "function"
+        },
+        {
           "name": "BlueprintEyes",
           "kind": "function"
         },
         {
           "name": "EYE_ICON_PATH",
+          "kind": "variable"
+        },
+        {
+          "name": "open",
           "kind": "variable"
         }
       ],
@@ -11682,9 +12677,13 @@
       "name": "HUD.tsx",
       "path": "apps/explorer/src/ui/HUD.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 3902,
+      "lines": 4257,
       "language": "tsx",
       "symbols": [
+        {
+          "name": "relationModesForView",
+          "kind": "function"
+        },
         {
           "name": "reviewTitle",
           "kind": "function"
@@ -11798,6 +12797,10 @@
           "kind": "function"
         },
         {
+          "name": "HidePanelsButton",
+          "kind": "function"
+        },
+        {
           "name": "PanelChrome",
           "kind": "function"
         },
@@ -11867,6 +12870,22 @@
         },
         {
           "name": "act",
+          "kind": "function"
+        },
+        {
+          "name": "closeBlueprintFileDialog",
+          "kind": "function"
+        },
+        {
+          "name": "runSaveBlueprint",
+          "kind": "function"
+        },
+        {
+          "name": "runLoadBlueprint",
+          "kind": "function"
+        },
+        {
+          "name": "openLoadBlueprint",
           "kind": "function"
         },
         {
@@ -12043,6 +13062,10 @@
         },
         {
           "name": "showActions",
+          "kind": "variable"
+        },
+        {
+          "name": "label",
           "kind": "variable"
         },
         {
@@ -12290,6 +13313,14 @@
           "kind": "variable"
         },
         {
+          "name": "hidden",
+          "kind": "variable"
+        },
+        {
+          "name": "panels",
+          "kind": "variable"
+        },
+        {
           "name": "for",
           "kind": "variable"
         },
@@ -12355,6 +13386,10 @@
         },
         {
           "name": "sessions",
+          "kind": "variable"
+        },
+        {
+          "name": "sessionTabs",
           "kind": "variable"
         },
         {
@@ -12510,10 +13545,6 @@
           "kind": "variable"
         },
         {
-          "name": "label",
-          "kind": "variable"
-        },
-        {
           "name": "item",
           "kind": "variable"
         },
@@ -12610,6 +13641,38 @@
           "kind": "variable"
         },
         {
+          "name": "blueprintFileDialog",
+          "kind": "variable"
+        },
+        {
+          "name": "setBlueprintFileDialog",
+          "kind": "variable"
+        },
+        {
+          "name": "blueprintFileBusy",
+          "kind": "variable"
+        },
+        {
+          "name": "setBlueprintFileBusy",
+          "kind": "variable"
+        },
+        {
+          "name": "blueprintFileError",
+          "kind": "variable"
+        },
+        {
+          "name": "setBlueprintFileError",
+          "kind": "variable"
+        },
+        {
+          "name": "savedBlueprintList",
+          "kind": "variable"
+        },
+        {
+          "name": "setSavedBlueprintList",
+          "kind": "variable"
+        },
+        {
           "name": "infoVisible",
           "kind": "variable"
         },
@@ -12624,16 +13687,34 @@
         {
           "name": "setInfoMinimized",
           "kind": "variable"
+        },
+        {
+          "name": "leftPanelsHidden",
+          "kind": "variable"
+        },
+        {
+          "name": "setLeftPanelsHidden",
+          "kind": "variable"
+        },
+        {
+          "name": "rightPanelsHidden",
+          "kind": "variable"
+        },
+        {
+          "name": "setRightPanelsHidden",
+          "kind": "variable"
         }
       ],
       "imports": [
+        "apps/explorer/src/ui/BlueprintFileDialogs.tsx",
         "apps/explorer/src/ui/NameInput.tsx",
         "apps/explorer/src/types.ts",
         "apps/explorer/src/userCreated.ts",
         "apps/explorer/src/layout.ts",
         "apps/explorer/src/ui/EyeIcon.tsx",
         "apps/explorer/src/keyboard.ts",
-        "apps/explorer/src/devTargets.ts"
+        "apps/explorer/src/devTargets.ts",
+        "apps/explorer/src/agentIntent.ts"
       ]
     },
     {
@@ -12641,7 +13722,7 @@
       "name": "MapContextMenu.tsx",
       "path": "apps/explorer/src/ui/MapContextMenu.tsx",
       "folder": "apps/explorer/src/ui",
-      "lines": 110,
+      "lines": 130,
       "language": "tsx",
       "symbols": [
         {
@@ -12658,6 +13739,14 @@
         },
         {
           "name": "target",
+          "kind": "variable"
+        },
+        {
+          "name": "fileId",
+          "kind": "variable"
+        },
+        {
+          "name": "folder",
           "kind": "variable"
         },
         {
@@ -12779,7 +13868,7 @@
       "name": "userContext.ts",
       "path": "apps/explorer/src/userContext.ts",
       "folder": "apps/explorer/src",
-      "lines": 74,
+      "lines": 85,
       "language": "ts",
       "symbols": [
         {
@@ -12792,6 +13881,10 @@
         },
         {
           "name": "persistShowBranchChanges",
+          "kind": "function"
+        },
+        {
+          "name": "persistShowHiddenFiles",
           "kind": "function"
         },
         {
@@ -12835,6 +13928,10 @@
           "kind": "variable"
         },
         {
+          "name": "_showHiddenFiles",
+          "kind": "variable"
+        },
+        {
           "name": "_userCreatedBlocks",
           "kind": "variable"
         },
@@ -12856,7 +13953,7 @@
       "name": "userCreated.ts",
       "path": "apps/explorer/src/userCreated.ts",
       "folder": "apps/explorer/src",
-      "lines": 1197,
+      "lines": 1215,
       "language": "ts",
       "symbols": [
         {
@@ -12873,6 +13970,14 @@
         },
         {
           "name": "namedCreatedIslands",
+          "kind": "function"
+        },
+        {
+          "name": "toBlueprintFile",
+          "kind": "function"
+        },
+        {
+          "name": "toBlueprintFolder",
           "kind": "function"
         },
         {
@@ -13491,7 +14596,7 @@
       "name": "vite.config.ts",
       "path": "apps/explorer/vite.config.ts",
       "folder": "apps/explorer",
-      "lines": 663,
+      "lines": 725,
       "language": "ts",
       "symbols": [
         {
@@ -13540,6 +14645,10 @@
         },
         {
           "name": "decideExplain",
+          "kind": "function"
+        },
+        {
+          "name": "decideBlueprints",
           "kind": "function"
         },
         {
@@ -13659,6 +14768,14 @@
           "kind": "variable"
         },
         {
+          "name": "saved",
+          "kind": "variable"
+        },
+        {
+          "name": "loaded",
+          "kind": "variable"
+        },
+        {
           "name": "filePath",
           "kind": "variable"
         },
@@ -13706,15 +14823,16 @@
         "apps/explorer/scripts/target-config.mjs",
         "apps/explorer/scripts/open-editor.mjs",
         "apps/explorer/scripts/session-store.mjs",
+        "apps/explorer/scripts/blueprint-files.mjs",
         "apps/explorer/scripts/explain-store.mjs"
       ]
     },
     {
-      "id": "bin/editors/cursor.mjs",
-      "name": "cursor.mjs",
-      "path": "bin/editors/cursor.mjs",
+      "id": "bin/editors/agents.mjs",
+      "name": "agents.mjs",
+      "path": "bin/editors/agents.mjs",
       "folder": "bin/editors",
-      "lines": 19,
+      "lines": 12,
       "language": "mjs",
       "symbols": [
         {
@@ -13726,16 +14844,169 @@
           "kind": "variable"
         },
         {
-          "name": "skillDir",
-          "kind": "variable"
-        },
-        {
-          "name": "commandDir",
+          "name": "label",
           "kind": "variable"
         }
       ],
       "imports": [
-        "bin/project.mjs"
+        "bin/editors/layout.mjs"
+      ]
+    },
+    {
+      "id": "bin/editors/claude.mjs",
+      "name": "claude.mjs",
+      "path": "bin/editors/claude.mjs",
+      "folder": "bin/editors",
+      "lines": 33,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "install",
+          "kind": "function"
+        },
+        {
+          "name": "id",
+          "kind": "variable"
+        },
+        {
+          "name": "label",
+          "kind": "variable"
+        },
+        {
+          "name": "SKILL_FRONTMATTER",
+          "kind": "variable"
+        },
+        {
+          "name": "COMMAND_FRONTMATTER",
+          "kind": "variable"
+        },
+        {
+          "name": "installed",
+          "kind": "variable"
+        },
+        {
+          "name": "name",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "bin/editors/layout.mjs"
+      ]
+    },
+    {
+      "id": "bin/editors/cline.mjs",
+      "name": "cline.mjs",
+      "path": "bin/editors/cline.mjs",
+      "folder": "bin/editors",
+      "lines": 62,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "install",
+          "kind": "function"
+        },
+        {
+          "name": "removeLegacyCommandSkills",
+          "kind": "function"
+        },
+        {
+          "name": "writeClineRules",
+          "kind": "function"
+        },
+        {
+          "name": "id",
+          "kind": "variable"
+        },
+        {
+          "name": "label",
+          "kind": "variable"
+        },
+        {
+          "name": "RULE_REL_PATHS",
+          "kind": "variable"
+        },
+        {
+          "name": "CLINE_RULE",
+          "kind": "variable"
+        },
+        {
+          "name": "installed",
+          "kind": "variable"
+        },
+        {
+          "name": "legacyWorkflows",
+          "kind": "variable"
+        },
+        {
+          "name": "name",
+          "kind": "variable"
+        },
+        {
+          "name": "dir",
+          "kind": "variable"
+        },
+        {
+          "name": "rel",
+          "kind": "variable"
+        },
+        {
+          "name": "file",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "bin/project.mjs",
+        "bin/editors/layout.mjs"
+      ]
+    },
+    {
+      "id": "bin/editors/copilot.mjs",
+      "name": "copilot.mjs",
+      "path": "bin/editors/copilot.mjs",
+      "folder": "bin/editors",
+      "lines": 12,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "install",
+          "kind": "function"
+        },
+        {
+          "name": "id",
+          "kind": "variable"
+        },
+        {
+          "name": "label",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "bin/editors/layout.mjs"
+      ]
+    },
+    {
+      "id": "bin/editors/cursor.mjs",
+      "name": "cursor.mjs",
+      "path": "bin/editors/cursor.mjs",
+      "folder": "bin/editors",
+      "lines": 13,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "install",
+          "kind": "function"
+        },
+        {
+          "name": "id",
+          "kind": "variable"
+        },
+        {
+          "name": "label",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "bin/editors/layout.mjs"
       ]
     },
     {
@@ -13743,7 +15014,7 @@
       "name": "index.mjs",
       "path": "bin/editors/index.mjs",
       "folder": "bin/editors",
-      "lines": 9,
+      "lines": 13,
       "language": "mjs",
       "symbols": [
         {
@@ -13756,7 +15027,730 @@
         }
       ],
       "imports": [
+        "bin/editors/agents.mjs",
+        "bin/editors/claude.mjs",
+        "bin/editors/cline.mjs",
+        "bin/editors/copilot.mjs",
         "bin/editors/cursor.mjs"
+      ]
+    },
+    {
+      "id": "bin/editors/layout.mjs",
+      "name": "layout.mjs",
+      "path": "bin/editors/layout.mjs",
+      "folder": "bin/editors",
+      "lines": 77,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "copySkillAndCommands",
+          "kind": "function"
+        },
+        {
+          "name": "removeRetiredGoCommand",
+          "kind": "function"
+        },
+        {
+          "name": "copySkillTree",
+          "kind": "function"
+        },
+        {
+          "name": "prependYamlFrontmatter",
+          "kind": "function"
+        },
+        {
+          "name": "COMMAND_SKILL_FRONTMATTER",
+          "kind": "function"
+        },
+        {
+          "name": "skillDir",
+          "kind": "variable"
+        },
+        {
+          "name": "commandDir",
+          "kind": "variable"
+        },
+        {
+          "name": "flat",
+          "kind": "variable"
+        },
+        {
+          "name": "skill",
+          "kind": "variable"
+        },
+        {
+          "name": "SKILL_TOOL_FRONTMATTER",
+          "kind": "variable"
+        },
+        {
+          "name": "name",
+          "kind": "variable"
+        },
+        {
+          "name": "stem",
+          "kind": "variable"
+        },
+        {
+          "name": "dest",
+          "kind": "variable"
+        },
+        {
+          "name": "text",
+          "kind": "variable"
+        },
+        {
+          "name": "end",
+          "kind": "variable"
+        },
+        {
+          "name": "block",
+          "kind": "variable"
+        },
+        {
+          "name": "existing",
+          "kind": "variable"
+        },
+        {
+          "name": "extra",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "bin/project.mjs"
+      ]
+    },
+    {
+      "id": "bin/extract-blueprint.mjs",
+      "name": "extract-blueprint.mjs",
+      "path": "bin/extract-blueprint.mjs",
+      "folder": "bin",
+      "lines": 390,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "explorerHref",
+          "kind": "function"
+        },
+        {
+          "name": "usage",
+          "kind": "function"
+        },
+        {
+          "name": "resolveUserPath",
+          "kind": "function"
+        },
+        {
+          "name": "fileRole",
+          "kind": "function"
+        },
+        {
+          "name": "compactInventory",
+          "kind": "function"
+        },
+        {
+          "name": "posixPath",
+          "kind": "function"
+        },
+        {
+          "name": "fileEntryFromPath",
+          "kind": "function"
+        },
+        {
+          "name": "folderEntryFromPath",
+          "kind": "function"
+        },
+        {
+          "name": "ensureFolderChain",
+          "kind": "function"
+        },
+        {
+          "name": "normalizeSymbol",
+          "kind": "function"
+        },
+        {
+          "name": "normalizeImport",
+          "kind": "function"
+        },
+        {
+          "name": "normalizeNote",
+          "kind": "function"
+        },
+        {
+          "name": "normalizePointer",
+          "kind": "function"
+        },
+        {
+          "name": "normalizeExtractLayer",
+          "kind": "function"
+        },
+        {
+          "name": "emptyLocals",
+          "kind": "function"
+        },
+        {
+          "name": "blueprintNameFromOutput",
+          "kind": "function"
+        },
+        {
+          "name": "writeExtractedBlueprint",
+          "kind": "function"
+        },
+        {
+          "name": "parseWriteArgs",
+          "kind": "function"
+        },
+        {
+          "name": "readLayerJson",
+          "kind": "function"
+        },
+        {
+          "name": "printInventory",
+          "kind": "function"
+        },
+        {
+          "name": "extractBlueprint",
+          "kind": "function"
+        },
+        {
+          "name": "EXTRACT_INSTRUCTION",
+          "kind": "variable"
+        },
+        {
+          "name": "raw",
+          "kind": "variable"
+        },
+        {
+          "name": "posix",
+          "kind": "variable"
+        },
+        {
+          "name": "files",
+          "kind": "variable"
+        },
+        {
+          "name": "functions",
+          "kind": "variable"
+        },
+        {
+          "name": "classes",
+          "kind": "variable"
+        },
+        {
+          "name": "variables",
+          "kind": "variable"
+        },
+        {
+          "name": "symbol",
+          "kind": "variable"
+        },
+        {
+          "name": "folders",
+          "kind": "variable"
+        },
+        {
+          "name": "resolved",
+          "kind": "variable"
+        },
+        {
+          "name": "name",
+          "kind": "variable"
+        },
+        {
+          "name": "folder",
+          "kind": "variable"
+        },
+        {
+          "name": "inferredParent",
+          "kind": "variable"
+        },
+        {
+          "name": "current",
+          "kind": "variable"
+        },
+        {
+          "name": "entry",
+          "kind": "variable"
+        },
+        {
+          "name": "file",
+          "kind": "variable"
+        },
+        {
+          "name": "from",
+          "kind": "variable"
+        },
+        {
+          "name": "note",
+          "kind": "variable"
+        },
+        {
+          "name": "kind",
+          "kind": "variable"
+        },
+        {
+          "name": "pointerPath",
+          "kind": "variable"
+        },
+        {
+          "name": "seenFiles",
+          "kind": "variable"
+        },
+        {
+          "name": "item",
+          "kind": "variable"
+        },
+        {
+          "name": "pathValue",
+          "kind": "variable"
+        },
+        {
+          "name": "addedFunctions",
+          "kind": "variable"
+        },
+        {
+          "name": "addedVariables",
+          "kind": "variable"
+        },
+        {
+          "name": "addedImports",
+          "kind": "variable"
+        },
+        {
+          "name": "notes",
+          "kind": "variable"
+        },
+        {
+          "name": "pointers",
+          "kind": "variable"
+        },
+        {
+          "name": "base",
+          "kind": "variable"
+        },
+        {
+          "name": "global",
+          "kind": "variable"
+        },
+        {
+          "name": "writeIndex",
+          "kind": "variable"
+        },
+        {
+          "name": "next",
+          "kind": "variable"
+        },
+        {
+          "name": "takesPath",
+          "kind": "variable"
+        },
+        {
+          "name": "rest",
+          "kind": "variable"
+        },
+        {
+          "name": "parsed",
+          "kind": "variable"
+        },
+        {
+          "name": "cwd",
+          "kind": "variable"
+        },
+        {
+          "name": "targetRoot",
+          "kind": "variable"
+        },
+        {
+          "name": "folderPath",
+          "kind": "variable"
+        },
+        {
+          "name": "outputPath",
+          "kind": "variable"
+        },
+        {
+          "name": "layer",
+          "kind": "variable"
+        },
+        {
+          "name": "saved",
+          "kind": "variable"
+        },
+        {
+          "name": "written",
+          "kind": "variable"
+        },
+        {
+          "name": "graph",
+          "kind": "variable"
+        },
+        {
+          "name": "inventory",
+          "kind": "variable"
+        },
+        {
+          "name": "folderArg",
+          "kind": "variable"
+        },
+        {
+          "name": "outputArg",
+          "kind": "variable"
+        },
+        {
+          "name": "buildScanGraph",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "bin/project.mjs",
+        "apps/explorer/scripts/blueprint-files.mjs",
+        "apps/explorer/scripts/session-store.mjs",
+        "apps/explorer/scripts/scan-ignore.mjs"
+      ]
+    },
+    {
+      "id": "bin/extract-blueprint.test.mjs",
+      "name": "extract-blueprint.test.mjs",
+      "path": "bin/extract-blueprint.test.mjs",
+      "folder": "bin",
+      "lines": 235,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "fixture",
+          "kind": "function"
+        },
+        {
+          "name": "App",
+          "kind": "function"
+        },
+        {
+          "name": "Clock",
+          "kind": "function"
+        },
+        {
+          "name": "capture",
+          "kind": "function"
+        },
+        {
+          "name": "packageRoot",
+          "kind": "variable"
+        },
+        {
+          "name": "root",
+          "kind": "variable"
+        },
+        {
+          "name": "src",
+          "kind": "variable"
+        },
+        {
+          "name": "widgets",
+          "kind": "variable"
+        },
+        {
+          "name": "theme",
+          "kind": "variable"
+        },
+        {
+          "name": "unused",
+          "kind": "variable"
+        },
+        {
+          "name": "skip",
+          "kind": "variable"
+        },
+        {
+          "name": "output",
+          "kind": "variable"
+        },
+        {
+          "name": "log",
+          "kind": "variable"
+        },
+        {
+          "name": "layer",
+          "kind": "variable"
+        },
+        {
+          "name": "env",
+          "kind": "variable"
+        },
+        {
+          "name": "graph",
+          "kind": "variable"
+        },
+        {
+          "name": "inventory",
+          "kind": "variable"
+        },
+        {
+          "name": "byPath",
+          "kind": "variable"
+        },
+        {
+          "name": "outputPath",
+          "kind": "variable"
+        },
+        {
+          "name": "layerPath",
+          "kind": "variable"
+        },
+        {
+          "name": "savedPath",
+          "kind": "variable"
+        },
+        {
+          "name": "document",
+          "kind": "variable"
+        },
+        {
+          "name": "saved",
+          "kind": "variable"
+        },
+        {
+          "name": "result",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "bin/extract-blueprint.mjs",
+        "apps/explorer/scripts/blueprint-files.mjs",
+        "apps/explorer/scripts/scan-target.mjs"
+      ]
+    },
+    {
+      "id": "bin/inbase-config.mjs",
+      "name": "inbase-config.mjs",
+      "path": "bin/inbase-config.mjs",
+      "folder": "bin",
+      "lines": 164,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "emptyConfig",
+          "kind": "function"
+        },
+        {
+          "name": "isFile",
+          "kind": "function"
+        },
+        {
+          "name": "hasGit",
+          "kind": "function"
+        },
+        {
+          "name": "findInbaseConfigFile",
+          "kind": "function"
+        },
+        {
+          "name": "resolveConfigPath",
+          "kind": "function"
+        },
+        {
+          "name": "configError",
+          "kind": "function"
+        },
+        {
+          "name": "parseInbaseConfig",
+          "kind": "function"
+        },
+        {
+          "name": "parseInbaseConfigFile",
+          "kind": "function"
+        },
+        {
+          "name": "loadInbaseConfig",
+          "kind": "function"
+        },
+        {
+          "name": "rememberInbaseConfig",
+          "kind": "function"
+        },
+        {
+          "name": "resolvePort",
+          "kind": "function"
+        },
+        {
+          "name": "writeInbaseConfig",
+          "kind": "function"
+        },
+        {
+          "name": "CONFIG_FILE_NAME",
+          "kind": "variable"
+        },
+        {
+          "name": "DEFAULT_PORT",
+          "kind": "variable"
+        },
+        {
+          "name": "INIT_INBASE_CONFIG",
+          "kind": "variable"
+        },
+        {
+          "name": "KNOWN_KEYS",
+          "kind": "variable"
+        },
+        {
+          "name": "dir",
+          "kind": "variable"
+        },
+        {
+          "name": "candidate",
+          "kind": "variable"
+        },
+        {
+          "name": "parent",
+          "kind": "variable"
+        },
+        {
+          "name": "raw",
+          "kind": "variable"
+        },
+        {
+          "name": "parsed",
+          "kind": "variable"
+        },
+        {
+          "name": "key",
+          "kind": "variable"
+        },
+        {
+          "name": "config",
+          "kind": "variable"
+        },
+        {
+          "name": "resolved",
+          "kind": "variable"
+        },
+        {
+          "name": "fromEnv",
+          "kind": "variable"
+        },
+        {
+          "name": "from",
+          "kind": "variable"
+        },
+        {
+          "name": "file",
+          "kind": "variable"
+        },
+        {
+          "name": "port",
+          "kind": "variable"
+        },
+        {
+          "name": "dest",
+          "kind": "variable"
+        }
+      ],
+      "imports": []
+    },
+    {
+      "id": "bin/inbase-config.test.mjs",
+      "name": "inbase-config.test.mjs",
+      "path": "bin/inbase-config.test.mjs",
+      "folder": "bin",
+      "lines": 209,
+      "language": "mjs",
+      "symbols": [
+        {
+          "name": "tempGitProject",
+          "kind": "function"
+        },
+        {
+          "name": "snapshotEnv",
+          "kind": "function"
+        },
+        {
+          "name": "restoreEnv",
+          "kind": "function"
+        },
+        {
+          "name": "writeConfig",
+          "kind": "function"
+        },
+        {
+          "name": "scanQuiet",
+          "kind": "function"
+        },
+        {
+          "name": "packageRoot",
+          "kind": "variable"
+        },
+        {
+          "name": "root",
+          "kind": "variable"
+        },
+        {
+          "name": "log",
+          "kind": "variable"
+        },
+        {
+          "name": "nested",
+          "kind": "variable"
+        },
+        {
+          "name": "inner",
+          "kind": "variable"
+        },
+        {
+          "name": "config",
+          "kind": "variable"
+        },
+        {
+          "name": "env",
+          "kind": "variable"
+        },
+        {
+          "name": "target",
+          "kind": "variable"
+        },
+        {
+          "name": "host",
+          "kind": "variable"
+        },
+        {
+          "name": "flagged",
+          "kind": "variable"
+        },
+        {
+          "name": "other",
+          "kind": "variable"
+        },
+        {
+          "name": "app",
+          "kind": "variable"
+        },
+        {
+          "name": "skip",
+          "kind": "variable"
+        },
+        {
+          "name": "vendored",
+          "kind": "variable"
+        },
+        {
+          "name": "graph",
+          "kind": "variable"
+        },
+        {
+          "name": "key",
+          "kind": "variable"
+        },
+        {
+          "name": "value",
+          "kind": "variable"
+        },
+        {
+          "name": "cleanup",
+          "kind": "variable"
+        }
+      ],
+      "imports": [
+        "bin/inbase-config.mjs",
+        "bin/project.mjs",
+        "apps/explorer/scripts/session-store.mjs",
+        "apps/explorer/scripts/scan-target.mjs"
       ]
     },
     {
@@ -13764,7 +15758,7 @@
       "name": "inbase.mjs",
       "path": "bin/inbase.mjs",
       "folder": "bin",
-      "lines": 220,
+      "lines": 246,
       "language": "mjs",
       "symbols": [
         {
@@ -13808,11 +15802,11 @@
           "kind": "variable"
         },
         {
-          "name": "target",
+          "name": "configAdded",
           "kind": "variable"
         },
         {
-          "name": "portValue",
+          "name": "target",
           "kind": "variable"
         },
         {
@@ -13836,6 +15830,14 @@
           "kind": "variable"
         },
         {
+          "name": "editor",
+          "kind": "variable"
+        },
+        {
+          "name": "name",
+          "kind": "variable"
+        },
+        {
           "name": "host",
           "kind": "variable"
         },
@@ -13849,6 +15851,10 @@
         },
         {
           "name": "targetRoot",
+          "kind": "variable"
+        },
+        {
+          "name": "config",
           "kind": "variable"
         },
         {
@@ -13874,8 +15880,10 @@
       ],
       "imports": [
         "bin/project.mjs",
+        "bin/inbase-config.mjs",
         "bin/editors/index.mjs",
-        "bin/session.mjs"
+        "bin/session.mjs",
+        "bin/extract-blueprint.mjs"
       ]
     },
     {
@@ -13883,7 +15891,7 @@
       "name": "inbase.test.mjs",
       "path": "bin/inbase.test.mjs",
       "folder": "bin",
-      "lines": 759,
+      "lines": 1177,
       "language": "mjs",
       "symbols": [
         {
@@ -13919,6 +15927,10 @@
           "kind": "variable"
         },
         {
+          "name": "file",
+          "kind": "variable"
+        },
+        {
           "name": "dest",
           "kind": "variable"
         },
@@ -13936,6 +15948,66 @@
         },
         {
           "name": "skill",
+          "kind": "variable"
+        },
+        {
+          "name": "claude",
+          "kind": "variable"
+        },
+        {
+          "name": "claudeSkill",
+          "kind": "variable"
+        },
+        {
+          "name": "claudeGo",
+          "kind": "variable"
+        },
+        {
+          "name": "claudeCoral",
+          "kind": "variable"
+        },
+        {
+          "name": "agents",
+          "kind": "variable"
+        },
+        {
+          "name": "agentsSkill",
+          "kind": "variable"
+        },
+        {
+          "name": "copilot",
+          "kind": "variable"
+        },
+        {
+          "name": "cline",
+          "kind": "variable"
+        },
+        {
+          "name": "clineSkill",
+          "kind": "variable"
+        },
+        {
+          "name": "clineAccept",
+          "kind": "variable"
+        },
+        {
+          "name": "clineRule",
+          "kind": "variable"
+        },
+        {
+          "name": "config",
+          "kind": "variable"
+        },
+        {
+          "name": "first",
+          "kind": "variable"
+        },
+        {
+          "name": "accept",
+          "kind": "variable"
+        },
+        {
+          "name": "coral",
           "kind": "variable"
         },
         {
@@ -14003,6 +16075,18 @@
           "kind": "variable"
         },
         {
+          "name": "sessionId",
+          "kind": "variable"
+        },
+        {
+          "name": "again",
+          "kind": "variable"
+        },
+        {
+          "name": "refused",
+          "kind": "variable"
+        },
+        {
           "name": "withQuestion",
           "kind": "variable"
         },
@@ -14022,6 +16106,7 @@
       "imports": [
         "bin/inbase.mjs",
         "bin/editors/index.mjs",
+        "bin/editors/layout.mjs",
         "bin/project.mjs",
         "apps/explorer/scripts/git-test.mjs"
       ]
@@ -14031,7 +16116,7 @@
       "name": "project.mjs",
       "path": "bin/project.mjs",
       "folder": "bin",
-      "lines": 194,
+      "lines": 210,
       "language": "mjs",
       "symbols": [
         {
@@ -14159,11 +16244,31 @@
           "kind": "variable"
         },
         {
+          "name": "config",
+          "kind": "variable"
+        },
+        {
+          "name": "explicitTarget",
+          "kind": "variable"
+        },
+        {
           "name": "running",
           "kind": "variable"
         },
         {
+          "name": "configTargetRoot",
+          "kind": "variable"
+        },
+        {
           "name": "targetRoot",
+          "kind": "variable"
+        },
+        {
+          "name": "kickoffDir",
+          "kind": "variable"
+        },
+        {
+          "name": "defaultDataDir",
           "kind": "variable"
         },
         {
@@ -14219,14 +16324,16 @@
           "kind": "variable"
         }
       ],
-      "imports": []
+      "imports": [
+        "bin/inbase-config.mjs"
+      ]
     },
     {
       "id": "bin/project.test.mjs",
       "name": "project.test.mjs",
       "path": "bin/project.test.mjs",
       "folder": "bin",
-      "lines": 179,
+      "lines": 180,
       "language": "mjs",
       "symbols": [
         {
@@ -14323,7 +16430,7 @@
       "name": "session.mjs",
       "path": "bin/session.mjs",
       "folder": "bin",
-      "lines": 681,
+      "lines": 707,
       "language": "mjs",
       "symbols": [
         {
@@ -14543,6 +16650,14 @@
           "kind": "variable"
         },
         {
+          "name": "before",
+          "kind": "variable"
+        },
+        {
+          "name": "alreadyAttached",
+          "kind": "variable"
+        },
+        {
           "name": "color",
           "kind": "variable"
         },
@@ -14551,11 +16666,15 @@
           "kind": "variable"
         },
         {
-          "name": "blocks",
+          "name": "wrongSlot",
           "kind": "variable"
         },
         {
-          "name": "islands",
+          "name": "files",
+          "kind": "variable"
+        },
+        {
+          "name": "folders",
           "kind": "variable"
         },
         {
@@ -14579,11 +16698,11 @@
           "kind": "variable"
         },
         {
-          "name": "localBlocks",
+          "name": "localFiles",
           "kind": "variable"
         },
         {
-          "name": "localIslands",
+          "name": "localFolders",
           "kind": "variable"
         },
         {
@@ -14628,6 +16747,26 @@
         },
         {
           "name": "replacedWaiting",
+          "kind": "variable"
+        },
+        {
+          "name": "startAt",
+          "kind": "variable"
+        },
+        {
+          "name": "kept",
+          "kind": "variable"
+        },
+        {
+          "name": "remaining",
+          "kind": "variable"
+        },
+        {
+          "name": "keptLabel",
+          "kind": "variable"
+        },
+        {
+          "name": "remainingList",
           "kind": "variable"
         },
         {
@@ -14720,12 +16859,241 @@
       ]
     },
     {
+      "id": "docs/inbase-1.png",
+      "name": "inbase-1.png",
+      "path": "docs/inbase-1.png",
+      "folder": "docs",
+      "lines": 1,
+      "language": "png",
+      "symbols": [],
+      "imports": [],
+      "binary": true
+    },
+    {
+      "id": "docs/inbase-2.png",
+      "name": "inbase-2.png",
+      "path": "docs/inbase-2.png",
+      "folder": "docs",
+      "lines": 1,
+      "language": "png",
+      "symbols": [],
+      "imports": [],
+      "binary": true
+    },
+    {
+      "id": "docs/inbase-llm.png",
+      "name": "inbase-llm.png",
+      "path": "docs/inbase-llm.png",
+      "folder": "docs",
+      "lines": 1,
+      "language": "png",
+      "symbols": [],
+      "imports": [],
+      "binary": true
+    },
+    {
+      "id": "docs/inbase-logo-white.png",
+      "name": "inbase-logo-white.png",
+      "path": "docs/inbase-logo-white.png",
+      "folder": "docs",
+      "lines": 1,
+      "language": "png",
+      "symbols": [],
+      "imports": [],
+      "binary": true
+    },
+    {
+      "id": "docs/inbase-logo.png",
+      "name": "inbase-logo.png",
+      "path": "docs/inbase-logo.png",
+      "folder": "docs",
+      "lines": 1,
+      "language": "png",
+      "symbols": [],
+      "imports": [],
+      "binary": true
+    },
+    {
+      "id": "docs/manual-accept-chat.png",
+      "name": "manual-accept-chat.png",
+      "path": "docs/manual-accept-chat.png",
+      "folder": "docs",
+      "lines": 1,
+      "language": "png",
+      "symbols": [],
+      "imports": [],
+      "binary": true
+    },
+    {
+      "id": "docs/manual-blueprint.png",
+      "name": "manual-blueprint.png",
+      "path": "docs/manual-blueprint.png",
+      "folder": "docs",
+      "lines": 1,
+      "language": "png",
+      "symbols": [],
+      "imports": [],
+      "binary": true
+    },
+    {
+      "id": "docs/manual-branch.png",
+      "name": "manual-branch.png",
+      "path": "docs/manual-branch.png",
+      "folder": "docs",
+      "lines": 1,
+      "language": "png",
+      "symbols": [],
+      "imports": [],
+      "binary": true
+    },
+    {
+      "id": "docs/manual-connected.png",
+      "name": "manual-connected.png",
+      "path": "docs/manual-connected.png",
+      "folder": "docs",
+      "lines": 1,
+      "language": "png",
+      "symbols": [],
+      "imports": [],
+      "binary": true
+    },
+    {
+      "id": "docs/manual-cursor-chat.png",
+      "name": "manual-cursor-chat.png",
+      "path": "docs/manual-cursor-chat.png",
+      "folder": "docs",
+      "lines": 1,
+      "language": "png",
+      "symbols": [],
+      "imports": [],
+      "binary": true
+    },
+    {
+      "id": "docs/manual-explain.png",
+      "name": "manual-explain.png",
+      "path": "docs/manual-explain.png",
+      "folder": "docs",
+      "lines": 1,
+      "language": "png",
+      "symbols": [],
+      "imports": [],
+      "binary": true
+    },
+    {
+      "id": "docs/manual-info-panel.png",
+      "name": "manual-info-panel.png",
+      "path": "docs/manual-info-panel.png",
+      "folder": "docs",
+      "lines": 1,
+      "language": "png",
+      "symbols": [],
+      "imports": [],
+      "binary": true
+    },
+    {
+      "id": "docs/manual-map.png",
+      "name": "manual-map.png",
+      "path": "docs/manual-map.png",
+      "folder": "docs",
+      "lines": 1,
+      "language": "png",
+      "symbols": [],
+      "imports": [],
+      "binary": true
+    },
+    {
+      "id": "docs/manual-open-url.png",
+      "name": "manual-open-url.png",
+      "path": "docs/manual-open-url.png",
+      "folder": "docs",
+      "lines": 1,
+      "language": "png",
+      "symbols": [],
+      "imports": [],
+      "binary": true
+    },
+    {
+      "id": "docs/manual-proposal.png",
+      "name": "manual-proposal.png",
+      "path": "docs/manual-proposal.png",
+      "folder": "docs",
+      "lines": 1,
+      "language": "png",
+      "symbols": [],
+      "imports": [],
+      "binary": true
+    },
+    {
+      "id": "docs/manual-sessions.png",
+      "name": "manual-sessions.png",
+      "path": "docs/manual-sessions.png",
+      "folder": "docs",
+      "lines": 1,
+      "language": "png",
+      "symbols": [],
+      "imports": [],
+      "binary": true
+    },
+    {
+      "id": "docs/manual-start.png",
+      "name": "manual-start.png",
+      "path": "docs/manual-start.png",
+      "folder": "docs",
+      "lines": 1,
+      "language": "png",
+      "symbols": [],
+      "imports": [],
+      "binary": true
+    },
+    {
+      "id": "docs/manual-walk.png",
+      "name": "manual-walk.png",
+      "path": "docs/manual-walk.png",
+      "folder": "docs",
+      "lines": 1,
+      "language": "png",
+      "symbols": [],
+      "imports": [],
+      "binary": true
+    },
+    {
+      "id": "inbase.json",
+      "name": "inbase.json",
+      "path": "inbase.json",
+      "folder": ".",
+      "lines": 7,
+      "language": "json",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": "logo-icon.png",
+      "name": "logo-icon.png",
+      "path": "logo-icon.png",
+      "folder": ".",
+      "lines": 1,
+      "language": "png",
+      "symbols": [],
+      "imports": [],
+      "binary": true
+    },
+    {
       "id": "package.json",
       "name": "package.json",
       "path": "package.json",
       "folder": ".",
-      "lines": 91,
+      "lines": 101,
       "language": "json",
+      "symbols": [],
+      "imports": []
+    },
+    {
+      "id": "skill/commands/accept.md",
+      "name": "accept.md",
+      "path": "skill/commands/accept.md",
+      "folder": "skill/commands",
+      "lines": 26,
+      "language": "md",
       "symbols": [],
       "imports": []
     },
@@ -14734,7 +17102,7 @@
       "name": "amber.md",
       "path": "skill/commands/amber.md",
       "folder": "skill/commands",
-      "lines": 26,
+      "lines": 28,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -14754,7 +17122,7 @@
       "name": "coral.md",
       "path": "skill/commands/coral.md",
       "folder": "skill/commands",
-      "lines": 26,
+      "lines": 28,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -14770,11 +17138,11 @@
       "imports": []
     },
     {
-      "id": "skill/commands/go.md",
-      "name": "go.md",
-      "path": "skill/commands/go.md",
+      "id": "skill/commands/extract-blueprint.md",
+      "name": "extract-blueprint.md",
+      "path": "skill/commands/extract-blueprint.md",
       "folder": "skill/commands",
-      "lines": 26,
+      "lines": 57,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -14784,7 +17152,7 @@
       "name": "green.md",
       "path": "skill/commands/green.md",
       "folder": "skill/commands",
-      "lines": 26,
+      "lines": 28,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -14794,7 +17162,7 @@
       "name": "inbase.md",
       "path": "skill/commands/inbase.md",
       "folder": "skill/commands",
-      "lines": 22,
+      "lines": 24,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -14804,7 +17172,7 @@
       "name": "lime.md",
       "path": "skill/commands/lime.md",
       "folder": "skill/commands",
-      "lines": 26,
+      "lines": 28,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -14814,7 +17182,7 @@
       "name": "orange.md",
       "path": "skill/commands/orange.md",
       "folder": "skill/commands",
-      "lines": 26,
+      "lines": 28,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -14824,7 +17192,7 @@
       "name": "purple.md",
       "path": "skill/commands/purple.md",
       "folder": "skill/commands",
-      "lines": 26,
+      "lines": 28,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -14834,7 +17202,7 @@
       "name": "red.md",
       "path": "skill/commands/red.md",
       "folder": "skill/commands",
-      "lines": 26,
+      "lines": 28,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -14854,7 +17222,7 @@
       "name": "violet.md",
       "path": "skill/commands/violet.md",
       "folder": "skill/commands",
-      "lines": 26,
+      "lines": 28,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -14864,7 +17232,7 @@
       "name": "yellow.md",
       "path": "skill/commands/yellow.md",
       "folder": "skill/commands",
-      "lines": 26,
+      "lines": 28,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -14874,7 +17242,7 @@
       "name": "SKILL.md",
       "path": "skill/inbase/SKILL.md",
       "folder": "skill/inbase",
-      "lines": 271,
+      "lines": 361,
       "language": "md",
       "symbols": [],
       "imports": []
@@ -14886,16 +17254,117 @@
       "name": "inbase",
       "parent": null,
       "files": [
+        ".gitignore",
         "CONTRIBUTING.md",
+        "inbase.json",
         "LICENSE",
+        "logo-icon.png",
         "package.json",
         "README.md",
         "SECURITY.md"
       ],
       "children": [
+        ".cursor",
+        ".github",
         "apps",
         "bin",
+        "docs",
         "skill"
+      ]
+    },
+    {
+      "path": ".cursor/commands",
+      "name": "commands",
+      "parent": ".cursor",
+      "files": [
+        ".cursor/commands/accept.md",
+        ".cursor/commands/amber.md",
+        ".cursor/commands/blue.md",
+        ".cursor/commands/coral.md",
+        ".cursor/commands/explain.md",
+        ".cursor/commands/extract-blueprint.md",
+        ".cursor/commands/green.md",
+        ".cursor/commands/inbase.md",
+        ".cursor/commands/lime.md",
+        ".cursor/commands/orange.md",
+        ".cursor/commands/purple.md",
+        ".cursor/commands/red.md",
+        ".cursor/commands/skipinbase.md",
+        ".cursor/commands/violet.md",
+        ".cursor/commands/yellow.md"
+      ],
+      "children": []
+    },
+    {
+      "path": ".cursor",
+      "name": ".cursor",
+      "parent": ".",
+      "files": [],
+      "children": [
+        ".cursor/commands",
+        ".cursor/rules",
+        ".cursor/skills"
+      ]
+    },
+    {
+      "path": ".cursor/rules",
+      "name": "rules",
+      "parent": ".cursor",
+      "files": [
+        ".cursor/rules/example-target-visual-edits.mdc"
+      ],
+      "children": []
+    },
+    {
+      "path": ".cursor/skills/example-target-visual-edits",
+      "name": "example-target-visual-edits",
+      "parent": ".cursor/skills",
+      "files": [
+        ".cursor/skills/example-target-visual-edits/SKILL.md"
+      ],
+      "children": [
+        ".cursor/skills/example-target-visual-edits/scripts"
+      ]
+    },
+    {
+      "path": ".cursor/skills",
+      "name": "skills",
+      "parent": ".cursor",
+      "files": [],
+      "children": [
+        ".cursor/skills/example-target-visual-edits"
+      ]
+    },
+    {
+      "path": ".cursor/skills/example-target-visual-edits/scripts",
+      "name": "scripts",
+      "parent": ".cursor/skills/example-target-visual-edits",
+      "files": [
+        ".cursor/skills/example-target-visual-edits/scripts/attach.mjs",
+        ".cursor/skills/example-target-visual-edits/scripts/propose-patch.mjs",
+        ".cursor/skills/example-target-visual-edits/scripts/read-blueprint.mjs",
+        ".cursor/skills/example-target-visual-edits/scripts/report-plan.mjs",
+        ".cursor/skills/example-target-visual-edits/scripts/run-inbase.mjs",
+        ".cursor/skills/example-target-visual-edits/scripts/start-session.mjs"
+      ],
+      "children": []
+    },
+    {
+      "path": ".github/workflows",
+      "name": "workflows",
+      "parent": ".github",
+      "files": [
+        ".github/workflows/publish.yml"
+      ],
+      "children": []
+    },
+    {
+      "path": ".github",
+      "name": ".github",
+      "parent": ".",
+      "files": [],
+      "children": [
+        ".github/workflows"
       ]
     },
     {
@@ -14954,6 +17423,9 @@
       "name": "scripts",
       "parent": "apps/explorer",
       "files": [
+        "apps/explorer/scripts/blueprint-files.d.ts",
+        "apps/explorer/scripts/blueprint-files.mjs",
+        "apps/explorer/scripts/blueprint-files.test.mjs",
         "apps/explorer/scripts/branch-changes.d.ts",
         "apps/explorer/scripts/branch-changes.mjs",
         "apps/explorer/scripts/branch-changes.test.mjs",
@@ -14961,6 +17433,9 @@
         "apps/explorer/scripts/explain-store.mjs",
         "apps/explorer/scripts/explain-store.test.mjs",
         "apps/explorer/scripts/git-test.mjs",
+        "apps/explorer/scripts/hidden-files.d.ts",
+        "apps/explorer/scripts/hidden-files.mjs",
+        "apps/explorer/scripts/hidden-files.test.mjs",
         "apps/explorer/scripts/js-source.mjs",
         "apps/explorer/scripts/open-editor.d.ts",
         "apps/explorer/scripts/open-editor.mjs",
@@ -15063,6 +17538,7 @@
       "name": "ui",
       "parent": "apps/explorer/src",
       "files": [
+        "apps/explorer/src/ui/BlueprintFileDialogs.tsx",
         "apps/explorer/src/ui/CanvasErrorBoundary.tsx",
         "apps/explorer/src/ui/ExplainAskCard.tsx",
         "apps/explorer/src/ui/ExplainHud.tsx",
@@ -15080,8 +17556,13 @@
       "name": "editors",
       "parent": "bin",
       "files": [
+        "bin/editors/agents.mjs",
+        "bin/editors/claude.mjs",
+        "bin/editors/cline.mjs",
+        "bin/editors/copilot.mjs",
         "bin/editors/cursor.mjs",
-        "bin/editors/index.mjs"
+        "bin/editors/index.mjs",
+        "bin/editors/layout.mjs"
       ],
       "children": []
     },
@@ -15090,6 +17571,10 @@
       "name": "bin",
       "parent": ".",
       "files": [
+        "bin/extract-blueprint.mjs",
+        "bin/extract-blueprint.test.mjs",
+        "bin/inbase-config.mjs",
+        "bin/inbase-config.test.mjs",
         "bin/inbase.mjs",
         "bin/inbase.test.mjs",
         "bin/project.mjs",
@@ -15101,15 +17586,42 @@
       ]
     },
     {
+      "path": "docs",
+      "name": "docs",
+      "parent": ".",
+      "files": [
+        "docs/inbase-1.png",
+        "docs/inbase-2.png",
+        "docs/inbase-llm.png",
+        "docs/inbase-logo-white.png",
+        "docs/inbase-logo.png",
+        "docs/manual-accept-chat.png",
+        "docs/manual-blueprint.png",
+        "docs/manual-branch.png",
+        "docs/manual-connected.png",
+        "docs/manual-cursor-chat.png",
+        "docs/manual-explain.png",
+        "docs/manual-info-panel.png",
+        "docs/manual-map.png",
+        "docs/manual-open-url.png",
+        "docs/manual-proposal.png",
+        "docs/manual-sessions.png",
+        "docs/manual-start.png",
+        "docs/manual-walk.png"
+      ],
+      "children": []
+    },
+    {
       "path": "skill/commands",
       "name": "commands",
       "parent": "skill",
       "files": [
+        "skill/commands/accept.md",
         "skill/commands/amber.md",
         "skill/commands/blue.md",
         "skill/commands/coral.md",
         "skill/commands/explain.md",
-        "skill/commands/go.md",
+        "skill/commands/extract-blueprint.md",
         "skill/commands/green.md",
         "skill/commands/inbase.md",
         "skill/commands/lime.md",

@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "kind": "inbase-blueprint",
+  "name": "temp",
+  "savedAt": "2026-09-06T06:15:59.150Z",
+  "global": {
+    "hidden": true,
+    "files": [
+      {
+        "id": "Newfolder/thrrth",
+        "name": "thrrth",
+        "path": "Newfolder/thrrth",
+        "folder": "Newfolder"
+      }
+    ],
+    "folders": [
+      {
+        "id": "Newfolder",
+        "name": "Newfolder",
+        "path": "Newfolder",
+        "parent": "."
+      },
+      {
+        "id": "apps/Temp",
+        "name": "Temp",
+        "path": "apps/Temp",
+        "parent": "apps"
+      }
+    ],
+    "addedFunctions": [],
+    "addedVariables": [],
+    "addedImports": [],
+    "notes": [],
+    "pointers": []
+  },
+  "locals": [
+    {
+      "color": "coral",
+      "colorName": "Coral",
+      "colorHex": "#f87171",
+      "hidden": false,
+      "files": [],
+      "folders": [],
+      "addedFunctions": [],
+      "addedVariables": [],
+      "addedImports": [],
+      "notes": [],
+      "pointers": []
+    },
+    {
+      "color": "amber",
+      "colorName": "Amber",
+      "colorHex": "#fbbf24",
+      "hidden": false,
+      "files": [],
+      "folders": [],
+      "addedFunctions": [],
+      "addedVariables": [],
+      "addedImports": [],
+      "notes": [],
+      "pointers": []
+    },
+    {
+      "color": "lime",
+      "colorName": "Lime",
+      "colorHex": "#a3e635",
+      "hidden": false,
+      "files": [],
+      "folders": [],
+      "addedFunctions": [],
+      "addedVariables": [],
+      "addedImports": [],
+      "notes": [],
+      "pointers": []
+    },
+    {
+      "color": "orange",
+      "colorName": "Orange",
+      "colorHex": "#fb923c",
+      "hidden": false,
+      "files": [],
+      "folders": [],
+      "addedFunctions": [],
+      "addedVariables": [],
+      "addedImports": [],
+      "notes": [],
+      "pointers": []
+    },
+    {
+      "color": "violet",
+      "colorName": "Violet",
+      "colorHex": "#c084fc",
+      "hidden": false,
+      "files": [],
+      "folders": [],
+      "addedFunctions": [],
+      "addedVariables": [],
+      "addedImports": [],
+      "notes": [],
+      "pointers": []
+    }
+  ]
+}

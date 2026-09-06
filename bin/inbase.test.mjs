@@ -89,7 +89,9 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /`\.claude`/)
     assert.match(skillText, /`\.agents`/)
     assert.match(skillText, /`\.cline`/)
+    assert.match(skillText, /`\.clinerules`/)
     assert.match(skillText, /`\.github\/skills`/)
+    assert.match(skillText, /\/extract-blueprint/)
     assert.doesNotMatch(skillText, /\/go/)
     assert.doesNotMatch(skillText, /user-invocable:/)
     assert.doesNotMatch(skillText, /allowed-tools:/)
@@ -137,7 +139,9 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(skillText, /`\.claude`/)
     assert.match(skillText, /`\.agents`/)
     assert.match(skillText, /`\.cline`/)
+    assert.match(skillText, /`\.clinerules`/)
     assert.match(skillText, /`\.github\/skills`/)
+    assert.match(skillText, /\/extract-blueprint/)
     assert.doesNotMatch(skillText, /npx inbase wait-for-approval/)
     assert.doesNotMatch(skillText, /npx inbase explain wait/)
     assert.doesNotMatch(skillText, /direct chat interaction not allowed/)
@@ -168,6 +172,19 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(
       fs.readFileSync(path.join(root, '.cursor/commands/explain.md'), 'utf8'),
       /npx inbase explain start/,
+    )
+    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/extract-blueprint.md')), true)
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/extract-blueprint.md'), 'utf8'),
+      /npx inbase extract-blueprint/,
+    )
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/extract-blueprint.md'), 'utf8'),
+      /Do \*\*not\*\* attach/,
+    )
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/extract-blueprint.md'), 'utf8'),
+      /Do not extract everything/,
     )
     assert.doesNotMatch(
       fs.readFileSync(path.join(root, '.cursor/commands/explain.md'), 'utf8'),
@@ -265,6 +282,10 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.equal(agents?.label, 'Agent Skills')
     assert.equal(agents?.skillDir, path.join(root, '.agents/skills/inbase'))
     assert.equal(fs.existsSync(path.join(root, '.agents/skills/accept/SKILL.md')), true)
+    assert.equal(
+      fs.existsSync(path.join(root, '.agents/skills/extract-blueprint/SKILL.md')),
+      true,
+    )
     const agentsSkill = fs.readFileSync(
       path.join(root, '.agents/skills/inbase/SKILL.md'),
       'utf8',
@@ -277,20 +298,34 @@ test('init copies editor skills and gitignores .inbase', () => {
     const cline = result.editors.find((editor) => editor.id === 'cline')
     assert.equal(cline?.label, 'Cline')
     assert.equal(cline?.skillDir, path.join(root, '.cline/skills/inbase'))
-    assert.equal(fs.existsSync(path.join(root, '.cline/skills/accept/SKILL.md')), true)
-    assert.equal(fs.existsSync(path.join(root, '.cline/skills/coral/SKILL.md')), true)
+    assert.equal(cline?.commandDir, path.join(root, '.cline/workflows'))
+    assert.equal(fs.existsSync(path.join(root, '.cline/skills/accept/SKILL.md')), false)
+    fs.mkdirSync(path.join(root, '.cline/skills/accept'), { recursive: true })
+    fs.writeFileSync(path.join(root, '.cline/skills/accept/SKILL.md'), 'legacy command skill\n')
+    initProject(root)
+    assert.equal(fs.existsSync(path.join(root, '.cline/skills/accept/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cline/workflows/accept.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.cline/workflows/coral.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.clinerules/workflows/accept.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.clinerules/workflows/coral.md')), true)
     const clineSkill = fs.readFileSync(
       path.join(root, '.cline/skills/inbase/SKILL.md'),
       'utf8',
     )
     assert.match(clineSkill, /npx inbase attach/)
-    assert.match(clineSkill, /allowed-tools: Bash\(npx inbase \*\)/)
+    assert.doesNotMatch(clineSkill, /allowed-tools:/)
     const clineAccept = fs.readFileSync(
-      path.join(root, '.cline/skills/accept/SKILL.md'),
+      path.join(root, '.cline/workflows/accept.md'),
       'utf8',
     )
-    assert.match(clineAccept, /^---\nname: accept\n/)
     assert.match(clineAccept, /npx inbase accept/)
+    const clineRule = fs.readFileSync(path.join(root, '.cline/rules/inbase.md'), 'utf8')
+    assert.match(clineRule, /\.cline\/skills\/inbase\/SKILL\.md/)
+    assert.match(clineRule, /\/extract-blueprint/)
+    assert.match(
+      fs.readFileSync(path.join(root, '.clinerules/inbase.md'), 'utf8'),
+      /\.cline\/skills\/inbase\/SKILL\.md/,
+    )
     assert.equal(fs.existsSync(path.join(root, '.inbase/user-context.json')), true)
     assert.match(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), /\.inbase\//)
     assert.equal(result.configAdded, true)
@@ -363,6 +398,7 @@ test('help prints usage', async () => {
     assert.match(output, /inbase run/)
     assert.match(output, /inbase attach \[--session <id>\] \[--color <name>\]/)
     assert.match(output, /inbase accept \[--session <id>\]/)
+    assert.match(output, /inbase extract-blueprint <folder> <output-file>/)
     assert.doesNotMatch(output, /inbase go \[--session/)
     assert.match(output, /Install Cursor, Claude Code, Codex, Copilot, and Cline skills/)
   } finally {
@@ -463,14 +499,12 @@ test('read-blueprint treats an enabled blueprint as the request when there is no
       pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
     )
     store.updateBlueprint(dataDir, 'blueprint-only', {
-      userCreatedBlocks: [
+      files: [
         {
           id: 'src/Widget.tsx',
           name: 'Widget.tsx',
           path: 'src/Widget.tsx',
           folder: 'src',
-          x: 1,
-          z: 2,
         },
       ],
     })

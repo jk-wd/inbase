@@ -540,8 +540,8 @@ export function findSessionIdByColor(dataDir, colorId) {
 
 function blueprintHasContent(blueprint) {
   return (
-    (blueprint.userCreatedBlocks?.length ?? 0) > 0 ||
-    (blueprint.userCreatedIslands?.length ?? 0) > 0 ||
+    (blueprint.files?.length ?? 0) > 0 ||
+    (blueprint.folders?.length ?? 0) > 0 ||
     (blueprint.addedFunctions?.length ?? 0) > 0 ||
     (blueprint.addedVariables?.length ?? 0) > 0 ||
     (blueprint.addedImports?.length ?? 0) > 0 ||
@@ -925,8 +925,8 @@ export function sessionIntent(
     blueprintRevision: blueprint.revision,
     blueprintSessionId: null,
     localBlueprintEnabled: readLocalBlueprint(dataDir, sessionId).enabled,
-    userCreatedBlocks: blueprint.userCreatedBlocks,
-    userCreatedIslands: blueprint.userCreatedIslands,
+    userCreatedBlocks: blueprint.files,
+    userCreatedIslands: blueprint.folders,
     ...preview,
     blueprintFunctions: blueprint.addedFunctions,
     blueprintVariables: blueprint.addedVariables,
@@ -1462,8 +1462,8 @@ export function updateBlueprint(dataDir, _sessionId, input = {}) {
   const current = readBlueprintByColor(dataDir, colorId)
   const next = {
     ...current,
-    userCreatedBlocks: fields.userCreatedBlocks ?? current.userCreatedBlocks,
-    userCreatedIslands: fields.userCreatedIslands ?? current.userCreatedIslands,
+    files: fields.files ?? fields.userCreatedBlocks ?? current.files,
+    folders: fields.folders ?? fields.userCreatedIslands ?? current.folders,
     addedFunctions: fields.addedFunctions ?? current.addedFunctions,
     addedVariables: fields.addedVariables ?? current.addedVariables,
     addedImports: fields.addedImports ?? current.addedImports,
@@ -2050,8 +2050,8 @@ export function emptyBlueprint() {
     revision: 0,
     enabled: false,
     sent: true,
-    userCreatedBlocks: [],
-    userCreatedIslands: [],
+    files: [],
+    folders: [],
     addedFunctions: [],
     addedVariables: [],
     addedImports: [],
@@ -2060,35 +2060,53 @@ export function emptyBlueprint() {
   }
 }
 
-function namedBlueprintBlocks(value) {
+function namedBlueprintFiles(value) {
   if (!Array.isArray(value)) return []
-  return value.filter((item) => {
-    if (!item || typeof item !== 'object') return false
-    return (
-      typeof item.id === 'string' &&
-      typeof item.name === 'string' &&
-      item.name.trim() !== '' &&
-      typeof item.path === 'string' &&
-      typeof item.folder === 'string' &&
-      typeof item.x === 'number' &&
-      typeof item.z === 'number' &&
-      !item.naming
-    )
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    if (
+      typeof item.id !== 'string' ||
+      typeof item.name !== 'string' ||
+      item.name.trim() === '' ||
+      typeof item.path !== 'string' ||
+      typeof item.folder !== 'string' ||
+      item.naming
+    ) {
+      return []
+    }
+    return [
+      {
+        id: item.id,
+        name: item.name,
+        path: item.path,
+        folder: item.folder,
+      },
+    ]
   })
 }
 
-function namedBlueprintIslands(value) {
+function namedBlueprintFolders(value) {
   if (!Array.isArray(value)) return []
-  return value.filter((item) => {
-    if (!item || typeof item !== 'object') return false
-    return (
-      typeof item.id === 'string' &&
-      typeof item.name === 'string' &&
-      item.name.trim() !== '' &&
-      typeof item.path === 'string' &&
-      typeof item.parent === 'string' &&
-      !item.naming
-    )
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    if (
+      typeof item.id !== 'string' ||
+      typeof item.name !== 'string' ||
+      item.name.trim() === '' ||
+      typeof item.path !== 'string' ||
+      typeof item.parent !== 'string' ||
+      item.naming
+    ) {
+      return []
+    }
+    return [
+      {
+        id: item.id,
+        name: item.name,
+        path: item.path,
+        parent: item.parent,
+      },
+    ]
   })
 }
 
@@ -2184,8 +2202,8 @@ function namedBlueprintPointers(value) {
 function blueprintContentEqual(left, right) {
   return (
     JSON.stringify({
-      userCreatedBlocks: left.userCreatedBlocks,
-      userCreatedIslands: left.userCreatedIslands,
+      files: left.files,
+      folders: left.folders,
       addedFunctions: left.addedFunctions,
       addedVariables: left.addedVariables,
       addedImports: left.addedImports,
@@ -2193,8 +2211,8 @@ function blueprintContentEqual(left, right) {
       pointers: left.pointers,
     }) ===
     JSON.stringify({
-      userCreatedBlocks: right.userCreatedBlocks,
-      userCreatedIslands: right.userCreatedIslands,
+      files: right.files,
+      folders: right.folders,
       addedFunctions: right.addedFunctions,
       addedVariables: right.addedVariables,
       addedImports: right.addedImports,
@@ -2205,8 +2223,8 @@ function blueprintContentEqual(left, right) {
 }
 
 function normalizeBlueprint(value) {
-  const userCreatedBlocks = namedBlueprintBlocks(value?.userCreatedBlocks)
-  const userCreatedIslands = namedBlueprintIslands(value?.userCreatedIslands)
+  const files = namedBlueprintFiles(value?.files ?? value?.userCreatedBlocks)
+  const folders = namedBlueprintFolders(value?.folders ?? value?.userCreatedIslands)
   const addedFunctions = namedBlueprintSymbols(value?.addedFunctions)
   const addedVariables = namedBlueprintSymbols(value?.addedVariables)
   const addedImports = namedBlueprintImportAdditions(value?.addedImports)
@@ -2218,8 +2236,8 @@ function normalizeBlueprint(value) {
     hidden: Boolean(value?.hidden),
     revision,
     enabled: blueprintHasContent({
-      userCreatedBlocks,
-      userCreatedIslands,
+      files,
+      folders,
       addedFunctions,
       addedVariables,
       addedImports,
@@ -2227,8 +2245,8 @@ function normalizeBlueprint(value) {
       pointers,
     }),
     sent: true,
-    userCreatedBlocks,
-    userCreatedIslands,
+    files,
+    folders,
     addedFunctions,
     addedVariables,
     addedImports,
@@ -2241,6 +2259,8 @@ function persistBlueprintFile(file, incoming, current) {
   const next = normalizeBlueprint({
     ...current,
     ...incoming,
+    files: incoming?.files ?? incoming?.userCreatedBlocks ?? current.files,
+    folders: incoming?.folders ?? incoming?.userCreatedIslands ?? current.folders,
     hidden:
       incoming?.hidden !== undefined ? incoming.hidden : current.hidden,
   })
@@ -2259,8 +2279,8 @@ function persistBlueprintFile(file, incoming, current) {
         revision: next.revision,
         enabled: next.enabled,
         sent: true,
-        userCreatedBlocks: namedBlueprintBlocks(next.userCreatedBlocks),
-        userCreatedIslands: namedBlueprintIslands(next.userCreatedIslands),
+        files: namedBlueprintFiles(next.files),
+        folders: namedBlueprintFolders(next.folders),
         addedFunctions: namedBlueprintSymbols(next.addedFunctions),
         addedVariables: namedBlueprintSymbols(next.addedVariables),
         addedImports: namedBlueprintImportAdditions(next.addedImports),
@@ -2367,17 +2387,15 @@ export function cleanupBlueprint(
   colorId,
 ) {
   const current = readBlueprintByColor(dataDir, colorId)
-  const files = new Set(knownFileIds)
-  const folders = new Set(knownFolderPaths)
+  const knownFiles = new Set(knownFileIds)
+  const knownFolders = new Set(knownFolderPaths)
   const removedFiles = new Set(
-    current.userCreatedBlocks.filter((block) => files.has(block.id)).map((block) => block.id),
+    current.files.filter((file) => knownFiles.has(file.id)).map((file) => file.id),
   )
   const next = {
     ...current,
-    userCreatedBlocks: current.userCreatedBlocks.filter((block) => !files.has(block.id)),
-    userCreatedIslands: current.userCreatedIslands.filter(
-      (island) => !folders.has(island.path),
-    ),
+    files: current.files.filter((file) => !knownFiles.has(file.id)),
+    folders: current.folders.filter((folder) => !knownFolders.has(folder.path)),
     addedFunctions: current.addedFunctions.filter((item) => !removedFiles.has(item.file)),
     addedVariables: current.addedVariables.filter((item) => !removedFiles.has(item.file)),
     addedImports: current.addedImports.filter((item) => !removedFiles.has(item.file)),

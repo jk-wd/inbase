@@ -8,15 +8,16 @@ description: >-
   /coral /red /amber and the other session colors. Later turns stay in that
   session: never attach again. Always works via the plan. A later change
   request must report-plan from the last proposal before editing, including
-  after the last recorded step. Do not use for git, docs-only, lockfiles, or
-  questions.
+  after the last recorded step. Do not use for git, docs-only, lockfiles,
+  questions, or `/extract-blueprint`.
 ---
 
 # Inbase visual edits
 
 Apply this skill **whenever the work is file changes in this repository**.
 Skip it for git, lockfiles, `.inbase`, `.cursor`, `.claude`, `.agents`,
-`.cline`, `.github/skills`, or questions with no code changes.
+`.cline`, `.clinerules`, `.github/skills`, questions with no code changes,
+or `/extract-blueprint`.
 
 `npx inbase run` creates 5 empty chat slots. A regular chat connects to
 the next unconnected slot. You do not need `/inbase`.
@@ -40,6 +41,8 @@ the next unconnected slot. You do not need `/inbase`.
   sub-steps.
 - **`/skipinbase`**: do the user's request without Inbase. Do not attach or
   record patches.
+- **`/extract-blueprint [folder] [output file]`**: extract a valuable blueprint
+  from an existing folder. Do not attach. Follow the extract-blueprint command.
 - **Any other file-change request**: if this conversation already has a
   `VISUAL_CODER_SESSION`, stay in that session and follow Required sequence
   from the current plan. Do **not** attach. If it does not, attach once, then
@@ -210,7 +213,7 @@ is waiting, do **not** restart from step 1. Do **not** attach.
 npx inbase read-blueprint --session "<session-id>"
 ```
 
-   The user may have placed files and islands on the map, or left the
+   The user may have placed files and folders on the map, or left the
    blueprints empty. The **global** (blue) blueprint is shared across sessions.
    This chat also has a **local** blueprint in this session's color; only this
    chat receives it. They can keep placing at any time.
@@ -230,12 +233,12 @@ npx inbase read-blueprint --session "<session-id>"
    (this session's color only). You can also read the global
    `.inbase/blueprint.json`.
    If either dump has `enabled` true, **that blueprint is leading**. Treat
-   `userCreatedBlocks`, `userCreatedIslands`, `addedFunctions`,
+   `files`, `folders`, `addedFunctions`,
    `addedVariables`, and `addedImports` as the source of truth for this chat.
    Create those paths and add those symbols even if they are not on disk.
    Honor the global blueprint and this session's local blueprint. Do not use
    another session's local blueprint.
-   Do not omit, rename, relocate, or replace a blueprint file, island, symbol,
+   Do not omit, rename, relocate, or replace a blueprint file, folder, symbol,
    or import. Extra edits to existing files are allowed when needed to finish
    the feature. Extra new files that are not in either blueprint are a deviation.
    If the user request, a later request, or your own plan would
@@ -353,3 +356,5 @@ npx inbase propose-patch --session "<session-id>" --clear
 - Propose another patch after `VISUAL_CODER_FINISHED`
 - Reuse, overwrite, or expand an existing session diff file yourself; `report-plan` replaces a waiting proposal, then `propose-patch` records a new patch
 - Use this flow for git, lockfiles, or other non-source work
+- Attach or follow the visual plan loop for `/extract-blueprint`; that command
+  writes a blueprint file only

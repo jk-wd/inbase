@@ -47,6 +47,11 @@ import {
   cleanupBlueprint,
 } from './scripts/session-store.mjs'
 import {
+  listSavedBlueprints,
+  loadBlueprintDocument,
+  saveBlueprintDocument,
+} from './scripts/blueprint-files.mjs'
+import {
   askExplainQuestion,
   explainTargetLabel,
   parseExplainTargetKind,
@@ -130,8 +135,8 @@ function blueprintIntentFields() {
     creationMode: true,
     blueprintHidden: Boolean(blueprint.hidden),
     blueprintRevision: blueprint.revision,
-    userCreatedBlocks: blueprint.userCreatedBlocks,
-    userCreatedIslands: blueprint.userCreatedIslands,
+    userCreatedBlocks: blueprint.files,
+    userCreatedIslands: blueprint.folders,
     blueprintFunctions: blueprint.addedFunctions,
     blueprintVariables: blueprint.addedVariables,
     blueprintImports: blueprint.addedImports,
@@ -266,6 +271,18 @@ function jsonFilePlugin(): Plugin {
         next()
       })
 
+      server.middlewares.use('/api/blueprints', (req, res, next) => {
+        if (req.method === 'GET') {
+          sendJson(res, 200, listSavedBlueprints(targetRoot))
+          return
+        }
+        if (req.method === 'POST') {
+          void decideBlueprints(req, res)
+          return
+        }
+        next()
+      })
+
       server.middlewares.use('/api/dev-targets', (req, res, next) => {
         if (req.method === 'GET') {
           sendJson(res, 200, workspaceDevTargetsState())
@@ -372,6 +389,44 @@ async function decideExplain(req: IncomingMessage, res: ServerResponse) {
   }
 }
 
+async function decideBlueprints(req: IncomingMessage, res: ServerResponse) {
+  try {
+    const body = JSON.parse(await readBody(req)) as {
+      action?: string
+      name?: string
+      directory?: string
+      filePath?: string
+      document?: unknown
+      global?: unknown
+      locals?: unknown
+    }
+    if (body.action === 'save') {
+      const saved = saveBlueprintDocument(targetRoot, {
+        name: body.name,
+        directory: body.directory,
+        filePath: body.filePath,
+        global: body.global,
+        locals: body.locals,
+      })
+      sendJson(res, 200, saved)
+      return
+    }
+    if (body.action === 'load') {
+      const loaded = loadBlueprintDocument(targetRoot, dataDir, {
+        name: body.name,
+        filePath: body.filePath,
+        document: body.document,
+      })
+      sendJson(res, 200, loaded)
+      return
+    }
+    sendJson(res, 400, { error: 'invalid blueprint action' })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'invalid request'
+    sendJson(res, 400, { error: message })
+  }
+}
+
 async function inspectFile(req: IncomingMessage, res: ServerResponse) {
   try {
     const body = JSON.parse(await readBody(req)) as {
@@ -412,6 +467,8 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       stepByStep?: boolean
       hidden?: boolean
       color?: string
+      files?: unknown[]
+      folders?: unknown[]
       userCreatedBlocks?: unknown[]
       userCreatedIslands?: unknown[]
       addedFunctions?: unknown[]
@@ -497,8 +554,8 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
     } else if (action === 'blueprint_update') {
       updateBlueprint(dataDir, body.sessionId, {
         color: body.color,
-        userCreatedBlocks: body.userCreatedBlocks,
-        userCreatedIslands: body.userCreatedIslands,
+        files: body.files ?? body.userCreatedBlocks,
+        folders: body.folders ?? body.userCreatedIslands,
         addedFunctions: body.addedFunctions,
         addedVariables: body.addedVariables,
         addedImports: body.addedImports,

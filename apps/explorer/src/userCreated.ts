@@ -64,6 +64,24 @@ export function namedCreatedIslands(islands: UserCreatedIsland[]) {
   return islands.filter((island) => !island.naming && Boolean(island.name))
 }
 
+export function toBlueprintFile(block: UserCreatedBlock) {
+  return {
+    id: block.id,
+    name: block.name,
+    path: block.path,
+    folder: block.folder,
+  }
+}
+
+export function toBlueprintFolder(island: UserCreatedIsland) {
+  return {
+    id: island.id,
+    name: island.name,
+    path: island.path,
+    parent: island.parent,
+  }
+}
+
 export function parseUserCreatedBlocks(value: unknown): UserCreatedBlock[] {
   if (!Array.isArray(value)) return []
   return value.flatMap((item) => {
@@ -73,9 +91,7 @@ export function parseUserCreatedBlocks(value: unknown): UserCreatedBlock[] {
       typeof block.id !== 'string' ||
       typeof block.name !== 'string' ||
       typeof block.path !== 'string' ||
-      typeof block.folder !== 'string' ||
-      typeof block.x !== 'number' ||
-      typeof block.z !== 'number'
+      typeof block.folder !== 'string'
     ) {
       return []
     }
@@ -85,8 +101,8 @@ export function parseUserCreatedBlocks(value: unknown): UserCreatedBlock[] {
         name: block.name,
         path: block.path,
         folder: block.folder,
-        x: block.x,
-        z: block.z,
+        ...(typeof block.x === 'number' ? { x: block.x } : {}),
+        ...(typeof block.z === 'number' ? { z: block.z } : {}),
       },
     ]
   })
@@ -388,11 +404,13 @@ export function withUserCreatedLayout(
   const height = fileHeight(12)
   for (const block of blocks) {
     const folder = withIslands.folders[block.folder]
+    const x = block.x ?? 0
+    const z = block.z ?? 0
     files[block.id] = {
       id: block.id,
-      position: [block.x, height / 2, block.z],
+      position: [x, height / 2, z],
       size: [CONFIG.fileWidth, height, CONFIG.fileDepth],
-      aisleFace: folder && block.x >= folder.x ? -1 : 1,
+      aisleFace: folder && x >= folder.x ? -1 : 1,
     }
   }
   return { ...withIslands, files }
@@ -738,9 +756,9 @@ function placeOverlayBlocks(
     nextIndex.set(folderPath, index + 1)
     const spot = folder
       ? defaultBlockSpot(foldersForSpot, folderPath, index)
-      : { x: block.x, z: block.z, folder: folderPath }
-    let x = spot?.x ?? block.x
-    const z = spot?.z ?? block.z
+      : { x: block.x ?? 0, z: block.z ?? 0, folder: folderPath }
+    let x = spot?.x ?? block.x ?? 0
+    const z = spot?.z ?? block.z ?? 0
     const candidate: PlacedFile = {
       id: block.id,
       position: [x, fileLift + height / 2, z],

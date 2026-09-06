@@ -337,8 +337,6 @@ test('/inbase starts without waiting for a blueprint', () => {
           name: 'Widget.tsx',
           path: 'src/Widget.tsx',
           folder: 'src',
-          x: 1,
-          z: 2,
         },
       ],
     })
@@ -645,8 +643,6 @@ test('shares user-placed files with the chat after Send blueprint', () => {
       name: 'New.tsx',
       path: 'src/New.tsx',
       folder: 'src',
-      x: 1,
-      z: 2,
     }
     const island = {
       id: 'src/widgets',
@@ -656,7 +652,7 @@ test('shares user-placed files with the chat after Send blueprint', () => {
     }
     updateBlueprint(env.dataDir, 'blue-chat', {
       userCreatedBlocks: [block],
-      userCreatedIslands: [island],
+      folders: [island],
       addedFunctions: [{ name: 'Clock', file: 'src/New.tsx' }],
       addedVariables: [{ name: 'tick', file: 'src/a.ts' }],
       addedImports: [
@@ -704,8 +700,6 @@ test('sessions share one blueprint across LLM chats', () => {
       name: 'A.tsx',
       path: 'src/A.tsx',
       folder: 'src',
-      x: 1,
-      z: 2,
     }
     updateBlueprint(env.dataDir, 'edit-a', { userCreatedBlocks: [blockA] })
 
@@ -720,8 +714,6 @@ test('sessions share one blueprint across LLM chats', () => {
       name: 'B.tsx',
       path: 'src/B.tsx',
       folder: 'src',
-      x: 3,
-      z: 4,
     }
     updateBlueprint(env.dataDir, 'edit-b', { userCreatedBlocks: [blockB] })
 
@@ -731,7 +723,7 @@ test('sessions share one blueprint across LLM chats', () => {
     assert.equal(editingB.creationMode, true)
     assert.deepEqual(editingA.userCreatedBlocks, [blockB])
     assert.deepEqual(editingB.userCreatedBlocks, [blockB])
-    assert.deepEqual(readBlueprint(env.dataDir).userCreatedBlocks, [blockB])
+    assert.deepEqual(readBlueprint(env.dataDir).files, [blockB])
 
     focusSession(env.dataDir, 'edit-a')
     assert.equal(readActiveSession(env.dataDir), 'edit-a')
@@ -750,24 +742,22 @@ test('session-colored blueprints stay local to that color', () => {
       name: 'Local.tsx',
       path: 'src/Local.tsx',
       folder: 'src',
-      x: 1,
-      z: 2,
     }
     updateBlueprint(env.dataDir, first.sessionId, {
       color: first.color,
       userCreatedBlocks: [block],
     })
-    assert.deepEqual(readBlueprint(env.dataDir).userCreatedBlocks, [])
-    assert.deepEqual(readLocalBlueprint(env.dataDir, first.sessionId).userCreatedBlocks, [
+    assert.deepEqual(readBlueprint(env.dataDir).files, [])
+    assert.deepEqual(readLocalBlueprint(env.dataDir, first.sessionId).files, [
       block,
     ])
-    assert.deepEqual(readLocalBlueprint(env.dataDir, second.sessionId).userCreatedBlocks, [])
-    assert.deepEqual(readBlueprintByColor(env.dataDir, second.color).userCreatedBlocks, [])
+    assert.deepEqual(readLocalBlueprint(env.dataDir, second.sessionId).files, [])
+    assert.deepEqual(readBlueprintByColor(env.dataDir, second.color).files, [])
     const locals = listLocalBlueprints(env.dataDir)
     const firstLocal = locals.find((item) => item.sessionId === first.sessionId)
     const secondLocal = locals.find((item) => item.sessionId === second.sessionId)
-    assert.deepEqual(firstLocal?.userCreatedBlocks, [block])
-    assert.deepEqual(secondLocal?.userCreatedBlocks, [])
+    assert.deepEqual(firstLocal?.files, [block])
+    assert.deepEqual(secondLocal?.files, [])
     assert.equal(readBlueprint(env.dataDir, first.sessionId).enabled, false)
   } finally {
     env.cleanup()
@@ -786,24 +776,18 @@ test('each chat keeps the global blueprint plus its own color only', () => {
       name: 'Global.tsx',
       path: 'src/Global.tsx',
       folder: 'src',
-      x: 1,
-      z: 1,
     }
     const coralBlock = {
       id: 'src/Coral.tsx',
       name: 'Coral.tsx',
       path: 'src/Coral.tsx',
       folder: 'src',
-      x: 2,
-      z: 2,
     }
     const amberBlock = {
       id: 'src/Amber.tsx',
       name: 'Amber.tsx',
       path: 'src/Amber.tsx',
       folder: 'src',
-      x: 3,
-      z: 3,
     }
     updateBlueprint(env.dataDir, null, { userCreatedBlocks: [globalBlock] })
     updateBlueprint(env.dataDir, coral.sessionId, {
@@ -817,19 +801,19 @@ test('each chat keeps the global blueprint plus its own color only', () => {
     sendBlueprint(env.dataDir, coral.sessionId, {
       userCreatedBlocks: [coralBlock],
     })
-    assert.deepEqual(readBlueprint(env.dataDir).userCreatedBlocks, [globalBlock])
-    assert.deepEqual(readLocalBlueprint(env.dataDir, coral.sessionId).userCreatedBlocks, [
+    assert.deepEqual(readBlueprint(env.dataDir).files, [globalBlock])
+    assert.deepEqual(readLocalBlueprint(env.dataDir, coral.sessionId).files, [
       coralBlock,
     ])
-    assert.deepEqual(readLocalBlueprint(env.dataDir, amber.sessionId).userCreatedBlocks, [
+    assert.deepEqual(readLocalBlueprint(env.dataDir, amber.sessionId).files, [
       amberBlock,
     ])
     sendBlueprint(env.dataDir, amber.sessionId)
-    assert.deepEqual(readBlueprint(env.dataDir).userCreatedBlocks, [globalBlock])
-    assert.deepEqual(readLocalBlueprint(env.dataDir, coral.sessionId).userCreatedBlocks, [
+    assert.deepEqual(readBlueprint(env.dataDir).files, [globalBlock])
+    assert.deepEqual(readLocalBlueprint(env.dataDir, coral.sessionId).files, [
       coralBlock,
     ])
-    assert.deepEqual(readLocalBlueprint(env.dataDir, amber.sessionId).userCreatedBlocks, [
+    assert.deepEqual(readLocalBlueprint(env.dataDir, amber.sessionId).files, [
       amberBlock,
     ])
     const coralIntent = sessionIntent(env.dataDir, coral.sessionId, ['src/a.ts'])
@@ -859,8 +843,6 @@ test('keeps accepting placed files after the blueprint handshake', () => {
       name: 'Later.tsx',
       path: 'src/Later.tsx',
       folder: 'src',
-      x: 5,
-      z: 6,
     }
     updateBlueprint(env.dataDir, 'later-chat', {
       userCreatedBlocks: [afterSend],
@@ -874,7 +856,7 @@ test('keeps accepting placed files after the blueprint handshake', () => {
 
     startSession(env.dataDir, { sessionId: 'ask-chat' })
     updateBlueprint(env.dataDir, 'ask-chat', { userCreatedBlocks: [afterSend] })
-    assert.deepEqual(readBlueprint(env.dataDir).userCreatedBlocks, [afterSend])
+    assert.deepEqual(readBlueprint(env.dataDir).files, [afterSend])
 
     startSession(env.dataDir, { sessionId: 'skip-chat' })
     answerBlueprint(env.dataDir, 'skip-chat', false)
@@ -883,8 +865,6 @@ test('keeps accepting placed files after the blueprint handshake', () => {
       name: 'Skipped.tsx',
       path: 'src/Skipped.tsx',
       folder: 'src',
-      x: 7,
-      z: 8,
     }
     updateBlueprint(env.dataDir, 'skip-chat', {
       userCreatedBlocks: [skipped],
@@ -906,16 +886,12 @@ test('blueprint stays shared after a session finishes and can be cleaned up', ()
       name: 'a.ts',
       path: 'src/a.ts',
       folder: 'src',
-      x: 1,
-      z: 2,
     }
     const pending = {
       id: 'src/New.tsx',
       name: 'New.tsx',
       path: 'src/New.tsx',
       folder: 'src',
-      x: 3,
-      z: 4,
     }
     const island = {
       id: 'src',
@@ -925,7 +901,7 @@ test('blueprint stays shared after a session finishes and can be cleaned up', ()
     }
     updateBlueprint(env.dataDir, null, {
       userCreatedBlocks: [block, pending],
-      userCreatedIslands: [island],
+      folders: [island],
       addedFunctions: [
         { name: 'Clock', file: 'src/New.tsx' },
         { name: 'value', file: 'src/a.ts' },
@@ -933,10 +909,10 @@ test('blueprint stays shared after a session finishes and can be cleaned up', ()
     })
     const cleaned = cleanupBlueprint(env.dataDir, ['src/a.ts'], ['src', '.'])
     assert.deepEqual(
-      cleaned.userCreatedBlocks.map((item) => item.id),
+      cleaned.files.map((item) => item.id),
       ['src/New.tsx'],
     )
-    assert.deepEqual(cleaned.userCreatedIslands, [])
+    assert.deepEqual(cleaned.folders, [])
     assert.deepEqual(cleaned.addedFunctions, [
       { name: 'Clock', file: 'src/New.tsx' },
     ])
@@ -949,7 +925,7 @@ test('blueprint stays shared after a session finishes and can be cleaned up', ()
     const cleared = clearBlueprint(env.dataDir)
     assert.equal(cleared.enabled, false)
     assert.equal(cleared.hidden, true)
-    assert.deepEqual(cleared.userCreatedBlocks, [])
+    assert.deepEqual(cleared.files, [])
     assert.ok(cleared.revision > hidden.revision)
   } finally {
     env.cleanup()
@@ -1711,8 +1687,6 @@ test('finished sessions discard stored blueprint drafts', () => {
       name: 'Draft.tsx',
       path: 'src/Draft.tsx',
       folder: 'src',
-      x: 1,
-      z: 2,
     }
     updateBlueprint(env.dataDir, 'finish-blue', {
       userCreatedBlocks: [block],

@@ -33,7 +33,7 @@ const COMMAND_SKILL_FRONTMATTER = (name) => [
   'allowed-tools: Bash(npx inbase *)',
 ]
 
-/** Skill folders for Codex, Copilot, Cline, Gemini CLI, and other SKILL.md agents. */
+/** Skill folders for Codex, Copilot, Gemini CLI, and other SKILL.md agents. */
 export function copySkillTree(projectRoot, { id, skillsRel }) {
   if (!fs.existsSync(skillTemplateDir)) {
     throw new Error(`Inbase skill template missing at ${skillTemplateDir}`)

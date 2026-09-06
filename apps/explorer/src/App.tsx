@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { shouldIgnoreShortcut, isKeyboardIsolated } from './keyboard'
-import { emptyIntent, fetchAgentIntent, fetchAgentIntents, inspectTargetFile, performAgentAction, persistBlueprintCleanup, persistBlueprintClear, persistBlueprintHidden, persistSessionBlueprint, persistSessionFocus } from './agentIntent'
+import { emptyIntent, fetchAgentIntent, fetchAgentIntents, inspectTargetFile, loadBlueprintFile, performAgentAction, persistBlueprintCleanup, persistBlueprintClear, persistBlueprintHidden, persistSessionBlueprint, persistSessionFocus, saveBlueprintFile } from './agentIntent'
 import { emptyBranchChanges, fetchBranchChanges } from './branchChanges'
 import { fetchCodebase, updateCodebase } from './codebase'
 import {
@@ -61,6 +61,8 @@ import {
   findBlueprintPointer,
   isBlueprintSymbolName,
   namedCreatedBlocks,
+  toBlueprintFile,
+  toBlueprintFolder,
   namedCreatedIslands,
   omitCreatedItems,
   blueprintImportRawFromFile,
@@ -97,6 +99,7 @@ import {
   GLOBAL_BLUEPRINT_COLOR,
   compareSessionColorOrder,
   type LocalBlueprint,
+  type LoadBlueprintInput,
   type PatchImportAddition,
   type PatchSymbolAddition,
   type SharedBlueprint,
@@ -104,6 +107,8 @@ import {
   type UserCreatedIsland,
   type ViewMode,
   type RelationMode,
+  type SaveBlueprintInput,
+  type SavedBlueprintInfo,
   type WorkflowAction,
   type WorldLayout,
 } from './types'
@@ -114,8 +119,8 @@ function emptySharedBlueprint(): SharedBlueprint {
     hidden: false,
     revision: 0,
     enabled: false,
-    userCreatedBlocks: [],
-    userCreatedIslands: [],
+    files: [],
+    folders: [],
     addedFunctions: [],
     addedVariables: [],
     addedImports: [],
@@ -197,21 +202,19 @@ function keepBlueprintDrafts(
   previous?: SharedBlueprint | null,
 ): SharedBlueprint {
   if (!previous) return stored
-  const draftBlocks = previous.userCreatedBlocks.filter((block) => block.naming)
-  const draftIslands = previous.userCreatedIslands.filter((island) => island.naming)
+  const draftBlocks = previous.files.filter((block) => block.naming)
+  const draftIslands = previous.folders.filter((island) => island.naming)
   if (draftBlocks.length === 0 && draftIslands.length === 0) return stored
   const draftBlockIds = new Set(draftBlocks.map((block) => block.id))
   const draftIslandIds = new Set(draftIslands.map((island) => island.id))
   return {
     ...stored,
-    userCreatedBlocks: [
-      ...stored.userCreatedBlocks.filter((block) => !draftBlockIds.has(block.id)),
+    files: [
+      ...stored.files.filter((block) => !draftBlockIds.has(block.id)),
       ...draftBlocks,
     ],
-    userCreatedIslands: [
-      ...stored.userCreatedIslands.filter(
-        (island) => !draftIslandIds.has(island.id),
-      ),
+    folders: [
+      ...stored.folders.filter((island) => !draftIslandIds.has(island.id)),
       ...draftIslands,
     ],
   }
@@ -242,8 +245,8 @@ function capturedBlueprintContents(
       capture.notes,
       capture.pointers,
     ),
-    userCreatedBlocks: capture.blocks,
-    userCreatedIslands: capture.islands,
+    files: capture.blocks,
+    folders: capture.islands,
     addedFunctions: capture.functions,
     addedVariables: capture.variables,
     addedImports: capture.imports,
@@ -375,8 +378,8 @@ function emptiedBlueprint<T extends SharedBlueprint>(current: T): T {
   return {
     ...current,
     enabled: false,
-    userCreatedBlocks: [],
-    userCreatedIslands: [],
+    files: [],
+    folders: [],
     addedFunctions: [],
     addedVariables: [],
     addedImports: [],
@@ -390,14 +393,14 @@ function cleanedBlueprint<T extends SharedBlueprint>(
   files: Set<string>,
   folders: Set<string>,
 ): T {
-  const nextBlocks = current.userCreatedBlocks.filter(
+  const nextBlocks = current.files.filter(
     (block) => block.naming || !files.has(block.id),
   )
-  const nextIslands = current.userCreatedIslands.filter(
+  const nextIslands = current.folders.filter(
     (island) => island.naming || !folders.has(island.path),
   )
   const removed = new Set(
-    current.userCreatedBlocks
+    current.files
       .filter((block) => !block.naming && files.has(block.id))
       .map((block) => block.id),
   )
@@ -422,8 +425,8 @@ function cleanedBlueprint<T extends SharedBlueprint>(
       notes,
       current.pointers,
     ),
-    userCreatedBlocks: nextBlocks,
-    userCreatedIslands: nextIslands,
+    files: nextBlocks,
+    folders: nextIslands,
     addedFunctions: nextFunctions,
     addedVariables: nextVariables,
     addedImports: nextImports,
@@ -486,11 +489,11 @@ function collectMapBlueprints(input: {
       blocks:
         input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
           ? input.selectedBlocks
-          : input.global.userCreatedBlocks,
+          : input.global.files,
       islands:
         input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
           ? input.selectedIslands
-          : input.global.userCreatedIslands,
+          : input.global.folders,
       functions:
         input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
           ? input.selectedFunctions
@@ -516,11 +519,11 @@ function collectMapBlueprints(input: {
       blocks:
         input.selectedColor === local.color
           ? input.selectedBlocks
-          : local.userCreatedBlocks,
+          : local.files,
       islands:
         input.selectedColor === local.color
           ? input.selectedIslands
-          : local.userCreatedIslands,
+          : local.folders,
       functions:
         input.selectedColor === local.color
           ? input.selectedFunctions
@@ -799,6 +802,9 @@ function Explorer({
     emptySharedBlueprint,
   )
   const [localBlueprints, setLocalBlueprints] = useState<LocalBlueprint[]>([])
+  const [savedBlueprint, setSavedBlueprint] = useState<SavedBlueprintInfo | null>(
+    null,
+  )
   const blueprintColorRef = useRef(blueprintColor)
   blueprintColorRef.current = blueprintColor
   const blueprintHiddenRef = useRef(blueprintHidden)
@@ -1450,8 +1456,8 @@ function Explorer({
       notesDirty.current = true
       void persistSessionBlueprint(intent.sessionId, {
         color,
-        userCreatedBlocks: namedCreatedBlocks(blocks),
-        userCreatedIslands: namedCreatedIslands(islands),
+        files: namedCreatedBlocks(blocks).map(toBlueprintFile),
+        folders: namedCreatedIslands(islands).map(toBlueprintFolder),
         addedFunctions: functions,
         addedVariables: variables,
         addedImports: imports,
@@ -1486,8 +1492,8 @@ function Explorer({
       if (!notesDirty.current) return
       persistSessionBlueprint(intent.sessionId, {
         color: blueprintColorRef.current,
-        userCreatedBlocks: namedCreatedBlocks(userBlocksRef.current),
-        userCreatedIslands: namedCreatedIslands(userIslandsRef.current),
+        files: namedCreatedBlocks(userBlocksRef.current).map(toBlueprintFile),
+        folders: namedCreatedIslands(userIslandsRef.current).map(toBlueprintFolder),
         addedFunctions: blueprintFunctionsRef.current,
         addedVariables: blueprintVariablesRef.current,
         addedImports: blueprintImportsRef.current,
@@ -1546,9 +1552,9 @@ function Explorer({
       !island.naming && createdIslandKey(island) === folderPath
     if (userIslandsRef.current.some(matches)) return blueprintColorRef.current
     const { global, locals } = latestBlueprintsRef.current
-    if (global.userCreatedIslands.some(matches)) return GLOBAL_BLUEPRINT_COLOR.id
+    if (global.folders.some(matches)) return GLOBAL_BLUEPRINT_COLOR.id
     return (
-      locals.find((item) => item.userCreatedIslands.some(matches))?.color ?? null
+      locals.find((item) => item.folders.some(matches))?.color ?? null
     )
   }, [])
 
@@ -1647,8 +1653,8 @@ function Explorer({
       latestBlueprintsRef.current.locals,
     )
     return {
-      blocks: stored.userCreatedBlocks,
-      islands: stored.userCreatedIslands,
+      blocks: stored.files,
+      islands: stored.folders,
       functions: stored.addedFunctions,
       variables: stored.addedVariables,
       imports: stored.addedImports,
@@ -1702,12 +1708,12 @@ function Explorer({
       return blueprintColorRef.current
     }
     const { global, locals } = latestBlueprintsRef.current
-    if (global.userCreatedBlocks.some((block) => block.id === fileId)) {
+    if (global.files.some((block) => block.id === fileId)) {
       return GLOBAL_BLUEPRINT_COLOR.id
     }
     return (
       locals.find((item) =>
-        item.userCreatedBlocks.some((block) => block.id === fileId),
+        item.files.some((block) => block.id === fileId),
       )?.color ?? null
     )
   }, [])
@@ -2252,8 +2258,8 @@ function Explorer({
     (blueprint: SharedBlueprint, keepDrafts = true) => {
       blueprintHiddenRef.current = Boolean(blueprint.hidden)
       setBlueprintHidden(Boolean(blueprint.hidden))
-      const nextBlocks = parseUserCreatedBlocks(blueprint.userCreatedBlocks)
-      const nextIslands = parseUserCreatedIslands(blueprint.userCreatedIslands)
+      const nextBlocks = parseUserCreatedBlocks(blueprint.files)
+      const nextIslands = parseUserCreatedIslands(blueprint.folders)
       setUserBlocks((current) => {
         if (!keepDrafts) return nextBlocks
         const drafts = current.filter((block) => block.naming)
@@ -2557,6 +2563,70 @@ function Explorer({
       )
     },
     [applyBlueprintContents, persistBlueprint],
+  )
+
+  const snapshotBlueprints = useCallback(() => {
+    rememberLiveBlueprint()
+    const current = latestBlueprintsRef.current
+    return {
+      global: {
+        ...current.global,
+        files: namedCreatedBlocks(current.global.files).map(toBlueprintFile),
+        folders: namedCreatedIslands(current.global.folders).map(toBlueprintFolder),
+      },
+      locals: current.locals.map((local) => ({
+        ...local,
+        files: namedCreatedBlocks(local.files).map(toBlueprintFile),
+        folders: namedCreatedIslands(local.folders).map(toBlueprintFolder),
+      })),
+    }
+  }, [rememberLiveBlueprint])
+
+  const saveCurrentBlueprint = useCallback(
+    async (input: SaveBlueprintInput) => {
+      persistBlueprint()
+      const saved = await saveBlueprintFile({
+        ...input,
+        ...snapshotBlueprints(),
+      })
+      setSavedBlueprint(saved)
+    },
+    [persistBlueprint, snapshotBlueprints],
+  )
+
+  const loadCurrentBlueprint = useCallback(
+    async (input: LoadBlueprintInput) => {
+      blueprintPersistGen.current += 1
+      const loaded = await loadBlueprintFile(input)
+      const next = {
+        global: loaded.global,
+        locals: loaded.localBlueprints,
+      }
+      latestBlueprintsRef.current = next
+      setGlobalBlueprint(next.global)
+      setLocalBlueprints(next.locals)
+      applyBlueprintContents(
+        blueprintForColor(blueprintColorRef.current, next.global, next.locals),
+        false,
+      )
+      const visible = [
+        !next.global.hidden ? GLOBAL_BLUEPRINT_COLOR.id : null,
+        ...next.locals
+          .filter((item) => !item.hidden)
+          .map((item) => item.color),
+      ].filter((id): id is string => Boolean(id))
+      visibleBlueprintColorsRef.current =
+        visible.length > 0 ? visible : [GLOBAL_BLUEPRINT_COLOR.id]
+      setVisibleBlueprintColors(visibleBlueprintColorsRef.current)
+      setSavedBlueprint({
+        name: loaded.name,
+        fileName: loaded.fileName,
+        savedAt: loaded.savedAt,
+        path: loaded.path,
+        relativePath: loaded.relativePath,
+      })
+    },
+    [applyBlueprintContents],
   )
 
   const selectBlueprintColor = useCallback(
@@ -2973,6 +3043,9 @@ function Explorer({
         onToggleBlueprintColor={toggleBlueprintColor}
         onClearBlueprint={clearSharedBlueprint}
         onCleanupBlueprint={cleanupSharedBlueprint}
+        savedBlueprint={savedBlueprint}
+        onSaveBlueprint={saveCurrentBlueprint}
+        onLoadBlueprint={loadCurrentBlueprint}
         devTargets={devTargets}
         onSelectDevTarget={onSelectDevTarget}
       />
