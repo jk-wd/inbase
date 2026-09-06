@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { initProject, isCliEntry, main } from './inbase.mjs'
 import { editors } from './editors/index.mjs'
 import { prependYamlFrontmatter, copySkillTree } from './editors/layout.mjs'
+import { stripYamlFrontmatter, toClineExecuteCommand } from './editors/cline.mjs'
 import {
   applyHostEnv,
   copyDir,
@@ -43,6 +44,16 @@ test('registers Cursor, Claude Code, Agent Skills, Copilot, and Cline adapters',
     editors.map((editor) => editor.id),
     ['cursor', 'claude', 'agents', 'copilot', 'cline'],
   )
+})
+
+test('Cline command markdown becomes execute_command XML', () => {
+  const xml = toClineExecuteCommand(
+    'Run:\n\n```bash\nnpx inbase accept --session "<session-id>"\n```\n',
+  )
+  assert.match(xml, /<execute_command>/)
+  assert.match(xml, /<command>npx inbase accept --session "SESSION_ID"<\/command>/)
+  assert.match(xml, /<requires_approval>false<\/requires_approval>/)
+  assert.equal(stripYamlFrontmatter('---\nname: inbase\n---\n\nBody\n'), 'Body\n')
 })
 
 test('prependYamlFrontmatter inserts keys once', () => {
@@ -313,6 +324,7 @@ test('init copies editor skills and gitignores .inbase', () => {
       'utf8',
     )
     assert.match(clineSkill, /npx inbase attach/)
+    assert.match(clineSkill, /<execute_command>/)
     assert.doesNotMatch(clineSkill, /allowed-tools:/)
     const clineAccept = fs.readFileSync(
       path.join(root, '.cline/workflows/accept.md'),
@@ -320,11 +332,16 @@ test('init copies editor skills and gitignores .inbase', () => {
     )
     assert.match(clineAccept, /npx inbase accept/)
     const clineRule = fs.readFileSync(path.join(root, '.cline/rules/inbase.md'), 'utf8')
-    assert.match(clineRule, /\.cline\/skills\/inbase\/SKILL\.md/)
+    assert.match(clineRule, /<execute_command>/)
+    assert.match(clineRule, /npx inbase attach/)
+    assert.match(clineRule, /SESSION_ID/)
+    assert.match(clineRule, /I see on the blueprint/)
     assert.match(clineRule, /\/extract-blueprint/)
+    assert.match(clineAccept, /<execute_command>/)
+    assert.match(clineAccept, /npx inbase accept --session "SESSION_ID"/)
     assert.match(
       fs.readFileSync(path.join(root, '.clinerules/inbase.md'), 'utf8'),
-      /\.cline\/skills\/inbase\/SKILL\.md/,
+      /<execute_command>/,
     )
     assert.equal(fs.existsSync(path.join(root, '.inbase/user-context.json')), true)
     assert.match(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), /\.inbase\//)

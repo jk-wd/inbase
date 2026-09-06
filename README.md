@@ -352,7 +352,7 @@ The installed skill runs session commands (`attach`, `read-blueprint`, `report-p
 
 ## Editor support
 
-The map runs in the browser. The LLM plan and patch loop works in **Cursor**, **Claude Code**, **Codex**, **GitHub Copilot**, and **Cline**. `inbase init` uses the editor adapters in `bin/editors/` to install the skill and slash commands. Cursor and Claude Code get command files (`/accept`). Codex, Copilot, Gemini CLI, and other SKILL.md agents get skill folders in `.agents/skills/` (`.github/skills/` for Copilot). Cline gets a skill in `.cline/skills/`, slash-command workflows in `.cline/workflows/` (and `.clinerules/workflows/`), and an always-on rule so a regular chat follows the map. In Copilot or Cline chat type `/accept`; in Codex use `$accept` or `/skills`. Other editors can be added as adapters there.
+The map runs in the browser. The LLM plan and patch loop works in **Cursor**, **Claude Code**, **Codex**, **GitHub Copilot**, and **Cline**. `inbase init` uses the editor adapters in `bin/editors/` to install the skill and slash commands. Cursor and Claude Code get command files (`/accept`). Codex, Copilot, Gemini CLI, and other SKILL.md agents get skill folders in `.agents/skills/` (`.github/skills/` for Copilot). Cline gets an always-on rule with the full loop inlined (so Qwen and other Cline models do not have to open a skill file), plus slash-command workflows in `.cline/workflows/` (and `.clinerules/workflows/`). Those Cline files use `execute_command` XML so the model runs `npx inbase` instead of printing it. In Copilot or Cline chat type `/accept`; in Codex use `$accept` or `/skills`. Other editors can be added as adapters there.
 
 ## Language support
 
