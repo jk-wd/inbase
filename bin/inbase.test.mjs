@@ -317,8 +317,9 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.equal(fs.existsSync(path.join(root, '.cline/skills/accept/SKILL.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.cline/workflows/accept.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.cline/workflows/coral.md')), true)
-    assert.equal(fs.existsSync(path.join(root, '.clinerules/workflows/accept.md')), true)
-    assert.equal(fs.existsSync(path.join(root, '.clinerules/workflows/coral.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.clinerules/workflows')), false)
+    assert.equal(fs.existsSync(path.join(root, '.clinerules/skills')), false)
+    assert.equal(fs.statSync(path.join(root, '.clinerules')).isFile(), true)
     const clineSkill = fs.readFileSync(
       path.join(root, '.cline/skills/inbase/SKILL.md'),
       'utf8',
@@ -326,6 +327,9 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(clineSkill, /npx inbase attach/)
     assert.match(clineSkill, /<execute_command>/)
     assert.doesNotMatch(clineSkill, /allowed-tools:/)
+    const clineRootSkill = fs.readFileSync(path.join(root, '.cline/SKILL.md'), 'utf8')
+    assert.match(clineRootSkill, /^---\nname: inbase\n/)
+    assert.match(clineRootSkill, /<execute_command>/)
     const clineAccept = fs.readFileSync(
       path.join(root, '.cline/workflows/accept.md'),
       'utf8',
@@ -339,10 +343,17 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(clineRule, /\/extract-blueprint/)
     assert.match(clineAccept, /<execute_command>/)
     assert.match(clineAccept, /npx inbase accept --session "SESSION_ID"/)
+    assert.equal(fs.statSync(path.join(root, '.clinerules')).isFile(), true)
     assert.match(
-      fs.readFileSync(path.join(root, '.clinerules/inbase.md'), 'utf8'),
+      fs.readFileSync(path.join(root, '.clinerules'), 'utf8'),
       /<execute_command>/,
     )
+    fs.rmSync(path.join(root, '.clinerules'))
+    fs.mkdirSync(path.join(root, '.clinerules/workflows'), { recursive: true })
+    fs.writeFileSync(path.join(root, '.clinerules/inbase.md'), 'legacy folder rule\n')
+    initProject(root)
+    assert.equal(fs.statSync(path.join(root, '.clinerules')).isFile(), true)
+    assert.equal(fs.existsSync(path.join(root, '.clinerules/inbase.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.inbase/user-context.json')), true)
     assert.match(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), /\.inbase\//)
     assert.equal(result.configAdded, true)

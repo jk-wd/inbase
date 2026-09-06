@@ -14898,15 +14898,31 @@
       "name": "cline.mjs",
       "path": "bin/editors/cline.mjs",
       "folder": "bin/editors",
-      "lines": 62,
+      "lines": 118,
       "language": "mjs",
       "symbols": [
+        {
+          "name": "stripYamlFrontmatter",
+          "kind": "function"
+        },
+        {
+          "name": "toClineExecuteCommand",
+          "kind": "function"
+        },
+        {
+          "name": "escapeXml",
+          "kind": "function"
+        },
         {
           "name": "install",
           "kind": "function"
         },
         {
           "name": "removeLegacyCommandSkills",
+          "kind": "function"
+        },
+        {
+          "name": "rewriteMarkdownDir",
           "kind": "function"
         },
         {
@@ -14926,11 +14942,27 @@
           "kind": "variable"
         },
         {
-          "name": "CLINE_RULE",
+          "name": "CLINE_PREAMBLE",
+          "kind": "variable"
+        },
+        {
+          "name": "end",
+          "kind": "variable"
+        },
+        {
+          "name": "withSession",
+          "kind": "variable"
+        },
+        {
+          "name": "command",
           "kind": "variable"
         },
         {
           "name": "installed",
+          "kind": "variable"
+        },
+        {
+          "name": "skillFile",
           "kind": "variable"
         },
         {
@@ -14946,11 +14978,23 @@
           "kind": "variable"
         },
         {
-          "name": "rel",
+          "name": "file",
           "kind": "variable"
         },
         {
-          "name": "file",
+          "name": "skill",
+          "kind": "variable"
+        },
+        {
+          "name": "body",
+          "kind": "variable"
+        },
+        {
+          "name": "text",
+          "kind": "variable"
+        },
+        {
+          "name": "rel",
           "kind": "variable"
         }
       ],
@@ -15124,11 +15168,19 @@
       "name": "extract-blueprint.mjs",
       "path": "bin/extract-blueprint.mjs",
       "folder": "bin",
-      "lines": 390,
+      "lines": 408,
       "language": "mjs",
       "symbols": [
         {
           "name": "explorerHref",
+          "kind": "function"
+        },
+        {
+          "name": "resolveExtractOutputPath",
+          "kind": "function"
+        },
+        {
+          "name": "loadBlueprintFiles",
           "kind": "function"
         },
         {
@@ -15212,11 +15264,19 @@
           "kind": "function"
         },
         {
+          "name": "SESSION_COLORS",
+          "kind": "variable"
+        },
+        {
           "name": "EXTRACT_INSTRUCTION",
           "kind": "variable"
         },
         {
           "name": "raw",
+          "kind": "variable"
+        },
+        {
+          "name": "resolved",
           "kind": "variable"
         },
         {
@@ -15245,10 +15305,6 @@
         },
         {
           "name": "folders",
-          "kind": "variable"
-        },
-        {
-          "name": "resolved",
           "kind": "variable"
         },
         {
@@ -15388,6 +15444,10 @@
           "kind": "variable"
         },
         {
+          "name": "saveBlueprintDocument",
+          "kind": "variable"
+        },
+        {
           "name": "folderArg",
           "kind": "variable"
         },
@@ -15402,8 +15462,6 @@
       ],
       "imports": [
         "bin/project.mjs",
-        "apps/explorer/scripts/blueprint-files.mjs",
-        "apps/explorer/scripts/session-store.mjs",
         "apps/explorer/scripts/scan-ignore.mjs"
       ]
     },
@@ -15412,7 +15470,7 @@
       "name": "extract-blueprint.test.mjs",
       "path": "bin/extract-blueprint.test.mjs",
       "folder": "bin",
-      "lines": 235,
+      "lines": 234,
       "language": "mjs",
       "symbols": [
         {
@@ -15891,7 +15949,7 @@
       "name": "inbase.test.mjs",
       "path": "bin/inbase.test.mjs",
       "folder": "bin",
-      "lines": 1177,
+      "lines": 1194,
       "language": "mjs",
       "symbols": [
         {
@@ -15924,6 +15982,10 @@
         },
         {
           "name": "root",
+          "kind": "variable"
+        },
+        {
+          "name": "xml",
           "kind": "variable"
         },
         {
@@ -16107,6 +16169,7 @@
         "bin/inbase.mjs",
         "bin/editors/index.mjs",
         "bin/editors/layout.mjs",
+        "bin/editors/cline.mjs",
         "bin/project.mjs",
         "apps/explorer/scripts/git-test.mjs"
       ]

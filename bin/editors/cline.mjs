@@ -1,12 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { copyDir } from '../project.mjs'
 import { copySkillAndCommands } from './layout.mjs'
 
 export const id = 'cline'
 export const label = 'Cline'
-
-const RULE_REL_PATHS = ['.cline/rules/inbase.md', '.clinerules/inbase.md']
 
 const CLINE_PREAMBLE = `# Inbase visual edits (Cline)
 
@@ -73,14 +70,13 @@ export function install(projectRoot) {
   removeLegacyCommandSkills(path.join(projectRoot, '.cline/skills'))
   rewriteMarkdownDir(installed.commandDir)
   const skillFile = path.join(installed.skillDir, 'SKILL.md')
+  let skillMarkdown = ''
   if (fs.existsSync(skillFile)) {
-    fs.writeFileSync(skillFile, toClineExecuteCommand(fs.readFileSync(skillFile, 'utf8')))
+    skillMarkdown = toClineExecuteCommand(fs.readFileSync(skillFile, 'utf8'))
+    fs.writeFileSync(skillFile, skillMarkdown)
   }
-  const legacyWorkflows = path.join(projectRoot, '.clinerules/workflows')
-  if (installed.commandDir && fs.existsSync(installed.commandDir)) {
-    copyDir(installed.commandDir, legacyWorkflows)
-  }
-  writeClineRules(projectRoot, installed.skillDir)
+  writeClineSkillFiles(projectRoot, skillMarkdown)
+  writeClineRules(projectRoot, skillMarkdown)
   return { ...installed, label }
 }
 
@@ -104,14 +100,31 @@ function rewriteMarkdownDir(dir) {
   }
 }
 
-function writeClineRules(projectRoot, skillDir) {
-  const skillFile = path.join(skillDir, 'SKILL.md')
-  const skill = fs.existsSync(skillFile) ? fs.readFileSync(skillFile, 'utf8') : ''
-  const body = toClineExecuteCommand(stripYamlFrontmatter(skill)).trim()
-  const text = `${CLINE_PREAMBLE.trim()}\n\n${body}\n`
-  for (const rel of RULE_REL_PATHS) {
-    const file = path.join(projectRoot, rel)
-    fs.mkdirSync(path.dirname(file), { recursive: true })
-    fs.writeFileSync(file, text)
+function writeClineSkillFiles(projectRoot, skillMarkdown) {
+  if (!skillMarkdown) return
+  const file = path.join(projectRoot, '.cline/SKILL.md')
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, skillMarkdown)
+}
+
+function removeLegacyClinerulesDir(projectRoot) {
+  const root = path.join(projectRoot, '.clinerules')
+  if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) return
+  for (const name of ['inbase.md', 'workflows', 'skills']) {
+    const target = path.join(root, name)
+    if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true })
   }
+  if (fs.readdirSync(root).length === 0) fs.rmdirSync(root)
+}
+
+function writeClineRules(projectRoot, skillMarkdown) {
+  const body = toClineExecuteCommand(stripYamlFrontmatter(skillMarkdown)).trim()
+  const text = `${CLINE_PREAMBLE.trim()}\n\n${body}\n`
+  const folderFile = path.join(projectRoot, '.cline/rules/inbase.md')
+  fs.mkdirSync(path.dirname(folderFile), { recursive: true })
+  fs.writeFileSync(folderFile, text)
+  removeLegacyClinerulesDir(projectRoot)
+  const file = path.join(projectRoot, '.clinerules')
+  if (fs.existsSync(file) && fs.statSync(file).isDirectory()) return
+  fs.writeFileSync(file, text)
 }
