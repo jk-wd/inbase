@@ -587,9 +587,10 @@ function readUserContext() {
     return {
       ...parsed,
       showBranchChanges: Boolean(parsed.showBranchChanges),
+      showHiddenFiles: Boolean(parsed.showHiddenFiles),
     }
   } catch {
-    return { showBranchChanges: false }
+    return { showBranchChanges: false, showHiddenFiles: false }
   }
 }
 
@@ -604,6 +605,10 @@ async function writeUserContext(req: IncomingMessage, res: ServerResponse) {
         typeof incoming.showBranchChanges === 'boolean'
           ? incoming.showBranchChanges
           : Boolean(existing.showBranchChanges),
+      showHiddenFiles:
+        typeof incoming.showHiddenFiles === 'boolean'
+          ? incoming.showHiddenFiles
+          : Boolean(existing.showHiddenFiles),
     }
     delete next.followLook
     delete next.userCreatedBlocks

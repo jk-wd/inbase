@@ -20,6 +20,7 @@ import {
   mapPointOntoFolder,
   regionBounds,
 } from './layout'
+import { filterGraphHiddenFiles } from './hidden-files'
 import { World } from './scene/World'
 import { HUD } from './ui/HUD'
 import { ExplainAskCard } from './ui/ExplainAskCard'
@@ -47,6 +48,7 @@ import {
 import {
   fetchUserContext,
   persistShowBranchChanges,
+  persistShowHiddenFiles,
   persistUserContext,
 } from './userContext'
 import {
@@ -747,6 +749,7 @@ function Explorer({
     null,
   )
   const [wantBranchChanges, setWantBranchChanges] = useState(false)
+  const [showHiddenFiles, setShowHiddenFiles] = useState(false)
   const [branchChanges, setBranchChanges] = useState(emptyBranchChanges)
   const intent =
     intents.find((item) => item.sessionId === focusedSessionId) ??
@@ -922,26 +925,31 @@ function Explorer({
     () => withUserCreatedGraph(previewGraph, pendingBlocks, visibleIslands),
     [pendingBlocks, previewGraph, visibleIslands],
   )
+  const visibleLayoutGraph = useMemo(
+    () =>
+      showHiddenFiles ? layoutGraph : filterGraphHiddenFiles(layoutGraph),
+    [layoutGraph, showHiddenFiles],
+  )
   const displayGraph = useMemo(
     () =>
       withBlueprintIntent(
-        layoutGraph,
+        visibleLayoutGraph,
         mapBlueprint.functions,
         mapBlueprint.variables,
         mapBlueprint.imports,
       ),
     [
-      layoutGraph,
       mapBlueprint.functions,
       mapBlueprint.imports,
       mapBlueprint.variables,
+      visibleLayoutGraph,
     ],
   )
   const layout = useMemo(() => {
-    const world = layoutWorld(layoutGraph)
+    const world = layoutWorld(visibleLayoutGraph)
     if (previewing) markCreatedFolders(world, changeSet.createFolders ?? [])
     return world
-  }, [changeSet.createFolders, layoutGraph, previewing])
+  }, [changeSet.createFolders, previewing, visibleLayoutGraph])
   const changeFileIds = useMemo(() => {
     const ids = new Set<string>()
     for (const id of changeSet.files) ids.add(id)
@@ -983,13 +991,13 @@ function Explorer({
   const hasChangeSet =
     changeFileIds.length > 0 || changeFolderPaths.length > 0
   const changePathGraph = useMemo(() => {
-    if (!hasChangeSet) return layoutGraph
+    if (!hasChangeSet) return visibleLayoutGraph
     return filterGraphToChangePaths(
-      layoutGraph,
+      visibleLayoutGraph,
       changeFileIds,
       changeFolderPaths,
     )
-  }, [changeFileIds, changeFolderPaths, hasChangeSet, layoutGraph])
+  }, [changeFileIds, changeFolderPaths, hasChangeSet, visibleLayoutGraph])
   const changePathLayout = useMemo(() => {
     if (!hasChangeSet) return layout
     const world = layoutWorld(changePathGraph)
@@ -1260,6 +1268,9 @@ function Explorer({
       if (cancelled) return
       if (typeof context?.showBranchChanges === 'boolean') {
         setWantBranchChanges(context.showBranchChanges)
+      }
+      if (typeof context?.showHiddenFiles === 'boolean') {
+        setShowHiddenFiles(context.showHiddenFiles)
       }
     })
     return () => {
@@ -2100,6 +2111,14 @@ function Explorer({
     })
   }, [branchChanges.available, llmBusy, wantBranchChanges])
 
+  const toggleShowHiddenFiles = useCallback(() => {
+    setShowHiddenFiles((current) => {
+      const next = !current
+      persistShowHiddenFiles(next)
+      return next
+    })
+  }, [])
+
   const toggleImportedBy = useCallback(() => {
     if (!selectedId) return
     setImportedBy((current) => !current)
@@ -2153,6 +2172,37 @@ function Explorer({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [canToggleBranchChanges, toggleShowBranchChanges])
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.repeat || event.code !== 'KeyH') return
+      if (shouldIgnoreShortcut(event)) return
+      event.preventDefault()
+      toggleShowHiddenFiles()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [toggleShowHiddenFiles])
+
+  useEffect(() => {
+    if (showHiddenFiles) return
+    if (
+      selectedId &&
+      !visibleLayoutGraph.files.some((file) => file.id === selectedId)
+    ) {
+      setSelectedId(null)
+    }
+    if (
+      selectedFolder &&
+      selectedFolder !== '.' &&
+      !visibleLayoutGraph.folders.some(
+        (folder) => folder.path === selectedFolder,
+      )
+    ) {
+      setSelectedFolder(null)
+      setSelectedFolderLayer(null)
+    }
+  }, [selectedFolder, selectedId, showHiddenFiles, visibleLayoutGraph])
 
   useEffect(() => {
     let cancelled = false
@@ -2872,6 +2922,8 @@ function Explorer({
         canShowBranchChanges={canToggleBranchChanges}
         llmMakingChanges={llmBusy}
         onToggleShowBranchChanges={toggleShowBranchChanges}
+        showHiddenFiles={showHiddenFiles}
+        onToggleShowHiddenFiles={toggleShowHiddenFiles}
         onUpdateModel={onUpdateModel}
         updatingModel={updatingModel}
         importedBy={importedBy}

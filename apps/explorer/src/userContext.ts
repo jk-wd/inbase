@@ -38,6 +38,16 @@ export function persistShowBranchChanges(showBranchChanges: boolean) {
   })
 }
 
+export function persistShowHiddenFiles(showHiddenFiles: boolean) {
+  fetch('/api/user-context', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: `${JSON.stringify({ showHiddenFiles })}\n`,
+  }).catch(() => {
+    lastWritten = ''
+  })
+}
+
 export function persistUserContext(context: UserContext) {
   pending = context
   if (timer !== null) return
@@ -51,6 +61,7 @@ function flushUserContext() {
   if (!context) return
   const {
     showBranchChanges: _showBranchChanges,
+    showHiddenFiles: _showHiddenFiles,
     userCreatedBlocks: _userCreatedBlocks,
     userCreatedIslands: _userCreatedIslands,
     ...gaze

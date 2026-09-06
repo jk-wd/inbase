@@ -124,6 +124,7 @@ export type UserContext = {
     z: number
   }
   showBranchChanges?: boolean
+  showHiddenFiles?: boolean
   userCreatedBlocks?: UserCreatedBlock[]
   userCreatedIslands?: UserCreatedIsland[]
 }

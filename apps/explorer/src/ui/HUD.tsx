@@ -1777,6 +1777,7 @@ function explorerInstructions({
   relationMode,
   showBranchChanges,
   canShowBranchChanges,
+  showHiddenFiles,
 }: {
   canPlace: boolean
   hasChangeSet: boolean
@@ -1788,6 +1789,7 @@ function explorerInstructions({
   relationMode: RelationMode
   showBranchChanges: boolean
   canShowBranchChanges: boolean
+  showHiddenFiles: boolean
 }): ExplorerInstructionSection[] {
   const backspace: ExplorerInstruction[] =
     selectedUserCreated && canPlace
@@ -1823,6 +1825,13 @@ function explorerInstructions({
         },
       ]
     : []
+  const hidden: ExplorerInstruction[] = [
+    {
+      id: 'hidden-files',
+      keys: ['H'],
+      label: showHiddenFiles ? 'Hide hidden files' : 'Show hidden files',
+    },
+  ]
   return [
     {
       id: 'walk',
@@ -1858,6 +1867,7 @@ function explorerInstructions({
           }`,
         },
         ...branch,
+        ...hidden,
         {
           id: 'update-model',
           keys: ['Update model'],
@@ -1958,6 +1968,7 @@ function explorerInstructions({
         ...info,
         ...imported,
         ...branch,
+        ...hidden,
         {
           id: 'update-model',
           keys: ['Update model'],
@@ -2033,6 +2044,8 @@ type HUDProps = {
   canShowBranchChanges?: boolean
   llmMakingChanges?: boolean
   onToggleShowBranchChanges?: () => void
+  showHiddenFiles?: boolean
+  onToggleShowHiddenFiles?: () => void
   onUpdateModel: () => void
   updatingModel?: boolean
   importedBy: boolean
@@ -2132,6 +2145,8 @@ export function HUD({
   canShowBranchChanges = false,
   llmMakingChanges = false,
   onToggleShowBranchChanges,
+  showHiddenFiles = false,
+  onToggleShowHiddenFiles,
   onUpdateModel,
   updatingModel = false,
   importedBy,
@@ -2616,6 +2631,7 @@ export function HUD({
     relationMode,
     showBranchChanges,
     canShowBranchChanges,
+    showHiddenFiles,
   })
   const currentInstructionView: InstructionView = mapping ? 'map' : 'walk'
   return (
@@ -3802,6 +3818,36 @@ export function HUD({
                 : importedBy
                   ? 'K show imports'
                   : 'K show imported by'}
+            </span>
+          </button>
+          <button
+            className="hud-button hud-icon-button"
+            data-active={showHiddenFiles}
+            aria-label={
+              showHiddenFiles ? 'Hide hidden files' : 'Show hidden files'
+            }
+            aria-keyshortcuts="H"
+            aria-pressed={showHiddenFiles}
+            type="button"
+            onClick={() => onToggleShowHiddenFiles?.()}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+              <path d="M14 2v6h6" />
+              <circle cx="9" cy="14" r="1.7" fill="currentColor" stroke="none" />
+            </svg>
+            <span className="hud-tooltip">
+              {showHiddenFiles ? 'H hide hidden files' : 'H show hidden files'}
             </span>
           </button>
           <button

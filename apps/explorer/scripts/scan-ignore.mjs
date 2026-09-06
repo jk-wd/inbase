@@ -26,7 +26,7 @@ function isViteDepCache(parts) {
     .some((part) => part === 'deps' || part.startsWith('deps_temp'))
 }
 
-/** True when any path segment is a junk directory, e.g. apps/web/node_modules/pkg/index.js. Hidden files stay on the map. */
+/** True when any path segment is a junk directory, e.g. apps/web/node_modules/pkg/index.js. Hidden files stay in the scan; the UI hides them unless shown. */
 export function shouldIgnoreRelativePath(relative) {
   const parts = toPosix(relative).split('/').filter(Boolean)
   if (isViteDepCache(parts)) return true

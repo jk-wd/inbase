@@ -32,7 +32,7 @@ Inbase does not call a model. The coding loop works in **Cursor**, **Claude Code
 
 ## Support overview
 
-The map draws every text file. Colors, relations, structure, and editor install are plug-in modules.
+The map draws every text file. Hidden files (names starting with `.`) stay off the map until you turn on **Show hidden files**. Colors, relations, structure, and editor install are plug-in modules.
 
 | | Today | Fallback | Add more |
 | --- | --- | --- | --- |
@@ -128,6 +128,7 @@ The map is top-down.
 - **Right-click** to create a file or folder, or to point at a folder
 - **Option-click** a folder to enter Walk there
 - The **gold pin** is your Walk position
+- **Hidden files** are off by default; press **H** or use the HUD toggle to show them
 
 ![Top-down map of the codebase](docs/manual-map.png)
 
@@ -315,6 +316,7 @@ Inbase disables this control while an LLM session is writing or reviewing a patc
 | Place file or folder | | Right-click |
 | Point to a target | Point to | Right-click, Point to folder |
 | Show only changed paths | | C |
+| Hidden files | H | H |
 | Branch changes | G | G |
 | Release mouse | Double-click, Esc | |
 | Connect a chat | Chat, or `/coral` `/amber` `/lime` `/orange` `/violet` | same |
