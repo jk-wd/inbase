@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { initProject, isCliEntry, main } from './inbase.mjs'
+import { cleanupProject, initProject, isCliEntry, main } from './inbase.mjs'
 import { editors } from './editors/index.mjs'
 import { prependYamlFrontmatter, copySkillTree } from './editors/layout.mjs'
 import { stripYamlFrontmatter, toClineExecuteCommand } from './editors/cline.mjs'
@@ -13,6 +13,7 @@ import {
   copyDir,
   ensureDataDir,
   ensureGitignoreEntry,
+  removeGitignoreEntry,
   skillTemplateDir,
   writeRunningInstance,
 } from './project.mjs'
@@ -369,6 +370,34 @@ test('init copies editor skills and gitignores .inbase', () => {
   }
 })
 
+test('init cline installs only Cline files', () => {
+  const { root, cleanup } = tempProject()
+  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
+  try {
+    const result = initProject(root, 'cline')
+    assert.deepEqual(
+      result.editors.map((editor) => editor.id),
+      ['cline'],
+    )
+    assert.equal(fs.existsSync(path.join(root, '.cline/skills/inbase/SKILL.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.clinerules')), true)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/skills/inbase/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.claude/skills/inbase/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.agents/skills/inbase/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.github/skills/inbase/SKILL.md')), false)
+    assert.throws(() => initProject(root, 'vim'), /Unknown editor 'vim'/)
+    const codex = initProject(root, 'codex')
+    assert.deepEqual(
+      codex.editors.map((editor) => editor.id),
+      ['agents'],
+    )
+    assert.equal(fs.existsSync(path.join(root, '.agents/skills/inbase/SKILL.md')), true)
+  } finally {
+    restoreEnv(env)
+    cleanup()
+  }
+})
+
 test('copySkillTree writes command skills and keeps the inbase skill', () => {
   const { root, cleanup } = tempProject()
   try {
@@ -414,6 +443,208 @@ test('gitignore helper is idempotent', () => {
   }
 })
 
+test('gitignore helper can remove the .inbase entry', () => {
+  const { root, cleanup } = tempProject()
+  try {
+    fs.writeFileSync(path.join(root, '.gitignore'), 'node_modules/\n.inbase/\ndist\n')
+    assert.equal(removeGitignoreEntry(root), true)
+    assert.equal(removeGitignoreEntry(root), false)
+    assert.equal(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), 'node_modules/\ndist\n')
+    fs.writeFileSync(path.join(root, '.gitignore'), '.inbase/\n')
+    assert.equal(removeGitignoreEntry(root), true)
+    assert.equal(fs.existsSync(path.join(root, '.gitignore')), false)
+  } finally {
+    cleanup()
+  }
+})
+
+test('cleanup reverses init and keeps unrelated editor files', () => {
+  const { root, cleanup } = tempProject()
+  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
+  try {
+    fs.mkdirSync(path.join(root, '.cursor/commands'), { recursive: true })
+    fs.mkdirSync(path.join(root, '.cursor/skills/other'), { recursive: true })
+    fs.mkdirSync(path.join(root, '.github/workflows'), { recursive: true })
+    fs.writeFileSync(path.join(root, '.cursor/commands/mine.md'), 'my command\n')
+    fs.writeFileSync(path.join(root, '.cursor/skills/other/SKILL.md'), 'other skill\n')
+    fs.writeFileSync(path.join(root, '.github/workflows/ci.yml'), 'name: ci\n')
+    fs.writeFileSync(path.join(root, '.gitignore'), 'node_modules/\n')
+    initProject(root)
+    const result = cleanupProject(root)
+    assert.equal(result.dataDirRemoved, true)
+    assert.equal(result.configRemoved, true)
+    assert.equal(result.gitignoreRemoved, true)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/skills/inbase')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/accept.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/blue.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/skipinbase.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.claude')), false)
+    assert.equal(fs.existsSync(path.join(root, '.agents')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cline')), false)
+    assert.equal(fs.existsSync(path.join(root, '.clinerules')), false)
+    assert.equal(fs.existsSync(path.join(root, '.github/skills')), false)
+    assert.equal(fs.existsSync(path.join(root, '.inbase')), false)
+    assert.equal(fs.existsSync(path.join(root, 'inbase.json')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/mine.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/skills/other/SKILL.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.github/workflows/ci.yml')), true)
+    assert.equal(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), 'node_modules/\n')
+    const again = initProject(root)
+    assert.equal(fs.existsSync(path.join(again.skillDir, 'SKILL.md')), true)
+    assert.equal(again.configAdded, true)
+  } finally {
+    restoreEnv(env)
+    cleanup()
+  }
+})
+
+test('cleanup removes leftover skills and rules', () => {
+  const { root, cleanup } = tempProject()
+  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
+  try {
+    initProject(root)
+    fs.mkdirSync(path.join(root, '.cursor/skills/visual-edits'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, '.cursor/skills/visual-edits/SKILL.md'),
+      'Use npx inbase attach for visual edits.\n',
+    )
+    fs.mkdirSync(path.join(root, '.cursor/rules'), { recursive: true })
+    fs.writeFileSync(path.join(root, '.cursor/rules/inbase.mdc'), 'alwaysApply: true\n')
+    fs.writeFileSync(
+      path.join(root, '.cursor/rules/visual-edits.mdc'),
+      'After VISUAL_CODER_EXECUTE, run npx inbase propose-patch.\n',
+    )
+    fs.writeFileSync(path.join(root, '.cursor/rules/style.mdc'), 'Use 2-space indent.\n')
+    fs.mkdirSync(path.join(root, '.claude/rules'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, '.claude/rules/inbase.md'),
+      'Run npx inbase attach before edits.\n',
+    )
+    fs.mkdirSync(path.join(root, '.agents/skills/visual-edits'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, '.agents/skills/visual-edits/SKILL.md'),
+      'Follow npx inbase attach. Stay in this session.\n',
+    )
+    fs.mkdirSync(path.join(root, '.cline/skills/accept'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, '.cline/skills/accept/SKILL.md'),
+      'Run npx inbase accept --session SESSION_ID\n',
+    )
+    fs.rmSync(path.join(root, '.clinerules'))
+    fs.mkdirSync(path.join(root, '.clinerules/workflows'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, '.clinerules/inbase.md'),
+      'legacy Inbase folder rule with npx inbase attach\n',
+    )
+
+    cleanupProject(root)
+
+    assert.equal(fs.existsSync(path.join(root, '.cursor/skills/inbase')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/skills/visual-edits')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/rules/inbase.mdc')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/rules/visual-edits.mdc')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/rules/style.mdc')), true)
+    assert.equal(fs.existsSync(path.join(root, '.claude/skills/inbase')), false)
+    assert.equal(fs.existsSync(path.join(root, '.claude/rules')), false)
+    assert.equal(fs.existsSync(path.join(root, '.agents/skills/inbase')), false)
+    assert.equal(fs.existsSync(path.join(root, '.agents/skills/visual-edits')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cline/skills/inbase')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cline/skills/accept')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cline/rules/inbase.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cline/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.clinerules')), false)
+  } finally {
+    restoreEnv(env)
+    cleanup()
+  }
+})
+
+test('cleanup cline removes only Cline files', () => {
+  const { root, cleanup } = tempProject()
+  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
+  try {
+    initProject(root)
+    const result = cleanupProject(root, 'cline')
+    assert.deepEqual(
+      result.editors.map((editor) => editor.id),
+      ['cline'],
+    )
+    assert.equal(result.dataDirRemoved, false)
+    assert.equal(result.configRemoved, false)
+    assert.equal(result.gitignoreRemoved, false)
+    assert.equal(fs.existsSync(path.join(root, '.cline')), false)
+    assert.equal(fs.existsSync(path.join(root, '.clinerules')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/skills/inbase/SKILL.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.claude/skills/inbase/SKILL.md')), true)
+    assert.equal(fs.existsSync(path.join(root, 'inbase.json')), true)
+    assert.equal(fs.existsSync(path.join(root, '.inbase')), true)
+    assert.throws(() => cleanupProject(root, 'vim'), /Unknown editor 'vim'/)
+  } finally {
+    restoreEnv(env)
+    cleanup()
+  }
+})
+
+test('cleanup is a no-op on a project without Inbase files', () => {
+  const { root, cleanup } = tempProject()
+  try {
+    fs.mkdirSync(path.join(root, '.cursor/commands'), { recursive: true })
+    fs.writeFileSync(path.join(root, '.cursor/commands/accept.md'), 'keep this command\n')
+    fs.writeFileSync(path.join(root, '.clinerules'), 'keep this rule\n')
+    const result = cleanupProject(root)
+    assert.equal(result.dataDirRemoved, false)
+    assert.equal(result.configRemoved, false)
+    assert.equal(result.gitignoreRemoved, false)
+    assert.equal(
+      result.editors.every((editor) => editor.removed === false),
+      true,
+    )
+    assert.equal(fs.readFileSync(path.join(root, '.cursor/commands/accept.md'), 'utf8'), 'keep this command\n')
+    assert.equal(fs.readFileSync(path.join(root, '.clinerules'), 'utf8'), 'keep this rule\n')
+  } finally {
+    cleanup()
+  }
+})
+
+test('cleanup refuses while the visualizer is running', () => {
+  const { root, cleanup } = tempProject()
+  try {
+    writeRunningInstance({
+      dataDir: path.join(root, '.inbase'),
+      targetRoot: root,
+    })
+    assert.throws(
+      () => cleanupProject(root),
+      /Stop the running Inbase server/,
+    )
+    assert.equal(fs.existsSync(path.join(root, '.inbase')), true)
+  } finally {
+    cleanup()
+  }
+})
+
+test('cleanup command removes init files', () => {
+  const { root, cleanup } = tempProject()
+  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
+  try {
+    initProject(root)
+    const extra = runCli(['cleanup', 'cline', 'nope'], { cwd: root })
+    assert.notEqual(extra.status, 0)
+    assert.match(extra.stderr, /Usage: inbase cleanup \[editor\]/)
+    const result = runCli(['cleanup'], { cwd: root })
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /Removed Cursor skill/)
+    assert.match(result.stdout, /Removed inbase.json/)
+    assert.equal(fs.existsSync(path.join(root, 'inbase.json')), false)
+    const empty = runCli(['cleanup'], { cwd: root })
+    assert.equal(empty.status, 0, empty.stderr)
+    assert.match(empty.stdout, /Nothing to clean up/)
+  } finally {
+    restoreEnv(env)
+    cleanup()
+  }
+})
+
 test('help prints usage', async () => {
   let output = ''
   const log = console.log
@@ -422,13 +653,14 @@ test('help prints usage', async () => {
   }
   try {
     await main(['help'])
-    assert.match(output, /inbase init/)
+    assert.match(output, /inbase init \[editor\]/)
+    assert.match(output, /inbase cleanup \[editor\]/)
     assert.match(output, /inbase run/)
     assert.match(output, /inbase attach \[--session <id>\] \[--color <name>\]/)
     assert.match(output, /inbase accept \[--session <id>\]/)
     assert.match(output, /inbase extract-blueprint <folder> <output-file>/)
     assert.doesNotMatch(output, /inbase go \[--session/)
-    assert.match(output, /Install Cursor, Claude Code, Codex, Copilot, and Cline skills/)
+    assert.match(output, /cursor, claude, agents, copilot, cline/)
   } finally {
     console.log = log
   }
@@ -1198,6 +1430,46 @@ test('explain start without a question walks the git branch diff', async () => {
     assert.match(result.stdout, /"src\/a.ts"/)
     assert.match(result.stdout, /"src\/Clock.ts"/)
     assert.doesNotMatch(result.stdout, /VISUAL_CODER_PROPOSAL/)
+  } finally {
+    cleanup()
+  }
+})
+
+test('explain start without a question walks staged files vs remote', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  initGitRepo(target)
+  runGit(target, ['add', '.'])
+  runGit(target, ['commit', '-m', 'base'])
+  const originSha = runGit(target, ['rev-parse', 'HEAD']).stdout.trim()
+  runGit(target, ['update-ref', 'refs/remotes/origin/main', originSha])
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 2\n')
+  runGit(target, ['add', 'src/a.ts'])
+  fs.writeFileSync(path.join(target, 'src/Clock.ts'), 'export function Clock() {}\n')
+  fs.mkdirSync(dataDir, { recursive: true })
+  fs.writeFileSync(
+    path.join(dataDir, 'user-context.json'),
+    `${JSON.stringify({ showBranchChanges: true, branchChangesMode: 'remote' }, null, 2)}\n`,
+  )
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    writeRunningInstance({ dataDir, targetRoot: target })
+    const result = runCli(['explain', 'start'], { cwd: root, env })
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(
+      result.stdout,
+      /VISUAL_CODER_DIFF What has changed in this git diff \(main staged vs origin\/main\)/,
+    )
+    assert.match(result.stdout, /VISUAL_CODER_CHANGES_START/)
+    assert.match(result.stdout, /"src\/a.ts"/)
+    assert.doesNotMatch(result.stdout, /"src\/Clock.ts"/)
   } finally {
     cleanup()
   }

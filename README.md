@@ -94,7 +94,7 @@ Open the printed URL (http://127.0.0.1:5173 by default). In a Cursor or VS Code 
 inbase run --target /path/to/your/project
 ```
 
-`inbase init` copies a Cursor skill into `.cursor/skills/inbase/`, a Claude Code skill into `.claude/skills/inbase/`, shared Agent Skills into `.agents/skills/`, Copilot skills into `.github/skills/`, Cline skills into `.cline/skills/inbase/` and `.cline/SKILL.md`, Cline workflows into `.cline/workflows/`, Cline rules into `.cline/rules/inbase.md` and a root `.clinerules` file, writes `inbase.json` if it is missing, and gitignores `.inbase/`. Keep `inbase run` open, then ask the agent to change source files. The LLM follows the visual plan and patch loop below.
+`inbase init` copies a Cursor skill into `.cursor/skills/inbase/`, a Claude Code skill into `.claude/skills/inbase/`, shared Agent Skills into `.agents/skills/`, Copilot skills into `.github/skills/`, Cline skills into `.cline/skills/inbase/` and `.cline/SKILL.md`, Cline workflows into `.cline/workflows/`, Cline rules into `.cline/rules/inbase.md` and a root `.clinerules` file, writes `inbase.json` if it is missing, and gitignores `.inbase/`. `inbase init cline` (or `cursor`, `claude`, `agents`, `copilot`) installs only that editor. `inbase cleanup` removes those files so you can turn Inbase off, including leftover Inbase skills and editor rules (for example `.cursor/rules` and `.cline/rules`). `inbase cleanup cline` removes only that editor. Keep `inbase run` open, then ask the agent to change source files. The LLM follows the visual plan and patch loop below.
 
 ### Config
 
@@ -300,7 +300,12 @@ Inbase stores patches under `.inbase/` and applies them on every step update. Yo
 
 ### Branch changes
 
-When no LLM is making changes, turn on **Show branch changes** (or press **G**) to highlight the current git branch against its base: committed, unstaged, and untracked files, in place of LLM patch files. Type **`/explain`** with no question to walk what has changed in that diff.
+When no LLM is making changes, turn on **Show branch changes** (or press **G**) to highlight git changes in place of LLM patch files. There are two comparisons:
+
+- **vs main**: the current branch against its base (`main` or `master`), including committed, unstaged, and untracked files.
+- **vs remote**: staged files (plus unpushed commits) against `origin` of the same branch. Unstaged and untracked files are left out.
+
+Switch with the buttons on the branch panel, or press **Shift+G**. Type **`/explain`** with no question to walk what has changed in that diff.
 
 ![Branch changes panel on the map](docs/manual-branch.png)
 
@@ -323,6 +328,7 @@ Inbase disables this control while an LLM session is writing or reviewing a patc
 | Show only changed paths | | C |
 | Hidden files | H | H |
 | Branch changes | G | G |
+| Switch branch comparison | Shift+G | Shift+G |
 | Release mouse | Double-click, Esc | |
 | Connect a chat | Chat, or `/coral` `/amber` `/lime` `/orange` `/violet` | same |
 | Start or continue a step | `/accept` in that chat | |
@@ -339,6 +345,9 @@ The in-app **Instructions** overlay (bottom of the HUD) lists the same controls 
 | Command | What it does |
 | --- | --- |
 | `inbase init` | Install Cursor, Claude Code, Codex, Copilot, and Cline skills in this repo and write `inbase.json` if missing |
+| `inbase init cline` | Install only that editor's skills (`cursor`, `claude`, `agents`, `copilot`, `cline`) |
+| `inbase cleanup` | Remove installed skills and rules, `.inbase/`, `inbase.json`, and the `.gitignore` entry |
+| `inbase cleanup cline` | Remove only that editor's skills (`cursor`, `claude`, `agents`, `copilot`, `cline`) |
 | `inbase run` | Scan this repo and start the local map |
 | `inbase run --port 5174` | Start on another port |
 | `inbase run --target <dir>` | Map another folder |

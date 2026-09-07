@@ -9,11 +9,14 @@ import {
   ensureGitignoreEntry,
   explorerRoot,
   isolatedViteConfig,
+  instanceFile,
+  readInstanceFile,
+  removeGitignoreEntry,
   resolveFromPackage,
   takeFlagValue,
 } from './project.mjs'
-import { resolvePort, writeInbaseConfig } from './inbase-config.mjs'
-import { installEditors } from './editors/index.mjs'
+import { removeInbaseConfig, resolvePort, writeInbaseConfig } from './inbase-config.mjs'
+import { installEditors, isAllEditors, uninstallEditors } from './editors/index.mjs'
 import {
   proposePatch,
   reportPlan,
@@ -29,7 +32,10 @@ import { extractBlueprint } from './extract-blueprint.mjs'
 const HELP = `inbase — a first-person 3D map of a codebase
 
 Usage:
-  inbase init              Install Cursor, Claude Code, Codex, Copilot, and Cline skills
+  inbase init [editor]     Install skills for all editors, or only one
+                           (cursor, claude, agents, copilot, cline)
+  inbase cleanup [editor]  Remove skills for all editors, or only one
+                           (also removes .inbase/ and inbase.json)
   inbase run               Scan this repo and start the local map
   inbase extract-blueprint <folder> <output-file>
   inbase help              Show this help
@@ -56,8 +62,8 @@ function printHelp() {
   console.log(HELP.trim())
 }
 
-export function initProject(projectRoot = process.cwd()) {
-  const installed = installEditors(projectRoot)
+export function initProject(projectRoot = process.cwd(), editor) {
+  const installed = installEditors(projectRoot, editor)
   const cursor = installed.find((editor) => editor.id === 'cursor') ?? installed[0]
   if (!cursor) {
     throw new Error('No editor adapters are registered')
@@ -77,6 +83,37 @@ export function initProject(projectRoot = process.cwd()) {
     gitignoreAdded,
     configAdded,
     editors: installed,
+  }
+}
+
+export function cleanupProject(projectRoot = process.cwd(), editor) {
+  const removeProjectFiles = isAllEditors(editor)
+  if (removeProjectFiles) {
+    const running = readInstanceFile(instanceFile(path.join(projectRoot, '.inbase')))
+    if (running) {
+      throw new Error(
+        `Stop the running Inbase server (pid ${running.pid}) before cleanup.`,
+      )
+    }
+  }
+  const uninstalled = uninstallEditors(projectRoot, editor)
+  let dataDirRemoved = false
+  let gitignoreRemoved = false
+  let configRemoved = false
+  if (removeProjectFiles) {
+    const dataDir = path.join(projectRoot, '.inbase')
+    if (fs.existsSync(dataDir)) {
+      fs.rmSync(dataDir, { recursive: true, force: true })
+      dataDirRemoved = true
+    }
+    gitignoreRemoved = removeGitignoreEntry(projectRoot)
+    configRemoved = removeInbaseConfig(projectRoot)
+  }
+  return {
+    editors: uninstalled,
+    dataDirRemoved,
+    gitignoreRemoved,
+    configRemoved,
   }
 }
 
@@ -143,7 +180,20 @@ export async function main(argv = process.argv.slice(2)) {
   }
 
   if (command === 'init') {
-    const result = initProject()
+    const [editorName, extra] = args
+    if (extra) {
+      console.error('Usage: inbase init [editor]')
+      process.exitCode = 1
+      return
+    }
+    let result
+    try {
+      result = initProject(process.cwd(), editorName)
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : error)
+      process.exitCode = 1
+      return
+    }
     for (const editor of result.editors) {
       const name = editor.label ?? editor.id
       console.log(`Installed ${name} skill at ${editor.skillDir}`)
@@ -158,9 +208,53 @@ export async function main(argv = process.argv.slice(2)) {
     }
     if (result.gitignoreAdded) console.log('Added .inbase/ to .gitignore')
     if (result.configAdded) console.log('Wrote inbase.json')
-    console.log(
-      'Next: run `inbase run`, then ask Cursor, Claude Code, Codex, Copilot, or Cline to change source files.',
-    )
+    const names = result.editors.map((editor) => editor.label ?? editor.id)
+    const who =
+      names.length === 1
+        ? names[0]
+        : names.slice(0, -1).join(', ') + `, or ${names.at(-1)}`
+    console.log(`Next: run \`inbase run\`, then ask ${who} to change source files.`)
+    return
+  }
+
+  if (command === 'cleanup') {
+    const [editorName, extra] = args
+    if (extra) {
+      console.error('Usage: inbase cleanup [editor]')
+      process.exitCode = 1
+      return
+    }
+    let result
+    try {
+      result = cleanupProject(process.cwd(), editorName)
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : error)
+      process.exitCode = 1
+      return
+    }
+    let logged = false
+    for (const editor of result.editors) {
+      if (!editor.removed) continue
+      logged = true
+      const name = editor.label ?? editor.id
+      console.log(`Removed ${name} skill at ${editor.skillDir}`)
+      if (editor.commandDir) {
+        console.log(`Removed ${name} commands at ${editor.commandDir}`)
+      }
+    }
+    if (result.dataDirRemoved) {
+      logged = true
+      console.log('Removed .inbase/')
+    }
+    if (result.gitignoreRemoved) {
+      logged = true
+      console.log('Removed .inbase/ from .gitignore')
+    }
+    if (result.configRemoved) {
+      logged = true
+      console.log('Removed inbase.json')
+    }
+    if (!logged) console.log('Nothing to clean up')
     return
   }
 

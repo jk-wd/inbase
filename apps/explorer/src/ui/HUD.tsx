@@ -15,6 +15,7 @@ import {
   type BlueprintPointer,
   type BlueprintPointerKind,
   type BranchChanges,
+  type BranchChangesMode,
   type CodebaseGraph,
   type ExplainTargetKind,
   type PatchImportAddition,
@@ -1649,8 +1650,12 @@ function SessionPanel({
 
 function BranchChangesPanel({
   changes,
+  mode,
+  onModeChange,
 }: {
   changes: BranchChanges
+  mode: BranchChangesMode
+  onModeChange?: (next: BranchChangesMode) => void
 }) {
   const [minimized, setMinimized] = useState(false)
   const addedFunctions = changes.addedFunctions ?? []
@@ -1659,11 +1664,18 @@ function BranchChangesPanel({
   const changedFunctions = changes.changedFunctions ?? []
   const changedVariables = changes.changedVariables ?? []
   const subtitle =
-    changes.branch && changes.base
-      ? `${changes.branch} vs ${changes.base}`
-      : changes.branch
-        ? changes.branch
-        : null
+    changes.mode === 'remote' && changes.branch && changes.base
+      ? `${changes.branch} staged vs ${changes.base}`
+      : changes.branch && changes.base
+        ? `${changes.branch} vs ${changes.base}`
+        : changes.branch
+          ? changes.branch
+          : null
+  const emptyMessage = changes.remoteMissing
+    ? 'No remote for this branch.'
+    : changes.mode === 'remote'
+      ? 'No staged changes vs remote.'
+      : 'No file changes on this branch.'
   const hasContent =
     changes.files.length > 0 ||
     (changes.createFolders ?? []).length > 0 ||
@@ -1688,9 +1700,35 @@ function BranchChangesPanel({
       />
       {!minimized && (
         <>
+          <div
+            className="hud-branch-modes"
+            role="tablist"
+            aria-label="Branch comparison"
+          >
+            <button
+              className="hud-button"
+              type="button"
+              role="tab"
+              data-active={mode === 'main'}
+              aria-selected={mode === 'main'}
+              onClick={() => onModeChange?.('main')}
+            >
+              vs main
+            </button>
+            <button
+              className="hud-button"
+              type="button"
+              role="tab"
+              data-active={mode === 'remote'}
+              aria-selected={mode === 'remote'}
+              onClick={() => onModeChange?.('remote')}
+            >
+              vs remote
+            </button>
+          </div>
           {subtitle && <p className="hud-feature">{subtitle}</p>}
           {!hasContent ? (
-            <p>No file changes on this branch.</p>
+            <p>{emptyMessage}</p>
           ) : (
             <MutationFold hasContent>
               {changes.files.length > 0 && (
@@ -1815,6 +1853,7 @@ function explorerInstructions({
   canToggleImportedBy,
   relationMode,
   showBranchChanges,
+  branchChangesMode,
   canShowBranchChanges,
   showHiddenFiles,
   leftPanelsHidden,
@@ -1829,6 +1868,7 @@ function explorerInstructions({
   canToggleImportedBy: boolean
   relationMode: RelationMode
   showBranchChanges: boolean
+  branchChangesMode: BranchChangesMode
   canShowBranchChanges: boolean
   showHiddenFiles: boolean
   leftPanelsHidden: boolean
@@ -1866,6 +1906,18 @@ function explorerInstructions({
             ? 'Hide branch changes'
             : 'Show branch changes',
         },
+        ...(showBranchChanges
+          ? [
+              {
+                id: 'branch-mode',
+                keys: ['Shift', 'G'],
+                label:
+                  branchChangesMode === 'remote'
+                    ? 'Compare to main'
+                    : 'Compare to remote',
+              },
+            ]
+          : []),
       ]
     : []
   const hidden: ExplorerInstruction[] = [
@@ -2128,9 +2180,11 @@ type HUDProps = {
   onWalk: () => void
   showBranchChanges?: boolean
   branchChanges?: BranchChanges
+  branchChangesMode?: BranchChangesMode
   canShowBranchChanges?: boolean
   llmMakingChanges?: boolean
   onToggleShowBranchChanges?: () => void
+  onBranchChangesModeChange?: (mode: BranchChangesMode) => void
   showHiddenFiles?: boolean
   onToggleShowHiddenFiles?: () => void
   onUpdateModel: () => void
@@ -2232,9 +2286,11 @@ export function HUD({
   onWalk,
   showBranchChanges = false,
   branchChanges,
+  branchChangesMode = 'main',
   canShowBranchChanges = false,
   llmMakingChanges = false,
   onToggleShowBranchChanges,
+  onBranchChangesModeChange,
   showHiddenFiles = false,
   onToggleShowHiddenFiles,
   onUpdateModel,
@@ -2819,6 +2875,7 @@ export function HUD({
     canToggleImportedBy,
     relationMode,
     showBranchChanges,
+    branchChangesMode,
     canShowBranchChanges,
     showHiddenFiles,
     leftPanelsHidden,
@@ -2986,7 +3043,11 @@ export function HUD({
             />
           )}
           {showBranchChanges && branchChanges && (
-            <BranchChangesPanel changes={branchChanges} />
+            <BranchChangesPanel
+              changes={branchChanges}
+              mode={branchChangesMode}
+              onModeChange={onBranchChangesModeChange}
+            />
           )}
         </div>
       )}
@@ -4123,7 +4184,7 @@ export function HUD({
                 : !canShowBranchChanges
                   ? 'No git branch to show'
                   : showBranchChanges
-                    ? 'G hide branch changes'
+                    ? 'G hide branch changes · Shift+G switch comparison'
                     : 'G show branch changes'}
             </span>
           </button>

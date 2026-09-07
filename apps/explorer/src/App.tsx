@@ -47,6 +47,7 @@ import {
 } from './explain'
 import {
   fetchUserContext,
+  persistBranchChangesMode,
   persistShowBranchChanges,
   persistShowHiddenFiles,
   persistUserContext,
@@ -87,6 +88,7 @@ import {
   llmIsMakingChanges,
   type AgentIntent,
   type AimedRelation,
+  type BranchChangesMode,
   type BlueprintNote,
   type BlueprintNoteKind,
   type BlueprintOption,
@@ -752,6 +754,8 @@ function Explorer({
     null,
   )
   const [wantBranchChanges, setWantBranchChanges] = useState(false)
+  const [branchChangesMode, setBranchChangesMode] =
+    useState<BranchChangesMode>('main')
   const [showHiddenFiles, setShowHiddenFiles] = useState(false)
   const [branchChanges, setBranchChanges] = useState(emptyBranchChanges)
   const intent =
@@ -1274,6 +1278,12 @@ function Explorer({
       if (cancelled) return
       if (typeof context?.showBranchChanges === 'boolean') {
         setWantBranchChanges(context.showBranchChanges)
+      }
+      if (
+        context?.branchChangesMode === 'remote' ||
+        context?.branchChangesMode === 'main'
+      ) {
+        setBranchChangesMode(context.branchChangesMode)
       }
       if (typeof context?.showHiddenFiles === 'boolean') {
         setShowHiddenFiles(context.showHiddenFiles)
@@ -2117,6 +2127,22 @@ function Explorer({
     })
   }, [branchChanges.available, llmBusy, wantBranchChanges])
 
+  const setBranchChangesModeAndPersist = useCallback(
+    (next: BranchChangesMode) => {
+      setBranchChangesMode(next)
+      persistBranchChangesMode(next)
+    },
+    [],
+  )
+
+  const toggleBranchChangesMode = useCallback(() => {
+    setBranchChangesMode((current) => {
+      const next = current === 'remote' ? 'main' : 'remote'
+      persistBranchChangesMode(next)
+      return next
+    })
+  }, [])
+
   const toggleShowHiddenFiles = useCallback(() => {
     setShowHiddenFiles((current) => {
       const next = !current
@@ -2171,13 +2197,24 @@ function Explorer({
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat || event.code !== 'KeyG') return
       if (shouldIgnoreShortcut(event)) return
+      if (event.shiftKey) {
+        if (!canToggleBranchChanges || !wantBranchChanges) return
+        event.preventDefault()
+        toggleBranchChangesMode()
+        return
+      }
       if (!canToggleBranchChanges) return
       event.preventDefault()
       toggleShowBranchChanges()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [canToggleBranchChanges, toggleShowBranchChanges])
+  }, [
+    canToggleBranchChanges,
+    toggleBranchChangesMode,
+    toggleShowBranchChanges,
+    wantBranchChanges,
+  ])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -2213,7 +2250,7 @@ function Explorer({
   useEffect(() => {
     let cancelled = false
     const load = async () => {
-      const next = await fetchBranchChanges()
+      const next = await fetchBranchChanges(branchChangesMode)
       if (!cancelled) setBranchChanges(next)
     }
     void load()
@@ -2229,7 +2266,7 @@ function Explorer({
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [llmBusy, updatingModel, wantBranchChanges])
+  }, [branchChangesMode, llmBusy, updatingModel, wantBranchChanges])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -2989,9 +3026,11 @@ function Explorer({
         onWalk={openWalk}
         showBranchChanges={showingBranchChanges}
         branchChanges={branchChanges}
+        branchChangesMode={branchChangesMode}
         canShowBranchChanges={canToggleBranchChanges}
         llmMakingChanges={llmBusy}
         onToggleShowBranchChanges={toggleShowBranchChanges}
+        onBranchChangesModeChange={setBranchChangesModeAndPersist}
         showHiddenFiles={showHiddenFiles}
         onToggleShowHiddenFiles={toggleShowHiddenFiles}
         onUpdateModel={onUpdateModel}

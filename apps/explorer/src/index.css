@@ -1348,6 +1348,26 @@ button {
   font-weight: 600;
 }
 
+.hud-branch-modes {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.hud-branch-modes .hud-button {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+  font-size: 11px;
+}
+
+.hud-branch-modes .hud-button[data-active='true'] {
+  border-color: #22ff66;
+  color: #e7ebf2;
+}
+
 .hud-panel-planned kbd {
   display: inline-block;
   padding: 1px 6px;

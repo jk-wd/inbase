@@ -1,9 +1,11 @@
-import type { BranchChanges } from './types'
+import type { BranchChanges, BranchChangesMode } from './types'
 
 export const emptyBranchChanges: BranchChanges = {
   available: false,
   branch: null,
   base: null,
+  mode: 'main',
+  remoteMissing: false,
   files: [],
   creates: [],
   deletes: [],
@@ -22,6 +24,8 @@ function normalize(data: Partial<BranchChanges> | null | undefined): BranchChang
     available: Boolean(data?.available),
     branch: typeof data?.branch === 'string' ? data.branch : null,
     base: typeof data?.base === 'string' ? data.base : null,
+    mode: data?.mode === 'remote' ? 'remote' : 'main',
+    remoteMissing: Boolean(data?.remoteMissing),
     files: Array.isArray(data?.files) ? data.files : [],
     creates: Array.isArray(data?.creates) ? data.creates : [],
     deletes: Array.isArray(data?.deletes) ? data.deletes : [],
@@ -43,9 +47,13 @@ function normalize(data: Partial<BranchChanges> | null | undefined): BranchChang
   }
 }
 
-export async function fetchBranchChanges(): Promise<BranchChanges> {
+export async function fetchBranchChanges(
+  mode: BranchChangesMode = 'main',
+): Promise<BranchChanges> {
   try {
-    const response = await fetch(`/api/branch-changes?t=${Date.now()}`)
+    const response = await fetch(
+      `/api/branch-changes?mode=${encodeURIComponent(mode)}&t=${Date.now()}`,
+    )
     if (!response.ok) return emptyBranchChanges
     return normalize((await response.json()) as BranchChanges)
   } catch {

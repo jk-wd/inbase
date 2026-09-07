@@ -1,4 +1,5 @@
 import type {
+  BranchChangesMode,
   CodebaseGraph,
   FileNode,
   UserContext,
@@ -38,6 +39,16 @@ export function persistShowBranchChanges(showBranchChanges: boolean) {
   })
 }
 
+export function persistBranchChangesMode(branchChangesMode: BranchChangesMode) {
+  fetch('/api/user-context', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: `${JSON.stringify({ branchChangesMode })}\n`,
+  }).catch(() => {
+    lastWritten = ''
+  })
+}
+
 export function persistShowHiddenFiles(showHiddenFiles: boolean) {
   fetch('/api/user-context', {
     method: 'POST',
@@ -61,6 +72,7 @@ function flushUserContext() {
   if (!context) return
   const {
     showBranchChanges: _showBranchChanges,
+    branchChangesMode: _branchChangesMode,
     showHiddenFiles: _showHiddenFiles,
     userCreatedBlocks: _userCreatedBlocks,
     userCreatedIslands: _userCreatedIslands,

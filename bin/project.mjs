@@ -207,3 +207,34 @@ export function ensureGitignoreEntry(projectRoot, entry = '.inbase/') {
   fs.appendFileSync(gitignore, `${prefix}${line}`)
   return true
 }
+
+export function removeGitignoreEntry(projectRoot, entry = '.inbase/') {
+  const gitignore = path.join(projectRoot, '.gitignore')
+  if (!fs.existsSync(gitignore)) return false
+  const aliases = new Set([entry, entry.replace(/\/$/, '')].filter(Boolean))
+  const lines = fs.readFileSync(gitignore, 'utf8').split(/\r?\n/)
+  const kept = lines.filter((row) => !aliases.has(row.trim()))
+  if (kept.length === lines.length) return false
+  while (kept.length > 0 && kept.at(-1) === '') kept.pop()
+  if (kept.length === 0) {
+    fs.unlinkSync(gitignore)
+    return true
+  }
+  fs.writeFileSync(gitignore, `${kept.join('\n')}\n`)
+  return true
+}
+
+/** Remove empty directories from `startDir` up to, but not including, `stopDir`. */
+export function removeEmptyParents(startDir, stopDir) {
+  const stop = path.resolve(stopDir)
+  let dir = path.resolve(startDir)
+  while (dir !== stop && dir.startsWith(`${stop}${path.sep}`)) {
+    if (!fs.existsSync(dir)) {
+      dir = path.dirname(dir)
+      continue
+    }
+    if (fs.readdirSync(dir).length > 0) break
+    fs.rmdirSync(dir)
+    dir = path.dirname(dir)
+  }
+}

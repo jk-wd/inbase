@@ -93,15 +93,18 @@ function readKnownFileIds(dataDir) {
   }
 }
 
-function readShowBranchChanges(dataDir) {
+function readUserContext(dataDir) {
   try {
-    const parsed = JSON.parse(
+    return JSON.parse(
       fs.readFileSync(path.join(dataDir, 'user-context.json'), 'utf8'),
     )
-    return parsed?.showBranchChanges === true
   } catch {
-    return false
+    return null
   }
+}
+
+function readShowBranchChanges(dataDir) {
+  return readUserContext(dataDir)?.showBranchChanges === true
 }
 
 function llmHidesBranchChanges(intent) {
@@ -156,12 +159,16 @@ async function readVisibleChanges(store, config) {
     const branchMod = await import(
       pathToFileURL(path.join(explorerRoot, 'scripts/branch-changes.mjs')).href
     )
-    const branch = branchMod.readBranchChanges(config.targetRoot, known)
+    const mode =
+      readUserContext(dataDir)?.branchChangesMode === 'remote' ? 'remote' : 'main'
+    const branch = branchMod.readBranchChanges(config.targetRoot, known, mode)
     if (branch.available) {
       const vs =
-        branch.branch && branch.base
-          ? ` (${branch.branch} vs ${branch.base})`
-          : ''
+        branch.mode === 'remote' && branch.branch && branch.base
+          ? ` (${branch.branch} staged vs ${branch.base})`
+          : branch.branch && branch.base
+            ? ` (${branch.branch} vs ${branch.base})`
+            : ''
       return {
         kind: 'diff',
         question: 'What has changed in this diff?',

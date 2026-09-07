@@ -1,6 +1,123 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { commandTemplateDir, copyDir, skillTemplateDir } from '../project.mjs'
+import {
+  commandTemplateDir,
+  copyDir,
+  removeEmptyParents,
+  skillTemplateDir,
+} from '../project.mjs'
+
+const RETIRED_COMMAND_NAMES = ['go']
+
+export function looksLikeInbaseFile(file) {
+  try {
+    if (!fs.statSync(file).isFile()) return false
+    const text = fs.readFileSync(file, 'utf8')
+    return /npx inbase|VISUAL_CODER|inbase attach|\/skipinbase|\bInbase\b/.test(text)
+  } catch {
+    return false
+  }
+}
+
+function commandTemplateStems() {
+  if (!fs.existsSync(commandTemplateDir)) return []
+  return fs.readdirSync(commandTemplateDir)
+    .filter((name) => name.endsWith('.md'))
+    .map((name) => name.slice(0, -3))
+}
+
+function installedCommandNames() {
+  return [...new Set([...commandTemplateStems(), ...RETIRED_COMMAND_NAMES])]
+}
+
+const ALWAYS_REMOVE_COMMANDS = new Set(['inbase', 'skipinbase', 'extract-blueprint'])
+
+function isDir(target) {
+  try {
+    return fs.statSync(target).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+function isFile(target) {
+  try {
+    return fs.statSync(target).isFile()
+  } catch {
+    return false
+  }
+}
+
+function removeDir(dir) {
+  if (!fs.existsSync(dir)) return false
+  fs.rmSync(dir, { recursive: true, force: true })
+  return true
+}
+
+export function removeManagedFile(file) {
+  if (!looksLikeInbaseFile(file)) return false
+  fs.unlinkSync(file)
+  return true
+}
+
+function removeKnownCommandFile(file, stem) {
+  if (!isFile(file)) return false
+  if (ALWAYS_REMOVE_COMMANDS.has(stem)) {
+    fs.unlinkSync(file)
+    return true
+  }
+  return removeManagedFile(file)
+}
+
+function removeManagedSkillDir(dir) {
+  const skill = path.join(dir, 'SKILL.md')
+  if (!isFile(skill) || !looksLikeInbaseFile(skill)) return false
+  fs.rmSync(dir, { recursive: true, force: true })
+  return true
+}
+
+/** Remove the `inbase` skill and any other skill folder whose SKILL.md is Inbase-managed. */
+export function sweepInbaseSkills(skillsDir) {
+  if (!isDir(skillsDir)) return false
+  let removed = false
+  for (const name of fs.readdirSync(skillsDir)) {
+    const dir = path.join(skillsDir, name)
+    if (isFile(dir) && name === 'SKILL.md') {
+      if (removeManagedFile(dir)) removed = true
+      continue
+    }
+    if (!isDir(dir)) continue
+    if (name === 'inbase') {
+      if (removeDir(dir)) removed = true
+      continue
+    }
+    if (removeManagedSkillDir(dir)) removed = true
+  }
+  return removed
+}
+
+/** Remove Inbase rule files (`inbase.md`, `inbase.mdc`, or content that looks like ours). */
+export function sweepInbaseRules(rulesPath) {
+  if (isFile(rulesPath)) return removeManagedFile(rulesPath)
+  if (!isDir(rulesPath)) return false
+  let removed = false
+  for (const name of fs.readdirSync(rulesPath)) {
+    const target = path.join(rulesPath, name)
+    if (isDir(target)) {
+      if (name === 'inbase' && removeDir(target)) removed = true
+      continue
+    }
+    if (!isFile(target) || !/\.(md|mdc)$/i.test(name)) continue
+    const stem = name.replace(/\.(md|mdc)$/i, '')
+    if (stem === 'inbase') {
+      fs.unlinkSync(target)
+      removed = true
+      continue
+    }
+    if (removeManagedFile(target)) removed = true
+  }
+  return removed
+}
 
 export function copySkillAndCommands(projectRoot, { id, skillRel, commandRel }) {
   if (!fs.existsSync(skillTemplateDir)) {
@@ -56,6 +173,28 @@ export function copySkillTree(projectRoot, { id, skillsRel }) {
   }
   removeRetiredGoCommand(commandDir)
   return { id, skillDir, commandDir }
+}
+
+export function removeSkillAndCommands(projectRoot, { id, skillRel, commandRel }) {
+  const skillDir = path.join(projectRoot, skillRel)
+  const commandDir = path.join(projectRoot, commandRel)
+  let removed = removeDir(skillDir)
+  if (sweepInbaseSkills(path.dirname(skillDir))) removed = true
+  for (const name of installedCommandNames()) {
+    if (removeKnownCommandFile(path.join(commandDir, `${name}.md`), name)) removed = true
+  }
+  removeEmptyParents(path.dirname(skillDir), projectRoot)
+  removeEmptyParents(commandDir, projectRoot)
+  return { id, skillDir, commandDir, removed }
+}
+
+export function removeSkillTree(projectRoot, { id, skillsRel }) {
+  const commandDir = path.join(projectRoot, skillsRel)
+  const skillDir = path.join(commandDir, 'inbase')
+  let removed = removeDir(skillDir)
+  if (sweepInbaseSkills(commandDir)) removed = true
+  removeEmptyParents(commandDir, projectRoot)
+  return { id, skillDir, commandDir, removed }
 }
 
 export function prependYamlFrontmatter(file, lines) {

@@ -54,6 +54,10 @@ function shouldSkipPath(fileId) {
   return shouldIgnoreRelativePath(fileId)
 }
 
+export function normalizeBranchChangesMode(value) {
+  return value === 'remote' ? 'remote' : 'main'
+}
+
 function currentBranch(cwd) {
   const result = runGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD'])
   if (result.status !== 0) return null
@@ -76,6 +80,25 @@ function resolveBaseRef(gitRoot) {
     if (check.status === 0 && check.stdout.trim()) return name
   }
   return 'HEAD'
+}
+
+function resolveRemoteRef(gitRoot, branch) {
+  const upstream = runGit(gitRoot, [
+    'rev-parse',
+    '--abbrev-ref',
+    '--symbolic-full-name',
+    '@{upstream}',
+  ])
+  if (upstream.status === 0) {
+    const ref = upstream.stdout.trim()
+    if (ref) return ref
+  }
+  if (branch && branch !== 'HEAD') {
+    const candidate = `origin/${branch}`
+    const check = runGit(gitRoot, ['rev-parse', '--verify', '--quiet', candidate])
+    if (check.status === 0 && check.stdout.trim()) return candidate
+  }
+  return null
 }
 
 function resolveMergeBase(gitRoot, baseRef) {
@@ -155,6 +178,8 @@ export function emptyBranchChanges() {
     available: false,
     branch: null,
     base: null,
+    mode: 'main',
+    remoteMissing: false,
     files: [],
     creates: [],
     deletes: [],
@@ -169,28 +194,15 @@ export function emptyBranchChanges() {
   }
 }
 
-export function readBranchChanges(targetRoot, knownFileIds = []) {
-  const empty = emptyBranchChanges()
-  if (!targetRoot || !fs.existsSync(targetRoot)) return empty
-  const gitRoot = gitTopLevel(targetRoot)
-  if (!gitRoot) return empty
-
-  const branch = currentBranch(targetRoot) ?? currentBranch(gitRoot)
-  const base = resolveBaseRef(gitRoot)
-  const mergeBase = resolveMergeBase(gitRoot, base)
-  const diffArgs = [
-    '--no-color',
-    '--no-ext-diff',
-    '--no-renames',
-    '--relative',
-    mergeBase,
-  ]
+function collectDiff(targetRoot, knownFileIds, diffArgs, includeUntracked) {
   const statusResult = runGit(targetRoot, ['diff', '--name-status', ...diffArgs])
   const patchResult = runGit(targetRoot, ['diff', ...diffArgs])
   const named = parseNameStatus(
     statusResult.status === 0 ? statusResult.stdout : '',
   )
-  const untracked = collectUntracked(targetRoot)
+  const untracked = includeUntracked
+    ? collectUntracked(targetRoot)
+    : { creates: [], patches: [], createLines: {} }
   const creates = unique([...named.creates, ...untracked.creates])
   const deletes = named.deletes.filter((id) => !creates.includes(id))
   const files = named.files.filter(
@@ -201,11 +213,7 @@ export function readBranchChanges(targetRoot, knownFileIds = []) {
     .join('\n')
   const parsed = parseUnifiedPatch(patchText)
   const known = unique([...knownFileIds, ...creates, ...files])
-
   return {
-    available: true,
-    branch,
-    base,
     files,
     creates,
     deletes,
@@ -216,5 +224,64 @@ export function readBranchChanges(targetRoot, knownFileIds = []) {
     createLines: { ...parsed.createLines, ...untracked.createLines },
     imports: extractPatchImports(parsed.entries, known),
     ...extractPatchAdditions(parsed.entries),
+  }
+}
+
+export function readBranchChanges(targetRoot, knownFileIds = [], modeInput = 'main') {
+  const empty = emptyBranchChanges()
+  const mode = normalizeBranchChangesMode(modeInput)
+  if (!targetRoot || !fs.existsSync(targetRoot)) return { ...empty, mode }
+  const gitRoot = gitTopLevel(targetRoot)
+  if (!gitRoot) return { ...empty, mode }
+
+  const branch = currentBranch(targetRoot) ?? currentBranch(gitRoot)
+  if (mode === 'remote') {
+    const remote = resolveRemoteRef(gitRoot, branch)
+    if (!remote) {
+      return {
+        ...empty,
+        available: true,
+        branch,
+        base: null,
+        mode,
+        remoteMissing: true,
+      }
+    }
+    return {
+      available: true,
+      branch,
+      base: remote,
+      mode,
+      remoteMissing: false,
+      ...collectDiff(
+        targetRoot,
+        knownFileIds,
+        [
+          '--cached',
+          '--no-color',
+          '--no-ext-diff',
+          '--no-renames',
+          '--relative',
+          remote,
+        ],
+        false,
+      ),
+    }
+  }
+
+  const base = resolveBaseRef(gitRoot)
+  const mergeBase = resolveMergeBase(gitRoot, base)
+  return {
+    available: true,
+    branch,
+    base,
+    mode,
+    remoteMissing: false,
+    ...collectDiff(
+      targetRoot,
+      knownFileIds,
+      ['--no-color', '--no-ext-diff', '--no-renames', '--relative', mergeBase],
+      true,
+    ),
   }
 }

@@ -6,7 +6,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { emptyIntent } from './scripts/patch-lib.mjs'
-import { readBranchChanges } from './scripts/branch-changes.mjs'
+import {
+  normalizeBranchChangesMode,
+  readBranchChanges,
+} from './scripts/branch-changes.mjs'
 import { writeRunningInstance, isolatedViteConfig, packageDirFromPackage } from '../../bin/project.mjs'
 import {
   dataDir,
@@ -245,7 +248,16 @@ function jsonFilePlugin(): Plugin {
 
       server.middlewares.use('/api/branch-changes', (req, res, next) => {
         if (req.method === 'GET') {
-          sendJson(res, 200, readBranchChanges(targetRoot, knownFileIds()))
+          const url = new URL(req.url ?? '/', 'http://visual-coder.local')
+          sendJson(
+            res,
+            200,
+            readBranchChanges(
+              targetRoot,
+              knownFileIds(),
+              url.searchParams.get('mode'),
+            ),
+          )
           return
         }
         next()
@@ -644,10 +656,15 @@ function readUserContext() {
     return {
       ...parsed,
       showBranchChanges: Boolean(parsed.showBranchChanges),
+      branchChangesMode: normalizeBranchChangesMode(parsed.branchChangesMode),
       showHiddenFiles: Boolean(parsed.showHiddenFiles),
     }
   } catch {
-    return { showBranchChanges: false, showHiddenFiles: false }
+    return {
+      showBranchChanges: false,
+      branchChangesMode: 'main',
+      showHiddenFiles: false,
+    }
   }
 }
 
@@ -662,6 +679,9 @@ async function writeUserContext(req: IncomingMessage, res: ServerResponse) {
         typeof incoming.showBranchChanges === 'boolean'
           ? incoming.showBranchChanges
           : Boolean(existing.showBranchChanges),
+      branchChangesMode: normalizeBranchChangesMode(
+        incoming.branchChangesMode ?? existing.branchChangesMode,
+      ),
       showHiddenFiles:
         typeof incoming.showHiddenFiles === 'boolean'
           ? incoming.showHiddenFiles

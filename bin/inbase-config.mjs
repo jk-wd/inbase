@@ -161,3 +161,14 @@ export function writeInbaseConfig(projectRoot, values = INIT_INBASE_CONFIG) {
   fs.writeFileSync(dest, `${JSON.stringify(values, null, 2)}\n`)
   return true
 }
+
+export function removeInbaseConfig(projectRoot) {
+  const dest = path.join(path.resolve(projectRoot), CONFIG_FILE_NAME)
+  try {
+    if (!fs.statSync(dest).isFile()) return false
+  } catch {
+    return false
+  }
+  fs.unlinkSync(dest)
+  return true
+}

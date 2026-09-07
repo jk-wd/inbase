@@ -108,6 +108,8 @@ export type UserCreatedIsland = {
   colorHex?: string
 }
 
+export type BranchChangesMode = 'main' | 'remote'
+
 export type UserContext = {
   updatedAt: string | null
   mode: ViewMode
@@ -124,6 +126,7 @@ export type UserContext = {
     z: number
   }
   showBranchChanges?: boolean
+  branchChangesMode?: BranchChangesMode
   showHiddenFiles?: boolean
   userCreatedBlocks?: UserCreatedBlock[]
   userCreatedIslands?: UserCreatedIsland[]
@@ -185,6 +188,8 @@ export type BranchChanges = {
   available: boolean
   branch: string | null
   base: string | null
+  mode: BranchChangesMode
+  remoteMissing: boolean
   files: string[]
   creates: string[]
   deletes: string[]

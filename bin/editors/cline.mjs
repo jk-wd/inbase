@@ -1,9 +1,22 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { copySkillAndCommands } from './layout.mjs'
+import { removeEmptyParents } from '../project.mjs'
+import {
+  copySkillAndCommands,
+  removeManagedFile,
+  removeSkillAndCommands,
+  sweepInbaseRules,
+  sweepInbaseSkills,
+} from './layout.mjs'
 
 export const id = 'cline'
 export const label = 'Cline'
+
+const LAYOUT = {
+  id,
+  skillRel: '.cline/skills/inbase',
+  commandRel: '.cline/workflows',
+}
 
 const CLINE_PREAMBLE = `# Inbase visual edits (Cline)
 
@@ -62,11 +75,7 @@ function escapeXml(text) {
 }
 
 export function install(projectRoot) {
-  const installed = copySkillAndCommands(projectRoot, {
-    id,
-    skillRel: '.cline/skills/inbase',
-    commandRel: '.cline/workflows',
-  })
+  const installed = copySkillAndCommands(projectRoot, LAYOUT)
   removeLegacyCommandSkills(path.join(projectRoot, '.cline/skills'))
   rewriteMarkdownDir(installed.commandDir)
   const skillFile = path.join(installed.skillDir, 'SKILL.md')
@@ -78,6 +87,35 @@ export function install(projectRoot) {
   writeClineSkillFiles(projectRoot, skillMarkdown)
   writeClineRules(projectRoot, skillMarkdown)
   return { ...installed, label }
+}
+
+export function uninstall(projectRoot) {
+  const removedLayout = removeSkillAndCommands(projectRoot, LAYOUT)
+  let removed = removedLayout.removed
+  if (removeManagedFile(path.join(projectRoot, '.cline/SKILL.md'))) removed = true
+  if (sweepInbaseSkills(path.join(projectRoot, '.cline/skills'))) removed = true
+  if (sweepInbaseRules(path.join(projectRoot, '.cline/rules'))) removed = true
+  if (removeClineRulesFile(projectRoot)) removed = true
+  removeEmptyParents(path.join(projectRoot, '.cline/rules'), projectRoot)
+  removeEmptyParents(path.join(projectRoot, '.cline/skills'), projectRoot)
+  removeEmptyParents(path.join(projectRoot, '.cline/workflows'), projectRoot)
+  removeEmptyParents(path.join(projectRoot, '.cline'), projectRoot)
+  return { ...removedLayout, removed, label }
+}
+
+function removeClineRulesFile(projectRoot) {
+  const file = path.join(projectRoot, '.clinerules')
+  if (!fs.existsSync(file)) return false
+  if (fs.statSync(file).isDirectory()) {
+    removeLegacyClinerulesDir(projectRoot)
+    if (sweepInbaseRules(file)) {
+      removeEmptyParents(file, projectRoot)
+      return true
+    }
+    removeEmptyParents(file, projectRoot)
+    return !fs.existsSync(file)
+  }
+  return removeManagedFile(file)
 }
 
 function removeLegacyCommandSkills(skillsDir) {
