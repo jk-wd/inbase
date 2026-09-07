@@ -64,6 +64,7 @@ import {
   isSessionStopped,
   isWorkflowStopped,
 } from './session-store.mjs'
+import { parseUnifiedPatch } from './patch-lib.mjs'
 import { initGitRepo, runGit } from './git-test.mjs'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
@@ -2340,6 +2341,35 @@ test('records live file edits against the invoke snapshot', () => {
       'export const value = 2\n',
     )
     assert.equal(fs.existsSync(path.join(env.targetRoot, 'src/helper.ts')), false)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('does not record snapshot copies when the data dir lives in the target', () => {
+  const env = fixture()
+  const nestedData = path.join(env.targetRoot, 'apps/explorer/src/data')
+  try {
+    fs.mkdirSync(nestedData, { recursive: true })
+    fs.writeFileSync(path.join(nestedData, 'codebase.json'), '{}\n')
+    startSession(nestedData, { sessionId: 'nested-data', name: 'Nested data' })
+    answerBlueprint(nestedData, 'nested-data', false)
+    reportPlan(nestedData, {
+      sessionId: 'nested-data',
+      feature: 'Nested data',
+      stepTitles: ['Bump value'],
+      targetRoot: env.targetRoot,
+    })
+    invokeStep(nestedData, 'nested-data', 1, env.targetRoot)
+    fs.writeFileSync(path.join(env.targetRoot, 'src/a.ts'), 'export const value = 2\n')
+
+    const recorded = appendDiff(nestedData, env.targetRoot, { sessionId: 'nested-data' })
+    const patch = readDiff(nestedData, 'nested-data', recorded.entry)
+    const parsed = parseUnifiedPatch(patch)
+    assert.deepEqual(parsed.files, ['src/a.ts'])
+    assert.deepEqual(parsed.creates, [])
+    assert.ok(!parsed.creates.some((id) => id.includes('diff-sessions')))
+    assert.ok(!parsed.creates.includes('apps/explorer/src/data/codebase.json'))
   } finally {
     env.cleanup()
   }

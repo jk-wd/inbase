@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-09-06T09:31:32.349Z",
+  "updatedAt": "2026-09-07T09:49:02.768Z",
   "mode": "map",
   "island": {
     "path": null,
@@ -11,8 +11,8 @@
   "filesOnIsland": [],
   "position": {
     "x": 0,
-    "z": 162.07
+    "z": 0
   },
-  "showBranchChanges": true,
+  "showBranchChanges": false,
   "showHiddenFiles": false
 }

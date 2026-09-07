@@ -196,11 +196,13 @@ function ensureFolder(folders, folderPath, rootName) {
   if (parent) ensureFolder(folders, parent, rootName)
 }
 
-export function listSourceFiles(root, extraPatterns) {
+export function listSourceFiles(root, extraPatterns, skipRoot = null) {
   if (!root || !fs.existsSync(root) || !fs.statSync(root).isDirectory()) return []
-  return listSourceAbsolutes(root, null, resolveScanIgnore(root, extraPatterns)).map(
-    (absolutePath) => toPosix(path.relative(root, absolutePath)),
-  )
+  return listSourceAbsolutes(
+    root,
+    skipRoot,
+    resolveScanIgnore(root, extraPatterns),
+  ).map((absolutePath) => toPosix(path.relative(root, absolutePath)))
 }
 
 export function buildScanGraph({

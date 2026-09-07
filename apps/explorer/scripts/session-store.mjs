@@ -1649,7 +1649,7 @@ export function invokeStep(dataDir, sessionId, step, targetRoot = null) {
 
 export function snapshotPreStep(dataDir, sessionId, targetRoot) {
   const { preStep } = sessionPaths(dataDir, sessionId)
-  snapshotSourceTree(targetRoot, preStep)
+  snapshotSourceTree(targetRoot, preStep, dataDir)
   return preStep
 }
 
@@ -1660,7 +1660,7 @@ export function readLiveDiff(dataDir, sessionId, targetRoot) {
       `Step ${sessionId} has no invoke snapshot. Wait for VISUAL_CODER_EXECUTE before recording file changes.`,
     )
   }
-  return diffSourceTrees(preStep, targetRoot)
+  return diffSourceTrees(preStep, targetRoot, dataDir)
 }
 
 export function appendDiff(dataDir, targetRoot, input) {

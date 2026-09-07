@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+import { toPosix } from './scan-ignore.mjs'
 import { isBinaryFile, listSourceFiles } from './scan-target.mjs'
 
 function splitLines(text) {
@@ -10,10 +11,55 @@ function splitLines(text) {
   return lines
 }
 
-export function snapshotSourceTree(fromRoot, toRoot) {
+function isInside(filePath, root) {
+  if (!filePath || !root) return false
+  const file = path.resolve(filePath)
+  const base = path.resolve(root)
+  return file === base || file.startsWith(base + path.sep)
+}
+
+function skipInside(root, skipRoot) {
+  return isInside(skipRoot, root) ? path.resolve(skipRoot) : null
+}
+
+/** Snapshot copies are already filtered. Do not re-apply project gitignore. */
+function listSnapshotFiles(root) {
+  if (!root || !fs.existsSync(root) || !fs.statSync(root).isDirectory()) return []
+  const acc = []
+  const walk = (dir) => {
+    let entries
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const absolute = path.join(dir, entry.name)
+      let stat = entry
+      if (entry.isSymbolicLink()) {
+        try {
+          stat = fs.statSync(absolute)
+        } catch {
+          continue
+        }
+      }
+      if (stat.isDirectory()) {
+        walk(absolute)
+        continue
+      }
+      if (!stat.isFile()) continue
+      acc.push(toPosix(path.relative(root, absolute)))
+    }
+  }
+  walk(root)
+  return acc
+}
+
+export function snapshotSourceTree(fromRoot, toRoot, skipRoot = null) {
   if (fs.existsSync(toRoot)) fs.rmSync(toRoot, { recursive: true, force: true })
   fs.mkdirSync(toRoot, { recursive: true })
-  for (const fileId of listSourceFiles(fromRoot)) {
+  const skip = skipInside(fromRoot, skipRoot) || skipInside(fromRoot, toRoot)
+  for (const fileId of listSourceFiles(fromRoot, undefined, skip)) {
     const from = path.join(fromRoot, fileId)
     const to = path.join(toRoot, fileId)
     fs.mkdirSync(path.dirname(to), { recursive: true })
@@ -91,9 +137,10 @@ function gitFileDiff(beforePath, afterPath, fileId) {
   return `${rewriteGitPaths(stdout, fileId).trimEnd()}\n`
 }
 
-export function diffSourceTrees(beforeRoot, afterRoot) {
-  const before = new Set(listSourceFiles(beforeRoot))
-  const after = new Set(listSourceFiles(afterRoot))
+export function diffSourceTrees(beforeRoot, afterRoot, skipRoot = null) {
+  const before = new Set(listSnapshotFiles(beforeRoot))
+  const skip = skipInside(afterRoot, skipRoot) || skipInside(afterRoot, beforeRoot)
+  const after = new Set(listSourceFiles(afterRoot, undefined, skip))
   const ids = [...new Set([...before, ...after])].sort((left, right) =>
     left.localeCompare(right),
   )

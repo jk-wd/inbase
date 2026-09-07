@@ -6,6 +6,7 @@ import test from 'node:test'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { cleanupProject, initProject, isCliEntry, main } from './inbase.mjs'
 import { editors } from './editors/index.mjs'
+import { CURSOR_INBASE_ALLOW_INSTRUCTION } from './editors/cursor.mjs'
 import { prependYamlFrontmatter, copySkillTree } from './editors/layout.mjs'
 import { stripYamlFrontmatter, toClineExecuteCommand } from './editors/cline.mjs'
 import {
@@ -104,6 +105,9 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /`\.clinerules`/)
     assert.match(skillText, /`\.github\/skills`/)
     assert.match(skillText, /\/extract-blueprint/)
+    assert.match(skillText, /Do not prefix it with/)
+    assert.match(skillText, /not wait for the user to click Run/)
+    assert.match(skillText, /or wait for the user to approve `propose-patch`/)
     assert.doesNotMatch(skillText, /\/go/)
     assert.doesNotMatch(skillText, /user-invocable:/)
     assert.doesNotMatch(skillText, /allowed-tools:/)
@@ -262,6 +266,16 @@ test('init copies editor skills and gitignores .inbase', () => {
     )
     assert.doesNotMatch(skillText, /user-invocable:/)
     assert.doesNotMatch(skillText, /allowed-tools:/)
+    const permissions = JSON.parse(
+      fs.readFileSync(path.join(root, '.cursor/permissions.json'), 'utf8'),
+    )
+    assert.deepEqual(permissions.autoRun.allow_instructions, [
+      CURSOR_INBASE_ALLOW_INSTRUCTION,
+    ])
+    const sandbox = JSON.parse(
+      fs.readFileSync(path.join(root, '.cursor/sandbox.json'), 'utf8'),
+    )
+    assert.equal(sandbox.enableSharedBuildCache, true)
     assert.doesNotMatch(
       fs.readFileSync(path.join(root, '.cursor/commands/accept.md'), 'utf8'),
       /disable-model-invocation:/,
@@ -431,6 +445,65 @@ test('copySkillTree writes command skills and keeps the inbase skill', () => {
   }
 })
 
+test('Cursor init auto-runs Inbase CLI and preserves other permissions', () => {
+  const { root, cleanup } = tempProject()
+  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
+  try {
+    fs.mkdirSync(path.join(root, '.cursor'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, '.cursor/permissions.json'),
+      `${JSON.stringify(
+        {
+          autoRun: {
+            allow_instructions: ['Keep this existing allow rule.'],
+            block_instructions: ['Keep this existing block rule.'],
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    )
+    fs.writeFileSync(
+      path.join(root, '.cursor/sandbox.json'),
+      `${JSON.stringify({ networkPolicy: { default: 'deny' } }, null, 2)}\n`,
+    )
+    initProject(root, 'cursor')
+    initProject(root, 'cursor')
+    const permissions = JSON.parse(
+      fs.readFileSync(path.join(root, '.cursor/permissions.json'), 'utf8'),
+    )
+    assert.deepEqual(permissions.autoRun.allow_instructions, [
+      'Keep this existing allow rule.',
+      CURSOR_INBASE_ALLOW_INSTRUCTION,
+    ])
+    assert.deepEqual(permissions.autoRun.block_instructions, [
+      'Keep this existing block rule.',
+    ])
+    const sandbox = JSON.parse(
+      fs.readFileSync(path.join(root, '.cursor/sandbox.json'), 'utf8'),
+    )
+    assert.equal(sandbox.enableSharedBuildCache, true)
+    assert.deepEqual(sandbox.networkPolicy, { default: 'deny' })
+    cleanupProject(root, 'cursor')
+    const leftover = JSON.parse(
+      fs.readFileSync(path.join(root, '.cursor/permissions.json'), 'utf8'),
+    )
+    assert.deepEqual(leftover, {
+      autoRun: {
+        allow_instructions: ['Keep this existing allow rule.'],
+        block_instructions: ['Keep this existing block rule.'],
+      },
+    })
+    assert.deepEqual(
+      JSON.parse(fs.readFileSync(path.join(root, '.cursor/sandbox.json'), 'utf8')),
+      { networkPolicy: { default: 'deny' }, enableSharedBuildCache: true },
+    )
+  } finally {
+    restoreEnv(env)
+    cleanup()
+  }
+})
+
 test('gitignore helper is idempotent', () => {
   const { root, cleanup } = tempProject()
   try {
@@ -439,6 +512,25 @@ test('gitignore helper is idempotent', () => {
     const text = fs.readFileSync(path.join(root, '.gitignore'), 'utf8')
     assert.equal(text.split('.inbase/').length - 1, 1)
   } finally {
+    cleanup()
+  }
+})
+
+test('init appends .inbase to an existing gitignore', () => {
+  const { root, cleanup } = tempProject()
+  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
+  try {
+    const gitignore = path.join(root, '.gitignore')
+    fs.writeFileSync(gitignore, 'node_modules/\ndist\n*.local')
+    assert.equal(ensureGitignoreEntry(root), true)
+    assert.equal(ensureGitignoreEntry(root), false)
+    initProject(root)
+    assert.equal(
+      fs.readFileSync(gitignore, 'utf8'),
+      'node_modules/\ndist\n*.local\n.inbase/\n',
+    )
+  } finally {
+    restoreEnv(env)
     cleanup()
   }
 })
@@ -485,6 +577,8 @@ test('cleanup reverses init and keeps unrelated editor files', () => {
     assert.equal(fs.existsSync(path.join(root, '.github/skills')), false)
     assert.equal(fs.existsSync(path.join(root, '.inbase')), false)
     assert.equal(fs.existsSync(path.join(root, 'inbase.json')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/permissions.json')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/sandbox.json')), false)
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/mine.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.cursor/skills/other/SKILL.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.github/workflows/ci.yml')), true)
@@ -575,6 +669,7 @@ test('cleanup cline removes only Cline files', () => {
     assert.equal(fs.existsSync(path.join(root, '.cline')), false)
     assert.equal(fs.existsSync(path.join(root, '.clinerules')), false)
     assert.equal(fs.existsSync(path.join(root, '.cursor/skills/inbase/SKILL.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/permissions.json')), true)
     assert.equal(fs.existsSync(path.join(root, '.claude/skills/inbase/SKILL.md')), true)
     assert.equal(fs.existsSync(path.join(root, 'inbase.json')), true)
     assert.equal(fs.existsSync(path.join(root, '.inbase')), true)

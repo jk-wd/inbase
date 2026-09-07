@@ -119,6 +119,13 @@ The visualizer stores immutable diffs under
 (`inbase run` or `npx inbase run`). Prefer `npx inbase` so the local package
 is used.
 
+Run `npx inbase` from the project working directory. Do not prefix it with
+`cd /absolute/path`. Do not request extra Shell permissions (`all`,
+`full_network`) for Inbase CLI — that leaves the sandbox and Cursor Auto-review
+will ask the user to approve. These commands only write local files under
+`.inbase/`. They are not a remote publish. Record the patch immediately; do
+not wait for the user to click Run.
+
 If this conversation already printed `VISUAL_CODER_SESSION`, skip attach.
 Use that id. Continue from the current plan (a change request → `report-plan`).
 
@@ -348,6 +355,7 @@ npx inbase propose-patch --session "<session-id>" --clear
 - Edit files for a change request before `report-plan` has replaced the waiting proposal
 - Keep editing after `inbase propose-patch` until the user types `/accept`, `/explain`, or a change request (or Step by step is off and the next step is already invoked)
 - Write a unified diff yourself; `inbase propose-patch` with no file records the git diff
+- Prefix `npx inbase` with `cd /absolute/path`, request extra Shell permissions for it, or wait for the user to approve `propose-patch`
 - Pass a `.patch` file to `propose-patch` unless you are debugging the CLI
 - Explore, search, or re-plan after `propose-patch` before the user types `/accept`, `/explain`, or a change request
 - Ask the user to `/accept` the last proposal, finish, or close the session when they asked for changes — `report-plan` with the new remaining steps from the last proposal instead, which replaces the waiting proposal

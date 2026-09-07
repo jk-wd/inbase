@@ -194,11 +194,15 @@ export function copyDir(from, to) {
 export function ensureGitignoreEntry(projectRoot, entry = '.inbase/') {
   const gitignore = path.join(projectRoot, '.gitignore')
   const line = entry.endsWith('\n') ? entry : `${entry}\n`
-  if (!fs.existsSync(gitignore)) {
-    fs.writeFileSync(gitignore, line)
+  let current = ''
+  try {
+    current = fs.readFileSync(gitignore, 'utf8')
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error
+    // Append creates the file and never truncates an existing one.
+    fs.appendFileSync(gitignore, line)
     return true
   }
-  const current = fs.readFileSync(gitignore, 'utf8')
   const hasEntry = current
     .split(/\r?\n/)
     .some((row) => row.trim() === entry || row.trim() === entry.replace(/\/$/, ''))

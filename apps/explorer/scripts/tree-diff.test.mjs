@@ -50,3 +50,51 @@ test('returns an empty patch when the trees match', () => {
     env.cleanup()
   }
 })
+
+test('does not treat invoke snapshot copies inside the target as added files', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'inbase-tree-diff-datadir-'))
+  const dataDir = path.join(root, 'apps/explorer/src/data')
+  const preStep = path.join(dataDir, 'diff-sessions/amber/pre-step')
+  try {
+    fs.mkdirSync(path.join(root, 'src'), { recursive: true })
+    fs.mkdirSync(dataDir, { recursive: true })
+    fs.writeFileSync(path.join(root, 'src/a.ts'), 'export const value = 1\n')
+    fs.writeFileSync(path.join(root, 'src/keep.ts'), 'export const keep = true\n')
+    fs.writeFileSync(path.join(dataDir, 'codebase.json'), '{}\n')
+
+    snapshotSourceTree(root, preStep, dataDir)
+    assert.equal(diffSourceTrees(preStep, root, dataDir), '')
+
+    fs.writeFileSync(path.join(root, 'src/a.ts'), 'export const value = 2\n')
+    const parsed = parseUnifiedPatch(diffSourceTrees(preStep, root, dataDir))
+    assert.deepEqual(parsed.files, ['src/a.ts'])
+    assert.deepEqual(parsed.creates, [])
+    assert.deepEqual(parsed.deletes, [])
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('still diffs a snapshot stored in a gitignored data dir', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'inbase-tree-diff-ignore-'))
+  const dataDir = path.join(root, '.inbase')
+  const preStep = path.join(dataDir, 'diff-sessions/amber/pre-step')
+  try {
+    fs.mkdirSync(path.join(root, 'src'), { recursive: true })
+    fs.writeFileSync(path.join(root, '.gitignore'), '.inbase\n')
+    fs.writeFileSync(path.join(root, 'src/a.ts'), 'export const value = 1\n')
+    fs.writeFileSync(path.join(root, 'src/keep.ts'), 'export const keep = true\n')
+
+    snapshotSourceTree(root, preStep, dataDir)
+    assert.equal(diffSourceTrees(preStep, root, dataDir), '')
+
+    fs.writeFileSync(path.join(root, 'src/Clock.tsx'), 'export function Clock() {}\n')
+    const parsed = parseUnifiedPatch(diffSourceTrees(preStep, root, dataDir))
+    assert.deepEqual(parsed.creates, ['src/Clock.tsx'])
+    assert.deepEqual(parsed.files, [])
+    assert.ok(!parsed.creates.includes('src/a.ts'))
+    assert.ok(!parsed.creates.includes('src/keep.ts'))
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
