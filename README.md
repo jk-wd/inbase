@@ -17,7 +17,7 @@ Inbase is a structured way to collaborate with an LLM. It visualizes the codebas
 
 You draw the intended change on a map of the real codebase before the model writes a file. That drawing is a **blueprint**: planned files, folders, functions, variables, imports, notes, and pointers, laid on the existing code. The LLM must follow that layout.
 
-The model reads the blueprint, says what it sees (`I see on the blueprint ...`) so you can confirm the reading, reports a plan that matches it, and **stops**. You run the work from Cursor, Claude Code, Codex, Copilot, or Cline with `/accept`, one map change per command. Inbase records each one as a patch on the map. If a proposal is wrong, type the change in the attached chat (that replaces the waiting proposal), change the blueprint, or Stop.
+The model reads the blueprint, says what it sees (`I see on the blueprint ...`) so you can confirm the reading, reports a plan that matches it, and implements every step. You walk the diffs on the map. `/accept` on the last proposal finishes the session. If a proposal is wrong, type the change in the attached chat (that replaces the waiting proposal), change the blueprint, or type **`/stop`**.
 
 Blueprints have two layers:
 
@@ -56,13 +56,12 @@ Keep `inbase run` open while you work. Language colors, import analyzers, and ed
 5. [Drawing a blueprint](#drawing-a-blueprint)
 6. [Connecting a chat](#connecting-a-chat)
 7. [The plan and `/accept` loop](#the-plan-and-accept-loop)
-8. [Step by step vs full plan](#step-by-step-vs-full-plan)
-9. [Explain mode](#explain-mode)
-10. [Reviewing changes](#reviewing-changes)
-11. [Branch changes](#branch-changes)
-12. [Controls](#controls)
-13. [Commands](#commands)
-14. [Language support](#language-support)
+8. [Explain mode](#explain-mode)
+9. [Reviewing changes](#reviewing-changes)
+10. [Branch changes](#branch-changes)
+11. [Controls](#controls)
+12. [Commands](#commands)
+13. [Language support](#language-support)
 
 ### Install and start
 
@@ -104,8 +103,7 @@ Commit an `inbase.json` next to where you run `inbase`. CLI flags and env vars s
 {
   "target": ".",
   "port": 5173,
-  "ignore": [],
-  "stepByStep": false
+  "ignore": []
 }
 ```
 
@@ -114,7 +112,6 @@ Commit an `inbase.json` next to where you run `inbase`. CLI flags and env vars s
 | `target` | Folder the map scans. Use a subfolder in a monorepo, like `"apps/web"`. |
 | `port` | Dev server port. Same as `--port`. |
 | `ignore` | Extra gitignore-style patterns on top of `.gitignore` and the built-in `node_modules` / `dist` skip list. |
-| `stepByStep` | Default for new sessions. `false` implements the full plan; `true` waits for `/accept` between steps. |
 
 Runtime data stays in `.inbase/` (gitignored). Do not put session or camera state in `inbase.json`.
 
@@ -213,7 +210,7 @@ The hamburger **More** menu has **Save blueprint**, **Save blueprint as**, and *
 2. Type `/coral` (or another color) to connect. That is enough when a blueprint is already on the map. Add a request after the command, like `/coral add a settings page`, when you want extra instruction.
 3. The chat attaches to a slot. The HUD shows **LLM connected** on that color.
 4. The agent reads the global blueprint, that session's local blueprint, and any request. It says what it sees (`I see on the blueprint ...`) so you can confirm the reading. With no request, it plans only from the blueprint: create those files and structure. It can ask if it needs more information.
-5. It **stops**. The plan waits for `/accept`.
+5. It implements every plan step. `/accept` on the last proposal finishes the session.
 
 The chat request does not override an enabled blueprint. If they conflict, the agent asks before planning.
 
@@ -221,15 +218,11 @@ You do not pass a session id or run CLI session commands. The skill does that. I
 
 ### The plan and `/accept` loop
 
-The HUD lists every plan step. With **Step by step** off (the default), the LLM implements the full plan. You can walk **Previous** / **Next** over the diffs; `/accept` on the last proposal finishes the session.
+The HUD lists every plan step. The LLM implements the full plan. You can walk **Previous** / **Next** over the diffs; `/accept` on the last proposal finishes the session.
 
-With **Step by step** on:
-
-1. Type **`/accept`** in the attached chat to start the waiting step.
-2. The LLM edits live project files for **that step only**, then records a patch. Those stored patches are the session record.
-3. The HUD shows the proposal: added, changed, and removed files, plus functions, vars, and imports. Type **`/accept`** again to accept it.
-4. After accept, the agent stops. Type **`/accept`** again to start the next step. The last proposal needs `/accept` to finish.
-5. After the last recorded patch you can `/accept`, type a change in the same chat to replace that last step, or **Stop**. Do not start a new chat to update the work.
+1. The agent reports the plan and implements each step, recording a patch after every step. Those stored patches are the session record.
+2. The HUD shows each proposal: added, changed, and removed files, plus functions, vars, and imports.
+3. After the last recorded patch you can `/accept` to finish, type a change in the same chat to replace that last step, or **`/stop`**. Do not start a new chat to update the work.
 
 <p>
   <img src="docs/inbase-llm.png" alt="Plan ready on the HUD with /accept on the first step" width="58%" />
@@ -240,20 +233,9 @@ While a proposal is waiting:
 
 - Type the change in the **same** attached chat to **replace** that proposal. The agent updates the plan from that last step (for example steps A, B, C waiting on C → keep A and B, replace C with one or more new remaining steps), then records a new proposal. Do not `/accept` just to finish the session so you can start over. Do not open a new chat.
 - Type **`/explain`** to walk what has changed in the current proposal on the map instead of accepting it.
-- **Stop** ends the session.
+- Type **`/stop`** in the attached chat to end the session. That restores files, discards the plan, and frees the color slot.
 
 ![Pending proposal with changed files and added functions](docs/manual-proposal.png)
-
-With **Step by step** on, the agent waits after each proposal. You sequence the work with plan, `/accept`, review, `/accept`.
-
-### Step by step vs full plan
-
-The **Step by step** switch lives on the session panel. New sessions start with it off.
-
-- **Off (default):** the LLM implements the full plan. You can walk **Previous** / **Next** over the diffs. `/accept` on the last proposal finishes the session.
-- **On:** `/accept` starts one step, then pauses on the proposal. Another `/accept` accepts it. Another starts the next step.
-
-Turn the switch before the plan runs. You accept or finish the work yourself, including when the model writes every step in one pass.
 
 ### Explain mode
 
@@ -331,7 +313,7 @@ Inbase disables this control while an LLM session is writing or reviewing a patc
 | Switch branch comparison | Shift+G | Shift+G |
 | Release mouse | Double-click, Esc | |
 | Connect a chat | Chat, or `/coral` `/amber` `/lime` `/orange` `/violet` | same |
-| Start or continue a step | `/accept` in that chat | |
+| Accept the last proposal | `/accept` in that chat | |
 | Explain | `/explain` in chat, or `?` then `/explain` | same |
 | Skip the map | `/skipinbase` | |
 | Extract a blueprint | `/extract-blueprint` | |
@@ -351,17 +333,18 @@ The in-app **Instructions** overlay (bottom of the HUD) lists the same controls 
 | `inbase run` | Scan this repo and start the local map |
 | `inbase run --port 5174` | Start on another port |
 | `inbase run --target <dir>` | Map another folder |
-| `inbase accept [--session <id>]` | Start the waiting step, or accept a ready proposal (`/accept`). The last proposal still needs this to finish |
+| `inbase accept [--session <id>]` | Accept the last proposal to finish (`/accept`) |
+| `inbase stop [--session <id>]` | Restore files, discard the session, and free the color slot (`/stop`) |
 | `inbase explain start [--question "..."]` | Open map-only explain mode. Omit `--question` to explain the current proposal or git diff |
 | `inbase explain report --step "..."` | Publish explanation steps and map focus |
 | `inbase explain stop` | Exit explain mode |
 | `inbase extract-blueprint <folder> <file>` | Scan a folder and print an inventory for `/extract-blueprint`. `--write` saves the curated blueprint |
 
-The installed skill runs session commands (`attach`, `read-blueprint`, `report-plan`, `accept`, `propose-patch`, `explain`, `extract-blueprint`). You do not need to run them.
+The installed skill runs session commands (`attach`, `read-blueprint`, `report-plan`, `accept`, `stop`, `propose-patch`, `explain`, `extract-blueprint`). You do not need to run them.
 
 ## Editor support
 
-The map runs in the browser. The LLM plan and patch loop works in **Cursor**, **Claude Code**, **Codex**, **GitHub Copilot**, and **Cline**. `inbase init` uses the editor adapters in `bin/editors/` to install the skill and slash commands. Cursor and Claude Code get command files (`/accept`). Codex, Copilot, Gemini CLI, and other SKILL.md agents get skill folders in `.agents/skills/` (`.github/skills/` for Copilot). Cline gets `SKILL.md` where its scanner looks (`.cline/skills/inbase/` and `.cline/SKILL.md`), an always-on rule as both `.cline/rules/inbase.md` and a root `.clinerules` file, plus slash-command workflows in `.cline/workflows/`. Those Cline files use `execute_command` XML so the model runs `npx inbase` instead of printing it. In Copilot or Cline chat type `/accept`; in Codex use `$accept` or `/skills`. Other editors can be added as adapters there.
+The map runs in the browser. The LLM plan and patch loop works in **Cursor**, **Claude Code**, **Codex**, **GitHub Copilot**, and **Cline**. `inbase init` uses the editor adapters in `bin/editors/` to install the skill and slash commands. Cursor and Claude Code get command files (`/accept`, `/stop`). Codex, Copilot, Gemini CLI, and other SKILL.md agents get skill folders in `.agents/skills/` (`.github/skills/` for Copilot). Cline gets `SKILL.md` where its scanner looks (`.cline/skills/inbase/` and `.cline/SKILL.md`), an always-on rule as both `.cline/rules/inbase.md` and a root `.clinerules` file, plus slash-command workflows in `.cline/workflows/`. Those Cline files use `execute_command` XML so the model runs `npx inbase` instead of printing it. In Copilot or Cline chat type `/accept` or `/stop`; in Codex use `$accept` or `/skills`. Other editors can be added as adapters there.
 
 ## Language support
 

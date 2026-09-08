@@ -68,6 +68,58 @@ export function snapshotSourceTree(fromRoot, toRoot, skipRoot = null) {
   return toRoot
 }
 
+function pruneEmptyDirs(root, filePath) {
+  const base = path.resolve(root)
+  let current = path.dirname(filePath)
+  while (current.startsWith(`${base}${path.sep}`)) {
+    if (!fs.existsSync(current)) {
+      current = path.dirname(current)
+      continue
+    }
+    if (fs.readdirSync(current).length > 0) break
+    fs.rmdirSync(current)
+    current = path.dirname(current)
+  }
+}
+
+function sameFileContents(left, right) {
+  try {
+    return fs.readFileSync(left).equals(fs.readFileSync(right))
+  } catch {
+    return false
+  }
+}
+
+/** Copy `fromRoot` onto `toRoot`, deleting files that are not in the snapshot. */
+export function restoreSourceTree(fromRoot, toRoot, skipRoot = null) {
+  if (!fromRoot || !fs.existsSync(fromRoot) || !fs.statSync(fromRoot).isDirectory()) {
+    return []
+  }
+  if (!toRoot || !fs.existsSync(toRoot) || !fs.statSync(toRoot).isDirectory()) {
+    return []
+  }
+  const skip = skipInside(toRoot, skipRoot) || skipInside(toRoot, fromRoot)
+  const before = new Set(listSnapshotFiles(fromRoot))
+  const after = new Set(listSourceFiles(toRoot, undefined, skip))
+  const changed = []
+  for (const fileId of after) {
+    if (before.has(fileId)) continue
+    const absolute = path.join(toRoot, fileId)
+    fs.rmSync(absolute, { force: true })
+    pruneEmptyDirs(toRoot, absolute)
+    changed.push(fileId)
+  }
+  for (const fileId of before) {
+    const from = path.join(fromRoot, fileId)
+    const to = path.join(toRoot, fileId)
+    if (after.has(fileId) && sameFileContents(from, to)) continue
+    fs.mkdirSync(path.dirname(to), { recursive: true })
+    fs.copyFileSync(from, to)
+    changed.push(fileId)
+  }
+  return changed
+}
+
 function fileAsAddPatch(fileId, contents) {
   const lines = splitLines(contents)
   const count = lines.length

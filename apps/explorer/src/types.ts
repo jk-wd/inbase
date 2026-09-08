@@ -279,7 +279,6 @@ export type WorkflowAction =
   | 'blueprint_cleanup'
   | 'blueprint_set_hidden'
   | 'focus'
-  | 'set_step_by_step'
 
 export type SharedBlueprint = {
   hidden: boolean
@@ -299,6 +298,14 @@ export const GLOBAL_BLUEPRINT_COLOR = {
   name: 'Global',
   hex: '#38bdf8',
 } as const
+
+export const SESSION_COLORS = [
+  { id: 'coral', name: 'Coral', hex: '#f87171' },
+  { id: 'amber', name: 'Amber', hex: '#fbbf24' },
+  { id: 'lime', name: 'Lime', hex: '#a3e635' },
+  { id: 'orange', name: 'Orange', hex: '#fb923c' },
+  { id: 'violet', name: 'Violet', hex: '#c084fc' },
+] as const
 
 export const SESSION_COLOR_ORDER = [
   'coral',
@@ -454,7 +461,6 @@ export type AgentIntent = {
   feature: string | null
   steps: PlanStep[]
   step: number | null
-  stepByStep: boolean
   files: string[]
   creates: string[]
   deletes: string[]

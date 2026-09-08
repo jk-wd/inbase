@@ -63,11 +63,11 @@ function proposalInfo(manifest) {
       `step ${active.step}`
     return { phase: 'review', step: active.step, title, sessionId: manifest.sessionId }
   }
-  if (manifest.phase === 'plan_ready') {
+  if (manifest.phase === 'plan_ready' || manifest.phase === 'working') {
     const step = manifest.currentStep
     const title =
       manifest.steps?.find((item) => item.index === step)?.title || `step ${step}`
-    return { phase: 'plan_ready', step, title, sessionId: manifest.sessionId }
+    return { phase: manifest.phase, step, title, sessionId: manifest.sessionId }
   }
   return null
 }
@@ -239,8 +239,8 @@ function emitApprovalHandshake(store, dataDir, sessionId, manifest) {
     const continuing = (manifest.diffs?.length ?? 0) > 0
     console.log(
       continuing
-        ? `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Continue immediately: edit live files for this step only, then inbase propose-patch --session ${sessionId} with no patch file. Then stop and wait for /accept, /explain, or a change request in chat.`
-        : `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Re-read the global blueprint.json and this session's local blueprint before implementing; the user can place files and folders at any time. Edit the live project files for this step only (Write, StrReplace, Delete). Then record the step with inbase propose-patch --session ${sessionId} — no patch file. Then stop and wait for /accept, /explain, or a change request in chat.`,
+        ? `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Continue immediately: edit live files for this step only, then inbase propose-patch --session ${sessionId} with no patch file. If the next step is already invoked, implement it now. After the last recorded step, wait for /accept, /explain, or a change request in chat.`
+        : `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Re-read the global blueprint.json and this session's local blueprint before implementing; the user can place files and folders at any time. Edit the live project files for this step only (Write, StrReplace, Delete). Then record the step with inbase propose-patch --session ${sessionId} — no patch file. If the next step is already invoked, implement it now. After the last recorded step, wait for /accept, /explain, or a change request in chat.`,
     )
     process.exit(0)
   }
@@ -287,8 +287,8 @@ export async function attachSession(args) {
     ' If this conversation already printed VISUAL_CODER_SESSION, this is the wrong slot: stop, discard this id, and use the original session. Do not report a new plan here.'
   console.log(
     colorName
-      ? `VISUAL_CODER_ATTACHED Attached to the ${colorName} session (${manifest.phase}). Tell the user you connected to the ${colorName} chat. Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then report a plan if you can. Stop after report-plan — the user types /accept, /explain, or a change request in chat.${wrongSlot}`
-      : `VISUAL_CODER_ATTACHED Attached to the next waiting visualizer session ${manifest.name || manifest.sessionId} (${manifest.phase}). Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then report a plan if you can. Stop after report-plan — the user types /accept, /explain, or a change request in chat.${wrongSlot}`,
+      ? `VISUAL_CODER_ATTACHED Attached to the ${colorName} session (${manifest.phase}). Tell the user you connected to the ${colorName} chat. Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then report a plan if you can. After report-plan, implement the invoked step. After the last recorded step, wait for /accept, /explain, or a change request in chat.${wrongSlot}`
+      : `VISUAL_CODER_ATTACHED Attached to the next waiting visualizer session ${manifest.name || manifest.sessionId} (${manifest.phase}). Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then report a plan if you can. After report-plan, implement the invoked step. After the last recorded step, wait for /accept, /explain, or a change request in chat.${wrongSlot}`,
   )
 }
 
@@ -468,10 +468,15 @@ export async function reportPlan(args) {
     return
   }
   console.log(
-    manifest.phase === 'working'
-      ? `VISUAL_CODER_PLAN_READY Reported ${manifest.steps.length} plan step(s) for session ${sessionId}. Step by step is off, so step ${manifest.currentStep} is already invoked. Edit the live files for that step, then inbase propose-patch --session ${sessionId} with no patch file.`
-      : `VISUAL_CODER_PLAN_READY Reported ${manifest.steps.length} plan step(s) for session ${sessionId}. Stop. Wait for the user to type /accept step ${manifest.currentStep} in chat.`,
+    `VISUAL_CODER_PLAN_READY Reported ${manifest.steps.length} plan step(s) for session ${sessionId}.`,
   )
+  if (manifest.phase === 'working') {
+    const title = manifest.steps.find((item) => item.index === manifest.currentStep)
+      ?.title
+    console.log(
+      `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Edit the live files for that step, then inbase propose-patch --session ${sessionId} with no patch file.`,
+    )
+  }
 }
 
 export async function goProposal(args) {
@@ -525,7 +530,7 @@ export async function goProposal(args) {
         : `waiting for /accept on step ${step}`,
     )
     console.log(
-      `VISUAL_CODER_ACCEPTED Accepted the proposal. Stop. Wait for the user to type /accept step ${step}${title ? `: ${title}` : ''} in chat. Do not edit files. The user can still Stop.`,
+      `VISUAL_CODER_ACCEPTED Accepted the proposal. Stop. Wait for the user to type /accept step ${step}${title ? `: ${title}` : ''} in chat. Do not edit files. The user can type /stop to end the session.`,
     )
     process.exit(0)
   }
@@ -534,6 +539,17 @@ export async function goProposal(args) {
 
 export async function acceptProposal(args) {
   return goProposal(args)
+}
+
+export async function stopWorkflow(args) {
+  const { store, config } = await loadExplorer()
+  requireVisualizer(store, config)
+  const sessionId = resolveCliSessionId(store, config.dataDir, args, 'stop')
+  store.stopSession(config.dataDir, sessionId, config.targetRoot)
+  printAck('stopped', 'session cleared')
+  console.log(
+    `VISUAL_CODER_STOPPED Stopped session ${sessionId}. Restored files, discarded the plan and patches, and freed the color slot. Do not edit project files. This chat is done with Inbase. Do not attach again in this conversation.`,
+  )
 }
 
 export async function proposePatch(args) {
@@ -586,13 +602,10 @@ export async function proposePatch(args) {
     store.readDiff(config.dataDir, sessionId, entry),
   )
 
-  const last = entry.step >= manifest.steps.length
   console.log(
     manifest.phase === 'working'
-      ? `VISUAL_CODER_STEP_READY Recorded live edits as patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Step by step is off, so the next step is already invoked. Implement that original next plan step now, then propose-patch again.`
-      : last
-        ? `VISUAL_CODER_STEP_READY Recorded live edits as patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Stop. Wait for /accept to finish, /explain, or a change request. A change request must report-plan with the new remaining steps first — that replaces this proposal from step ${entry.step}. Do not edit files before report-plan.`
-        : `VISUAL_CODER_STEP_READY Recorded live edits as patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Stop. Wait for /accept, /explain, or a change request. A change request must report-plan with the new remaining steps first — that replaces this proposal from step ${entry.step}. Do not edit files before report-plan.`,
+      ? `VISUAL_CODER_STEP_READY Recorded live edits as patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. The next step is already invoked. Implement that original next plan step now, then propose-patch again.`
+      : `VISUAL_CODER_STEP_READY Recorded live edits as patch ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${parsed.files.length} changed, ${parsed.creates.length} added. Stop. Wait for /accept to finish, /explain, or a change request. A change request must report-plan with the new remaining steps first — that replaces this proposal from step ${entry.step}. Do not edit files before report-plan.`,
   )
 }
 

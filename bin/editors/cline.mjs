@@ -46,6 +46,7 @@ On a new file-change request, in this order:
 
 If this chat already printed \`VISUAL_CODER_SESSION\`, skip attach. Stay in
 that session. \`/accept\` runs \`npx inbase accept --session SESSION_ID\`.
+\`/stop\` runs \`npx inbase stop --session SESSION_ID\`.
 
 Follow the rest of this rule exactly.
 `

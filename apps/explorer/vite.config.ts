@@ -38,7 +38,6 @@ import {
   setInitialInstruction,
   addContextFiles,
   removeContextFile,
-  setStepByStep,
   setupSession,
   focusSession,
   stopSession,
@@ -476,7 +475,6 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       instruction?: string
       name?: string
       step?: number
-      stepByStep?: boolean
       hidden?: boolean
       color?: string
       files?: unknown[]
@@ -511,7 +509,6 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       action !== 'blueprint_cleanup' &&
       action !== 'blueprint_set_hidden' &&
       action !== 'focus' &&
-      action !== 'set_step_by_step' &&
       action !== 'set_initial_instruction' &&
       action !== 'add_context_files' &&
       action !== 'remove_context_file' &&
@@ -602,13 +599,6 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       removeContextFile(dataDir, body.sessionId, body.fileId)
     } else if (action === 'focus') {
       focusSession(dataDir, body.sessionId)
-    } else if (action === 'set_step_by_step') {
-      if (typeof body.stepByStep !== 'boolean') {
-        sendJson(res, 400, { error: 'stepByStep is required' })
-        return
-      }
-      setStepByStep(dataDir, body.sessionId, body.stepByStep, targetRoot)
-      rescanTarget('after changing step-by-step mode')
     } else {
       stopSession(dataDir, body.sessionId, targetRoot)
       rescanTarget('after stopping session')

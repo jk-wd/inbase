@@ -9,10 +9,9 @@ export const INIT_INBASE_CONFIG = {
   target: '.',
   port: DEFAULT_PORT,
   ignore: [],
-  stepByStep: false,
 }
 
-const KNOWN_KEYS = new Set(['target', 'port', 'ignore', 'stepByStep'])
+const KNOWN_KEYS = new Set(['target', 'port', 'ignore'])
 
 function emptyConfig(dir = null, file = null) {
   return {
@@ -21,7 +20,6 @@ function emptyConfig(dir = null, file = null) {
     target: null,
     port: null,
     ignore: [],
-    stepByStep: null,
   }
 }
 
@@ -105,13 +103,6 @@ export function parseInbaseConfig(raw, file = null) {
       throw configError(file, '"ignore" must be an array of strings')
     }
     config.ignore = parsed.ignore.map((pattern) => pattern.trim()).filter(Boolean)
-  }
-
-  if (parsed.stepByStep != null) {
-    if (typeof parsed.stepByStep !== 'boolean') {
-      throw configError(file, '"stepByStep" must be a boolean')
-    }
-    config.stepByStep = parsed.stepByStep
   }
 
   return config

@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { parseUnifiedPatch } from './patch-lib.mjs'
-import { diffSourceTrees, snapshotSourceTree } from './tree-diff.mjs'
+import { diffSourceTrees, restoreSourceTree, snapshotSourceTree } from './tree-diff.mjs'
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'inbase-tree-diff-'))
@@ -36,6 +36,29 @@ test('snapshots source files and diffs adds, edits, and deletes', () => {
     assert.deepEqual(parsed.deletes.sort(), ['src/keep.ts'])
     assert.match(patch, /export const value = 2/)
     assert.match(patch, /export function Clock/)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('restoreSourceTree deletes extras and restores edits', () => {
+  const env = fixture()
+  try {
+    snapshotSourceTree(env.before, env.after)
+    fs.writeFileSync(path.join(env.after, 'src/a.ts'), 'export const value = 2\n')
+    fs.writeFileSync(path.join(env.after, 'src/Clock.tsx'), 'export function Clock() {}\n')
+    fs.rmSync(path.join(env.after, 'src/keep.ts'))
+
+    restoreSourceTree(env.before, env.after)
+    assert.equal(
+      fs.readFileSync(path.join(env.after, 'src/a.ts'), 'utf8'),
+      'export const value = 1\n',
+    )
+    assert.equal(
+      fs.readFileSync(path.join(env.after, 'src/keep.ts'), 'utf8'),
+      'export const keep = true\n',
+    )
+    assert.equal(fs.existsSync(path.join(env.after, 'src/Clock.tsx')), false)
   } finally {
     env.cleanup()
   }

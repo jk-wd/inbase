@@ -11,18 +11,13 @@ import {
   foldersFromFileIds,
   parseUnifiedPatch,
 } from './patch-lib.mjs'
-import { diffSourceTrees, snapshotSourceTree } from './tree-diff.mjs'
+import { diffSourceTrees, restoreSourceTree, snapshotSourceTree } from './tree-diff.mjs'
 import { readExplain } from './explain-store.mjs'
-import { loadInbaseConfig } from '../../../bin/inbase-config.mjs'
 
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const CONNECTED_TTL_MS = 15_000
 const STALLED_WAIT_MS = 2_000
 export const SESSION_SLOT_COUNT = 5
-export const DEFAULT_STEP_BY_STEP = false
-export function resolveDefaultStepByStep() {
-  return loadInbaseConfig().stepByStep === true
-}
 export const SESSION_COLORS = [
   { id: 'coral', name: 'Coral', hex: '#f87171' },
   { id: 'amber', name: 'Amber', hex: '#fbbf24' },
@@ -48,7 +43,7 @@ export const GLOBAL_BLUEPRINT_COLOR = {
   hex: '#38bdf8',
 }
 export const CHAT_LIMIT_MESSAGE =
-  'VISUAL_CODER_CHAT_LIMIT Only 5 Inbase chats can be connected at once. Finish or stop one in the map, then start a new chat.'
+  'VISUAL_CODER_CHAT_LIMIT Only 5 Inbase chats can be connected at once. Finish or type /stop in a connected chat, then start a new chat.'
 export const NOT_RUNNING_MESSAGE =
   "VISUAL_CODER_NOT_RUNNING Inbase isn't running. Start it with `npx inbase run`, then send this request again."
 export function colorUnknownMessage(query) {
@@ -56,7 +51,7 @@ export function colorUnknownMessage(query) {
   return `VISUAL_CODER_COLOR_UNKNOWN ${label} is not a chat color. Connect with /coral, /amber, /lime, /orange, or /violet (aliases: /red, /yellow, /green, /purple). Blue is the global blueprint, not a chat.`
 }
 export function colorBusyMessage(colorName) {
-  return `VISUAL_CODER_COLOR_BUSY The ${colorName} session already has a chat connected. Finish or stop it in the map, then try again.`
+  return `VISUAL_CODER_COLOR_BUSY The ${colorName} session already has a chat connected. Finish it or type /stop in that chat, then try again.`
 }
 export function colorMissingMessage(colorName) {
   return `VISUAL_CODER_COLOR_UNKNOWN No ${colorName} session is open. Start Inbase with \`npx inbase run\`, then try again.`
@@ -696,7 +691,7 @@ export function readManifest(dataDir, sessionId) {
     value.workStartedAt ??= null
   }
   if (typeof value.pendingExplain !== 'boolean') value.pendingExplain = false
-  if (typeof value.stepByStep !== 'boolean') value.stepByStep = resolveDefaultStepByStep()
+  delete value.stepByStep
   value.initialInstruction =
     typeof value.initialInstruction === 'string' ? value.initialInstruction : null
   value.contextFiles = normalizeContextFiles(value.contextFiles)
@@ -890,7 +885,6 @@ export function sessionIntent(
     contextFiles: listContextFiles(dataDir, sessionId).map(publicContextFile),
     steps: manifest.steps,
     step: activeView ? manifest.currentStep : selected?.step ?? manifest.currentStep,
-    stepByStep: isStepByStep(manifest),
     reason: activeView ? currentPlanStep?.title ?? null : selected?.title ?? null,
     sessionId,
     diffId: selected?.id ?? null,
@@ -1004,6 +998,22 @@ export function restoreBaseline(dataDir, sessionId, targetRoot) {
     fs.mkdirSync(path.dirname(absolute), { recursive: true })
     fs.copyFileSync(stored, absolute)
   }
+}
+
+function restoreSessionFiles(dataDir, sessionId, targetRoot) {
+  const extraAbsolutes = []
+  const { preStep } = sessionPaths(dataDir, sessionId)
+  if (fs.existsSync(preStep)) {
+    for (const fileId of restoreSourceTree(preStep, targetRoot, dataDir)) {
+      try {
+        extraAbsolutes.push(resolveTargetFile(targetRoot, fileId).absolute)
+      } catch {
+        // Ignore ids the scanner would also skip.
+      }
+    }
+  }
+  restoreBaseline(dataDir, sessionId, targetRoot)
+  unstagePaths(targetRoot, extraAbsolutes)
 }
 
 function replayPatches(dataDir, sessionId, targetRoot, entries) {
@@ -1138,10 +1148,6 @@ function planSteps(titles, startAt = 1) {
   })
 }
 
-export function isStepByStep(manifest) {
-  return manifest?.stepByStep === true
-}
-
 function pendingReviewDiff(manifest) {
   if (manifest?.phase !== 'review') return null
   const active =
@@ -1163,7 +1169,7 @@ function canRevisePlan(phase) {
 
 export function autoAdvance(dataDir, sessionId, targetRoot = null) {
   const manifest = readManifest(dataDir, sessionId)
-  if (!manifest || isStepByStep(manifest)) return manifest
+  if (!manifest) return manifest
   if (manifest.phase === 'plan_ready') {
     return invokeStep(dataDir, sessionId, manifest.currentStep, targetRoot)
   }
@@ -1171,27 +1177,9 @@ export function autoAdvance(dataDir, sessionId, targetRoot = null) {
     const active = manifest.diffs.at(-1)
     if (!active || active.status !== 'pending') return manifest
     if (active.step >= manifest.steps.length) return manifest
-    if (isRevisedProposal(manifest, active)) return manifest
     return invokeStep(dataDir, sessionId, active.step + 1, targetRoot)
   }
   return manifest
-}
-
-function isRevisedProposal(manifest, active) {
-  return manifest.diffs.some(
-    (entry) =>
-      entry.id !== active.id &&
-      entry.step === active.step &&
-      (entry.status === 'extended' || entry.status === 'extend'),
-  )
-}
-
-export function setStepByStep(dataDir, sessionId, enabled, targetRoot = null) {
-  const manifest = requireManifest(dataDir, sessionId)
-  manifest.stepByStep = Boolean(enabled)
-  writeManifest(dataDir, manifest)
-  if (isStepByStep(manifest)) return manifest
-  return autoAdvance(dataDir, sessionId, targetRoot)
 }
 
 export function startSession(dataDir, input) {
@@ -1217,7 +1205,6 @@ export function startSession(dataDir, input) {
     steps: [],
     status: 'active',
     phase: 'blueprint_ask',
-    stepByStep: resolveDefaultStepByStep(),
     currentStep: 1,
     activeDiffId: null,
     pendingInstruction: null,
@@ -1261,7 +1248,6 @@ export function setupSession(dataDir, input = {}) {
     status: 'active',
     phase: 'blueprint',
     awaitingAttach: true,
-    stepByStep: resolveDefaultStepByStep(),
     currentStep: 1,
     activeDiffId: null,
     pendingInstruction: null,
@@ -1522,10 +1508,6 @@ export function reportPlan(dataDir, input) {
       steps: [],
       status: 'active',
       phase: 'preparing',
-      stepByStep:
-        typeof input.stepByStep === 'boolean'
-          ? input.stepByStep
-          : resolveDefaultStepByStep(),
       currentStep: 1,
       activeDiffId: null,
       pendingInstruction: null,
@@ -1828,7 +1810,7 @@ export function requestExplainProposal(dataDir, sessionId, diffId) {
       manifest.steps.find((step) => step.index === active.step)?.title ||
       active.title ||
       `step ${active.step}`
-  } else if (manifest.phase === 'plan_ready') {
+  } else if (manifest.phase === 'plan_ready' || manifest.phase === 'working') {
     const step = manifest.currentStep
     title =
       manifest.steps.find((item) => item.index === step)?.title || `step ${step}`
@@ -2011,8 +1993,12 @@ export function recoverOpenDiffSessions(dataDir, targetRoot = null) {
 
 export function stopSession(dataDir, sessionId, targetRoot = null) {
   const safeId = assertSessionId(sessionId)
+  if (targetRoot) restoreSessionFiles(dataDir, safeId, targetRoot)
   writeStoppedMarker(dataDir, safeId)
-  discardStoredSession(dataDir, safeId, targetRoot, { keepStoppedMarker: true })
+  discardStoredSession(dataDir, safeId, targetRoot, {
+    restore: false,
+    keepStoppedMarker: true,
+  })
   const waiters = waiterSessionIds()
   waiters.add(safeId)
   discardInactiveDiffSessions(dataDir, targetRoot, waiters)

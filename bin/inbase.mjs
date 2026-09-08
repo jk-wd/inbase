@@ -26,6 +26,7 @@ import {
   readBlueprint,
   goProposal,
   acceptProposal,
+  stopWorkflow,
 } from './session.mjs'
 import { extractBlueprint } from './extract-blueprint.mjs'
 
@@ -46,6 +47,7 @@ Agent commands (used by the installed skill):
   inbase read-blueprint --session <id>
   inbase report-plan --session <id> --feature "name" --steps "one"
   inbase accept [--session <id>]
+  inbase stop [--session <id>]
   inbase propose-patch --session <id> [file.patch|-]
   inbase propose-patch --session <id> --clear
   inbase explain start [--question "How does this work?"]
@@ -273,7 +275,7 @@ export async function main(argv = process.argv.slice(2)) {
   ensureDataDir(process.env.INBASE_DATA_DIR)
   if (host.instance) {
     console.log(
-      `INBASE_ATTACHED Using the running visualizer (${host.instance.dataDir}). Run read-blueprint to load the optional blueprint. Then stop for /accept or /explain in chat.`,
+      `INBASE_ATTACHED Using the running visualizer (${host.instance.dataDir}). Run read-blueprint to load the optional blueprint. After report-plan, implement the invoked step.`,
     )
   }
 
@@ -305,6 +307,10 @@ export async function main(argv = process.argv.slice(2)) {
   }
   if (command === 'accept') {
     await acceptProposal(args)
+    return
+  }
+  if (command === 'stop') {
+    await stopWorkflow(args)
     return
   }
   if (command === 'propose-patch') {

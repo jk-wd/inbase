@@ -84,7 +84,6 @@ export const emptyIntent: {
   feature: null
   steps: unknown[]
   step: null
-  stepByStep: boolean
   files: string[]
   creates: string[]
   deletes: string[]

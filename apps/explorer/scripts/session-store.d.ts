@@ -59,7 +59,6 @@ export type DiffManifest = {
   initialInstruction?: string | null
   contextFiles?: SessionContextFile[]
   workStartedAt: string | null
-  stepByStep: boolean
   createdAt: string
   updatedAt: string
   diffs: DiffEntry[]
@@ -162,8 +161,6 @@ export const MAX_CONTEXT_FILES: number
 export const MAX_CONTEXT_FILE_BYTES: number
 export const MAX_CONTEXT_TOTAL_BYTES: number
 export const SESSION_SLOT_COUNT: number
-export const DEFAULT_STEP_BY_STEP: boolean
-export function resolveDefaultStepByStep(): boolean
 export const SESSION_COLORS: Array<{ id: string; name: string; hex: string }>
 export const SESSION_COLOR_ALIASES: Record<string, string>
 export const GLOBAL_BLUEPRINT_COLOR: { id: 'global'; name: 'Global'; hex: string }
@@ -322,22 +319,14 @@ export function reportPlan(
     name?: string
     feature: string
     stepTitles: string[]
-    stepByStep?: boolean
     targetRoot?: string | null
   },
 ): DiffManifest
-export function isStepByStep(manifest: DiffManifest | null | undefined): boolean
 export function autoAdvance(
   dataDir: string,
   sessionId: string,
   targetRoot?: string | null,
 ): DiffManifest | null
-export function setStepByStep(
-  dataDir: string,
-  sessionId: string,
-  enabled: boolean,
-  targetRoot?: string | null,
-): DiffManifest
 export function invokeStep(
   dataDir: string,
   sessionId: string,

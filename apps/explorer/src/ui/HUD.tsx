@@ -1115,12 +1115,8 @@ function sessionLiveStatus(intent: AgentIntent) {
 
 function LiveStatus({
   intent,
-  showStop = false,
-  onStop,
 }: {
   intent: AgentIntent
-  showStop?: boolean
-  onStop?: () => void
 }) {
   const status = sessionLiveStatus(intent)
   const [flash, setFlash] = useState(false)
@@ -1137,15 +1133,6 @@ function LiveStatus({
     <div className="hud-live" data-busy={status.busy} data-flash={flash}>
       {status.busy ? <span className="hud-spinner" aria-hidden="true" /> : null}
       <span>{status.text}</span>
-      {showStop && onStop ? (
-        <button
-          className="hud-button hud-button-reject"
-          type="button"
-          onClick={onStop}
-        >
-          Stop
-        </button>
-      ) : null}
     </div>
   )
 }
@@ -1165,7 +1152,7 @@ type SessionPanelProps = {
   onWorkflowAction: (
     sessionId: string,
     action: WorkflowAction,
-    options?: { step?: number; stepByStep?: boolean },
+    options?: { step?: number },
   ) => void | boolean | AgentIntent | Promise<void | boolean | AgentIntent>
   onNavigateDiff: (sessionId: string, diffId: string) => void
 }
@@ -1205,7 +1192,6 @@ function SessionPanel({
     intent.step && intent.steps?.length > 0
       ? `Step ${intent.step} of ${intent.steps.length}`
       : 'Patch'
-  const stepByStep = intent.stepByStep === true
   const addedFunctions = intent.addedFunctions ?? []
   const addedVariables = intent.addedVariables ?? []
   const addedImports = intent.addedImports ?? []
@@ -1226,13 +1212,8 @@ function SessionPanel({
     : null
   const processingStep =
     working && typeof intent.step === 'number' ? intent.step : null
-  const invokeStep =
-    planReady && !working && proposalStep === null
-      ? (intent.steps.find((step) => !acceptedSteps.has(step.index)) ?? null)
-      : null
   const llmDisconnected =
     Boolean(intent.llmIdle) && intent.awaitingAttach === false
-  const canRunNext = stepByStep && Boolean(invokeStep) && !llmDisconnected
   const canAcceptProposal = proposalStep !== null && !llmDisconnected
   const panelDone =
     intent.status === 'finished' ||
@@ -1250,12 +1231,6 @@ function SessionPanel({
     llmConnected && !llmDisconnected && (askingBlueprint || sendingBlueprint || preparing)
   const showPlaceHint =
     canPlace && !intent.working && !askingBlueprint && !sendingBlueprint
-  const liveHasStop =
-    showConnectedProgress ||
-    working ||
-    Boolean(intent.pendingExplain) ||
-    Boolean(intent.explainActive) ||
-    llmDisconnected
   const queuedBehind =
     intent.awaitingAttach &&
     nextAttachSession &&
@@ -1265,7 +1240,7 @@ function SessionPanel({
 
   const act = (
     action: WorkflowAction,
-    options?: { step?: number; stepByStep?: boolean },
+    options?: { step?: number },
   ) => onWorkflowAction(sessionId, action, options)
 
   return (
@@ -1321,31 +1296,13 @@ function SessionPanel({
           {!intent.awaitingAttach && (
             <>
               {showPlaceHint && !planReady && !pending && <PlaceFilesHint />}
-              <LiveStatus
-                intent={intent}
-                showStop={liveHasStop}
-                onStop={() => act('stop')}
-              />
+              <LiveStatus intent={intent} />
             </>
           )}
-          {!llmDisconnected && (
-            <label className="hud-mode-switch">
-              <span>Step by step</span>
-              <button
-                className="hud-switch"
-                type="button"
-                role="switch"
-                aria-checked={stepByStep}
-                aria-label="Step by step"
-                onKeyDown={(event) => event.stopPropagation()}
-                onClick={() => act('set_step_by_step', { stepByStep: !stepByStep })}
-              />
-            </label>
-          )}
-          {!llmDisconnected && !stepByStep && (
+          {!llmDisconnected && intent.steps?.length > 0 && (
             <p className="hud-mode-hint">
-              LLM implements the full plan. You can still walk the diffs, then
-              /accept.
+              The LLM implements the full plan. Walk the diffs, then /accept
+              the last proposal. Type /stop in chat to end the session.
             </p>
           )}
           {handshakeSetup ? (
@@ -1409,13 +1366,6 @@ function SessionPanel({
                 >
                   Let LLM continue
                 </button>
-                <button
-                  className="hud-button hud-button-reject"
-                  type="button"
-                  onClick={() => act('stop')}
-                >
-                  Stop
-                </button>
               </div>
             </>
           ) : handshakeSetup ? null : intent.status === 'finished' ? (
@@ -1440,10 +1390,8 @@ function SessionPanel({
                       Boolean(stepDiff) && !intent.working
                     const viewing =
                       Boolean(stepDiff) && intent.step === step.index
-                    const showGoHint =
-                      canRunNext && invokeStep?.index === step.index && !creating
                     const showAcceptHint = canAcceptProposal && proposed
-                    const showStepHint = creating || showGoHint || showAcceptHint
+                    const showStepHint = creating || showAcceptHint
                     const stepBody = (
                       <>
                         <span className="hud-step-index">{step.index}.</span>
@@ -1454,9 +1402,7 @@ function SessionPanel({
                               <span className="hud-step-hint">
                                 {creating
                                   ? 'Creating proposal…'
-                                  : showGoHint
-                                    ? '/accept'
-                                    : '/accept · /explain'}
+                                  : '/accept · /explain'}
                               </span>
                             </span>
                           )}
@@ -1626,18 +1572,9 @@ function SessionPanel({
                   </>
                 )}
               </MutationFold>
-              {(planReady || (pending && !llmDisconnected)) && (
+              {(planReady || (pending && !llmDisconnected)) && showPlaceHint && (
                 <div className="hud-session-actions">
-                  {showPlaceHint && <PlaceFilesHint />}
-                  <div className="hud-decide">
-                    <button
-                      className="hud-button hud-button-reject"
-                      type="button"
-                      onClick={() => act('stop')}
-                    >
-                      Stop
-                    </button>
-                  </div>
+                  <PlaceFilesHint />
                 </div>
               )}
             </>
@@ -1985,7 +1922,7 @@ function explorerInstructions({
           id: 'cursor-chat',
           keys: ['Chat'],
           label:
-            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /accept /explain; 5 chats at once',
+            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /accept /explain /stop; 5 chats at once',
         },
         {
           id: 'blueprint-select',
@@ -2102,7 +2039,7 @@ function explorerInstructions({
           id: 'cursor-chat',
           keys: ['Chat'],
           label:
-            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /accept /explain; 5 chats at once',
+            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /accept /explain /stop; 5 chats at once',
         },
         {
           id: 'blueprint-select',
@@ -2173,7 +2110,7 @@ type HUDProps = {
   onWorkflowAction: (
     sessionId: string,
     action: WorkflowAction,
-    options?: { step?: number; stepByStep?: boolean },
+    options?: { step?: number },
   ) => void | boolean | AgentIntent | Promise<void | boolean | AgentIntent>
   onNavigateDiff: (sessionId: string, diffId: string) => void
   onOpenMap: () => void

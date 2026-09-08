@@ -99,6 +99,7 @@ import {
   type ExplainTargetKind,
   type FlyTo,
   GLOBAL_BLUEPRINT_COLOR,
+  SESSION_COLORS,
   compareSessionColorOrder,
   type LocalBlueprint,
   type LoadBlueprintInput,
@@ -145,22 +146,33 @@ function blueprintOptionsFrom(
   locals: LocalBlueprint[],
 ): BlueprintOption[] {
   const byColor = new Map<string, BlueprintOption>()
+  for (const color of SESSION_COLORS) {
+    byColor.set(color.id, {
+      id: color.id,
+      name: color.name,
+      hex: color.hex,
+      kind: 'local',
+      sessionId: null,
+    })
+  }
   for (const intent of intents) {
-    if (!intent.color || byColor.has(intent.color)) continue
+    if (!intent.color || !byColor.has(intent.color)) continue
+    const existing = byColor.get(intent.color)
     byColor.set(intent.color, {
       id: intent.color,
-      name: intent.colorName || intent.color,
-      hex: intent.colorHex || '#6b7280',
+      name: intent.colorName || existing?.name || intent.color,
+      hex: intent.colorHex || existing?.hex || '#6b7280',
       kind: 'local',
       sessionId: intent.sessionId,
     })
   }
   for (const local of locals) {
     const existing = byColor.get(local.color)
+    if (!existing) continue
     byColor.set(local.color, {
       id: local.color,
-      name: local.colorName || existing?.name || local.color,
-      hex: local.colorHex || existing?.hex || '#6b7280',
+      name: local.colorName || existing.name || local.color,
+      hex: local.colorHex || existing.hex || '#6b7280',
       kind: 'local',
       sessionId: local.sessionId,
     })
@@ -1177,7 +1189,7 @@ function Explorer({
     async (
       sessionId: string,
       action: WorkflowAction,
-      options: { step?: number; stepByStep?: boolean } = {},
+      options: { step?: number } = {},
     ) => {
       const current = intents.find((item) => item.sessionId === sessionId)
       if (!current?.sessionId) return false
@@ -1199,12 +1211,14 @@ function Explorer({
         )
         browsingHistory.current[sessionId] = false
         lastIntentSig.current = null
+        if (action === 'stop') {
+          const bundle = await fetchAgentIntents()
+          setIntents(bundle.intents)
+          await onRefreshGraph()
+          return next
+        }
         applyIntent(next, sessionId)
-        if (
-          action === 'continue' ||
-          action === 'stop' ||
-          action === 'set_step_by_step'
-        ) {
+        if (action === 'continue') {
           await onRefreshGraph()
         }
         return next
@@ -2335,9 +2349,18 @@ function Explorer({
         const persistGen = blueprintPersistGen.current
         const bundle = await fetchAgentIntents()
         if (cancelled) return
+        const nextSessionIds = new Set(
+          bundle.intents
+            .map((item) => item.sessionId)
+            .filter((id): id is string => Boolean(id)),
+        )
+        const sessionsChanged =
+          nextSessionIds.size !== seenSessionIds.current.size ||
+          [...seenSessionIds.current].some((id) => !nextSessionIds.has(id)) ||
+          [...nextSessionIds].some((id) => !seenSessionIds.current.has(id))
         if (
-          !notesDirty.current &&
-          persistGen === blueprintPersistGen.current
+          sessionsChanged ||
+          (!notesDirty.current && persistGen === blueprintPersistGen.current)
         ) {
           const nextBlueprints = withPolledBlueprints(latestBlueprintsRef.current, {
             global: bundle.blueprint,
@@ -2348,6 +2371,7 @@ function Explorer({
           setLocalBlueprints(nextBlueprints.locals)
           const colorIds = new Set([
             GLOBAL_BLUEPRINT_COLOR.id,
+            ...SESSION_COLORS.map((color) => color.id),
             ...bundle.localBlueprints.map((item) => item.color),
             ...bundle.intents
               .map((item) => item.color)
@@ -2369,7 +2393,12 @@ function Explorer({
               nextBlueprints.global,
               nextBlueprints.locals,
             ),
+            !sessionsChanged,
           )
+        }
+        if (sessionsChanged) {
+          await onRefreshGraph()
+          if (cancelled) return
         }
         setNextAttachSessionId(bundle.nextAttachSessionId)
         const merged: AgentIntent[] = []
@@ -2431,7 +2460,7 @@ function Explorer({
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [applyBlueprintContents])
+  }, [applyBlueprintContents, onRefreshGraph])
 
   const plannedIds = previewing ? [...changeSet.files, ...changeSet.creates] : []
   const blueprintImportEdges = mapBlueprint.imports.flatMap((item) => {

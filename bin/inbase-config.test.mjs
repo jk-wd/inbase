@@ -14,7 +14,6 @@ import {
   writeInbaseConfig,
 } from './inbase-config.mjs'
 import { applyHostEnv } from './project.mjs'
-import { resolveDefaultStepByStep } from '../apps/explorer/scripts/session-store.mjs'
 import { scanTarget } from '../apps/explorer/scripts/scan-target.mjs'
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -154,8 +153,7 @@ test('rejects invalid settings', () => {
   assert.throws(() => parseInbaseConfig('{'), /not valid JSON/)
   assert.throws(() => parseInbaseConfig(JSON.stringify({ target: '' })), /non-empty string/)
   assert.throws(() => parseInbaseConfig(JSON.stringify({ port: 51.5 })), /integer/)
-  assert.throws(() => parseInbaseConfig(JSON.stringify({ ignore: 'vendor' })), /array of strings/)
-  assert.throws(() => parseInbaseConfig(JSON.stringify({ stepByStep: 'yes' })), /boolean/)
+    assert.throws(() => parseInbaseConfig(JSON.stringify({ ignore: 'vendor' })), /array of strings/)
 })
 
 test('scanTarget honours extra ignore patterns', () => {
@@ -177,21 +175,6 @@ test('scanTarget honours extra ignore patterns', () => {
       graph.files.map((file) => file.id).sort(),
       ['src/app.ts'],
     )
-  } finally {
-    restoreEnv(env)
-    cleanup()
-  }
-})
-
-test('resolveDefaultStepByStep reads inbase.json', () => {
-  const { root, cleanup } = tempGitProject()
-  const env = snapshotEnv('INBASE_CONFIG')
-  try {
-    writeConfig(root, { stepByStep: true })
-    process.env.INBASE_CONFIG = path.join(root, CONFIG_FILE_NAME)
-    assert.equal(resolveDefaultStepByStep(), true)
-    writeConfig(root, { stepByStep: false })
-    assert.equal(resolveDefaultStepByStep(), false)
   } finally {
     restoreEnv(env)
     cleanup()

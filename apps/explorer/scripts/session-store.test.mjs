@@ -29,7 +29,6 @@ import {
   clearPendingExplain,
   sendBlueprint,
   sessionIntent,
-  setStepByStep,
   startSession as startSessionStore,
   setupSession,
   attachSession,
@@ -87,13 +86,11 @@ function fixture({ git = false } = {}) {
 }
 
 function startSession(dataDir, input) {
-  const started = startSessionStore(dataDir, input)
-  setStepByStep(dataDir, started.sessionId, true)
-  return readManifest(dataDir, started.sessionId)
+  return startSessionStore(dataDir, input)
 }
 
 function reportPlan(dataDir, input) {
-  return reportPlanStore(dataDir, { stepByStep: true, ...input })
+  return reportPlanStore(dataDir, input)
 }
 
 const oneToTwo =
@@ -105,21 +102,6 @@ test('rejects unsafe session identifiers', () => {
   assert.throws(() => assertSessionId('../other-chat'))
   assert.throws(() => assertSessionId('has spaces'))
   assert.equal(assertSessionId('chat_123-abc'), 'chat_123-abc')
-})
-
-test('new sessions default to step-by-step off', () => {
-  const env = fixture()
-  try {
-    const started = startSessionStore(env.dataDir, { sessionId: 'cli-chat' })
-    assert.equal(started.stepByStep, false)
-    assert.equal(sessionIntent(env.dataDir, 'cli-chat').stepByStep, false)
-
-    const visual = setupSession(env.dataDir, { sessionId: 'viz-chat' })
-    assert.equal(visual.stepByStep, false)
-    assert.equal(sessionIntent(env.dataDir, 'viz-chat').stepByStep, false)
-  } finally {
-    env.cleanup()
-  }
 })
 
 test('starts a blueprint handshake before the LLM can prepare', () => {
@@ -161,10 +143,10 @@ test('starts a blueprint handshake before the LLM can prepare', () => {
       stepTitles: ['Build value'],
     })
     const planned = sessionIntent(env.dataDir, 'prep-chat', ['src/a.ts'])
-    assert.equal(planned.status, 'planned')
+    assert.equal(planned.status, 'working')
     assert.equal(planned.feature, 'Prepared feature')
     assert.equal(planned.name, 'Prepared feature')
-    assert.equal(planned.working, false)
+    assert.equal(planned.working, true)
     assert.equal(planned.steps.length, 1)
   } finally {
     env.cleanup()
@@ -386,13 +368,11 @@ test('re-attach to the same session keeps a waiting last proposal', () => {
     const slot = setupSession(env.dataDir)
     setupSession(env.dataDir)
     attachSession(env.dataDir, slot.sessionId)
-    setStepByStep(env.dataDir, slot.sessionId, true)
     reportPlan(env.dataDir, {
       sessionId: slot.sessionId,
       feature: 'Keep session',
       stepTitles: ['Build value'],
     })
-    invokeStep(env.dataDir, slot.sessionId, 1)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: slot.sessionId,
       patchText: oneToTwo,
@@ -849,7 +829,7 @@ test('keeps accepting placed files after the blueprint handshake', () => {
       userCreatedBlocks: [afterSend],
     })
     const intent = sessionIntent(env.dataDir, 'later-chat', ['src/a.ts'])
-    assert.equal(intent.status, 'planned')
+    assert.equal(intent.status, 'working')
     assert.equal(intent.creationMode, true)
     assert.deepEqual(intent.userCreatedBlocks, [afterSend])
     assert.equal(readBlueprint(env.dataDir, 'later-chat').enabled, true)
@@ -1021,7 +1001,7 @@ test('lists every open LLM session so multiple prompts stay visible', () => {
     assert.equal(afterPlan.length, 2)
     assert.equal(
       afterPlan.find((intent) => intent.sessionId === 'first-chat')?.status,
-      'planned',
+      'working',
     )
     assert.equal(
       afterPlan.find((intent) => intent.sessionId === 'second-chat')?.status,
@@ -1085,31 +1065,26 @@ test('hides finished sessions but keeps review and handshake sessions without a 
   }
 })
 
-test('reports a plan before invocation and exposes plan-only intent', () => {
+test('reportPlan invokes the first step', () => {
   const env = fixture()
   try {
     reportPlan(env.dataDir, {
       sessionId: 'plan-chat',
       feature: 'Plan first',
-      stepTitles: ['Build value', 'Finish value'],
+      stepTitles: ['Build value'],
     })
     const intent = sessionIntent(env.dataDir, 'plan-chat', ['src/a.ts'])
-    assert.equal(intent.status, 'planned')
+    assert.equal(intent.status, 'working')
     assert.equal(intent.step, 1)
     assert.equal(intent.diffId, null)
     assert.equal(intent.preview, false)
-    assert.throws(() =>
-      appendDiff(env.dataDir, env.targetRoot, {
-        sessionId: 'plan-chat',
-        patchText: oneToTwo,
-      }),
-    )
+    assert.equal(sessionIntent(env.dataDir, 'plan-chat').lastAck.kind, 'invoke')
   } finally {
     env.cleanup()
   }
 })
 
-test('invokes, reviews, continues, and waits to run the next step', () => {
+test('runs remaining steps and waits on the last proposal', () => {
   const env = fixture()
   try {
     reportPlan(env.dataDir, {
@@ -1117,7 +1092,6 @@ test('invokes, reviews, continues, and waits to run the next step', () => {
       feature: 'Happy path',
       stepTitles: ['Build value', 'Finish value'],
     })
-    invokeStep(env.dataDir, 'happy-chat', 1)
     assert.equal(readManifest(env.dataDir, 'happy-chat').phase, 'working')
     assert.equal(sessionIntent(env.dataDir, 'happy-chat').lastAck.kind, 'invoke')
     assert.match(sessionIntent(env.dataDir, 'happy-chat').lastAck.detail, /step 1/)
@@ -1127,25 +1101,13 @@ test('invokes, reviews, continues, and waits to run the next step', () => {
       patchText: oneToTwo,
     })
     assert.equal(first.entry.step, 1)
-    assert.equal(first.manifest.phase, 'review')
+    assert.equal(first.entry.status, 'applied')
+    assert.equal(first.manifest.phase, 'working')
+    assert.equal(first.manifest.currentStep, 2)
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
       'export const value = 2\n',
     )
-
-    invokeStep(env.dataDir, 'happy-chat', 2, env.targetRoot)
-    const accepted = readManifest(env.dataDir, 'happy-chat')
-    assert.equal(accepted.phase, 'plan_ready')
-    assert.equal(accepted.currentStep, 2)
-    assert.equal(
-      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 2\n',
-    )
-
-    invokeStep(env.dataDir, 'happy-chat', 2, env.targetRoot)
-    const continued = readManifest(env.dataDir, 'happy-chat')
-    assert.equal(continued.phase, 'working')
-    assert.equal(continued.currentStep, 2)
 
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'happy-chat',
@@ -1166,7 +1128,7 @@ test('invokes, reviews, continues, and waits to run the next step', () => {
   }
 })
 
-test('accepting a step waits for go, including the last proposal', () => {
+test('the last proposal waits for /accept', () => {
   const env = fixture()
   try {
     reportPlan(env.dataDir, {
@@ -1174,21 +1136,14 @@ test('accepting a step waits for go, including the last proposal', () => {
       feature: 'Last go',
       stepTitles: ['Build value', 'Finish value'],
     })
-    invokeStep(env.dataDir, 'last-go', 1, env.targetRoot)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'last-go',
       patchText: oneToTwo,
     })
-    const afterAccept = continueDiff(
-      env.dataDir,
-      env.targetRoot,
-      'last-go',
-      '0001',
-    )
-    assert.equal(afterAccept.phase, 'plan_ready')
-    assert.equal(afterAccept.currentStep, 2)
+    const afterFirst = readManifest(env.dataDir, 'last-go')
+    assert.equal(afterFirst.phase, 'working')
+    assert.equal(afterFirst.currentStep, 2)
 
-    invokeStep(env.dataDir, 'last-go', 2, env.targetRoot)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'last-go',
       patchText:
@@ -1214,7 +1169,6 @@ test('report-plan replaces a waiting last proposal without accepting it', () => 
       stepTitles: ['Build value'],
       targetRoot: env.targetRoot,
     })
-    invokeStep(env.dataDir, 'revise-chat', 1, env.targetRoot)
     fs.writeFileSync(path.join(env.targetRoot, 'src/a.ts'), 'export const value = 2\n')
     const first = appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'revise-chat',
@@ -1250,11 +1204,11 @@ test('report-plan replaces a waiting last proposal without accepting it', () => 
       sessionId: 'revise-chat',
     })
     assert.equal(replaced.entry.step, 1)
-    assert.equal(replaced.entry.status, 'pending')
-    assert.equal(replaced.manifest.phase, 'review')
+    assert.equal(replaced.entry.status, 'applied')
+    assert.equal(replaced.manifest.phase, 'working')
+    assert.equal(replaced.manifest.currentStep, 2)
     assert.equal(replaced.manifest.status, 'active')
     assert.equal(replaced.manifest.diffs[0].status, 'extended')
-    assert.equal(readManifest(env.dataDir, 'revise-chat')?.phase, 'review')
     assert.match(readDiff(env.dataDir, 'revise-chat', replaced.entry), /export const value = 3/)
   } finally {
     env.cleanup()
@@ -1269,13 +1223,10 @@ test('report-plan keeps accepted steps when replacing remaining work', () => {
       feature: 'Keep accepted',
       stepTitles: ['Build value', 'Finish value'],
     })
-    invokeStep(env.dataDir, 'keep-chat', 1)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'keep-chat',
       patchText: oneToTwo,
     })
-    continueDiff(env.dataDir, env.targetRoot, 'keep-chat', '0001')
-    invokeStep(env.dataDir, 'keep-chat', 2)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'keep-chat',
       patchText: twoToThree,
@@ -1304,101 +1255,6 @@ test('report-plan keeps accepted steps when replacing remaining work', () => {
   }
 })
 
-test('step-by-step off runs remaining steps and waits on Complete', () => {
-  const env = fixture()
-  try {
-    startSession(env.dataDir, { sessionId: 'auto-chat' })
-    assert.equal(sessionIntent(env.dataDir, 'auto-chat').stepByStep, true)
-    setStepByStep(env.dataDir, 'auto-chat', false)
-    assert.equal(readManifest(env.dataDir, 'auto-chat').stepByStep, false)
-    answerBlueprint(env.dataDir, 'auto-chat', false)
-
-    const planned = reportPlan(env.dataDir, {
-      sessionId: 'auto-chat',
-      feature: 'Auto run',
-      stepTitles: ['Build value', 'Finish value'],
-    })
-    assert.equal(planned.phase, 'working')
-    assert.equal(planned.currentStep, 1)
-    assert.equal(sessionIntent(env.dataDir, 'auto-chat').stepByStep, false)
-
-    const first = appendDiff(env.dataDir, env.targetRoot, {
-      sessionId: 'auto-chat',
-      patchText: oneToTwo,
-    })
-    assert.equal(first.entry.step, 1)
-    assert.equal(first.entry.status, 'applied')
-    assert.equal(first.manifest.phase, 'working')
-    assert.equal(first.manifest.currentStep, 2)
-    assert.equal(
-      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 2\n',
-    )
-
-    const second = appendDiff(env.dataDir, env.targetRoot, {
-      sessionId: 'auto-chat',
-      patchText:
-        '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 2\n+export const value = 4\n',
-    })
-    assert.equal(second.entry.step, 2)
-    assert.equal(second.entry.status, 'pending')
-    assert.equal(second.manifest.phase, 'review')
-    const intent = sessionIntent(env.dataDir, 'auto-chat', ['src/a.ts'])
-    assert.equal(intent.status, 'pending')
-    assert.equal(intent.chain.length, 2)
-
-    continueDiff(env.dataDir, env.targetRoot, 'auto-chat', '0002')
-    assert.equal(readManifest(env.dataDir, 'auto-chat'), null)
-  } finally {
-    env.cleanup()
-  }
-})
-
-test('turning step-by-step off at plan ready invokes the current step', () => {
-  const env = fixture()
-  try {
-    reportPlan(env.dataDir, {
-      sessionId: 'toggle-chat',
-      feature: 'Toggle off',
-      stepTitles: ['Build value', 'Finish value'],
-    })
-    assert.equal(readManifest(env.dataDir, 'toggle-chat').phase, 'plan_ready')
-    const next = setStepByStep(env.dataDir, 'toggle-chat', false)
-    assert.equal(next.phase, 'working')
-    assert.equal(next.currentStep, 1)
-  } finally {
-    env.cleanup()
-  }
-})
-
-test('turning step-by-step off during review continues into the next step', () => {
-  const env = fixture()
-  try {
-    reportPlan(env.dataDir, {
-      sessionId: 'review-toggle',
-      feature: 'Toggle during review',
-      stepTitles: ['Build value', 'Finish value'],
-    })
-    invokeStep(env.dataDir, 'review-toggle', 1)
-    appendDiff(env.dataDir, env.targetRoot, {
-      sessionId: 'review-toggle',
-      patchText: oneToTwo,
-    })
-    assert.equal(readManifest(env.dataDir, 'review-toggle').phase, 'review')
-    const next = setStepByStep(
-      env.dataDir,
-      'review-toggle',
-      false,
-      env.targetRoot,
-    )
-    assert.equal(next.phase, 'working')
-    assert.equal(next.currentStep, 2)
-    assert.equal(next.diffs[0].status, 'applied')
-  } finally {
-    env.cleanup()
-  }
-})
-
 test('preview keeps earlier diffs visible as later steps accumulate', () => {
   const env = fixture()
   const addB =
@@ -1409,7 +1265,6 @@ test('preview keeps earlier diffs visible as later steps accumulate', () => {
       feature: 'Accumulated preview',
       stepTitles: ['Change value', 'Add extra'],
     })
-    invokeStep(env.dataDir, 'preview-chat', 1)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'preview-chat',
       patchText: oneToTwo,
@@ -1419,13 +1274,6 @@ test('preview keeps earlier diffs visible as later steps accumulate', () => {
     assert.deepEqual(firstReview.files, ['src/a.ts'])
     assert.deepEqual(firstReview.creates, [])
 
-    continueDiff(env.dataDir, env.targetRoot, 'preview-chat', '0001')
-    const afterContinue = sessionIntent(env.dataDir, 'preview-chat', ['src/a.ts'])
-    assert.equal(afterContinue.preview, true)
-    assert.deepEqual(afterContinue.files, ['src/a.ts'])
-    assert.deepEqual(afterContinue.creates, [])
-
-    invokeStep(env.dataDir, 'preview-chat', 2)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'preview-chat',
       patchText: addB,
@@ -1459,9 +1307,8 @@ test('explain proposal keeps the pending review and records an ack', () => {
     reportPlan(env.dataDir, {
       sessionId: 'explain-chat',
       feature: 'Explain',
-      stepTitles: ['Build value', 'Finish value'],
+      stepTitles: ['Build value'],
     })
-    invokeStep(env.dataDir, 'explain-chat', 1)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'explain-chat',
       patchText: oneToTwo,
@@ -1487,9 +1334,8 @@ test('explain proposal uses the live pending diff when the client diff id is sta
     reportPlan(env.dataDir, {
       sessionId: 'explain-stale',
       feature: 'Explain',
-      stepTitles: ['Build value', 'Finish value'],
+      stepTitles: ['Build value'],
     })
-    invokeStep(env.dataDir, 'explain-stale', 1)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'explain-stale',
       patchText: oneToTwo,
@@ -1505,17 +1351,17 @@ test('explain proposal uses the live pending diff when the client diff id is sta
   }
 })
 
-test('explain proposal from plan ready does not require a pending diff', () => {
+test('explain proposal while working does not require a pending diff', () => {
   const env = fixture()
   try {
     reportPlan(env.dataDir, {
       sessionId: 'explain-plan',
       feature: 'Explain',
-      stepTitles: ['Build value', 'Finish value'],
+      stepTitles: ['Build value'],
     })
     requestExplainProposal(env.dataDir, 'explain-plan')
     const manifest = readManifest(env.dataDir, 'explain-plan')
-    assert.equal(manifest.phase, 'plan_ready')
+    assert.equal(manifest.phase, 'working')
     assert.equal(manifest.pendingExplain, true)
     assert.equal(manifest.diffs.length, 0)
     const intent = sessionIntent(env.dataDir, 'explain-plan', ['src/a.ts'])
@@ -1536,7 +1382,7 @@ test('pending explain and active explain keep the LLM session connected', async 
     reportPlan(env.dataDir, {
       sessionId: 'explain-live',
       feature: 'Explain',
-      stepTitles: ['Build value', 'Finish value'],
+      stepTitles: ['Build value'],
     })
     requestExplainProposal(env.dataDir, 'explain-live')
     const pending = readManifest(env.dataDir, 'explain-live')
@@ -1607,7 +1453,6 @@ test('rejects stale actions and invalid virtual continuations', () => {
       stepTitles: ['Build value'],
     })
     assert.throws(() => invokeStep(env.dataDir, 'guard-chat', 2))
-    invokeStep(env.dataDir, 'guard-chat', 1)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'guard-chat',
       patchText: oneToTwo,
@@ -1642,7 +1487,6 @@ test('preview lists new folders as added islands', () => {
       feature: 'New island',
       stepTitles: ['Add arcade'],
     })
-    invokeStep(env.dataDir, 'island-chat', 1)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'island-chat',
       patchText: addNested,
@@ -1699,7 +1543,6 @@ test('finished sessions discard stored blueprint drafts', () => {
       feature: 'Finish cleanup',
       stepTitles: ['Add draft file'],
     })
-    invokeStep(env.dataDir, 'finish-blue', 1)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'finish-blue',
       patchText:
@@ -1725,7 +1568,6 @@ test('stop deletes the session plan, patches, and active pointer', () => {
       feature: 'Stop wipes session',
       stepTitles: ['Build value'],
     })
-    invokeStep(env.dataDir, 'stop-chat', 1)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'stop-chat',
       patchText: oneToTwo,
@@ -1774,7 +1616,6 @@ test('stop keeps other open sessions and only drops finished leftovers', () => {
       feature: 'Orphan leftover',
       stepTitles: ['Build value'],
     })
-    invokeStep(env.dataDir, 'orphan-chat', 1)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'orphan-chat',
       patchText: oneToTwo,
@@ -1784,7 +1625,6 @@ test('stop keeps other open sessions and only drops finished leftovers', () => {
       feature: 'Stop wipes leftovers',
       stepTitles: ['Build value'],
     })
-    invokeStep(env.dataDir, 'stop-chat', 1)
 
     stopSession(env.dataDir, 'stop-chat', env.targetRoot)
     assert.equal(
@@ -1828,7 +1668,6 @@ test('explicit clear still wipes the diff-sessions folder', () => {
       feature: 'Stale leftover',
       stepTitles: ['Build value'],
     })
-    invokeStep(env.dataDir, 'stale-chat', 1)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'stale-chat',
       patchText: oneToTwo,
@@ -1902,7 +1741,6 @@ test('attached sessions stay connected without an LLM waiter', () => {
   try {
     ensureSessionPool(env.dataDir, { count: 1, focus: false })
     startSession(env.dataDir, { sessionId: 'stale-chat' })
-    setStepByStep(env.dataDir, 'stale-chat', false)
     answerBlueprint(env.dataDir, 'stale-chat', false)
     reportPlan(env.dataDir, {
       sessionId: 'stale-chat',
@@ -2000,7 +1838,6 @@ test('visualizer startup discards leftover LLM sessions', () => {
   const env = fixture()
   try {
     startSession(env.dataDir, { sessionId: 'boot-chat' })
-    setStepByStep(env.dataDir, 'boot-chat', false)
     answerBlueprint(env.dataDir, 'boot-chat', false)
     reportPlan(env.dataDir, {
       sessionId: 'boot-chat',
@@ -2053,13 +1890,10 @@ test('stop reverts accepted diffs and the pending preview', () => {
       feature: 'Revert accepted',
       stepTitles: ['Change value', 'Add extra'],
     })
-    invokeStep(env.dataDir, 'keep-chat', 1)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'keep-chat',
       patchText: oneToTwo,
     })
-    continueDiff(env.dataDir, env.targetRoot, 'keep-chat', '0001')
-    invokeStep(env.dataDir, 'keep-chat', 2)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'keep-chat',
       patchText: addB,
@@ -2097,13 +1931,10 @@ test('stop unstages reverted files from git', () => {
       feature: 'Unstage on stop',
       stepTitles: ['Change value', 'Add extra'],
     })
-    invokeStep(env.dataDir, 'stage-chat', 1)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'stage-chat',
       patchText: oneToTwo,
     })
-    continueDiff(env.dataDir, env.targetRoot, 'stage-chat', '0001')
-    invokeStep(env.dataDir, 'stage-chat', 2)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'stage-chat',
       patchText: addB,
@@ -2132,7 +1963,6 @@ test('stop during working blocks further LLM writes until start-session', () => 
       feature: 'Kill while working',
       stepTitles: ['Build value'],
     })
-    invokeStep(env.dataDir, 'kill-chat', 1)
     assert.equal(readManifest(env.dataDir, 'kill-chat').phase, 'working')
 
     stopSession(env.dataDir, 'kill-chat', env.targetRoot)
@@ -2172,6 +2002,41 @@ test('stop during working blocks further LLM writes until start-session', () => 
   }
 })
 
+test('stop during working restores live files including binaries', () => {
+  const env = fixture()
+  try {
+    reportPlan(env.dataDir, {
+      sessionId: 'live-stop',
+      feature: 'Restore live files',
+      stepTitles: ['Build value'],
+      targetRoot: env.targetRoot,
+    })
+    fs.writeFileSync(
+      path.join(env.targetRoot, 'src/a.ts'),
+      'export const value = 9\n',
+    )
+    fs.writeFileSync(
+      path.join(env.targetRoot, 'src/balloon.ts'),
+      'export const balloon = 1\n',
+    )
+    fs.mkdirSync(path.join(env.targetRoot, 'assets'), { recursive: true })
+    fs.writeFileSync(
+      path.join(env.targetRoot, 'assets/park.png'),
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 3]),
+    )
+
+    stopSession(env.dataDir, 'live-stop', env.targetRoot)
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 1\n',
+    )
+    assert.equal(fs.existsSync(path.join(env.targetRoot, 'src/balloon.ts')), false)
+    assert.equal(fs.existsSync(path.join(env.targetRoot, 'assets/park.png')), false)
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('inspecting a file materializes the selected diff into the editor path', () => {
   const env = fixture()
   try {
@@ -2180,13 +2045,10 @@ test('inspecting a file materializes the selected diff into the editor path', ()
       feature: 'Inspect',
       stepTitles: ['Change value', 'Change again'],
     })
-    invokeStep(env.dataDir, 'inspect-chat', 1)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'inspect-chat',
       patchText: oneToTwo,
     })
-    continueDiff(env.dataDir, env.targetRoot, 'inspect-chat', '0001')
-    invokeStep(env.dataDir, 'inspect-chat', 2)
     appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'inspect-chat',
       patchText: twoToThree,
@@ -2232,7 +2094,6 @@ test('publishes a patch without copying the rest of the target tree', () => {
       feature: 'Avoid sandbox copy',
       stepTitles: ['Build value'],
     })
-    invokeStep(env.dataDir, 'cursor-copy-chat', 1)
     const published = appendDiff(env.dataDir, env.targetRoot, {
       sessionId: 'cursor-copy-chat',
       patchText: oneToTwo,
@@ -2256,7 +2117,6 @@ test('flags a working session when the LLM is still waiting', () => {
       feature: 'Stalled wait',
       stepTitles: ['Build value'],
     })
-    invokeStep(env.dataDir, 'stall-chat', 1)
     const fresh = sessionIntent(
       env.dataDir,
       'stall-chat',
@@ -2303,22 +2163,19 @@ test('records live file edits against the invoke snapshot', () => {
       stepTitles: ['Bump value', 'Add helper'],
       targetRoot: env.targetRoot,
     })
-    invokeStep(env.dataDir, 'live-chat', 1, env.targetRoot)
     fs.writeFileSync(path.join(env.targetRoot, 'src/a.ts'), 'export const value = 2\n')
 
     const first = appendDiff(env.dataDir, env.targetRoot, { sessionId: 'live-chat' })
     assert.equal(first.entry.step, 1)
-    assert.equal(first.manifest.phase, 'review')
+    assert.equal(first.entry.status, 'applied')
+    assert.equal(first.manifest.phase, 'working')
+    assert.equal(first.manifest.currentStep, 2)
     assert.match(readDiff(env.dataDir, 'live-chat', first.entry), /export const value = 2/)
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
       'export const value = 2\n',
     )
 
-    invokeStep(env.dataDir, 'live-chat', 2, env.targetRoot)
-    assert.equal(readManifest(env.dataDir, 'live-chat').phase, 'plan_ready')
-    invokeStep(env.dataDir, 'live-chat', 2, env.targetRoot)
-    assert.equal(readManifest(env.dataDir, 'live-chat').phase, 'working')
     fs.writeFileSync(
       path.join(env.targetRoot, 'src/helper.ts'),
       'export function helper() { return 2 }\n',
@@ -2360,7 +2217,6 @@ test('does not record snapshot copies when the data dir lives in the target', ()
       stepTitles: ['Bump value'],
       targetRoot: env.targetRoot,
     })
-    invokeStep(nestedData, 'nested-data', 1, env.targetRoot)
     fs.writeFileSync(path.join(env.targetRoot, 'src/a.ts'), 'export const value = 2\n')
 
     const recorded = appendDiff(nestedData, env.targetRoot, { sessionId: 'nested-data' })
@@ -2386,7 +2242,6 @@ test('refuses to record a live step with no file changes', () => {
       stepTitles: ['Do nothing'],
       targetRoot: env.targetRoot,
     })
-    invokeStep(env.dataDir, 'empty-live', 1, env.targetRoot)
     assert.throws(
       () => appendDiff(env.dataDir, env.targetRoot, { sessionId: 'empty-live' }),
       /No file changes/,

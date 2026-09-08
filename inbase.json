@@ -1,6 +1,5 @@
 {
   "target": "apps/example-target",
   "port": 5173,
-  "ignore": [],
-  "stepByStep": false
+  "ignore": []
 }

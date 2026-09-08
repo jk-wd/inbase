@@ -104,7 +104,6 @@ export const emptyIntent: AgentIntent = {
   feature: null,
   steps: [],
   step: null,
-  stepByStep: false,
   files: [],
   creates: [],
   deletes: [],
@@ -162,7 +161,6 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     feature: data?.feature ?? null,
     steps: Array.isArray(data?.steps) ? data.steps : [],
     step: typeof data?.step === 'number' ? data.step : null,
-    stepByStep: data?.stepByStep === true,
     files: Array.isArray(data?.files) ? data.files : [],
     creates: Array.isArray(data?.creates) ? data.creates : [],
     deletes: Array.isArray(data?.deletes) ? data.deletes : [],
@@ -346,7 +344,6 @@ export async function performAgentAction(
   options: {
     diffId?: string
     step?: number
-    stepByStep?: boolean
     userCreatedBlocks?: UserCreatedBlock[]
     userCreatedIslands?: UserCreatedIsland[]
     addedFunctions?: PatchSymbolAddition[]
