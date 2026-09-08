@@ -1104,6 +1104,7 @@ test('runs remaining steps and waits on the last proposal', () => {
     assert.equal(first.entry.status, 'applied')
     assert.equal(first.manifest.phase, 'working')
     assert.equal(first.manifest.currentStep, 2)
+    assert.match(sessionIntent(env.dataDir, 'happy-chat').lastAck.detail, /step 2/)
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
       'export const value = 2\n',

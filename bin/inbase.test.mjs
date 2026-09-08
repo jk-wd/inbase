@@ -92,6 +92,7 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /VISUAL_CODER_NO_REQUEST/)
     assert.match(skillText, /VISUAL_CODER_DIFF/)
     assert.match(skillText, /Always work via the plan/)
+    assert.match(skillText, /Do not ask the user to review or `\/accept` a mid-plan step/)
     assert.match(skillText, /from the point of the last proposal/)
     assert.match(skillText, /replaces the waiting proposal/)
     assert.match(skillText, /close the session/)
@@ -147,6 +148,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(skillText, /VISUAL_CODER_NO_REQUEST/)
     assert.match(skillText, /VISUAL_CODER_DIFF/)
     assert.match(skillText, /Always work via the plan/)
+    assert.match(skillText, /Do not ask the user to review or `\/accept` a mid-plan step/)
     assert.match(skillText, /from the point of the last proposal/)
     assert.match(skillText, /replaces the waiting proposal/)
     assert.match(skillText, /close the session/)
@@ -1060,6 +1062,45 @@ test('recording a non-last step continues into the next step', async () => {
         '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 2\n',
     })
     const manifest = store.readManifest(dataDir, 'continue-review')
+    assert.equal(manifest.phase, 'working')
+    assert.equal(manifest.currentStep, 2)
+    assert.equal(manifest.diffs[0].status, 'applied')
+    assert.notEqual(manifest.phase, 'review')
+  } finally {
+    cleanup()
+  }
+})
+
+test('propose-patch CLI auto-invokes the next step without waiting for /accept', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    planSession(store, dataDir, target, 'continue-cli', 'Continue CLI', [
+      'Bump value',
+      'Bump again',
+    ])
+    fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 2\n')
+    const result = runCli(['propose-patch', '--session', 'continue-cli'], {
+      cwd: root,
+      env,
+    })
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /VISUAL_CODER_STEP_READY/)
+    assert.match(result.stdout, /VISUAL_CODER_EXECUTE Step 2 is invoked: Bump again/)
+    assert.match(result.stdout, /Do not stop/)
+    assert.doesNotMatch(result.stdout, /That was the last plan step/)
+    const manifest = store.readManifest(dataDir, 'continue-cli')
     assert.equal(manifest.phase, 'working')
     assert.equal(manifest.currentStep, 2)
     assert.equal(manifest.diffs[0].status, 'applied')

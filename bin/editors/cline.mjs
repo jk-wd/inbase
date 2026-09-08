@@ -42,7 +42,9 @@ On a new file-change request, in this order:
 4. Reply: \`I see on the blueprint ...\` (name files, folders, symbols, notes)
 5. Run \`npx inbase report-plan --session SESSION_ID --feature "..." --steps "..."\`
 6. Edit files only after \`VISUAL_CODER_EXECUTE\`. Then run
-   \`npx inbase propose-patch --session SESSION_ID\` with no patch file. Then stop.
+   \`npx inbase propose-patch --session SESSION_ID\` with no patch file. If the
+   next step is invoked, implement it now in the same turn. After the last
+   recorded step, stop and wait for \`/accept\`.
 
 If this chat already printed \`VISUAL_CODER_SESSION\`, skip attach. Stay in
 that session. \`/accept\` runs \`npx inbase accept --session SESSION_ID\`.

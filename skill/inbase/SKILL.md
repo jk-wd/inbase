@@ -29,7 +29,8 @@ the next unconnected slot. You do not need `/inbase`.
   the enabled blueprint only: create those files and structure. Ask if you
   need more information.
 - **`/blue`**: Blue is the global blueprint, not a chat. Do not attach.
-- **`/accept`**: accept the last proposal to finish the session.
+- **`/accept`**: accept the last proposal to finish the session. Do not
+  `/accept` between plan steps — those continue automatically.
 - **`/stop`**: end this session. Restore files, discard the plan and patches,
   and free the color slot. Then stop. Do not edit files after `/stop`.
 - **`/explain [question]`**: explain mode on the map. If a plan or proposal is
@@ -89,7 +90,8 @@ session so they can start over.
 
 The user drives the next action from this chat. Do not poll the visualizer:
 
-- **`/accept`**: accept the last proposal to finish the session.
+- **`/accept`**: accept the last proposal to finish the session. Do not
+  `/accept` between plan steps — those continue automatically.
 - **`/stop`**: end this session. Restore files, discard the plan and patches,
   and free the color slot. Then stop. Do not edit files after `/stop`.
 - **`/explain`**: explain the current proposal or git diff (what has changed),
@@ -102,15 +104,16 @@ The user drives the next action from this chat. Do not poll the visualizer:
   it finishes the current last proposal.
 
 `report-plan` and each recorded non-last step invoke the next step immediately
-(`VISUAL_CODER_EXECUTE`). Implement that step in the same turn. After the last
+(`VISUAL_CODER_EXECUTE`). Implement that next step in the **same turn**. Do not
+stop. Do not ask the user to review or `/accept` a mid-plan step. After the last
 recorded step, stop for `/accept`, `/explain`, `/stop`, or a change request in this
-same session.
+same session. `/accept` is only for that last proposal.
 
 **Recorded patches are the session record.** After `VISUAL_CODER_EXECUTE`, edit
 live project files for that step only. Then
 run `inbase propose-patch` with no patch file. Inbase diffs the working tree
-against the snapshot taken at invoke and stores that patch. Then continue if
-the next step is already invoked. After the last recorded step, **stop**. Do
+against the snapshot taken at invoke and stores that patch. Then implement the
+next invoked step in this same turn. After the last recorded step, **stop**. Do
 not write a unified diff yourself.
 
 The visualizer stores immutable diffs under
@@ -185,14 +188,16 @@ and pointers. For other later acks, echo the signal, for example:
 the required tools in the same turn. Do not start with a long analysis. Do not
 call tools before that sentence.
 
-After `propose-patch`, continue if the next step is already invoked — then
-implement that original next plan step now. After the last recorded step,
-**stop**. Do not explore, search, or re-plan on your own. Do not attach. Wait
-for `/accept`, `/explain`, `/stop`, or a **change request** in this chat. A change
-request must `report-plan` first (remaining steps from the last proposal), then
-implement. That includes after the last recorded step. Do not edit files
-before that `report-plan`. Do not ask the user to `/accept` the last proposal so
-they can close the session. Do not start a new chat.
+After `propose-patch`, if the next step is invoked (`VISUAL_CODER_EXECUTE` or
+"already invoked"), implement that original next plan step **now in this same
+turn**. Do not stop. Do not tell the user to review the step. Do not wait for
+`/accept`. After the last recorded step, **stop**. Do not explore, search, or
+re-plan on your own. Do not attach. Wait for `/accept`, `/explain`, `/stop`, or a
+**change request** in this chat. A change request must `report-plan` first
+(remaining steps from the last proposal), then implement. That includes after
+the last recorded step. Do not edit files before that `report-plan`. Do not ask
+the user to `/accept` the last proposal so they can close the session. Do not
+start a new chat.
 
 ## Required sequence
 
@@ -276,26 +281,13 @@ npx inbase report-plan \
    invoked.
 8. When the user types **`/accept`**, run
    `npx inbase accept --session "<session-id>"`.
+   That accepts the **last** proposal and finishes the session. Do not treat
+   `/accept` as the way to start the next plan step — those already ran.
    If that prints `VISUAL_CODER_EXECUTE`, implement only that step by editing
-   the live project files. Paths are the same ids as
-   `codebase.json`. Then record the step:
-
-```bash
-npx inbase propose-patch --session "<session-id>"
-```
-
-   Do not write a unified diff. Do not pass a `.patch` file. Never write or
-   replace a patch already stored in the session folder. Then continue if
-   the next step is already invoked — implement that step now. After the last
-   recorded step, **stop**. Wait for `/accept`, `/explain`, `/stop`, or a change request
-   in chat. `/accept` accepts the last proposal to finish. A **change request**
-   must **replace** that waiting proposal instead: do not ask the user to
-   `/accept` so they can close the session. If `/accept` prints
-   `VISUAL_CODER_ACCEPTED`, do not edit files. **Stop.** The last proposal still
-   needs `/accept` to finish — unless the user asked for changes, in which case
-   replace it.
+   the live project files, then `npx inbase propose-patch --session "<session-id>"`
+   with no patch file, and keep going if the next step is invoked.
    If that prints `VISUAL_CODER_FINISHED`, tell the user the feature is done
-   and **stop**. Do not propose another patch.
+   and **stop**. Do not propose another patch. Do not implement more steps.
 9. If the user types a **change request** while a plan or proposal is waiting
    (not `/accept`, `/explain`, or `/stop`), including after the last recorded
    step: stay in this session. **Do not attach. Do not edit files yet.**
@@ -316,8 +308,8 @@ npx inbase propose-patch --session "<session-id>"
     prints `VISUAL_CODER_PROPOSAL` or `VISUAL_CODER_DIFF`, walk the listed
     changes (between `VISUAL_CODER_CHANGES_START` / `END` when present). Then
     `npx inbase explain report`. After reporting, **stop**. The user navigates
-    the map. They type `/explain` again for a follow-up, `/accept` to continue
-    the plan, `/stop` to end the session, or a change request to replace
+    the map. They type `/explain` again for a follow-up, `/accept` to finish
+    the last proposal, `/stop` to end the session, or a change request to replace
     the waiting proposal.
 11. After a finished handshake, the explorer already removed stored session
     diffs. The global blueprint remains. Optionally run:
@@ -355,15 +347,14 @@ npx inbase propose-patch --session "<session-id>" --clear
 - Use the user's camera viewpoint to choose files
 - Edit project files before `VISUAL_CODER_EXECUTE`
 - Edit files for a change request before `report-plan` has replaced the waiting proposal
-- Keep editing after `inbase propose-patch` until the user types `/accept`, `/explain`, `/stop`, or a change request (unless the next step is already invoked)
+- Stop after a non-last `propose-patch` — implement the next invoked step in the same turn. Only stop after the last recorded step. `/accept` is only for the last proposal
 - Write a unified diff yourself; `inbase propose-patch` with no file records the git diff
 - Prefix `npx inbase` with `cd /absolute/path`, request extra Shell permissions for it, or wait for the user to approve `propose-patch`
 - Pass a `.patch` file to `propose-patch` unless you are debugging the CLI
-- Explore, search, or re-plan after `propose-patch` before the user types `/accept`, `/explain`, `/stop`, or a change request
+- Explore, search, or re-plan after the last `propose-patch` before the user types `/accept`, `/explain`, `/stop`, or a change request
 - Keep editing after `/stop`; that command restores files and ends this session
 - Ask the user to `/accept` the last proposal, finish, or close the session when they asked for changes — `report-plan` with the new remaining steps from the last proposal instead, which replaces the waiting proposal
 - Stay silent or call tools before acknowledging a `VISUAL_CODER_ACK` in chat
-- Propose the next original step before the user types `/accept` (unless the next step is already invoked or they asked for changes)
 - Propose another patch after `VISUAL_CODER_FINISHED`
 - Reuse, overwrite, or expand an existing session diff file yourself; `report-plan` replaces a waiting proposal, then `propose-patch` records a new patch
 - Use this flow for git, lockfiles, or other non-source work

@@ -51,7 +51,7 @@ npx inbase explain report \
 
 For a follow-up, add `--parent` from `VISUAL_CODER_PARENT`. For a `?` click, use a single `--step`. Repeat `--step` for every changed file or proposal step.
 
-4. **Stop.** Do not run `explain wait`. The user navigates the map. They type `/explain` again for a follow-up or another `?` click, or `/accept` to continue the plan.
+4. **Stop.** Do not run `explain wait`. The user navigates the map. They type `/explain` again for a follow-up or another `?` click, or `/accept` to finish the last proposal.
 
 ## No proposal or diff
 

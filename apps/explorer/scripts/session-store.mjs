@@ -1660,7 +1660,7 @@ export function appendDiff(dataDir, targetRoot, input) {
   if (manifest.phase !== 'working') {
     throw new Error(
       manifest.phase === 'plan_ready'
-        ? `Step ${manifest.currentStep} has not been invoked. Wait for /accept, or if the user asked for a change, run report-plan with the new remaining steps first.`
+        ? `Step ${manifest.currentStep} has not been invoked. If the user asked for a change, run report-plan with the new remaining steps first.`
         : `Step ${manifest.currentStep} has not been invoked`,
     )
   }
@@ -1698,16 +1698,17 @@ export function appendDiff(dataDir, targetRoot, input) {
 
   const id = String(manifest.diffs.length + 1).padStart(4, '0')
   const file = `diffs/${id}.patch`
+  const isLast = step >= manifest.steps.length
   const entry = {
     id,
     file,
     parentId: parent?.id ?? null,
     step,
     title,
-    status: 'pending',
+    status: isLast ? 'pending' : 'applied',
     instruction: null,
     createdAt: now,
-    decidedAt: null,
+    decidedAt: isLast ? null : now,
   }
   const paths = sessionPaths(dataDir, sessionId)
   fs.mkdirSync(paths.diffs, { recursive: true })
@@ -1716,20 +1717,40 @@ export function appendDiff(dataDir, targetRoot, input) {
     patchText.endsWith('\n') ? patchText : `${patchText}\n`,
   )
   manifest.activeDiffId = id
-  manifest.phase = 'review'
   manifest.pendingInstruction = null
-  manifest.workStartedAt = null
   manifest.diffs.push(entry)
+  if (isLast) {
+    manifest.phase = 'review'
+    manifest.workStartedAt = null
+  } else {
+    manifest.currentStep = step + 1
+    manifest.phase = 'working'
+    manifest.workStartedAt = new Date().toISOString()
+  }
   writeManifest(dataDir, manifest)
   materializeDiff(dataDir, targetRoot, sessionId, id)
   focusSession(dataDir, sessionId)
-  const advanced = autoAdvance(dataDir, sessionId, targetRoot)
-  if (!advanced) {
+  if (!isLast) {
+    const nextTitle = manifest.steps.find(
+      (item) => item.index === manifest.currentStep,
+    )?.title
+    recordSessionAck(
+      dataDir,
+      sessionId,
+      'invoke',
+      nextTitle
+        ? `step ${manifest.currentStep} — ${nextTitle}`
+        : `step ${manifest.currentStep}`,
+    )
+    if (targetRoot) snapshotPreStep(dataDir, sessionId, targetRoot)
+  }
+  const latest = readManifest(dataDir, sessionId)
+  if (!latest) {
     throw new Error(`Session ${sessionId} disappeared after publishing a diff`)
   }
   return {
-    manifest: advanced,
-    entry: advanced.diffs.find((item) => item.id === id) ?? entry,
+    manifest: latest,
+    entry: latest.diffs.find((item) => item.id === id) ?? entry,
   }
 }
 

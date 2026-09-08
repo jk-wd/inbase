@@ -49,6 +49,15 @@ function relationModesForView(mapping: boolean, current: RelationMode) {
   )
 }
 
+function isLastPlanStep(intent: AgentIntent) {
+  return (
+    typeof intent.step === 'number' &&
+    Array.isArray(intent.steps) &&
+    intent.steps.length > 0 &&
+    intent.step >= intent.steps.length
+  )
+}
+
 function reviewTitle(status: AgentIntentStatus) {
   if (status === 'blueprint_ask') return 'Setup blueprint'
   if (status === 'blueprint') return 'Blueprint'
@@ -1078,7 +1087,10 @@ function sessionLiveStatus(intent: AgentIntent) {
     return { text: 'Reviewing this step', busy: false }
   }
   if (intent.status === 'pending') {
-    return { text: 'Type /accept in chat', busy: false }
+    if (isLastPlanStep(intent)) {
+      return { text: 'Type /accept in chat', busy: false }
+    }
+    return { text: 'LLM is continuing', busy: true }
   }
   if (kind === 'execute' && intent.status === 'working') {
     return { text: `LLM received ${detail}`, busy: true }
@@ -1101,7 +1113,7 @@ function sessionLiveStatus(intent: AgentIntent) {
     return { text: 'LLM is drafting the plan', busy: true }
   }
   if (kind === 'plan' || intent.status === 'planned') {
-    return { text: 'Type /accept in chat', busy: false }
+    return { text: 'LLM is starting…', busy: true }
   }
   if (
     kind === 'attached' ||
@@ -1214,7 +1226,10 @@ function SessionPanel({
     working && typeof intent.step === 'number' ? intent.step : null
   const llmDisconnected =
     Boolean(intent.llmIdle) && intent.awaitingAttach === false
-  const canAcceptProposal = proposalStep !== null && !llmDisconnected
+  const canAcceptProposal =
+    proposalStep !== null &&
+    !llmDisconnected &&
+    proposalStep >= (intent.steps?.length ?? 0)
   const panelDone =
     intent.status === 'finished' ||
     intent.status === 'approved' ||
@@ -1384,25 +1399,24 @@ function SessionPanel({
                     const proposed = proposalStep === step.index
                     const processing = processingStep === step.index
                     const accepted = acceptedSteps.has(step.index) && !proposed
-                    const creating = processing && !proposed
                     const stepDiff = latestDiffForStep(intent.chain, step.index)
                     const canOpenDiff =
                       Boolean(stepDiff) && !intent.working
                     const viewing =
                       Boolean(stepDiff) && intent.step === step.index
-                    const showAcceptHint = canAcceptProposal && proposed
-                    const showStepHint = creating || showAcceptHint
+                    const showCommandHint =
+                      canAcceptProposal &&
+                      proposed &&
+                      step.index === intent.steps.length
                     const stepBody = (
                       <>
                         <span className="hud-step-index">{step.index}.</span>
                         <span className="hud-step-main">
                           <span className="hud-step-title">{step.title}</span>
-                          {showStepHint && (
+                          {showCommandHint && (
                             <span className="hud-step-actions">
                               <span className="hud-step-hint">
-                                {creating
-                                  ? 'Creating proposal…'
-                                  : '/accept · /explain'}
+                                /accept · /explain
                               </span>
                             </span>
                           )}

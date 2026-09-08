@@ -218,9 +218,9 @@ You do not pass a session id or run CLI session commands. The skill does that. I
 
 ### The plan and `/accept` loop
 
-The HUD lists every plan step. The LLM implements the full plan. You can walk **Previous** / **Next** over the diffs; `/accept` on the last proposal finishes the session.
+The HUD lists every plan step. The LLM implements the full plan without waiting for `/accept` between steps. You can walk **Previous** / **Next** over the diffs; `/accept` on the last proposal finishes the session.
 
-1. The agent reports the plan and implements each step, recording a patch after every step. Those stored patches are the session record.
+1. The agent reports the plan and implements each step in one go, recording a patch after every step. Those stored patches are the session record.
 2. The HUD shows each proposal: added, changed, and removed files, plus functions, vars, and imports.
 3. After the last recorded patch you can `/accept` to finish, type a change in the same chat to replace that last step, or **`/stop`**. Do not start a new chat to update the work.
 
