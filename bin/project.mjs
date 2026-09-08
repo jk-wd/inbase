@@ -141,49 +141,16 @@ export function visualizerOrigin(port) {
   return `http://127.0.0.1:${Number(port) || 5173}`
 }
 
-export async function fetchVisualizerProjects(port, timeoutMs = 800) {
+export async function probeVisualizer(port, timeoutMs = 800) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const response = await fetch(`${visualizerOrigin(port)}/api/dev-targets`, {
       signal: controller.signal,
     })
-    if (!response.ok) return null
-    const body = await response.json()
-    if (!body || typeof body !== 'object' || !Array.isArray(body.targets)) {
-      return null
-    }
-    return body
+    return response.ok
   } catch {
-    return null
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
-export async function registerRemoteProject(instance, { root, label } = {}) {
-  const port = instance?.port
-  if (!port) throw new Error('Running Inbase has no port')
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 20_000)
-  try {
-    const response = await fetch(`${visualizerOrigin(port)}/api/dev-targets`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ root, label, select: true }),
-      signal: controller.signal,
-    })
-    if (!response.ok) {
-      let detail = `Could not register project (${response.status})`
-      try {
-        const body = await response.json()
-        if (body?.error) detail = body.error
-      } catch {
-        // Keep the status text.
-      }
-      throw new Error(detail)
-    }
-    return await response.json()
+    return false
   } finally {
     clearTimeout(timer)
   }
@@ -198,14 +165,12 @@ export async function findLiveVisualizer(cwd = process.cwd(), portHint = null) {
     ports.push(hinted)
   }
   for (const port of ports) {
-    const state = await fetchVisualizerProjects(port)
-    if (!state) continue
+    if (!(await probeVisualizer(port))) continue
     return {
       dataDir: running?.dataDir ?? null,
       targetRoot: running?.targetRoot ?? null,
       pid: running?.pid ?? null,
       port,
-      state,
     }
   }
   return null

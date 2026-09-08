@@ -87,7 +87,7 @@ Open the printed URL (http://127.0.0.1:5173 by default). In a Cursor or VS Code 
 
 ![Map open after inbase run](docs/manual-start.png)
 
-`inbase run` maps `target` from `inbase.json` when that file is present, otherwise the current directory. If a map is already running, this command **reuses that one server** and adds the folder as a project. Switch projects from the **Project** dropdown in the top right of the map.
+`inbase run` maps `target` from `inbase.json` when that file is present, otherwise the current directory. If a map is already running, this command prints the URL and exits instead of starting another server.
 
 To map another folder for one run:
 
@@ -361,7 +361,7 @@ npm install
 npm run dev
 ```
 
-`npm run dev` maps `apps/example-target` by default (`inbase.json`). In the map, **Project** switches between registered folders (or, while developing Inbase itself, the bundled example apps and the complete repository).
+`npm run dev` maps `apps/example-target` by default (`inbase.json`). In the map, **Look at** switches to the complete repository (and later example apps). That control exists in `npm run dev`, not in `inbase run`.
 
 To map a different project without the CLI:
 

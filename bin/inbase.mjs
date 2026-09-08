@@ -12,15 +12,12 @@ import {
   instanceFile,
   isPidAlive,
   findLiveVisualizer,
-  globalInbaseDir,
   readInstanceFile,
   readRunningInstance,
-  registerRemoteProject,
   removeGitignoreEntry,
   resolveFromPackage,
   takeFlagValue,
   visualizerOrigin,
-  writeRunningInstance,
 } from './project.mjs'
 import {
   loadInbaseConfig,
@@ -52,7 +49,6 @@ Usage:
   inbase cleanup [editor]  Remove skills for all editors, or only one
                            (also removes .inbase/ and inbase.json)
   inbase run               Scan this repo and start the local map
-                           (reuses a running map and adds this folder as a project)
   inbase extract-blueprint <folder> <output-file>
   inbase help              Show this help
 
@@ -151,22 +147,10 @@ function resolveRunTarget(cwd, targetFlag, config) {
   return path.resolve(cwd)
 }
 
-async function joinRunningVisualizer(live, intendedTarget, cwd) {
-  await registerRemoteProject(live, { root: intendedTarget })
-  const dataDir = live.state?.dataDir || live.dataDir
-  const pid = live.state?.pid ?? live.pid
-  if (dataDir && pid) {
-    writeRunningInstance({
-      dataDir,
-      targetRoot: path.resolve(intendedTarget),
-      port: live.port,
-      pid,
-      extraDirs: [globalInbaseDir(), path.join(cwd, '.inbase')],
-    })
-  }
+function printAlreadyRunning(live) {
   const url = `${visualizerOrigin(live.port)}/`
-  console.log(`Inbase is already running on port ${live.port}`)
-  console.log(`Now mapping ${path.resolve(intendedTarget)}`)
+  console.log(`Inbase is already running on port ${live.port}.`)
+  if (live.targetRoot) console.log(`It is mapping ${live.targetRoot}`)
   console.log(`Open ${url}`)
 }
 
@@ -182,28 +166,23 @@ async function runServer(args) {
     process.exit(1)
   }
 
-  const intendedTarget = resolveRunTarget(cwd, targetFlag, config)
-  if (!fs.existsSync(intendedTarget)) {
-    console.error(`Target not found at ${intendedTarget}`)
-    process.exit(1)
-  }
-
   const live = await findLiveVisualizer(cwd, port)
   if (live) {
-    try {
-      await joinRunningVisualizer(live, intendedTarget, cwd)
-    } catch (error) {
-      console.error(error instanceof Error ? error.message : error)
-      process.exit(1)
-    }
+    printAlreadyRunning(live)
     return
   }
 
   const running = readRunningInstance(cwd)
   if (running && isPidAlive(running.pid)) {
-    console.error(
-      `Inbase is already running (pid ${running.pid}) at ${visualizerOrigin(running.port)} but the map did not respond.`,
+    console.log(
+      `Inbase is already running (pid ${running.pid}) at ${visualizerOrigin(running.port)}.`,
     )
+    return
+  }
+
+  const intendedTarget = resolveRunTarget(cwd, targetFlag, config)
+  if (!fs.existsSync(intendedTarget)) {
+    console.error(`Target not found at ${intendedTarget}`)
     process.exit(1)
   }
 

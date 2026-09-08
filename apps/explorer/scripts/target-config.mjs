@@ -10,7 +10,6 @@ const appsDir = path.resolve(explorerRoot, '..')
 const defaultTargetRoot = path.resolve(explorerRoot, '../example-target')
 const defaultDataDir = path.resolve(explorerRoot, 'src/data')
 const DEV_TARGET_FILE = 'dev-target.json'
-const PROJECTS_FILE = 'projects.json'
 const EXPLORER_APP_NAME = 'explorer'
 const REPO_TARGET_ID = 'repo'
 
@@ -59,147 +58,6 @@ export function readPersistedTargetId(dir = dataDir) {
 export function writePersistedTargetId(id, dir = dataDir) {
   fs.mkdirSync(dir, { recursive: true })
   fs.writeFileSync(persistedTargetFile(dir), `${JSON.stringify({ id }, null, 2)}\n`)
-}
-
-export function projectsFile(dir = dataDir) {
-  return path.join(dir, PROJECTS_FILE)
-}
-
-function disambiguateProjectLabels(projects) {
-  const counts = new Map()
-  for (const project of projects) {
-    const base = path.basename(project.root)
-    counts.set(base, (counts.get(base) ?? 0) + 1)
-  }
-  return projects.map((project) => {
-    const base = path.basename(project.root)
-    if ((counts.get(base) ?? 0) <= 1) {
-      return { ...project, label: labelFromFolderName(base) }
-    }
-    const parent = path.basename(path.dirname(project.root))
-    return {
-      ...project,
-      label: `${labelFromFolderName(parent)}/${labelFromFolderName(base)}`,
-    }
-  })
-}
-
-export function readRegisteredProjects(dir = dataDir) {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(projectsFile(dir), 'utf8'))
-    const list = Array.isArray(parsed?.projects) ? parsed.projects : []
-    const projects = []
-    const seen = new Set()
-    for (const item of list) {
-      const root = typeof item?.root === 'string' ? path.resolve(item.root) : ''
-      if (!root || seen.has(root)) continue
-      seen.add(root)
-      const id =
-        typeof item.id === 'string' && item.id.trim() ? item.id.trim() : root
-      projects.push({ id, root })
-    }
-    const labeled = disambiguateProjectLabels(projects)
-    const currentId =
-      typeof parsed?.currentId === 'string' && parsed.currentId.trim()
-        ? parsed.currentId.trim()
-        : null
-    return { currentId, projects: labeled }
-  } catch {
-    return { currentId: null, projects: [] }
-  }
-}
-
-export function writeRegisteredProjects(
-  { currentId = null, projects = [] } = {},
-  dir = dataDir,
-) {
-  const labeled = disambiguateProjectLabels(
-    projects.map((project) => ({
-      id:
-        typeof project.id === 'string' && project.id.trim()
-          ? project.id.trim()
-          : path.resolve(project.root),
-      root: path.resolve(project.root),
-    })),
-  )
-  fs.mkdirSync(dir, { recursive: true })
-  fs.writeFileSync(
-    projectsFile(dir),
-    `${JSON.stringify({ currentId, projects: labeled }, null, 2)}\n`,
-  )
-  return { currentId, projects: labeled }
-}
-
-export function applyTargetRoot(root) {
-  targetRoot = path.resolve(root)
-  targetName = path.basename(targetRoot)
-  targetPathPrefix = resolveTargetPathPrefix(targetRoot)
-  process.env.VISUAL_CODER_TARGET = targetRoot
-}
-
-export function registerProject(
-  root,
-  { dir = dataDir, select = true } = {},
-) {
-  const resolved = path.resolve(root)
-  const state = readRegisteredProjects(dir)
-  let projects = [...state.projects]
-  if (
-    samePath(dir, dataDir) &&
-    projects.length === 0 &&
-    targetRoot &&
-    !samePath(targetRoot, resolved)
-  ) {
-    projects.push({
-      id: path.resolve(targetRoot),
-      root: path.resolve(targetRoot),
-    })
-  }
-  const existing = projects.find((project) => samePath(project.root, resolved))
-  const id = existing?.id ?? resolved
-  if (!existing) {
-    projects = [...projects, { id, root: resolved }]
-  }
-  const currentId = select ? id : (state.currentId ?? id)
-  const next = writeRegisteredProjects({ currentId, projects }, dir)
-  if (select) applyTargetRoot(resolved)
-  return {
-    ...next,
-    selected: next.projects.find((project) => project.id === id) ?? null,
-  }
-}
-
-export function selectProject(id, { dir = dataDir } = {}) {
-  const registered = readRegisteredProjects(dir)
-  const fromRegistered = registered.projects.find((project) => project.id === id)
-  if (fromRegistered) {
-    applyTargetRoot(fromRegistered.root)
-    writeRegisteredProjects(
-      { currentId: fromRegistered.id, projects: registered.projects },
-      dir,
-    )
-    writePersistedTargetId(fromRegistered.id, dir)
-    return fromRegistered
-  }
-  if (isWorkspaceDevSwitcherEnabled()) {
-    return setWorkspaceTarget(id)
-  }
-  throw new Error(`Unknown project: ${id}`)
-}
-
-export function projectsState({ dir = dataDir } = {}) {
-  const registered = readRegisteredProjects(dir)
-  if (registered.projects.length > 0) {
-    const current =
-      registered.projects.find((project) => samePath(project.root, targetRoot)) ??
-      registered.projects.find((project) => project.id === registered.currentId)
-    return {
-      enabled: true,
-      currentId: current?.id ?? registered.currentId,
-      targets: registered.projects.map(({ id, label }) => ({ id, label })),
-    }
-  }
-  return workspaceDevTargetsState()
 }
 
 /**
@@ -268,6 +126,13 @@ export function resolveInitialTargetRoot({
   }
   if (configTarget) return path.resolve(configTarget)
   return fallback
+}
+
+function applyTargetRoot(root) {
+  targetRoot = path.resolve(root)
+  targetName = path.basename(targetRoot)
+  targetPathPrefix = resolveTargetPathPrefix(targetRoot)
+  process.env.VISUAL_CODER_TARGET = targetRoot
 }
 
 const switcherEnabledAtBoot = isWorkspaceDevSwitcherEnabled()

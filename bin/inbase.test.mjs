@@ -777,7 +777,7 @@ test('help prints usage', async () => {
   }
 })
 
-test('inbase run registers with a live visualizer instead of starting another', async () => {
+test('inbase run tells the user when a map is already running', async () => {
   const first = tempProject()
   const second = tempProject()
   const env = snapshotEnv(
@@ -790,35 +790,10 @@ test('inbase run registers with a live visualizer instead of starting another', 
   delete process.env.VISUAL_CODER_TARGET
   delete process.env.INBASE_DATA_DIR
   delete process.env.INBASE_CONFIG
-  let posted = null
   const server = http.createServer((req, res) => {
     if (req.url === '/api/dev-targets' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(
-        JSON.stringify({
-          enabled: true,
-          currentId: first.root,
-          targets: [{ id: first.root, label: 'First' }],
-          dataDir: path.join(first.root, '.inbase'),
-          pid: process.pid,
-        }),
-      )
-      return
-    }
-    if (req.url === '/api/dev-targets' && req.method === 'POST') {
-      const chunks = []
-      req.on('data', (chunk) => chunks.push(chunk))
-      req.on('end', () => {
-        posted = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(
-          JSON.stringify({
-            enabled: true,
-            currentId: posted.root,
-            targets: [],
-          }),
-        )
-      })
+      res.end(JSON.stringify({ enabled: false, currentId: null, targets: [] }))
       return
     }
     res.statusCode = 404
@@ -845,10 +820,10 @@ test('inbase run registers with a live visualizer instead of starting another', 
     )
     process.chdir(second.root)
     await main(['run'])
-    assert.equal(path.resolve(posted.root), path.resolve(second.root))
     assert.match(output, /already running/)
-    assert.match(output, new RegExp(`Now mapping ${path.resolve(second.root)}`))
+    assert.match(output, new RegExp(`It is mapping ${path.resolve(first.root)}`))
     assert.match(output, new RegExp(`Open http://127.0.0.1:${port}/`))
+    assert.doesNotMatch(output, /Now mapping/)
   } finally {
     console.log = log
     process.chdir(previousCwd)

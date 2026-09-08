@@ -660,7 +660,6 @@ export default function App() {
   const updatingModelRef = useRef(false)
   const [devTargets, setDevTargets] = useState<DevTargetsState>(emptyDevTargets)
   const [targetEpoch, setTargetEpoch] = useState(0)
-  const currentTargetIdRef = useRef<string | null>(null)
 
   const graphSig = useRef<string | null>(null)
   const applyGraph = useCallback((next: CodebaseGraph | null, failed: string) => {
@@ -707,7 +706,6 @@ export default function App() {
           return
         }
         setDevTargets(result.state)
-        currentTargetIdRef.current = result.state.currentId
         applyGraph(result.graph, 'Could not switch project.')
         setTargetEpoch((value) => value + 1)
       } finally {
@@ -723,33 +721,8 @@ export default function App() {
   }, [refreshGraph])
 
   useEffect(() => {
-    let cancelled = false
-    const tick = async () => {
-      const next = await fetchDevTargets()
-      if (cancelled) return
-      setDevTargets(next)
-      const previousId = currentTargetIdRef.current
-      if (
-        next.currentId &&
-        previousId &&
-        next.currentId !== previousId
-      ) {
-        currentTargetIdRef.current = next.currentId
-        await refreshGraph()
-        if (!cancelled) setTargetEpoch((value) => value + 1)
-        return
-      }
-      currentTargetIdRef.current = next.currentId
-    }
-    void tick()
-    const timer = window.setInterval(() => {
-      void tick()
-    }, 2000)
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-    }
-  }, [refreshGraph])
+    void fetchDevTargets().then(setDevTargets)
+  }, [])
 
   if (!graph) {
     return (

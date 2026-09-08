@@ -6,14 +6,13 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import {
   applyHostEnv,
-  fetchVisualizerProjects,
   findLiveVisualizer,
   globalInbaseDir,
   isolatedViteConfig,
   packageDirFromPackage,
+  probeVisualizer,
   readInstanceFile,
   readRunningInstance,
-  registerRemoteProject,
   resolveFromPackage,
   writeRunningInstance,
   isPidAlive,
@@ -220,7 +219,7 @@ function listen(server) {
   })
 }
 
-test('findLiveVisualizer joins a reachable map', async () => {
+test('findLiveVisualizer finds a reachable map', async () => {
   const { root, cleanup } = tempProject()
   const home = path.join(root, 'home')
   const env = snapshotEnv('INBASE_HOME')
@@ -228,15 +227,7 @@ test('findLiveVisualizer joins a reachable map', async () => {
   const server = http.createServer((req, res) => {
     if (req.url === '/api/dev-targets' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(
-        JSON.stringify({
-          enabled: true,
-          currentId: root,
-          targets: [{ id: root, label: 'Root' }],
-          dataDir: path.join(root, '.inbase'),
-          pid: process.pid,
-        }),
-      )
+      res.end(JSON.stringify({ enabled: false, currentId: null, targets: [] }))
       return
     }
     res.statusCode = 404
@@ -252,47 +243,10 @@ test('findLiveVisualizer joins a reachable map', async () => {
     })
     const live = await findLiveVisualizer(root, port)
     assert.equal(live.port, port)
-    assert.equal(live.state.currentId, root)
-    assert.deepEqual(await fetchVisualizerProjects(port), live.state)
+    assert.equal(await probeVisualizer(port), true)
   } finally {
     await new Promise((resolve) => server.close(resolve))
     restoreEnv(env)
-    cleanup()
-  }
-})
-
-test('registerRemoteProject posts the caller folder', async () => {
-  const { root, cleanup } = tempProject()
-  let posted = null
-  const server = http.createServer((req, res) => {
-    if (req.url === '/api/dev-targets' && req.method === 'POST') {
-      const chunks = []
-      req.on('data', (chunk) => chunks.push(chunk))
-      req.on('end', () => {
-        posted = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(
-          JSON.stringify({
-            enabled: true,
-            currentId: posted.root,
-            targets: [{ id: posted.root, label: 'Other' }],
-          }),
-        )
-      })
-      return
-    }
-    res.statusCode = 404
-    res.end()
-  })
-  try {
-    const port = await listen(server)
-    const other = path.join(root, 'other')
-    const result = await registerRemoteProject({ port }, { root: other })
-    assert.equal(posted.root, other)
-    assert.equal(posted.select, true)
-    assert.equal(result.currentId, other)
-  } finally {
-    await new Promise((resolve) => server.close(resolve))
     cleanup()
   }
 })

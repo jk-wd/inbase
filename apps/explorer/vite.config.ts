@@ -14,11 +14,9 @@ import { globalInbaseDir, writeRunningInstance, isolatedViteConfig, packageDirFr
 import {
   dataDir,
   isWorkspaceDevSwitcherEnabled,
-  projectsState,
-  readRegisteredProjects,
-  registerProject,
-  selectProject,
+  setWorkspaceTarget,
   targetRoot,
+  workspaceDevTargetsState,
 } from './scripts/target-config.mjs'
 import { editorFileUri, openInEditor } from './scripts/open-editor.mjs'
 import {
@@ -157,24 +155,6 @@ function intentResponse(sessionId?: string) {
   return { ...base, ...blueprintIntentFields() }
 }
 
-function publicProjectsState(port: number) {
-  return {
-    ...projectsState(),
-    dataDir,
-    targetRoot,
-    pid: process.pid,
-    port,
-  }
-}
-
-function instanceExtraDirs() {
-  const extras = [globalInbaseDir()]
-  for (const project of readRegisteredProjects().projects) {
-    extras.push(path.join(project.root, '.inbase'))
-  }
-  return extras
-}
-
 function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.statusCode = status
   res.setHeader('Content-Type', 'application/json')
@@ -186,14 +166,11 @@ function jsonFilePlugin(): Plugin {
     name: 'visual-coder-json-files',
     configureServer(server) {
       const serverPort = server.config.server.port ?? 5173
-      if (!isWorkspaceDevSwitcherEnabled()) {
-        registerProject(targetRoot)
-      }
       writeRunningInstance({
         dataDir,
         targetRoot,
         port: serverPort,
-        extraDirs: instanceExtraDirs(),
+        extraDirs: [globalInbaseDir()],
       })
       // Discard leftover LLM sessions, then open 5 empty chat slots.
       clearDiffSessions(dataDir, targetRoot)
@@ -320,7 +297,7 @@ function jsonFilePlugin(): Plugin {
 
       server.middlewares.use('/api/dev-targets', (req, res, next) => {
         if (req.method === 'GET') {
-          sendJson(res, 200, publicProjectsState(serverPort))
+          sendJson(res, 200, workspaceDevTargetsState())
           return
         }
         if (req.method === 'POST') {
@@ -338,28 +315,23 @@ async function switchDevTarget(
   res: ServerResponse,
   port: number,
 ) {
+  if (!isWorkspaceDevSwitcherEnabled()) {
+    sendJson(res, 404, { error: 'dev target switcher is not available' })
+    return
+  }
   try {
-    const body = JSON.parse(await readBody(req)) as {
-      id?: string
-      root?: string
-      select?: boolean
+    const body = JSON.parse(await readBody(req)) as { id?: string }
+    const id = body.id?.trim()
+    if (!id || id === 'custom') {
+      sendJson(res, 400, { error: 'id is required' })
+      return
     }
-    const root = body.root?.trim()
-    if (root) {
-      registerProject(root, { select: body.select !== false })
-    } else {
-      const id = body.id?.trim()
-      if (!id || id === 'custom') {
-        sendJson(res, 400, { error: 'id or root is required' })
-        return
-      }
-      selectProject(id)
-    }
+    setWorkspaceTarget(id)
     writeRunningInstance({
       dataDir,
       targetRoot,
       port,
-      extraDirs: instanceExtraDirs(),
+      extraDirs: [globalInbaseDir()],
     })
     stopExplain(dataDir)
     clearDiffSessions(dataDir, targetRoot)
@@ -369,7 +341,7 @@ async function switchDevTarget(
       return
     }
     sendJson(res, 200, {
-      ...publicProjectsState(port),
+      ...workspaceDevTargetsState(),
       codebase: readCodebase(),
     })
   } catch (error) {
