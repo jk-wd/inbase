@@ -150,7 +150,7 @@ export function setupSession(
 export function attachSession(
   dataDir: string,
   sessionId?: string | null,
-  options?: { color?: string | null },
+  options?: { color?: string | null; targetRoot?: string | null },
 ): DiffManifest
 export function setInitialInstruction(
   dataDir: string,

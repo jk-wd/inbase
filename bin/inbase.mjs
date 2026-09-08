@@ -10,12 +10,26 @@ import {
   explorerRoot,
   isolatedViteConfig,
   instanceFile,
+  isPidAlive,
+  findLiveVisualizer,
+  globalInbaseDir,
   readInstanceFile,
+  readRunningInstance,
+  registerRemoteProject,
   removeGitignoreEntry,
   resolveFromPackage,
   takeFlagValue,
+  visualizerOrigin,
+  writeRunningInstance,
 } from './project.mjs'
-import { removeInbaseConfig, resolvePort, writeInbaseConfig } from './inbase-config.mjs'
+import {
+  loadInbaseConfig,
+  rememberInbaseConfig,
+  removeInbaseConfig,
+  resolveConfigPath,
+  resolvePort,
+  writeInbaseConfig,
+} from './inbase-config.mjs'
 import { installEditors, isAllEditors, uninstallEditors } from './editors/index.mjs'
 import {
   proposePatch,
@@ -38,6 +52,7 @@ Usage:
   inbase cleanup [editor]  Remove skills for all editors, or only one
                            (also removes .inbase/ and inbase.json)
   inbase run               Scan this repo and start the local map
+                           (reuses a running map and adds this folder as a project)
   inbase extract-blueprint <folder> <output-file>
   inbase help              Show this help
 
@@ -123,9 +138,42 @@ function explorerHref(relative) {
   return pathToFileURL(path.join(explorerRoot, relative)).href
 }
 
+function resolveRunTarget(cwd, targetFlag, config) {
+  const explicit = targetFlag?.trim()
+  if (explicit) {
+    return path.isAbsolute(explicit)
+      ? path.normalize(explicit)
+      : path.resolve(cwd, explicit)
+  }
+  if (config.target && config.dir) {
+    return resolveConfigPath(config.target, config.dir)
+  }
+  return path.resolve(cwd)
+}
+
+async function joinRunningVisualizer(live, intendedTarget, cwd) {
+  await registerRemoteProject(live, { root: intendedTarget })
+  const dataDir = live.state?.dataDir || live.dataDir
+  const pid = live.state?.pid ?? live.pid
+  if (dataDir && pid) {
+    writeRunningInstance({
+      dataDir,
+      targetRoot: path.resolve(intendedTarget),
+      port: live.port,
+      pid,
+      extraDirs: [globalInbaseDir(), path.join(cwd, '.inbase')],
+    })
+  }
+  const url = `${visualizerOrigin(live.port)}/`
+  console.log(`Inbase is already running on port ${live.port}`)
+  console.log(`Now mapping ${path.resolve(intendedTarget)}`)
+  console.log(`Open ${url}`)
+}
+
 async function runServer(args) {
-  const target = takeFlagValue(args, '--target') || undefined
-  const { targetRoot, dataDir, config } = applyHostEnv({ target })
+  const cwd = process.cwd()
+  const targetFlag = takeFlagValue(args, '--target') || undefined
+  const config = rememberInbaseConfig(loadInbaseConfig(cwd))
   let port
   try {
     port = resolvePort(takeFlagValue(args, '--port'), config)
@@ -134,10 +182,32 @@ async function runServer(args) {
     process.exit(1)
   }
 
-  if (!fs.existsSync(targetRoot)) {
-    console.error(`Target not found at ${targetRoot}`)
+  const intendedTarget = resolveRunTarget(cwd, targetFlag, config)
+  if (!fs.existsSync(intendedTarget)) {
+    console.error(`Target not found at ${intendedTarget}`)
     process.exit(1)
   }
+
+  const live = await findLiveVisualizer(cwd, port)
+  if (live) {
+    try {
+      await joinRunningVisualizer(live, intendedTarget, cwd)
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : error)
+      process.exit(1)
+    }
+    return
+  }
+
+  const running = readRunningInstance(cwd)
+  if (running && isPidAlive(running.pid)) {
+    console.error(
+      `Inbase is already running (pid ${running.pid}) at ${visualizerOrigin(running.port)} but the map did not respond.`,
+    )
+    process.exit(1)
+  }
+
+  const { targetRoot, dataDir } = applyHostEnv({ target: intendedTarget })
   ensureDataDir(dataDir)
 
   const { scanTarget } = await import(explorerHref('scripts/scan-target.mjs'))

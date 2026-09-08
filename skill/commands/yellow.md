@@ -14,7 +14,7 @@ If this conversation already printed `VISUAL_CODER_SESSION`, do **not** run atta
 npx inbase attach --color yellow
 ```
 
-If attach fails with `VISUAL_CODER_NOT_RUNNING`, `VISUAL_CODER_CHAT_LIMIT`, `VISUAL_CODER_COLOR_BUSY`, or `VISUAL_CODER_COLOR_UNKNOWN`, reply with that message and stop.
+If attach fails with `VISUAL_CODER_NOT_RUNNING`, `VISUAL_CODER_CHAT_LIMIT`, or `VISUAL_CODER_COLOR_UNKNOWN`, reply with that message and stop.
 
 2. Read `VISUAL_CODER_SESSION` from the output. That id is the session to use for every later `inbase` command.
 

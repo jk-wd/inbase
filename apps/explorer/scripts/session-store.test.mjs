@@ -35,7 +35,6 @@ import {
   listAttachQueue,
   nextAttachSessionId,
   parseSessionColorQuery,
-  colorBusyMessage,
   colorUnknownMessage,
   colorMissingMessage,
   SESSION_SLOT_COUNT,
@@ -436,16 +435,136 @@ test('attach --color takes that waiting session even if it is not first', () => 
   }
 })
 
-test('attach --color fails when that color already has a chat', () => {
+test('new attach clears leftover plan on a waiting slot', () => {
+  const env = fixture()
+  try {
+    const slot = setupSession(env.dataDir)
+    setupSession(env.dataDir)
+    slot.name = 'Leftover plan'
+    slot.feature = 'Leftover plan'
+    slot.steps = [{ index: 1, title: 'Build value' }]
+    slot.phase = 'plan_ready'
+    slot.currentStep = 1
+    writeManifest(env.dataDir, slot)
+    setInitialInstruction(env.dataDir, slot.sessionId, 'Keep this request')
+    updateBlueprint(env.dataDir, slot.sessionId, {
+      color: slot.color,
+      userCreatedBlocks: [
+        {
+          id: 'src/Kept.tsx',
+          name: 'Kept.tsx',
+          path: 'src/Kept.tsx',
+          folder: 'src',
+        },
+      ],
+    })
+
+    const attached = attachSession(env.dataDir, null, {
+      color: 'red',
+      targetRoot: env.targetRoot,
+    })
+    assert.equal(attached.sessionId, slot.sessionId)
+    assert.equal(attached.awaitingAttach, false)
+    assert.equal(attached.phase, 'preparing')
+    assert.deepEqual(attached.steps, [])
+    assert.equal(attached.feature, '')
+    assert.equal(attached.name, '')
+    assert.equal(attached.initialInstruction, 'Keep this request')
+    assert.deepEqual(readLocalBlueprint(env.dataDir, slot.sessionId).files, [
+      {
+        id: 'src/Kept.tsx',
+        name: 'Kept.tsx',
+        path: 'src/Kept.tsx',
+        folder: 'src',
+      },
+    ])
+    const intent = sessionIntent(env.dataDir, slot.sessionId)
+    assert.equal(intent.lastAck.kind, 'attached')
+    assert.equal(intent.steps.length, 0)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('attach --color starts clean when that color already has leftover LLM work', () => {
   const env = fixture()
   try {
     const coral = setupSession(env.dataDir)
     setupSession(env.dataDir)
     attachSession(env.dataDir, coral.sessionId)
-    assert.throws(
-      () => attachSession(env.dataDir, null, { color: 'red' }),
-      (error) => String(error.message) === colorBusyMessage('Coral'),
+    setInitialInstruction(env.dataDir, coral.sessionId, 'Keep the coral request')
+    updateBlueprint(env.dataDir, coral.sessionId, {
+      color: coral.color,
+      userCreatedBlocks: [
+        {
+          id: 'src/Coral.tsx',
+          name: 'Coral.tsx',
+          path: 'src/Coral.tsx',
+          folder: 'src',
+        },
+      ],
+    })
+    addContextFiles(env.dataDir, coral.sessionId, {
+      name: 'notes.txt',
+      bytes: Buffer.from('keep me'),
+    })
+    reportPlan(env.dataDir, {
+      sessionId: coral.sessionId,
+      feature: 'Leftover coral',
+      stepTitles: ['Build value'],
+    })
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: coral.sessionId,
+      patchText: oneToTwo,
+    })
+    assert.equal(readManifest(env.dataDir, coral.sessionId).phase, 'review')
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
     )
+
+    const attached = attachSession(env.dataDir, null, {
+      color: 'red',
+      targetRoot: env.targetRoot,
+    })
+    assert.notEqual(attached.sessionId, coral.sessionId)
+    assert.equal(attached.color, 'coral')
+    assert.equal(attached.awaitingAttach, false)
+    assert.equal(attached.phase, 'preparing')
+    assert.deepEqual(attached.steps, [])
+    assert.equal(attached.feature, '')
+    assert.equal(isSessionStopped(env.dataDir, coral.sessionId), true)
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 1\n',
+    )
+    assert.equal(attached.initialInstruction, 'Keep the coral request')
+    assert.deepEqual(readLocalBlueprint(env.dataDir, attached.sessionId).files, [
+      {
+        id: 'src/Coral.tsx',
+        name: 'Coral.tsx',
+        path: 'src/Coral.tsx',
+        folder: 'src',
+      },
+    ])
+    const context = listContextFiles(env.dataDir, attached.sessionId)
+    assert.equal(context.length, 1)
+    assert.equal(context[0].name, 'notes.txt')
+    assert.equal(
+      fs.readFileSync(context[0].path, 'utf8'),
+      'keep me',
+    )
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('attach --color still rejects blue and missing colors', () => {
+  const env = fixture()
+  try {
+    const coral = setupSession(env.dataDir)
+    setupSession(env.dataDir)
+    attachSession(env.dataDir, coral.sessionId)
     assert.throws(
       () => attachSession(env.dataDir, null, { color: 'blue' }),
       (error) => String(error.message).includes('VISUAL_CODER_COLOR_UNKNOWN'),
@@ -1289,10 +1408,20 @@ test('preview keeps earlier diffs visible as later steps accumulate', () => {
       'src/b.ts',
     ])
     assert.equal(latest.preview, true)
-    assert.deepEqual(latest.files, ['src/a.ts'])
+    assert.deepEqual(latest.files, [])
     assert.deepEqual(latest.creates, ['src/b.ts'])
     assert.deepEqual(latest.createFolders, [])
     assert.equal(latest.diffId, '0002')
+    assert.equal(latest.createLines['src/b.ts'], 1)
+
+    const earlier = sessionIntent(
+      env.dataDir,
+      'preview-chat',
+      ['src/a.ts', 'src/b.ts'],
+      '0001',
+    )
+    assert.deepEqual(earlier.files, ['src/a.ts'])
+    assert.deepEqual(earlier.creates, [])
 
     continueDiff(env.dataDir, env.targetRoot, 'preview-chat', '0002')
     assert.equal(readManifest(env.dataDir, 'preview-chat'), null)
@@ -1309,6 +1438,37 @@ test('preview keeps earlier diffs visible as later steps accumulate', () => {
       fs.readFileSync(path.join(env.targetRoot, 'src/b.ts'), 'utf8'),
       'export const extra = 1\n',
     )
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('proposal preview does not highlight the whole mapped tree as added', () => {
+  const env = fixture()
+  const extras = Array.from({ length: 24 }, (_, index) => `src/f${index}.ts`)
+  const addAll = [
+    ...extras.map(
+      (id) => `--- /dev/null\n+++ b/${id}\n@@ -0,0 +1,1 @@\n+export const n = 1\n`,
+    ),
+    '--- /dev/null\n+++ b/src/New.ts\n@@ -0,0 +1,1 @@\n+export const neu = 1\n',
+  ].join('\n')
+  try {
+    reportPlan(env.dataDir, {
+      sessionId: 'mass-chat',
+      feature: 'Mass add',
+      stepTitles: ['Touch tree'],
+    })
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'mass-chat',
+      patchText: addAll,
+    })
+    const intent = sessionIntent(env.dataDir, 'mass-chat', [
+      'src/a.ts',
+      ...extras,
+    ])
+    assert.deepEqual(intent.creates, ['src/New.ts'])
+    assert.ok(!intent.creates.includes('src/f0.ts'))
+    assert.deepEqual(intent.files, [])
   } finally {
     env.cleanup()
   }
@@ -2315,6 +2475,35 @@ test('does not record snapshot copies when the data dir lives in the target', ()
     assert.deepEqual(parsed.creates, [])
     assert.ok(!parsed.creates.some((id) => id.includes('diff-sessions')))
     assert.ok(!parsed.creates.includes('apps/explorer/src/data/codebase.json'))
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('does not record mapped files the invoke snapshot missed as added', () => {
+  const env = fixture()
+  try {
+    fs.writeFileSync(
+      path.join(env.targetRoot, 'src/keep.ts'),
+      'export const keep = true\n',
+    )
+    reportPlan(env.dataDir, {
+      sessionId: 'miss-chat',
+      feature: 'Missed snapshot',
+      stepTitles: ['Bump value'],
+      targetRoot: env.targetRoot,
+    })
+    const preStep = path.join(env.dataDir, 'diff-sessions', 'miss-chat', 'pre-step')
+    fs.rmSync(path.join(preStep, 'src/keep.ts'), { force: true })
+    fs.writeFileSync(
+      path.join(env.dataDir, 'codebase.json'),
+      `${JSON.stringify({ files: [{ id: 'src/a.ts' }, { id: 'src/keep.ts' }] })}\n`,
+    )
+    fs.writeFileSync(path.join(env.targetRoot, 'src/a.ts'), 'export const value = 2\n')
+    const recorded = appendDiff(env.dataDir, env.targetRoot, { sessionId: 'miss-chat' })
+    const parsed = parseUnifiedPatch(readDiff(env.dataDir, 'miss-chat', recorded.entry))
+    assert.deepEqual(parsed.files, ['src/a.ts'])
+    assert.deepEqual(parsed.creates, [])
   } finally {
     env.cleanup()
   }

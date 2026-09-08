@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
@@ -60,6 +61,12 @@ export function resolveOptionalPath(value, fallback) {
 
 export const INSTANCE_FILE = 'instance.json'
 
+export function globalInbaseDir() {
+  const override = process.env.INBASE_HOME?.trim()
+  if (override) return path.resolve(override)
+  return path.join(os.homedir(), '.inbase')
+}
+
 export function isPidAlive(pid) {
   if (!Number.isInteger(pid)) return true
   try {
@@ -76,16 +83,29 @@ export function instanceFile(dataDir) {
   return path.join(dataDir, INSTANCE_FILE)
 }
 
-export function writeRunningInstance({ dataDir, targetRoot, port = null }) {
-  fs.mkdirSync(dataDir, { recursive: true })
+export function writeRunningInstance({
+  dataDir,
+  targetRoot,
+  port = null,
+  pid = process.pid,
+  extraDirs = [],
+}) {
   const instance = {
     dataDir: path.resolve(dataDir),
     targetRoot: path.resolve(targetRoot),
     port: port ?? null,
-    pid: process.pid,
+    pid,
     updatedAt: new Date().toISOString(),
   }
-  fs.writeFileSync(instanceFile(dataDir), `${JSON.stringify(instance, null, 2)}\n`)
+  const dirs = [path.resolve(dataDir), ...extraDirs]
+  const seen = new Set()
+  for (const dir of dirs) {
+    const resolved = path.resolve(dir)
+    if (seen.has(resolved)) continue
+    seen.add(resolved)
+    fs.mkdirSync(resolved, { recursive: true })
+    fs.writeFileSync(instanceFile(resolved), `${JSON.stringify(instance, null, 2)}\n`)
+  }
   return instance
 }
 
@@ -103,6 +123,7 @@ export function readInstanceFile(file) {
 export function readRunningInstance(cwd = process.cwd()) {
   const files = [
     path.join(cwd, '.inbase', INSTANCE_FILE),
+    path.join(globalInbaseDir(), INSTANCE_FILE),
     path.join(explorerRoot, 'src/data', INSTANCE_FILE),
   ]
   const seen = new Set()
@@ -112,6 +133,80 @@ export function readRunningInstance(cwd = process.cwd()) {
     seen.add(resolved)
     const instance = readInstanceFile(resolved)
     if (instance) return instance
+  }
+  return null
+}
+
+export function visualizerOrigin(port) {
+  return `http://127.0.0.1:${Number(port) || 5173}`
+}
+
+export async function fetchVisualizerProjects(port, timeoutMs = 800) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(`${visualizerOrigin(port)}/api/dev-targets`, {
+      signal: controller.signal,
+    })
+    if (!response.ok) return null
+    const body = await response.json()
+    if (!body || typeof body !== 'object' || !Array.isArray(body.targets)) {
+      return null
+    }
+    return body
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+export async function registerRemoteProject(instance, { root, label } = {}) {
+  const port = instance?.port
+  if (!port) throw new Error('Running Inbase has no port')
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 20_000)
+  try {
+    const response = await fetch(`${visualizerOrigin(port)}/api/dev-targets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ root, label, select: true }),
+      signal: controller.signal,
+    })
+    if (!response.ok) {
+      let detail = `Could not register project (${response.status})`
+      try {
+        const body = await response.json()
+        if (body?.error) detail = body.error
+      } catch {
+        // Keep the status text.
+      }
+      throw new Error(detail)
+    }
+    return await response.json()
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+export async function findLiveVisualizer(cwd = process.cwd(), portHint = null) {
+  const running = readRunningInstance(cwd)
+  const ports = []
+  const hinted = Number(portHint)
+  if (running?.port) ports.push(running.port)
+  if (Number.isInteger(hinted) && hinted > 0 && !ports.includes(hinted)) {
+    ports.push(hinted)
+  }
+  for (const port of ports) {
+    const state = await fetchVisualizerProjects(port)
+    if (!state) continue
+    return {
+      dataDir: running?.dataDir ?? null,
+      targetRoot: running?.targetRoot ?? null,
+      pid: running?.pid ?? null,
+      port,
+      state,
+    }
   }
   return null
 }

@@ -144,10 +144,14 @@ If this chat is not yet attached (this conversation has **never** printed
 npx inbase attach
 ```
 
-That attaches this chat to the matching color's empty slot, or to the next
+That attaches this chat to the matching color's slot, or to the next
 unconnected visualizer session (oldest first). Already-connected sessions are
-skipped unless you asked for that color — then attach fails with
-`VISUAL_CODER_COLOR_BUSY`. Window focus does not matter.
+skipped unless you asked for that color — then leftover LLM work on that color
+is discarded so this chat starts clean. A new attach always starts from an
+empty plan: leftover steps, patches, and working state from a previous chat
+are cleared. User-placed blueprint files, the initial instruction, and attached
+context files stay. Recorded file changes from that leftover session are
+restored. Window focus does not matter.
 No id is passed in; read `VISUAL_CODER_SESSION` from the output and use that
 `--session` value for every later command. Read `VISUAL_CODER_COLOR` and **reply
 in this chat first** with one short sentence that names that color, for example:
@@ -169,8 +173,8 @@ Inbase isn't running. Start it with `npx inbase run`, then send this request aga
 Only 5 Inbase chats can be connected at once. Finish or type /stop in a connected chat, then start a new chat.
 ```
 
-- `VISUAL_CODER_COLOR_BUSY` or `VISUAL_CODER_COLOR_UNKNOWN`: reply with the rest
-  of that line (it names the color), then **stop**.
+- `VISUAL_CODER_COLOR_UNKNOWN`: reply with the rest of that line (it names
+  the color), then **stop**.
 
 Then continue from `read-blueprint` below. Do **not** run `start-session`.
 Do **not** wait for a blueprint handshake.

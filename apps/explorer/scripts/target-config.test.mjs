@@ -5,14 +5,20 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import {
+  applyTargetRoot,
   isWorkspaceDevSwitcherEnabled,
   listWorkspaceTargets,
   matchWorkspaceTargetId,
+  projectsState,
   readPersistedTargetId,
+  readRegisteredProjects,
+  registerProject,
   resolveDataDir,
   resolveInitialTargetRoot,
   resolveTargetPathPrefix,
   resolveTargetRoot,
+  selectProject,
+  targetRoot,
   writePersistedTargetId,
 } from './target-config.mjs'
 
@@ -174,4 +180,66 @@ test('defaults data dir to explorer src/data', () => {
 test('resolves absolute and cwd-relative data dirs', () => {
   assert.equal(resolveDataDir('/tmp/inbase-data'), path.normalize('/tmp/inbase-data'))
   assert.equal(resolveDataDir('.inbase'), path.resolve(process.cwd(), '.inbase'))
+})
+
+test('registers projects in an isolated data dir', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'inbase-projects-'))
+  const first = path.join(dir, 'apps/alpha')
+  const second = path.join(dir, 'apps/beta')
+  fs.mkdirSync(first, { recursive: true })
+  fs.mkdirSync(second, { recursive: true })
+  try {
+    registerProject(first, { dir, select: false })
+    registerProject(second, { dir, select: false })
+    const state = readRegisteredProjects(dir)
+    assert.deepEqual(
+      state.projects.map((project) => project.label),
+      ['Alpha', 'Beta'],
+    )
+    assert.equal(state.projects[0].root, path.resolve(first))
+    assert.equal(projectsState({ dir }).enabled, true)
+    assert.equal(projectsState({ dir }).targets.length, 2)
+    assert.equal(fs.existsSync(path.join(dir, 'projects.json')), true)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('disambiguates registered projects that share a folder name', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'inbase-projects-'))
+  const first = path.join(dir, 'one/app')
+  const second = path.join(dir, 'two/app')
+  fs.mkdirSync(first, { recursive: true })
+  fs.mkdirSync(second, { recursive: true })
+  try {
+    registerProject(first, { dir, select: false })
+    registerProject(second, { dir, select: false })
+    const state = readRegisteredProjects(dir)
+    assert.deepEqual(
+      state.projects.map((project) => project.label),
+      ['One/App', 'Two/App'],
+    )
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('selecting a registered project updates the live target', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'inbase-projects-'))
+  const first = path.join(dir, 'apps/alpha')
+  const second = path.join(dir, 'apps/beta')
+  fs.mkdirSync(first, { recursive: true })
+  fs.mkdirSync(second, { recursive: true })
+  const previous = targetRoot
+  try {
+    registerProject(first, { dir, select: true })
+    registerProject(second, { dir, select: true })
+    assert.equal(targetRoot, path.resolve(second))
+    selectProject(path.resolve(first), { dir })
+    assert.equal(targetRoot, path.resolve(first))
+    assert.equal(projectsState({ dir }).currentId, path.resolve(first))
+  } finally {
+    applyTargetRoot(previous)
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
 })

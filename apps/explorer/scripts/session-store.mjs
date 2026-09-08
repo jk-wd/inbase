@@ -545,6 +545,104 @@ export function findSessionIdByColor(dataDir, colorId) {
   return null
 }
 
+function snapshotUserAttachContext(dataDir, sessionId) {
+  const manifest = readManifest(dataDir, sessionId)
+  if (!manifest) return null
+  const dir = sessionPaths(dataDir, sessionId).context
+  const files = normalizeContextFiles(manifest.contextFiles).flatMap((item) => {
+    try {
+      const absolute = contextFileAbsolute(dir, item.storedName)
+      if (!fs.existsSync(absolute)) return []
+      return [
+        {
+          name: item.name,
+          mimeType: item.mimeType,
+          bytes: fs.readFileSync(absolute),
+        },
+      ]
+    } catch {
+      return []
+    }
+  })
+  return {
+    instruction: manifest.initialInstruction,
+    blueprint: readLocalBlueprint(dataDir, sessionId),
+    files,
+  }
+}
+
+function restoreUserAttachContext(dataDir, sessionId, snapshot) {
+  if (!snapshot) return
+  if (snapshot.blueprint) {
+    writeLocalBlueprint(dataDir, sessionId, snapshot.blueprint)
+  }
+  if (snapshot.instruction) {
+    setInitialInstruction(dataDir, sessionId, snapshot.instruction)
+  }
+  if (snapshot.files.length > 0) {
+    addContextFiles(dataDir, sessionId, snapshot.files)
+  }
+}
+
+function resetLlmSessionWork(dataDir, sessionId, targetRoot = null) {
+  const safeId = assertSessionId(sessionId)
+  const manifest = readManifest(dataDir, safeId)
+  if (!manifest || isTerminalSession(manifest)) return manifest
+  if (targetRoot) {
+    try {
+      restoreSessionFiles(dataDir, safeId, targetRoot)
+    } catch {
+      // Incomplete session artifacts should still be cleared.
+    }
+  }
+  const paths = sessionPaths(dataDir, safeId)
+  for (const dir of [paths.diffs, paths.preStep, paths.baselineFiles]) {
+    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true })
+  }
+  for (const file of [
+    paths.baseline,
+    ackFile(dataDir, safeId),
+    connectionFile(dataDir, safeId),
+  ]) {
+    if (fs.existsSync(file)) fs.unlinkSync(file)
+  }
+  writeManifest(dataDir, {
+    ...manifest,
+    name: '',
+    feature: '',
+    steps: [],
+    status: 'active',
+    phase: 'blueprint',
+    currentStep: 1,
+    activeDiffId: null,
+    pendingInstruction: null,
+    pendingExplain: false,
+    workStartedAt: null,
+    diffs: [],
+  })
+  return readManifest(dataDir, safeId)
+}
+
+function recycleColorSlotForAttach(dataDir, color, targetRoot = null) {
+  const matchId = findSessionIdByColor(dataDir, color.id)
+  if (!matchId) throw new Error(colorMissingMessage(color.name))
+  const existing = requireManifest(dataDir, matchId)
+  if (sessionIsWaitingToAttach(existing)) {
+    resetLlmSessionWork(dataDir, matchId, targetRoot)
+    return matchId
+  }
+  const snapshot = snapshotUserAttachContext(dataDir, matchId)
+  stopSession(dataDir, matchId, targetRoot)
+  let nextId = findSessionIdByColor(dataDir, color.id)
+  if (!nextId) {
+    setupSession(dataDir, { focus: false })
+    nextId = findSessionIdByColor(dataDir, color.id)
+  }
+  if (!nextId) throw new Error(colorMissingMessage(color.name))
+  restoreUserAttachContext(dataDir, nextId, snapshot)
+  return nextId
+}
+
 function blueprintHasContent(blueprint) {
   return (
     (blueprint.files?.length ?? 0) > 0 ||
@@ -835,6 +933,52 @@ export function previewPatchChain(patches, knownFileIds = []) {
   }
 }
 
+function dropMassKnownCreates(preview, knownFileIds = []) {
+  const known = new Set(knownFileIds)
+  const overlap = preview.creates.filter((id) => known.has(id))
+  const massFalseAdd =
+    overlap.length >= 20 && overlap.length >= Math.max(10, known.size * 0.15)
+  if (!massFalseAdd) return preview
+  const drop = new Set(overlap)
+  const creates = preview.creates.filter((id) => !drop.has(id))
+  const createLines = Object.fromEntries(
+    Object.entries(preview.createLines ?? {}).filter(([id]) => !drop.has(id)),
+  )
+  const keepSymbol = (item) => !drop.has(item.file)
+  return {
+    ...preview,
+    creates,
+    createLines,
+    createFolders: collectCreateFolders(
+      creates,
+      foldersFromFileIds(knownFileIds.filter((id) => !creates.includes(id))),
+    ),
+    imports: (preview.imports ?? []).filter(
+      (edge) => !drop.has(edge.from) && !drop.has(edge.to),
+    ),
+    addedFunctions: (preview.addedFunctions ?? []).filter(keepSymbol),
+    addedVariables: (preview.addedVariables ?? []).filter(keepSymbol),
+    addedImports: (preview.addedImports ?? []).filter(keepSymbol),
+    changedFunctions: (preview.changedFunctions ?? []).filter(keepSymbol),
+    changedVariables: (preview.changedVariables ?? []).filter(keepSymbol),
+  }
+}
+
+function readCodebaseFileIds(dataDir) {
+  try {
+    const parsed = JSON.parse(
+      fs.readFileSync(path.join(dataDir, 'codebase.json'), 'utf8'),
+    )
+    return Array.isArray(parsed?.files)
+      ? parsed.files
+          .map((file) => file?.id)
+          .filter((id) => typeof id === 'string' && id)
+      : []
+  } catch {
+    return []
+  }
+}
+
 export function sessionIntent(
   dataDir,
   sessionId,
@@ -848,13 +992,16 @@ export function sessionIntent(
   const selectedIndex = selectedId ? entryIndex(manifest, selectedId) : null
   const selected =
     selectedIndex === null ? null : manifest.diffs[selectedIndex]
-  const patches =
-    selectedIndex === null
-      ? []
-      : liveEntries(manifest, selectedId).map((entry) =>
-          readDiff(dataDir, sessionId, entry),
-        )
-  const preview = previewPatchChain(patches, knownFileIds)
+  const live = selectedId ? liveEntries(manifest, selectedId) : []
+  const livePatches = live.map((entry) => readDiff(dataDir, sessionId, entry))
+  const selectedPatches =
+    selectedIndex === null ? [] : [readDiff(dataDir, sessionId, selected)]
+  const chainPreview = previewPatchChain(livePatches, knownFileIds)
+  const preview = dropMassKnownCreates(
+    previewPatchChain(selectedPatches, knownFileIds),
+    knownFileIds,
+  )
+  const previewVisible = selectedPatches.length > 0
   const activeView = !selectedDiffId || selectedId === manifest.activeDiffId
   const phaseStatus = {
     blueprint_ask: 'blueprint_ask',
@@ -874,7 +1021,6 @@ export function sessionIntent(
   const currentPlanStep = manifest.steps.find(
     (step) => step.index === manifest.currentStep,
   )
-  const previewVisible = patches.length > 0
   const blueprint = readBlueprint(dataDir, sessionId)
   const canEnterBlueprint = manifest.phase === 'blueprint_ask'
   const colored = ensureManifestColor(dataDir, manifest)
@@ -934,6 +1080,7 @@ export function sessionIntent(
     userCreatedBlocks: blueprint.files,
     userCreatedIslands: blueprint.folders,
     ...preview,
+    createLines: { ...chainPreview.createLines, ...preview.createLines },
     blueprintFunctions: blueprint.addedFunctions,
     blueprintVariables: blueprint.addedVariables,
     blueprintImports: blueprint.addedImports,
@@ -1398,22 +1545,27 @@ export function readAttachedSession(dataDir) {
 }
 
 function resolveAttachSessionId(dataDir, sessionId, options = {}) {
-  if (sessionId) return assertSessionId(sessionId)
+  const targetRoot = options.targetRoot ?? null
+  if (sessionId) {
+    const safeId = assertSessionId(sessionId)
+    const existing = readManifest(dataDir, safeId)
+    if (existing && !isTerminalSession(existing) && sessionIsWaitingToAttach(existing)) {
+      resetLlmSessionWork(dataDir, safeId, targetRoot)
+    }
+    return safeId
+  }
   if (options.color) {
     const color = parseSessionColorQuery(options.color)
     if (!color) throw new Error(colorUnknownMessage(options.color))
-    const matchId = findSessionIdByColor(dataDir, color.id)
-    if (!matchId) throw new Error(colorMissingMessage(color.name))
-    const existing = requireManifest(dataDir, matchId)
-    if (!sessionIsWaitingToAttach(existing)) {
-      throw new Error(colorBusyMessage(color.name))
-    }
-    return matchId
+    return recycleColorSlotForAttach(dataDir, color, targetRoot)
   }
-  return nextAttachSessionId(dataDir)
+  const nextId = nextAttachSessionId(dataDir)
+  if (nextId) resetLlmSessionWork(dataDir, nextId, targetRoot)
+  return nextId
 }
 
 export function attachSession(dataDir, sessionId, options = {}) {
+  const explicitSession = Boolean(sessionId)
   const safeId = resolveAttachSessionId(dataDir, sessionId, options)
   if (!safeId) {
     throw new Error(CHAT_LIMIT_MESSAGE)
@@ -1426,7 +1578,7 @@ export function attachSession(dataDir, sessionId, options = {}) {
   if (isTerminalSession(manifest)) {
     throw sessionStoppedError(safeId)
   }
-  const alreadyAttached = !sessionIsWaitingToAttach(manifest)
+  const alreadyAttached = explicitSession && !sessionIsWaitingToAttach(manifest)
   focusSession(dataDir, safeId)
   touchSessionConnection(dataDir, safeId)
   const colored = ensureManifestColor(dataDir, manifest)
@@ -1654,7 +1806,7 @@ export function readLiveDiff(dataDir, sessionId, targetRoot) {
       `Step ${sessionId} has no invoke snapshot. Wait for VISUAL_CODER_EXECUTE before recording file changes.`,
     )
   }
-  return diffSourceTrees(preStep, targetRoot, dataDir)
+  return diffSourceTrees(preStep, targetRoot, dataDir, readCodebaseFileIds(dataDir))
 }
 
 export function appendDiff(dataDir, targetRoot, input) {

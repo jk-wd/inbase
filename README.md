@@ -87,7 +87,9 @@ Open the printed URL (http://127.0.0.1:5173 by default). In a Cursor or VS Code 
 
 ![Map open after inbase run](docs/manual-start.png)
 
-`inbase run` maps `target` from `inbase.json` when that file is present, otherwise the current directory. To map another folder for one run:
+`inbase run` maps `target` from `inbase.json` when that file is present, otherwise the current directory. If a map is already running, this command **reuses that one server** and adds the folder as a project. Switch projects from the **Project** dropdown in the top right of the map.
+
+To map another folder for one run:
 
 ```bash
 inbase run --target /path/to/your/project
@@ -168,7 +170,7 @@ Reading the map:
 
 A regular chat connects to the next unconnected slot (oldest first). Inbase skips sessions that have an LLM. The map window does not need focus. The cap is 5 connected chats.
 
-Type `/coral` (or another color) to skip the queue and attach to that slot. With no text after the command, the agent starts from the enabled blueprint only: create those files and structure, and ask if it needs more information. Add a request after the command, like `/coral add a login page`, when you want extra instruction.
+Type `/coral` (or another color) to skip the queue and attach to that slot. A new chat always starts clean: leftover plan, patches, and working state from a previous LLM on that color are discarded, and recorded file changes are restored. User-placed blueprint files stay. With no text after the command, the agent starts from the enabled blueprint only: create those files and structure, and ask if it needs more information. Add a request after the command, like `/coral add a login page`, when you want extra instruction.
 
 When a session finishes, Inbase discards it and opens a new empty slot. The global blueprint stays. Restarting the visualizer discards leftover sessions and opens 5 new empty slots.
 
@@ -359,7 +361,7 @@ npm install
 npm run dev
 ```
 
-`npm run dev` maps `apps/example-target` by default (`inbase.json`). In the map, **Look at** switches to the complete repository (and later example apps). That control exists in `npm run dev`, not in `inbase run`.
+`npm run dev` maps `apps/example-target` by default (`inbase.json`). In the map, **Project** switches between registered folders (or, while developing Inbase itself, the bundled example apps and the complete repository).
 
 To map a different project without the CLI:
 

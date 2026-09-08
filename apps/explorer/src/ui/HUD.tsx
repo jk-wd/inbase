@@ -2910,11 +2910,11 @@ export function HUD({
               onSelectDevTarget &&
               devTargets.targets.length > 0 && (
                 <label className="hud-target-select">
-                  <span>Look at</span>
+                  <span>Project</span>
                   <select
                     className="hud-button hud-target-select-control"
-                    aria-label="Look at"
-                    title="Choose which project the map scans. Only available while developing Inbase."
+                    aria-label="Project"
+                    title="Choose which project the map shows"
                     value={devTargets.currentId ?? ''}
                     disabled={updatingModel}
                     onChange={(event) => {

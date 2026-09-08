@@ -271,7 +271,10 @@ export async function attachSession(args) {
   const colorQuery = takeFlagValue(args, '--color')
   const before = sessionId ? store.readManifest(config.dataDir, sessionId) : null
   const alreadyAttached = Boolean(before) && before.awaitingAttach === false
-  const manifest = store.attachSession(config.dataDir, sessionId, { color: colorQuery })
+  const manifest = store.attachSession(config.dataDir, sessionId, {
+    color: colorQuery,
+    targetRoot: config.targetRoot,
+  })
   const color = store.resolveSessionColor(manifest.color)
   const colorName = color?.name || null
   console.log(`VISUAL_CODER_SESSION ${manifest.sessionId}`)

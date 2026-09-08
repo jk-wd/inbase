@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
+import http from 'node:http'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -14,6 +15,7 @@ import {
   copyDir,
   ensureDataDir,
   ensureGitignoreEntry,
+  globalInbaseDir,
   removeGitignoreEntry,
   skillTemplateDir,
   writeRunningInstance,
@@ -99,6 +101,7 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /close the session/)
     assert.match(skillText, /Stay in this session/)
     assert.match(skillText, /never attach again/)
+    assert.match(skillText, /starts clean/)
     assert.match(skillText, /different empty slot/)
     assert.match(skillText, /do \*\*not\*\* restart from step 1/)
     assert.match(skillText, /`\.claude`/)
@@ -156,6 +159,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(skillText, /close the session/)
     assert.match(skillText, /Stay in this session/)
     assert.match(skillText, /never attach again/)
+    assert.match(skillText, /starts clean/)
     assert.match(skillText, /different empty slot/)
     assert.match(skillText, /do \*\*not\*\* restart from step 1/)
     assert.match(skillText, /`\.claude`/)
@@ -773,6 +777,88 @@ test('help prints usage', async () => {
   }
 })
 
+test('inbase run registers with a live visualizer instead of starting another', async () => {
+  const first = tempProject()
+  const second = tempProject()
+  const env = snapshotEnv(
+    'VISUAL_CODER_TARGET',
+    'INBASE_DATA_DIR',
+    'INBASE_CONFIG',
+    'INBASE_HOME',
+  )
+  process.env.INBASE_HOME = path.join(first.root, 'home')
+  delete process.env.VISUAL_CODER_TARGET
+  delete process.env.INBASE_DATA_DIR
+  delete process.env.INBASE_CONFIG
+  let posted = null
+  const server = http.createServer((req, res) => {
+    if (req.url === '/api/dev-targets' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(
+        JSON.stringify({
+          enabled: true,
+          currentId: first.root,
+          targets: [{ id: first.root, label: 'First' }],
+          dataDir: path.join(first.root, '.inbase'),
+          pid: process.pid,
+        }),
+      )
+      return
+    }
+    if (req.url === '/api/dev-targets' && req.method === 'POST') {
+      const chunks = []
+      req.on('data', (chunk) => chunks.push(chunk))
+      req.on('end', () => {
+        posted = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(
+          JSON.stringify({
+            enabled: true,
+            currentId: posted.root,
+            targets: [],
+          }),
+        )
+      })
+      return
+    }
+    res.statusCode = 404
+    res.end()
+  })
+  const previousCwd = process.cwd()
+  let output = ''
+  const log = console.log
+  console.log = (message) => {
+    output += `${message}\n`
+  }
+  try {
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const port = server.address().port
+    writeRunningInstance({
+      dataDir: path.join(first.root, '.inbase'),
+      targetRoot: first.root,
+      port,
+      extraDirs: [globalInbaseDir()],
+    })
+    fs.writeFileSync(
+      path.join(second.root, 'inbase.json'),
+      `${JSON.stringify({ target: '.' }, null, 2)}\n`,
+    )
+    process.chdir(second.root)
+    await main(['run'])
+    assert.equal(path.resolve(posted.root), path.resolve(second.root))
+    assert.match(output, /already running/)
+    assert.match(output, new RegExp(`Now mapping ${path.resolve(second.root)}`))
+    assert.match(output, new RegExp(`Open http://127.0.0.1:${port}/`))
+  } finally {
+    console.log = log
+    process.chdir(previousCwd)
+    await new Promise((resolve) => server.close(resolve))
+    restoreEnv(env)
+    first.cleanup()
+    second.cleanup()
+  }
+})
+
 test('start-session writes a manifest under .inbase', async () => {
   const { root, cleanup } = tempProject()
   const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
@@ -1381,6 +1467,61 @@ test('attach --session on an already attached chat stays in that session', async
     assert.doesNotMatch(again.stdout, /VISUAL_CODER_ATTACHED/)
     assert.equal(store.readManifest(dataDir, sessionId).phase, 'review')
     assert.notEqual(store.sessionIntent(dataDir, sessionId).lastAck.kind, 'attached')
+  } finally {
+    cleanup()
+  }
+})
+
+test('attach --color starts clean when leftover LLM work is on that slot', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    store.ensureSessionPool(dataDir)
+    writeRunningInstance({ dataDir, targetRoot: target })
+    const first = runCli(['attach', '--color', 'coral'], { cwd: root, env })
+    assert.equal(first.status, 0, first.stderr)
+    const sessionId = first.stdout.match(/VISUAL_CODER_SESSION (\S+)/)?.[1]
+    assert.ok(sessionId)
+    store.reportPlan(dataDir, {
+      sessionId,
+      feature: 'Leftover coral',
+      stepTitles: ['Build value'],
+      targetRoot: target,
+    })
+    store.appendDiff(dataDir, target, {
+      sessionId,
+      patchText:
+        '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 1\n+export const value = 2\n',
+    })
+    assert.equal(store.readManifest(dataDir, sessionId).phase, 'review')
+
+    const again = runCli(['attach', '--color', 'coral'], { cwd: root, env })
+    assert.equal(again.status, 0, again.stderr)
+    assert.match(again.stdout, /VISUAL_CODER_ATTACHED/)
+    assert.doesNotMatch(again.stdout, /VISUAL_CODER_ALREADY_ATTACHED/)
+    const nextId = again.stdout.match(/VISUAL_CODER_SESSION (\S+)/)?.[1]
+    assert.ok(nextId)
+    assert.notEqual(nextId, sessionId)
+    const attached = store.readManifest(dataDir, nextId)
+    assert.equal(attached.color, 'coral')
+    assert.equal(attached.phase, 'preparing')
+    assert.deepEqual(attached.steps, [])
+    assert.equal(store.isSessionStopped(dataDir, sessionId), true)
+    assert.equal(
+      fs.readFileSync(path.join(target, 'src/a.ts'), 'utf8'),
+      'export const value = 1\n',
+    )
   } finally {
     cleanup()
   }

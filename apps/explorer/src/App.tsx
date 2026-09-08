@@ -660,6 +660,7 @@ export default function App() {
   const updatingModelRef = useRef(false)
   const [devTargets, setDevTargets] = useState<DevTargetsState>(emptyDevTargets)
   const [targetEpoch, setTargetEpoch] = useState(0)
+  const currentTargetIdRef = useRef<string | null>(null)
 
   const graphSig = useRef<string | null>(null)
   const applyGraph = useCallback((next: CodebaseGraph | null, failed: string) => {
@@ -706,6 +707,7 @@ export default function App() {
           return
         }
         setDevTargets(result.state)
+        currentTargetIdRef.current = result.state.currentId
         applyGraph(result.graph, 'Could not switch project.')
         setTargetEpoch((value) => value + 1)
       } finally {
@@ -721,8 +723,33 @@ export default function App() {
   }, [refreshGraph])
 
   useEffect(() => {
-    void fetchDevTargets().then(setDevTargets)
-  }, [])
+    let cancelled = false
+    const tick = async () => {
+      const next = await fetchDevTargets()
+      if (cancelled) return
+      setDevTargets(next)
+      const previousId = currentTargetIdRef.current
+      if (
+        next.currentId &&
+        previousId &&
+        next.currentId !== previousId
+      ) {
+        currentTargetIdRef.current = next.currentId
+        await refreshGraph()
+        if (!cancelled) setTargetEpoch((value) => value + 1)
+        return
+      }
+      currentTargetIdRef.current = next.currentId
+    }
+    void tick()
+    const timer = window.setInterval(() => {
+      void tick()
+    }, 2000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [refreshGraph])
 
   if (!graph) {
     return (
@@ -789,6 +816,14 @@ function Explorer({
       : emptyIntent
   const previewing = llmPreviewing || showingBranchChanges
   const plannedCreates = previewing ? changeSet.creates : []
+  const previewCreateIds = previewing
+    ? [
+        ...new Set([
+          ...plannedCreates,
+          ...Object.keys(changeSet.createLines ?? {}),
+        ]),
+      ]
+    : []
   const [userBlocks, setUserBlocks] = useState<UserCreatedBlock[]>([])
   const [userIslands, setUserIslands] = useState<UserCreatedIsland[]>([])
   const [blueprintFunctions, setBlueprintFunctions] = useState<
@@ -859,7 +894,7 @@ function Explorer({
     if (!previewing) return graph
     return withPreviewGraph(
       graph,
-      plannedCreates,
+      previewCreateIds,
       changeSet.createLines ?? {},
       changeSet.createFolders ?? [],
       changeSet.imports ?? [],
@@ -869,7 +904,7 @@ function Explorer({
     changeSet.createLines,
     changeSet.imports,
     graph,
-    plannedCreates,
+    previewCreateIds,
     previewing,
   ])
   const knownFileIds = useMemo(

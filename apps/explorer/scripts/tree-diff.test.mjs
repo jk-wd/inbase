@@ -121,3 +121,26 @@ test('still diffs a snapshot stored in a gitignored data dir', () => {
     fs.rmSync(root, { recursive: true, force: true })
   }
 })
+
+test('does not treat mapped files missing from a snapshot as added', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'inbase-tree-diff-known-'))
+  const before = path.join(root, 'before')
+  const after = path.join(root, 'after')
+  try {
+    fs.mkdirSync(path.join(before, 'src'), { recursive: true })
+    fs.mkdirSync(path.join(after, 'src'), { recursive: true })
+    fs.writeFileSync(path.join(after, 'src/a.ts'), 'export const value = 1\n')
+    fs.writeFileSync(path.join(after, 'src/keep.ts'), 'export const keep = true\n')
+    fs.writeFileSync(path.join(after, 'src/Clock.tsx'), 'export function Clock() {}\n')
+
+    const parsed = parseUnifiedPatch(
+      diffSourceTrees(before, after, null, ['src/a.ts', 'src/keep.ts']),
+    )
+    assert.deepEqual(parsed.creates, ['src/Clock.tsx'])
+    assert.deepEqual(parsed.files, [])
+    assert.ok(!parsed.creates.includes('src/a.ts'))
+    assert.ok(!parsed.creates.includes('src/keep.ts'))
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})

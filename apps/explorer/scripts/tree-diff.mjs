@@ -189,10 +189,16 @@ function gitFileDiff(beforePath, afterPath, fileId) {
   return `${rewriteGitPaths(stdout, fileId).trimEnd()}\n`
 }
 
-export function diffSourceTrees(beforeRoot, afterRoot, skipRoot = null) {
+export function diffSourceTrees(
+  beforeRoot,
+  afterRoot,
+  skipRoot = null,
+  knownFileIds = [],
+) {
   const before = new Set(listSnapshotFiles(beforeRoot))
   const skip = skipInside(afterRoot, skipRoot) || skipInside(afterRoot, beforeRoot)
   const after = new Set(listSourceFiles(afterRoot, undefined, skip))
+  const known = new Set(knownFileIds)
   const ids = [...new Set([...before, ...after])].sort((left, right) =>
     left.localeCompare(right),
   )
@@ -203,6 +209,9 @@ export function diffSourceTrees(beforeRoot, afterRoot, skipRoot = null) {
     const had = before.has(fileId)
     const has = after.has(fileId)
     if (!had && has) {
+      // Already on the mapped tree: snapshot miss or a different repo's
+      // snapshot, not a file this proposal created.
+      if (known.has(fileId)) continue
       if (isBinaryFile(afterPath)) continue
       parts.push(fileAsAddPatch(fileId, fs.readFileSync(afterPath, 'utf8')))
       continue

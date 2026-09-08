@@ -10,13 +10,15 @@ import {
   normalizeBranchChangesMode,
   readBranchChanges,
 } from './scripts/branch-changes.mjs'
-import { writeRunningInstance, isolatedViteConfig, packageDirFromPackage } from '../../bin/project.mjs'
+import { globalInbaseDir, writeRunningInstance, isolatedViteConfig, packageDirFromPackage } from '../../bin/project.mjs'
 import {
   dataDir,
   isWorkspaceDevSwitcherEnabled,
-  setWorkspaceTarget,
+  projectsState,
+  readRegisteredProjects,
+  registerProject,
+  selectProject,
   targetRoot,
-  workspaceDevTargetsState,
 } from './scripts/target-config.mjs'
 import { editorFileUri, openInEditor } from './scripts/open-editor.mjs'
 import {
@@ -155,6 +157,24 @@ function intentResponse(sessionId?: string) {
   return { ...base, ...blueprintIntentFields() }
 }
 
+function publicProjectsState(port: number) {
+  return {
+    ...projectsState(),
+    dataDir,
+    targetRoot,
+    pid: process.pid,
+    port,
+  }
+}
+
+function instanceExtraDirs() {
+  const extras = [globalInbaseDir()]
+  for (const project of readRegisteredProjects().projects) {
+    extras.push(path.join(project.root, '.inbase'))
+  }
+  return extras
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.statusCode = status
   res.setHeader('Content-Type', 'application/json')
@@ -166,10 +186,14 @@ function jsonFilePlugin(): Plugin {
     name: 'visual-coder-json-files',
     configureServer(server) {
       const serverPort = server.config.server.port ?? 5173
+      if (!isWorkspaceDevSwitcherEnabled()) {
+        registerProject(targetRoot)
+      }
       writeRunningInstance({
         dataDir,
         targetRoot,
         port: serverPort,
+        extraDirs: instanceExtraDirs(),
       })
       // Discard leftover LLM sessions, then open 5 empty chat slots.
       clearDiffSessions(dataDir, targetRoot)
@@ -296,7 +320,7 @@ function jsonFilePlugin(): Plugin {
 
       server.middlewares.use('/api/dev-targets', (req, res, next) => {
         if (req.method === 'GET') {
-          sendJson(res, 200, workspaceDevTargetsState())
+          sendJson(res, 200, publicProjectsState(serverPort))
           return
         }
         if (req.method === 'POST') {
@@ -314,19 +338,29 @@ async function switchDevTarget(
   res: ServerResponse,
   port: number,
 ) {
-  if (!isWorkspaceDevSwitcherEnabled()) {
-    sendJson(res, 404, { error: 'dev target switcher is not available' })
-    return
-  }
   try {
-    const body = JSON.parse(await readBody(req)) as { id?: string }
-    const id = body.id?.trim()
-    if (!id || id === 'custom') {
-      sendJson(res, 400, { error: 'id is required' })
-      return
+    const body = JSON.parse(await readBody(req)) as {
+      id?: string
+      root?: string
+      select?: boolean
     }
-    setWorkspaceTarget(id)
-    writeRunningInstance({ dataDir, targetRoot, port })
+    const root = body.root?.trim()
+    if (root) {
+      registerProject(root, { select: body.select !== false })
+    } else {
+      const id = body.id?.trim()
+      if (!id || id === 'custom') {
+        sendJson(res, 400, { error: 'id or root is required' })
+        return
+      }
+      selectProject(id)
+    }
+    writeRunningInstance({
+      dataDir,
+      targetRoot,
+      port,
+      extraDirs: instanceExtraDirs(),
+    })
     stopExplain(dataDir)
     clearDiffSessions(dataDir, targetRoot)
     ensureSessionPool(dataDir)
@@ -335,7 +369,7 @@ async function switchDevTarget(
       return
     }
     sendJson(res, 200, {
-      ...workspaceDevTargetsState(),
+      ...publicProjectsState(port),
       codebase: readCodebase(),
     })
   } catch (error) {
