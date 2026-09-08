@@ -20,4 +20,4 @@ If that fails with `VISUAL_CODER_NOT_RUNNING`, reply with that message and stop.
 
 3. If the output includes `VISUAL_CODER_EXECUTE`, implement that step now: edit live files for that step only, then `npx inbase propose-patch --session "<session-id>"` with no patch file. If the next step is already invoked, implement it now in this same turn. After the last recorded step, **stop**.
 
-4. If the output includes `VISUAL_CODER_FINISHED`, that was the last proposal. Tell the user the feature is done and **stop**. Do not propose another patch. Do not report a new plan.
+4. If the output includes `VISUAL_CODER_FINISHED`, that was the last proposal. Tell the user the feature is done and **stop**. The applied files stay. Do not restore or revert them. Do not propose another patch. Do not report a new plan.

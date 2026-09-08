@@ -287,7 +287,8 @@ npx inbase report-plan \
    the live project files, then `npx inbase propose-patch --session "<session-id>"`
    with no patch file, and keep going if the next step is invoked.
    If that prints `VISUAL_CODER_FINISHED`, tell the user the feature is done
-   and **stop**. Do not propose another patch. Do not implement more steps.
+   and **stop**. The applied files stay. Do not restore or revert them. Do not
+   propose another patch. Do not implement more steps.
 9. If the user types a **change request** while a plan or proposal is waiting
    (not `/accept`, `/explain`, or `/stop`), including after the last recorded
    step: stay in this session. **Do not attach. Do not edit files yet.**
@@ -312,11 +313,10 @@ npx inbase report-plan \
     the last proposal, `/stop` to end the session, or a change request to replace
     the waiting proposal.
 11. After a finished handshake, the explorer already removed stored session
-    diffs. The global blueprint remains. Optionally run:
-
-```bash
-npx inbase propose-patch --session "<session-id>" --clear
-```
+    diffs. **Keep the applied project files.** Do not restore, revert, or
+    delete the work. The global blueprint remains. Optionally run
+    `npx inbase propose-patch --session "<session-id>" --clear` to drop leftover
+    session artifacts — that must not revert files.
 12. When the user types **`/stop`**, do not edit project files. Run
     `npx inbase stop --session "<session-id>"`. That restores files, discards
     the plan and patches, and frees the color slot. Then **stop**. Do not
@@ -356,6 +356,7 @@ npx inbase propose-patch --session "<session-id>" --clear
 - Ask the user to `/accept` the last proposal, finish, or close the session when they asked for changes — `report-plan` with the new remaining steps from the last proposal instead, which replaces the waiting proposal
 - Stay silent or call tools before acknowledging a `VISUAL_CODER_ACK` in chat
 - Propose another patch after `VISUAL_CODER_FINISHED`
+- Restore, revert, or delete applied files after `/accept` or `VISUAL_CODER_FINISHED`
 - Reuse, overwrite, or expand an existing session diff file yourself; `report-plan` replaces a waiting proposal, then `propose-patch` records a new patch
 - Use this flow for git, lockfiles, or other non-source work
 - Attach or follow the visual plan loop for `/extract-blueprint`; that command

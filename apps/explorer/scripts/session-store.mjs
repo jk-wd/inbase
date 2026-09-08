@@ -300,6 +300,18 @@ function isTerminalSession(manifest) {
   )
 }
 
+function isAcceptedSession(manifest) {
+  return (
+    manifest?.phase === 'finished' ||
+    manifest?.status === 'finished'
+  )
+}
+
+function shouldRestoreDiscardedSession(manifest) {
+  if (!manifest || isAcceptedSession(manifest)) return false
+  return true
+}
+
 function isStalledWorking(manifest, waiterIds, sessionId, now = Date.now()) {
   if (manifest.phase !== 'working') return false
   if (!waiterIds.has(sessionId)) return false
@@ -1786,7 +1798,7 @@ export function continueDiff(dataDir, targetRoot, sessionId, diffId) {
     manifest.phase = 'finished'
     manifest.status = 'finished'
     writeManifest(dataDir, manifest)
-    finalizeFinishedSession(dataDir, sessionId)
+    finalizeFinishedSession(dataDir, sessionId, targetRoot)
     return manifest
   }
   manifest.currentStep = active.step + 1
@@ -1948,7 +1960,9 @@ export function discardInactiveDiffSessions(
     if (!isTerminalSession(manifest)) continue
     const stopping = keep.has(sessionId) && isSessionStopped(dataDir, sessionId)
     if (stopping) continue
-    discardStoredSession(dataDir, sessionId, targetRoot)
+    discardStoredSession(dataDir, sessionId, targetRoot, {
+      restore: shouldRestoreDiscardedSession(manifest),
+    })
   }
 
   const liveIds = listStoredSessionIds(dataDir).filter(
@@ -1989,7 +2003,10 @@ export function recycleDisconnectedSessions(
 
 export function clearDiffSessions(dataDir, targetRoot = null) {
   for (const sessionId of listStoredSessionIds(dataDir)) {
-    discardStoredSession(dataDir, sessionId, targetRoot)
+    const manifest = readManifest(dataDir, sessionId)
+    discardStoredSession(dataDir, sessionId, targetRoot, {
+      restore: shouldRestoreDiscardedSession(manifest),
+    })
   }
   writeActiveSession(dataDir, null)
   writeBlueprintSession(dataDir, null)
@@ -2046,8 +2063,8 @@ export function closeSession(dataDir, sessionId) {
   if (active === assertSessionId(sessionId)) writeActiveSession(dataDir, null)
 }
 
-export function finalizeFinishedSession(dataDir, sessionId) {
-  discardStoredSession(dataDir, sessionId, null, { restore: false })
+export function finalizeFinishedSession(dataDir, sessionId, targetRoot = null) {
+  discardStoredSession(dataDir, sessionId, targetRoot, { restore: false })
   refillSessionPool(dataDir)
 }
 

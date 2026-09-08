@@ -220,7 +220,7 @@ function emitApprovalHandshake(store, dataDir, sessionId, manifest) {
   if (manifest.phase === 'finished') {
     signalAck(store, dataDir, sessionId, 'finished', 'the final step was accepted')
     console.log(
-      `VISUAL_CODER_FINISHED The final step was applied. Feature is done. Run inbase propose-patch --session ${sessionId} --clear, then tell the user it is finished.`,
+      `VISUAL_CODER_FINISHED The final step was applied. Feature is done. Tell the user it is finished. Do not restore or revert project files.`,
     )
     process.exit(5)
   }
@@ -553,9 +553,13 @@ export async function proposePatch(args) {
 
   if (clear) {
     if (!sessionId) usage('propose-patch', '--session <id> --clear')
-    store.stopSession(config.dataDir, sessionId, config.targetRoot)
+    store.finalizeFinishedSession(
+      config.dataDir,
+      sessionId,
+      config.targetRoot,
+    )
     console.log(
-      `Cleared session ${sessionId}; stored diffs were removed. The global blueprint remains.`,
+      `Cleared session ${sessionId}; stored diffs were removed. Applied files were kept. The global blueprint remains.`,
     )
     process.exit(0)
   }

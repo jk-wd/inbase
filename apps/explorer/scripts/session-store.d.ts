@@ -426,4 +426,8 @@ export function decideDiff(
   decision: 'approved' | 'rejected',
 ): DiffManifest | null
 export function closeSession(dataDir: string, sessionId: string): void
-export function finalizeFinishedSession(dataDir: string, sessionId: string): void
+export function finalizeFinishedSession(
+  dataDir: string,
+  sessionId: string,
+  targetRoot?: string | null,
+): void

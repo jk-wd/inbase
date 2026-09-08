@@ -1124,6 +1124,10 @@ test('runs remaining steps and waits on the last proposal', () => {
       fs.existsSync(path.join(env.dataDir, 'diff-sessions', 'happy-chat')),
       false,
     )
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 4\n',
+    )
   } finally {
     env.cleanup()
   }
@@ -1296,6 +1300,14 @@ test('preview keeps earlier diffs visible as later steps accumulate', () => {
     assert.equal(
       fs.existsSync(path.join(env.dataDir, 'diff-sessions', 'preview-chat')),
       false,
+    )
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/b.ts'), 'utf8'),
+      'export const extra = 1\n',
     )
   } finally {
     env.cleanup()
@@ -1556,6 +1568,82 @@ test('finished sessions discard stored blueprint drafts', () => {
       false,
     )
     assert.equal(readActiveSession(env.dataDir), null)
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/Draft.tsx'), 'utf8'),
+      'export function Draft() {\n  return null\n}\n',
+    )
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('accepting the last proposal keeps applied files', () => {
+  const env = fixture()
+  const addB =
+    '--- /dev/null\n+++ b/src/b.ts\n@@ -0,0 +1,1 @@\n+export const extra = 1\n'
+  try {
+    reportPlan(env.dataDir, {
+      sessionId: 'accept-keep',
+      feature: 'Keep accepted files',
+      stepTitles: ['Change value', 'Add extra'],
+    })
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'accept-keep',
+      patchText: oneToTwo,
+    })
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'accept-keep',
+      patchText: addB,
+    })
+    continueDiff(env.dataDir, env.targetRoot, 'accept-keep', '0002')
+    assert.equal(readManifest(env.dataDir, 'accept-keep'), null)
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/b.ts'), 'utf8'),
+      'export const extra = 1\n',
+    )
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('clearing a finished session keeps applied files', () => {
+  const env = fixture()
+  const addB =
+    '--- /dev/null\n+++ b/src/b.ts\n@@ -0,0 +1,1 @@\n+export const extra = 1\n'
+  try {
+    reportPlan(env.dataDir, {
+      sessionId: 'clear-keep',
+      feature: 'Clear keeps files',
+      stepTitles: ['Change value', 'Add extra'],
+    })
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'clear-keep',
+      patchText: oneToTwo,
+    })
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'clear-keep',
+      patchText: addB,
+    })
+    const waiting = readManifest(env.dataDir, 'clear-keep')
+    assert.equal(waiting.phase, 'review')
+    waiting.phase = 'finished'
+    waiting.status = 'finished'
+    writeManifest(env.dataDir, waiting)
+
+    discardInactiveDiffSessions(env.dataDir, env.targetRoot)
+    assert.equal(readManifest(env.dataDir, 'clear-keep'), null)
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/b.ts'), 'utf8'),
+      'export const extra = 1\n',
+    )
   } finally {
     env.cleanup()
   }

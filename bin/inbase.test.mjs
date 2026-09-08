@@ -93,6 +93,7 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /VISUAL_CODER_DIFF/)
     assert.match(skillText, /Always work via the plan/)
     assert.match(skillText, /Do not ask the user to review or `\/accept` a mid-plan step/)
+    assert.match(skillText, /Keep the applied project files/)
     assert.match(skillText, /from the point of the last proposal/)
     assert.match(skillText, /replaces the waiting proposal/)
     assert.match(skillText, /close the session/)
@@ -149,6 +150,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(skillText, /VISUAL_CODER_DIFF/)
     assert.match(skillText, /Always work via the plan/)
     assert.match(skillText, /Do not ask the user to review or `\/accept` a mid-plan step/)
+    assert.match(skillText, /Keep the applied project files/)
     assert.match(skillText, /from the point of the last proposal/)
     assert.match(skillText, /replaces the waiting proposal/)
     assert.match(skillText, /close the session/)
@@ -1139,7 +1141,59 @@ test('accept finishes the last step', async () => {
     })
     assert.equal(result.status, 5, result.stderr)
     assert.match(result.stdout, /VISUAL_CODER_FINISHED/)
+    assert.doesNotMatch(result.stdout, /propose-patch --session accept-last --clear/)
     assert.equal(store.readManifest(dataDir, 'accept-last'), null)
+    assert.equal(
+      fs.readFileSync(path.join(target, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
+  } finally {
+    cleanup()
+  }
+})
+
+test('accept keeps new files and --clear does not revert them', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    planSession(store, dataDir, target, 'accept-create', 'Accept create', [
+      'Add helper',
+    ])
+    fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 2\n')
+    fs.writeFileSync(path.join(target, 'src/b.ts'), 'export const extra = 1\n')
+    store.appendDiff(dataDir, target, { sessionId: 'accept-create' })
+    writeRunningInstance({ dataDir, targetRoot: target })
+    const accepted = runCli(['accept', '--session', 'accept-create'], {
+      cwd: root,
+      env,
+    })
+    assert.equal(accepted.status, 5, accepted.stderr)
+    assert.match(accepted.stdout, /VISUAL_CODER_FINISHED/)
+    const cleared = runCli(
+      ['propose-patch', '--session', 'accept-create', '--clear'],
+      { cwd: root, env },
+    )
+    assert.equal(cleared.status, 0, cleared.stderr)
+    assert.match(cleared.stdout, /Applied files were kept/)
+    assert.equal(
+      fs.readFileSync(path.join(target, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
+    assert.equal(
+      fs.readFileSync(path.join(target, 'src/b.ts'), 'utf8'),
+      'export const extra = 1\n',
+    )
   } finally {
     cleanup()
   }
@@ -1215,6 +1269,10 @@ test('go finishes the last proposal', async () => {
     assert.equal(result.status, 5, result.stderr)
     assert.match(result.stdout, /VISUAL_CODER_FINISHED/)
     assert.equal(store.readManifest(dataDir, 'go-last'), null)
+    assert.equal(
+      fs.readFileSync(path.join(target, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
   } finally {
     cleanup()
   }
