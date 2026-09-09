@@ -108,7 +108,27 @@ export type UserCreatedIsland = {
   colorHex?: string
 }
 
-export type BranchChangesMode = 'main' | 'remote'
+export type BranchChangesMode = 'main' | 'remote' | 'current' | 'commit'
+
+export type BranchCommit = {
+  sha: string
+  short: string
+  subject: string
+}
+
+export const BRANCH_CHANGES_MODES: BranchChangesMode[] = [
+  'main',
+  'remote',
+  'current',
+  'commit',
+]
+
+export function nextBranchChangesMode(
+  mode: BranchChangesMode,
+): BranchChangesMode {
+  const index = BRANCH_CHANGES_MODES.indexOf(mode)
+  return BRANCH_CHANGES_MODES[index < 0 ? 0 : (index + 1) % BRANCH_CHANGES_MODES.length]
+}
 
 export type UserContext = {
   updatedAt: string | null
@@ -127,6 +147,7 @@ export type UserContext = {
   }
   showBranchChanges?: boolean
   branchChangesMode?: BranchChangesMode
+  branchChangesCommit?: string | null
   showHiddenFiles?: boolean
   userCreatedBlocks?: UserCreatedBlock[]
   userCreatedIslands?: UserCreatedIsland[]
@@ -190,6 +211,9 @@ export type BranchChanges = {
   base: string | null
   mode: BranchChangesMode
   remoteMissing: boolean
+  commit: BranchCommit | null
+  commits: BranchCommit[]
+  commitMissing: boolean
   files: string[]
   creates: string[]
   deletes: string[]
@@ -253,6 +277,17 @@ export type DiffChainEntry = {
   step: number
   title: string
   status: 'pending' | 'extend' | 'extended' | 'applied' | 'rejected'
+  files: string[]
+  creates: string[]
+  deletes: string[]
+  createFolders: string[]
+  createLines: Record<string, number>
+  imports: PatchImport[]
+  addedFunctions: PatchSymbolAddition[]
+  addedVariables: PatchSymbolAddition[]
+  addedImports: PatchImportAddition[]
+  changedFunctions: PatchSymbolAddition[]
+  changedVariables: PatchSymbolAddition[]
 }
 
 export type WorkflowPhase =
@@ -271,6 +306,7 @@ export type WorkflowAction =
   | 'continue'
   | 'explain_proposal'
   | 'stop'
+  | 'done'
   | 'blueprint_yes'
   | 'blueprint_no'
   | 'blueprint_send'
@@ -479,6 +515,7 @@ export type AgentIntent = {
   chainIndex: number | null
   chain: DiffChainEntry[]
   isActiveDiff: boolean
+  liveStep?: number | null
   preview: boolean
   phase: WorkflowPhase | null
   working: boolean

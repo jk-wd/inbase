@@ -532,6 +532,7 @@ export const emptyIntent = {
   chainIndex: null,
   chain: [],
   isActiveDiff: false,
+  liveStep: null,
   preview: false,
   phase: null,
   working: false,

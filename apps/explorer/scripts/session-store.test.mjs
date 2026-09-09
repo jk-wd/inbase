@@ -22,7 +22,7 @@ import {
   focusSession,
   readBlueprint,
   readBlueprintSession,
-  readDiff,
+  readOverlay,
   readManifest,
   reportPlan as reportPlanStore,
   requestExplainProposal,
@@ -50,6 +50,7 @@ import {
   MAX_CONTEXT_FILE_BYTES,
   maybeStartVisualizerHandshake,
   stopSession,
+  completeSession,
   touchSessionConnection,
   updateBlueprint,
   clearBlueprint,
@@ -62,7 +63,6 @@ import {
   isSessionStopped,
   isWorkflowStopped,
 } from './session-store.mjs'
-import { parseUnifiedPatch } from './patch-lib.mjs'
 import { initGitRepo, runGit } from './git-test.mjs'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
@@ -700,6 +700,41 @@ test('stopping a connected chat opens a new empty slot', () => {
   }
 })
 
+test('completeSession keeps files and frees the color slot', () => {
+  const env = fixture()
+  try {
+    const created = ensureSessionPool(env.dataDir)
+    const sessionId = created[0].sessionId
+    const color = readManifest(env.dataDir, sessionId).color
+    attachSession(env.dataDir, sessionId)
+    reportPlan(env.dataDir, {
+      sessionId,
+      feature: 'Keep done files',
+      stepTitles: ['Change value'],
+      targetRoot: env.targetRoot,
+    })
+    fs.writeFileSync(path.join(env.targetRoot, 'src/a.ts'), 'export const value = 2\n')
+    appendDiff(env.dataDir, env.targetRoot, { sessionId })
+    completeSession(env.dataDir, sessionId, env.targetRoot)
+    assert.equal(readManifest(env.dataDir, sessionId), null)
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
+    const ids = listOpenSessionIds(env.dataDir)
+    assert.equal(ids.length, SESSION_SLOT_COUNT)
+    assert.equal(ids.includes(sessionId), false)
+    const waiting = ids.map((id) => readManifest(env.dataDir, id))
+    assert.equal(waiting.some((manifest) => manifest.color === color), true)
+    assert.equal(
+      waiting.filter((manifest) => manifest.awaitingAttach).length,
+      SESSION_SLOT_COUNT,
+    )
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('session color order stays fixed after a slot is refilled', () => {
   const env = fixture()
   try {
@@ -1252,7 +1287,7 @@ test('runs remaining steps and waits on the last proposal', () => {
   }
 })
 
-test('the last proposal waits for /accept', () => {
+test('the last proposal does not auto-advance', () => {
   const env = fixture()
   try {
     reportPlan(env.dataDir, {
@@ -1333,7 +1368,10 @@ test('report-plan replaces a waiting last proposal without accepting it', () => 
     assert.equal(replaced.manifest.currentStep, 2)
     assert.equal(replaced.manifest.status, 'active')
     assert.equal(replaced.manifest.diffs[0].status, 'extended')
-    assert.match(readDiff(env.dataDir, 'revise-chat', replaced.entry), /export const value = 3/)
+    assert.deepEqual(
+      readOverlay(env.dataDir, 'revise-chat', replaced.entry).files,
+      ['src/a.ts'],
+    )
   } finally {
     env.cleanup()
   }
@@ -1823,7 +1861,7 @@ test('stop deletes the session plan, patches, and active pointer', () => {
     })
     assert.equal(readActiveSession(env.dataDir), 'stop-chat')
     assert.ok(
-      fs.existsSync(path.join(env.dataDir, 'diff-sessions', 'stop-chat', 'diffs', '0001.patch')),
+      fs.existsSync(path.join(env.dataDir, 'diff-sessions', 'stop-chat', 'diffs', '0001.json')),
     )
 
     assert.equal(stopSession(env.dataDir, 'stop-chat', env.targetRoot), null)
@@ -2286,7 +2324,7 @@ test('stop during working restores live files including binaries', () => {
   }
 })
 
-test('inspecting a file materializes the selected diff into the editor path', () => {
+test('inspecting a file opens the live path without rewinding history', () => {
   const env = fixture()
   try {
     reportPlan(env.dataDir, {
@@ -2310,7 +2348,19 @@ test('inspecting a file materializes the selected diff into the editor path', ()
     materializeDiff(env.dataDir, env.targetRoot, 'inspect-chat', '0001')
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 2\n',
+      'export const value = 3\n',
+    )
+
+    const earlier = sessionIntent(
+      env.dataDir,
+      'inspect-chat',
+      ['src/a.ts'],
+      '0001',
+    )
+    assert.deepEqual(earlier.files, ['src/a.ts'])
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 3\n',
     )
 
     const inspected = inspectTargetFile(env.dataDir, env.targetRoot, {
@@ -2419,7 +2469,9 @@ test('records live file edits against the invoke snapshot', () => {
     assert.equal(first.entry.status, 'applied')
     assert.equal(first.manifest.phase, 'working')
     assert.equal(first.manifest.currentStep, 2)
-    assert.match(readDiff(env.dataDir, 'live-chat', first.entry), /export const value = 2/)
+    assert.deepEqual(readOverlay(env.dataDir, 'live-chat', first.entry).files, [
+      'src/a.ts',
+    ])
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
       'export const value = 2\n',
@@ -2431,7 +2483,9 @@ test('records live file edits against the invoke snapshot', () => {
     )
     const second = appendDiff(env.dataDir, env.targetRoot, { sessionId: 'live-chat' })
     assert.equal(second.entry.step, 2)
-    assert.match(readDiff(env.dataDir, 'live-chat', second.entry), /export function helper/)
+    const overlay = readOverlay(env.dataDir, 'live-chat', second.entry)
+    assert.deepEqual(overlay.files, ['src/a.ts'])
+    assert.deepEqual(overlay.creates, ['src/helper.ts'])
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
       'export const value = 2\n',
@@ -2446,7 +2500,83 @@ test('records live file edits against the invoke snapshot', () => {
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
       'export const value = 2\n',
     )
-    assert.equal(fs.existsSync(path.join(env.targetRoot, 'src/helper.ts')), false)
+    assert.equal(fs.existsSync(path.join(env.targetRoot, 'src/helper.ts')), true)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('history overlay is the recorded snapshot while later files keep changing', () => {
+  const env = fixture()
+  try {
+    startSession(env.dataDir, { sessionId: 'history-chat', name: 'History' })
+    answerBlueprint(env.dataDir, 'history-chat', false)
+    reportPlan(env.dataDir, {
+      sessionId: 'history-chat',
+      feature: 'History walk',
+      stepTitles: ['Bump value', 'Add helper', 'Finish'],
+      targetRoot: env.targetRoot,
+    })
+    fs.writeFileSync(path.join(env.targetRoot, 'src/a.ts'), 'export const value = 2\n')
+    const first = appendDiff(env.dataDir, env.targetRoot, { sessionId: 'history-chat' })
+    fs.writeFileSync(
+      path.join(env.targetRoot, 'src/helper.ts'),
+      'export function helper() { return 2 }\n',
+    )
+
+    const live = sessionIntent(
+      env.dataDir,
+      'history-chat',
+      ['src/a.ts'],
+      undefined,
+      undefined,
+      env.targetRoot,
+    )
+    assert.equal(live.working, true)
+    assert.equal(live.isActiveDiff, true)
+    assert.equal(live.liveStep, live.step)
+    assert.ok(live.creates.includes('src/helper.ts'))
+    assert.deepEqual(live.chain[0].creates, [])
+
+    const stillLive = sessionIntent(
+      env.dataDir,
+      'history-chat',
+      ['src/a.ts'],
+      first.entry.id,
+      undefined,
+      env.targetRoot,
+    )
+    assert.equal(stillLive.diffId, first.entry.id)
+    assert.equal(stillLive.isActiveDiff, true)
+    assert.ok(stillLive.creates.includes('src/helper.ts'))
+
+    const second = appendDiff(env.dataDir, env.targetRoot, { sessionId: 'history-chat' })
+    const firstAgain = sessionIntent(
+      env.dataDir,
+      'history-chat',
+      ['src/a.ts', 'src/helper.ts'],
+      first.entry.id,
+      undefined,
+      env.targetRoot,
+    )
+    assert.equal(firstAgain.isActiveDiff, false)
+    assert.deepEqual(firstAgain.files, ['src/a.ts'])
+    assert.deepEqual(firstAgain.creates, [])
+    assert.equal(firstAgain.working, true)
+    assert.deepEqual(firstAgain.chain[0].files, ['src/a.ts'])
+    assert.deepEqual(firstAgain.chain[0].creates, [])
+    assert.ok(firstAgain.chain[1].creates.includes('src/helper.ts'))
+
+    const latest = sessionIntent(
+      env.dataDir,
+      'history-chat',
+      ['src/a.ts', 'src/helper.ts'],
+      undefined,
+      undefined,
+      env.targetRoot,
+    )
+    assert.equal(latest.diffId, second.entry.id)
+    assert.deepEqual(latest.creates, ['src/helper.ts'])
   } finally {
     env.cleanup()
   }
@@ -2469,12 +2599,11 @@ test('does not record snapshot copies when the data dir lives in the target', ()
     fs.writeFileSync(path.join(env.targetRoot, 'src/a.ts'), 'export const value = 2\n')
 
     const recorded = appendDiff(nestedData, env.targetRoot, { sessionId: 'nested-data' })
-    const patch = readDiff(nestedData, 'nested-data', recorded.entry)
-    const parsed = parseUnifiedPatch(patch)
-    assert.deepEqual(parsed.files, ['src/a.ts'])
-    assert.deepEqual(parsed.creates, [])
-    assert.ok(!parsed.creates.some((id) => id.includes('diff-sessions')))
-    assert.ok(!parsed.creates.includes('apps/explorer/src/data/codebase.json'))
+    const overlay = readOverlay(nestedData, 'nested-data', recorded.entry)
+    assert.deepEqual(overlay.files, ['src/a.ts'])
+    assert.deepEqual(overlay.creates, [])
+    assert.ok(!overlay.creates.some((id) => id.includes('diff-sessions')))
+    assert.ok(!overlay.creates.includes('apps/explorer/src/data/codebase.json'))
   } finally {
     env.cleanup()
   }
@@ -2501,9 +2630,9 @@ test('does not record mapped files the invoke snapshot missed as added', () => {
     )
     fs.writeFileSync(path.join(env.targetRoot, 'src/a.ts'), 'export const value = 2\n')
     const recorded = appendDiff(env.dataDir, env.targetRoot, { sessionId: 'miss-chat' })
-    const parsed = parseUnifiedPatch(readDiff(env.dataDir, 'miss-chat', recorded.entry))
-    assert.deepEqual(parsed.files, ['src/a.ts'])
-    assert.deepEqual(parsed.creates, [])
+    const overlay = readOverlay(env.dataDir, 'miss-chat', recorded.entry)
+    assert.deepEqual(overlay.files, ['src/a.ts'])
+    assert.deepEqual(overlay.creates, [])
   } finally {
     env.cleanup()
   }

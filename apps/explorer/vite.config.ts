@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { emptyIntent } from './scripts/patch-lib.mjs'
 import {
+  normalizeBranchChangesCommit,
   normalizeBranchChangesMode,
   readBranchChanges,
 } from './scripts/branch-changes.mjs'
@@ -41,6 +42,7 @@ import {
   setupSession,
   focusSession,
   stopSession,
+  completeSession,
   updateBlueprint,
   readBlueprint,
   listLocalBlueprints,
@@ -150,7 +152,7 @@ function blueprintIntentFields() {
 function intentResponse(sessionId?: string) {
   const base =
     sessionId !== undefined && sessionId !== ''
-      ? (sessionIntent(dataDir, sessionId, knownFileIds()) ?? { ...emptyIntent })
+      ? (sessionIntent(dataDir, sessionId, knownFileIds(), undefined, undefined, targetRoot) ?? { ...emptyIntent })
       : { ...emptyIntent }
   return { ...base, ...blueprintIntentFields() }
 }
@@ -219,19 +221,34 @@ function jsonFilePlugin(): Plugin {
           const sessionId = url.searchParams.get('sessionId')
           const diffId = url.searchParams.get('diffId') ?? undefined
           if (sessionId) {
-            const intent = sessionIntent(
-              dataDir,
-              sessionId,
-              knownFileIds(),
-              diffId,
-            )
-            sendJson(res, 200, intent ?? { ...emptyIntent })
+            try {
+              const intent = sessionIntent(
+                dataDir,
+                sessionId,
+                knownFileIds(),
+                diffId,
+                undefined,
+                targetRoot,
+              )
+              sendJson(res, 200, intent ?? { ...emptyIntent })
+            } catch (error) {
+              sendJson(
+                res,
+                500,
+                {
+                  error:
+                    error instanceof Error
+                      ? error.message
+                      : 'Could not read session',
+                },
+              )
+            }
             return
           }
           sendJson(res, 200, {
             focusedSessionId: readActiveSession(dataDir),
             nextAttachSessionId: nextAttachSessionId(dataDir),
-            intents: listSessionIntents(dataDir, knownFileIds()),
+            intents: listSessionIntents(dataDir, knownFileIds(), targetRoot),
             blueprint: readBlueprint(dataDir),
             localBlueprints: listLocalBlueprints(dataDir),
           })
@@ -256,6 +273,7 @@ function jsonFilePlugin(): Plugin {
               targetRoot,
               knownFileIds(),
               url.searchParams.get('mode'),
+              url.searchParams.get('commit'),
             ),
           )
           return
@@ -507,6 +525,7 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       action !== 'continue' &&
       action !== 'explain_proposal' &&
       action !== 'stop' &&
+      action !== 'done' &&
       action !== 'blueprint_yes' &&
       action !== 'blueprint_no' &&
       action !== 'blueprint_send' &&
@@ -559,7 +578,7 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
         return
       }
       continueDiff(dataDir, targetRoot, body.sessionId, body.diffId)
-      rescanTarget('after applying patch')
+      rescanTarget('after accepting proposal')
     } else if (action === 'explain_proposal') {
       requestExplainProposal(dataDir, body.sessionId, body.diffId)
     } else if (action === 'blueprint_yes') {
@@ -605,6 +624,9 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       removeContextFile(dataDir, body.sessionId, body.fileId)
     } else if (action === 'focus') {
       focusSession(dataDir, body.sessionId)
+    } else if (action === 'done') {
+      completeSession(dataDir, body.sessionId, targetRoot)
+      rescanTarget('after completing session')
     } else {
       stopSession(dataDir, body.sessionId, targetRoot)
       rescanTarget('after stopping session')
@@ -653,12 +675,16 @@ function readUserContext() {
       ...parsed,
       showBranchChanges: Boolean(parsed.showBranchChanges),
       branchChangesMode: normalizeBranchChangesMode(parsed.branchChangesMode),
+      branchChangesCommit: normalizeBranchChangesCommit(
+        parsed.branchChangesCommit,
+      ),
       showHiddenFiles: Boolean(parsed.showHiddenFiles),
     }
   } catch {
     return {
       showBranchChanges: false,
       branchChangesMode: 'main',
+      branchChangesCommit: null,
       showHiddenFiles: false,
     }
   }
@@ -678,6 +704,10 @@ async function writeUserContext(req: IncomingMessage, res: ServerResponse) {
       branchChangesMode: normalizeBranchChangesMode(
         incoming.branchChangesMode ?? existing.branchChangesMode,
       ),
+      branchChangesCommit:
+        incoming.branchChangesCommit !== undefined
+          ? normalizeBranchChangesCommit(incoming.branchChangesCommit)
+          : existing.branchChangesCommit ?? null,
       showHiddenFiles:
         typeof incoming.showHiddenFiles === 'boolean'
           ? incoming.showHiddenFiles
@@ -733,7 +763,7 @@ export default defineConfig({
     port: 5173,
     watch: {
       // Session snapshots copy target source into the data dir. If Vite
-      // watches those writes, /accept full-reloads the visualizer.
+      // watches those writes, completing a session full-reloads the visualizer.
       ignored: ['**/src/data/**', isDataDirPath],
     },
   },

@@ -2,7 +2,7 @@
 description: Extract a valuable Inbase blueprint from an existing folder
 ---
 
-The user invoked `/extract-blueprint`. Do **not** attach an Inbase session. Do **not** run `read-blueprint`, `report-plan`, `accept`, or `propose-patch`. Do **not** edit application source files. This writes a blueprint JSON file only.
+The user invoked `/extract-blueprint`. Do **not** attach an Inbase session. Do **not** run `read-blueprint`, `report-plan`, or `propose-patch`. Do **not** edit application source files. This writes a blueprint JSON file only.
 
 Arguments:
 

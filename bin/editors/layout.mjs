@@ -7,7 +7,7 @@ import {
   skillTemplateDir,
 } from '../project.mjs'
 
-const RETIRED_COMMAND_NAMES = ['go']
+const RETIRED_COMMAND_NAMES = ['go', 'accept']
 
 export function looksLikeInbaseFile(file) {
   try {
@@ -129,16 +129,18 @@ export function copySkillAndCommands(projectRoot, { id, skillRel, commandRel }) 
   if (fs.existsSync(commandTemplateDir)) {
     copyDir(commandTemplateDir, commandDir)
   }
-  removeRetiredGoCommand(commandDir)
+  removeRetiredCommands(commandDir)
   return { id, skillDir, commandDir }
 }
 
-function removeRetiredGoCommand(commandDir) {
+function removeRetiredCommands(commandDir) {
   if (!commandDir || !fs.existsSync(commandDir)) return
-  const flat = path.join(commandDir, 'go.md')
-  if (fs.existsSync(flat)) fs.unlinkSync(flat)
-  const skill = path.join(commandDir, 'go')
-  if (fs.existsSync(skill)) fs.rmSync(skill, { recursive: true, force: true })
+  for (const name of RETIRED_COMMAND_NAMES) {
+    const flat = path.join(commandDir, `${name}.md`)
+    if (fs.existsSync(flat)) fs.unlinkSync(flat)
+    const skill = path.join(commandDir, name)
+    if (fs.existsSync(skill)) fs.rmSync(skill, { recursive: true, force: true })
+  }
 }
 
 const SKILL_TOOL_FRONTMATTER = ['allowed-tools: Bash(npx inbase *)']
@@ -171,7 +173,7 @@ export function copySkillTree(projectRoot, { id, skillsRel }) {
       prependYamlFrontmatter(dest, COMMAND_SKILL_FRONTMATTER(stem))
     }
   }
-  removeRetiredGoCommand(commandDir)
+  removeRetiredCommands(commandDir)
   return { id, skillDir, commandDir }
 }
 

@@ -14,6 +14,6 @@ Please include:
 - Steps to reproduce, or a proof of concept if you have one
 - Affected versions, if you know them
 
-This project runs a local Vite server and applies patch files to a target
+This project runs a local Vite server and records map overlays for a target
 directory you choose. Treat that target as trusted input: do not point Inbase
-at untrusted trees, and do not apply patches from untrusted sessions.
+at untrusted trees.

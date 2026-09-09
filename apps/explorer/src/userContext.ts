@@ -49,6 +49,16 @@ export function persistBranchChangesMode(branchChangesMode: BranchChangesMode) {
   })
 }
 
+export function persistBranchChangesCommit(branchChangesCommit: string | null) {
+  fetch('/api/user-context', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: `${JSON.stringify({ branchChangesCommit })}\n`,
+  }).catch(() => {
+    lastWritten = ''
+  })
+}
+
 export function persistShowHiddenFiles(showHiddenFiles: boolean) {
   fetch('/api/user-context', {
     method: 'POST',
@@ -73,6 +83,7 @@ function flushUserContext() {
   const {
     showBranchChanges: _showBranchChanges,
     branchChangesMode: _branchChangesMode,
+    branchChangesCommit: _branchChangesCommit,
     showHiddenFiles: _showHiddenFiles,
     userCreatedBlocks: _userCreatedBlocks,
     userCreatedIslands: _userCreatedIslands,

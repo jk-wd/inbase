@@ -102,6 +102,7 @@ export const emptyIntent: {
   chainIndex: null
   chain: unknown[]
   isActiveDiff: boolean
+  liveStep: null
   preview: boolean
   phase: null
   working: boolean

@@ -44,11 +44,11 @@ On a new file-change request, in this order:
 6. Edit files only after \`VISUAL_CODER_EXECUTE\`. Then run
    \`npx inbase propose-patch --session SESSION_ID\` with no patch file. If the
    next step is invoked, implement it now in the same turn. After the last
-   recorded step, stop and wait for \`/accept\`.
+   recorded step, stop. The user clicks Done in the session window to keep
+   the files and free the color.
 
 If this chat already printed \`VISUAL_CODER_SESSION\`, skip attach. Stay in
-that session. \`/accept\` runs \`npx inbase accept --session SESSION_ID\`.
-\`/stop\` runs \`npx inbase stop --session SESSION_ID\`.
+that session. \`/stop\` runs \`npx inbase stop --session SESSION_ID\`.
 
 Follow the rest of this rule exactly.
 `

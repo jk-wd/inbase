@@ -1078,8 +1078,15 @@ function sessionLiveStatus(intent: AgentIntent) {
   if (intent.explainActive || kind === 'explain') {
     return { text: 'Explanation is on the map — /explain for a follow-up', busy: false }
   }
+  if (browsingHistory) {
+    return {
+      text: intent.working
+        ? 'Viewing this step · LLM is still working'
+        : 'Reviewing this step',
+      busy: intent.working,
+    }
+  }
   if (
-    browsingHistory ||
     intent.status === 'approved' ||
     intent.status === 'extended' ||
     intent.status === 'extend'
@@ -1088,7 +1095,7 @@ function sessionLiveStatus(intent: AgentIntent) {
   }
   if (intent.status === 'pending') {
     if (isLastPlanStep(intent)) {
-      return { text: 'Type /accept in chat', busy: false }
+      return { text: 'Click Done to keep the changes', busy: false }
     }
     return { text: 'LLM is continuing', busy: true }
   }
@@ -1166,14 +1173,14 @@ type SessionPanelProps = {
     action: WorkflowAction,
     options?: { step?: number },
   ) => void | boolean | AgentIntent | Promise<void | boolean | AgentIntent>
-  onNavigateDiff: (sessionId: string, diffId: string) => void
+  onNavigateDiff: (sessionId: string, diffId: string | null) => void
 }
 
 function latestDiffForStep(chain: AgentIntent['chain'], stepIndex: number) {
   for (let index = chain.length - 1; index >= 0; index -= 1) {
-    if (chain[index].step === stepIndex) return chain[index]
+    if (Number(chain[index].step) === stepIndex) return chain[index]
   }
-  return null
+  return chain[stepIndex - 1] ?? null
 }
 
 function SessionPanel({
@@ -1200,6 +1207,14 @@ function SessionPanel({
   const chainIndex = intent.chainIndex ?? 0
   const previousDiff = intent.chain[chainIndex - 1]
   const nextDiff = intent.chain[chainIndex + 1]
+  const freezeLatestWhileLive =
+    intent.isActiveDiff && Boolean(intent.working) && intent.chain.length > 0
+  const previousTarget = freezeLatestWhileLive
+    ? intent.chain.at(-1)
+    : previousDiff
+  const resumeLiveNext =
+    !intent.isActiveDiff && Boolean(intent.working) && !nextDiff
+  const liveStep = intent.liveStep ?? (intent.working ? intent.step : null)
   const stepLabel =
     intent.step && intent.steps?.length > 0
       ? `Step ${intent.step} of ${intent.steps.length}`
@@ -1223,7 +1238,7 @@ function SessionPanel({
     ? (latestEntry?.status === 'pending' ? latestEntry.step : intent.step)
     : null
   const processingStep =
-    working && typeof intent.step === 'number' ? intent.step : null
+    (working || intent.working) && typeof liveStep === 'number' ? liveStep : null
   const llmDisconnected =
     Boolean(intent.llmIdle) && intent.awaitingAttach === false
   const canAcceptProposal =
@@ -1316,8 +1331,9 @@ function SessionPanel({
           )}
           {!llmDisconnected && intent.steps?.length > 0 && (
             <p className="hud-mode-hint">
-              The LLM implements the full plan. Walk the diffs, then /accept
-              the last proposal. Type /stop in chat to end the session.
+              The LLM implements the full plan. Walk the diffs, then Done
+              to keep the changes and free this color. Type /stop in chat
+              to revert and end the session.
             </p>
           )}
           {handshakeSetup ? (
@@ -1400,8 +1416,9 @@ function SessionPanel({
                     const processing = processingStep === step.index
                     const accepted = acceptedSteps.has(step.index) && !proposed
                     const stepDiff = latestDiffForStep(intent.chain, step.index)
-                    const canOpenDiff =
-                      Boolean(stepDiff) && !intent.working
+                    const canResumeLive =
+                      processing && !intent.isActiveDiff && !stepDiff
+                    const canOpenDiff = Boolean(stepDiff) || canResumeLive
                     const viewing =
                       Boolean(stepDiff) && intent.step === step.index
                     const showCommandHint =
@@ -1416,7 +1433,7 @@ function SessionPanel({
                           {showCommandHint && (
                             <span className="hud-step-actions">
                               <span className="hud-step-hint">
-                                /accept · /explain
+                                Done · /explain
                               </span>
                             </span>
                           )}
@@ -1429,17 +1446,29 @@ function SessionPanel({
                         data-done={accepted}
                         data-active={processing || proposed || viewing}
                       >
-                        {canOpenDiff && stepDiff ? (
+                        {canOpenDiff ? (
                           <button
                             className="hud-step-link hud-step-row"
                             type="button"
                             aria-current={viewing ? 'step' : undefined}
-                            aria-label={`Show diff for step ${step.index}`}
-                            title="Show this step's diff"
-                            onClick={() => {
-                              if (stepDiff.id !== intent.diffId) {
-                                onNavigateDiff(sessionId, stepDiff.id)
-                              }
+                            aria-label={
+                              canResumeLive
+                                ? `Show live map for step ${step.index}`
+                                : `Show diff for step ${step.index}`
+                            }
+                            title={
+                              canResumeLive
+                                ? 'Show the live map'
+                                : "Show this step's diff"
+                            }
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onClick={(event) => {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              onNavigateDiff(
+                                sessionId,
+                                stepDiff ? stepDiff.id : null,
+                              )
                             }}
                           >
                             {stepBody}
@@ -1457,23 +1486,31 @@ function SessionPanel({
                   <button
                     className="hud-button"
                     type="button"
-                    disabled={!previousDiff}
-                    onClick={() =>
-                      previousDiff && onNavigateDiff(sessionId, previousDiff.id)
-                    }
+                    disabled={!previousTarget}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      if (previousTarget) onNavigateDiff(sessionId, previousTarget.id)
+                    }}
                   >
                     Previous
                   </button>
                   <span>
                     Diff {chainIndex + 1} of {intent.chain.length}
+                    {intent.isActiveDiff && intent.working ? ' · live' : ''}
                   </span>
                   <button
                     className="hud-button"
                     type="button"
-                    disabled={!nextDiff}
-                    onClick={() =>
-                      nextDiff && onNavigateDiff(sessionId, nextDiff.id)
-                    }
+                    disabled={!nextDiff && !resumeLiveNext}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      if (nextDiff) onNavigateDiff(sessionId, nextDiff.id)
+                      else if (resumeLiveNext) onNavigateDiff(sessionId, null)
+                    }}
                   >
                     Next
                   </button>
@@ -1591,6 +1628,25 @@ function SessionPanel({
                   <PlaceFilesHint />
                 </div>
               )}
+              {llmConnected && !llmDisconnected && (
+                <div className="hud-session-actions">
+                  <div className="hud-decide">
+                    <button
+                      className="hud-button hud-button-approve"
+                      type="button"
+                      aria-label="Done — keep changes and free this color"
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        act('done')
+                      }}
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </>
@@ -1603,10 +1659,12 @@ function BranchChangesPanel({
   changes,
   mode,
   onModeChange,
+  onCommitChange,
 }: {
   changes: BranchChanges
   mode: BranchChangesMode
   onModeChange?: (next: BranchChangesMode) => void
+  onCommitChange?: (sha: string) => void
 }) {
   const [minimized, setMinimized] = useState(false)
   const addedFunctions = changes.addedFunctions ?? []
@@ -1615,7 +1673,13 @@ function BranchChangesPanel({
   const changedFunctions = changes.changedFunctions ?? []
   const changedVariables = changes.changedVariables ?? []
   const subtitle =
-    changes.mode === 'remote' && changes.branch && changes.base
+    changes.mode === 'commit' && changes.branch
+      ? changes.commit
+        ? `${changes.branch} · ${changes.commit.short}`
+        : changes.branch
+      : changes.mode === 'current' && changes.branch
+      ? `${changes.branch} vs HEAD`
+      : changes.mode === 'remote' && changes.branch && changes.base
       ? `${changes.branch} staged vs ${changes.base}`
       : changes.branch && changes.base
         ? `${changes.branch} vs ${changes.base}`
@@ -1624,9 +1688,17 @@ function BranchChangesPanel({
           : null
   const emptyMessage = changes.remoteMissing
     ? 'No remote for this branch.'
-    : changes.mode === 'remote'
+    : changes.commitMissing
+      ? 'No commits on this branch.'
+      : changes.mode === 'remote'
       ? 'No staged changes vs remote.'
-      : 'No file changes on this branch.'
+      : changes.mode === 'current'
+        ? 'No uncommitted file changes.'
+        : changes.mode === 'commit'
+          ? 'No file changes in this commit.'
+          : 'No file changes on this branch.'
+  const selectedCommit =
+    changes.commit?.sha ?? changes.commits[0]?.sha ?? ''
   const hasContent =
     changes.files.length > 0 ||
     (changes.createFolders ?? []).length > 0 ||
@@ -1676,7 +1748,43 @@ function BranchChangesPanel({
             >
               vs remote
             </button>
+            <button
+              className="hud-button"
+              type="button"
+              role="tab"
+              data-active={mode === 'current'}
+              aria-selected={mode === 'current'}
+              onClick={() => onModeChange?.('current')}
+            >
+              current changes
+            </button>
+            <button
+              className="hud-button"
+              type="button"
+              role="tab"
+              data-active={mode === 'commit'}
+              aria-selected={mode === 'commit'}
+              onClick={() => onModeChange?.('commit')}
+            >
+              commit
+            </button>
           </div>
+          {mode === 'commit' && changes.commits.length > 0 && (
+            <label className="hud-branch-commit">
+              <select
+                className="hud-button hud-target-select-control hud-branch-commit-select"
+                aria-label="Commit on this branch"
+                value={selectedCommit}
+                onChange={(event) => onCommitChange?.(event.target.value)}
+              >
+                {changes.commits.map((commit) => (
+                  <option key={commit.sha} value={commit.sha}>
+                    {commit.short} {commit.subject}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {subtitle && <p className="hud-feature">{subtitle}</p>}
           {!hasContent ? (
             <p>{emptyMessage}</p>
@@ -1864,8 +1972,12 @@ function explorerInstructions({
                 keys: ['Shift', 'G'],
                 label:
                   branchChangesMode === 'remote'
-                    ? 'Compare to main'
-                    : 'Compare to remote',
+                    ? 'Compare current changes'
+                    : branchChangesMode === 'current'
+                      ? 'Compare a commit'
+                      : branchChangesMode === 'commit'
+                        ? 'Compare to main'
+                        : 'Compare to remote',
               },
             ]
           : []),
@@ -1936,7 +2048,7 @@ function explorerInstructions({
           id: 'cursor-chat',
           keys: ['Chat'],
           label:
-            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /accept /explain /stop; 5 chats at once',
+            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; Done in the session window, /explain /stop; 5 chats at once',
         },
         {
           id: 'blueprint-select',
@@ -2053,7 +2165,7 @@ function explorerInstructions({
           id: 'cursor-chat',
           keys: ['Chat'],
           label:
-            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; /accept /explain /stop; 5 chats at once',
+            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; Done in the session window, /explain /stop; 5 chats at once',
         },
         {
           id: 'blueprint-select',
@@ -2126,7 +2238,7 @@ type HUDProps = {
     action: WorkflowAction,
     options?: { step?: number },
   ) => void | boolean | AgentIntent | Promise<void | boolean | AgentIntent>
-  onNavigateDiff: (sessionId: string, diffId: string) => void
+  onNavigateDiff: (sessionId: string, diffId: string | null) => void
   onOpenMap: () => void
   onWalk: () => void
   showBranchChanges?: boolean
@@ -2136,6 +2248,7 @@ type HUDProps = {
   llmMakingChanges?: boolean
   onToggleShowBranchChanges?: () => void
   onBranchChangesModeChange?: (mode: BranchChangesMode) => void
+  onBranchChangesCommitChange?: (sha: string) => void
   showHiddenFiles?: boolean
   onToggleShowHiddenFiles?: () => void
   onUpdateModel: () => void
@@ -2242,6 +2355,7 @@ export function HUD({
   llmMakingChanges = false,
   onToggleShowBranchChanges,
   onBranchChangesModeChange,
+  onBranchChangesCommitChange,
   showHiddenFiles = false,
   onToggleShowHiddenFiles,
   onUpdateModel,
@@ -2998,6 +3112,7 @@ export function HUD({
               changes={branchChanges}
               mode={branchChangesMode}
               onModeChange={onBranchChangesModeChange}
+              onCommitChange={onBranchChangesCommitChange}
             />
           )}
         </div>

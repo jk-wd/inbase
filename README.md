@@ -17,7 +17,7 @@ Inbase is a structured way to collaborate with an LLM. It visualizes the codebas
 
 You draw the intended change on a map of the real codebase before the model writes a file. That drawing is a **blueprint**: planned files, folders, functions, variables, imports, notes, and pointers, laid on the existing code. The LLM must follow that layout.
 
-The model reads the blueprint, says what it sees (`I see on the blueprint ...`) so you can confirm the reading, reports a plan that matches it, and implements every step. You walk the diffs on the map. `/accept` on the last proposal finishes the session. If a proposal is wrong, type the change in the attached chat (that replaces the waiting proposal), change the blueprint, or type **`/stop`**.
+The model reads the blueprint, says what it sees (`I see on the blueprint ...`) so you can confirm the reading, reports a plan that matches it, and implements every step. You walk the diffs on the map. **Done** in the session window keeps the files and frees that color for another chat. If a proposal is wrong, type the change in the attached chat (that replaces the waiting proposal), change the blueprint, or type **`/stop`**.
 
 Blueprints have two layers:
 
@@ -55,7 +55,7 @@ Keep `inbase run` open while you work. Language colors, import analyzers, and ed
 4. [Sessions and colors](#sessions-and-colors)
 5. [Drawing a blueprint](#drawing-a-blueprint)
 6. [Connecting a chat](#connecting-a-chat)
-7. [The plan and `/accept` loop](#the-plan-and-accept-loop)
+7. [The plan and Done](#the-plan-and-done)
 8. [Explain mode](#explain-mode)
 9. [Reviewing changes](#reviewing-changes)
 10. [Branch changes](#branch-changes)
@@ -212,29 +212,29 @@ The hamburger **More** menu has **Save blueprint**, **Save blueprint as**, and *
 2. Type `/coral` (or another color) to connect. That is enough when a blueprint is already on the map. Add a request after the command, like `/coral add a settings page`, when you want extra instruction.
 3. The chat attaches to a slot. The HUD shows **LLM connected** on that color.
 4. The agent reads the global blueprint, that session's local blueprint, and any request. It says what it sees (`I see on the blueprint ...`) so you can confirm the reading. With no request, it plans only from the blueprint: create those files and structure. It can ask if it needs more information.
-5. It implements every plan step. `/accept` on the last proposal finishes the session.
+5. It implements every plan step. **Done** in the session window keeps the files and frees that color.
 
 The chat request does not override an enabled blueprint. If they conflict, the agent asks before planning.
 
 You do not pass a session id or run CLI session commands. The skill does that. If attach fails because Inbase is not running, start it and send the request again.
 
-### The plan and `/accept` loop
+### The plan and Done
 
-The HUD lists every plan step. The LLM implements the full plan without waiting for `/accept` between steps. You can walk **Previous** / **Next** over the diffs; `/accept` on the last proposal finishes the session.
+The HUD lists every plan step. The LLM implements the full plan without waiting between steps. You can walk **Previous** / **Next** over the diffs; **Done** in the session window keeps the files and frees that color for another chat.
 
-1. The agent reports the plan and implements each step in one go, recording a patch after every step. Those stored patches are the session record.
+1. The agent reports the plan and implements each step in one go, recording a map snapshot after every step. Those stored overlays are the session record.
 2. The HUD shows each proposal: added, changed, and removed files, plus functions, vars, and imports.
-3. After the last recorded patch you can `/accept` to finish, type a change in the same chat to replace that last step, or **`/stop`**. Do not start a new chat to update the work.
+3. After the last recorded patch you can click **Done** to keep the work and free the color, type a change in the same chat to replace that last step, or **`/stop`**. Do not start a new chat to update the work.
 
 <p>
-  <img src="docs/inbase-llm.png" alt="Plan ready on the HUD with /accept on the first step" width="58%" />
-  <img src="docs/manual-accept-chat.png" alt="Chat with the /accept command" width="40%" />
+  <img src="docs/inbase-llm.png" alt="Plan ready on the HUD with Done in the session window" width="58%" />
+  <img src="docs/manual-accept-chat.png" alt="Chat attached to an Inbase session" width="40%" />
 </p>
 
 While a proposal is waiting:
 
-- Type the change in the **same** attached chat to **replace** that proposal. The agent updates the plan from that last step (for example steps A, B, C waiting on C → keep A and B, replace C with one or more new remaining steps), then records a new proposal. Do not `/accept` just to finish the session so you can start over. Do not open a new chat.
-- Type **`/explain`** to walk what has changed in the current proposal on the map instead of accepting it.
+- Type the change in the **same** attached chat to **replace** that proposal. The agent updates the plan from that last step (for example steps A, B, C waiting on C → keep A and B, replace C with one or more new remaining steps), then records a new proposal. Do not click Done just so you can start over. Do not open a new chat.
+- Type **`/explain`** to walk what has changed in the current proposal on the map.
 - Type **`/stop`** in the attached chat to end the session. That restores files, discards the plan, and frees the color slot.
 
 ![Pending proposal with changed files and added functions](docs/manual-proposal.png)
@@ -268,32 +268,34 @@ Click the **?** next to a file or folder name, then type `/explain` in the chat.
 - Type `/explain` with a follow-up question to drill into sub-steps (`7.1`, `7.2`) until you return to the next original step.
 - Arrow keys or the step list move through the explanation.
 
-Close with **X**. Type `/accept` to continue the plan.
+Close with **X**. Click **Done** in the session window to keep the files and free the color.
 
 ### Reviewing changes
 
-Every recorded patch is a step on the session chain.
+Every recorded step is a snapshot of what the map showed.
 
-- **Previous** / **Next** walk the diffs without accepting them.
-- The session panel lists changed, added, and removed files, plus functions, vars, and imports for the current diff.
+- **Previous** / **Next** walk those snapshots without changing files. Stepping back while the LLM is still working freezes that snapshot; **Next** (or the current live step) turns auto-follow back on.
+- The session panel lists changed, added, and removed files, plus functions, vars, and imports for the current snapshot.
 - The map highlights those files. Press **C** to show only changed paths.
-- Click a highlighted block to see which functions and vars that patch added or edited.
-- Type **`/explain`** with no question to walk what has changed in the current diff.
+- Click a highlighted block to see which functions and vars that overlay added or edited.
+- Type **`/explain`** with no question to walk what has changed in the current overlay.
 
-Inbase stores patches under `.inbase/` and applies them on every step update. You do not write unified diffs.
+While a session is active, the map shows the regular git working-tree diff (current changes). `propose-patch` stores that overlay. You do not write unified diffs.
 
 ### Branch changes
 
-When no LLM is making changes, turn on **Show branch changes** (or press **G**) to highlight git changes in place of LLM patch files. There are two comparisons:
+When no LLM is making changes, turn on **Show branch changes** (or press **G**) to highlight git changes on the map. There are three comparisons:
 
 - **vs main**: the current branch against its base (`main` or `master`), including committed, unstaged, and untracked files.
 - **vs remote**: staged files (plus unpushed commits) against `origin` of the same branch. Unstaged and untracked files are left out.
+- **current changes**: uncommitted working-tree changes against `HEAD` (staged, unstaged, and untracked). Committed branch work is left out.
+- **commit**: the files that one commit on the current branch introduced. Pick the commit from the list. Working-tree changes are left out.
 
 Switch with the buttons on the branch panel, or press **Shift+G**. Type **`/explain`** with no question to walk what has changed in that diff.
 
 ![Branch changes panel on the map](docs/manual-branch.png)
 
-Inbase disables this control while an LLM session is writing or reviewing a patch.
+Inbase disables this control while an LLM session is writing or reviewing changes.
 
 ### Controls
 
@@ -315,7 +317,7 @@ Inbase disables this control while an LLM session is writing or reviewing a patc
 | Switch branch comparison | Shift+G | Shift+G |
 | Release mouse | Double-click, Esc | |
 | Connect a chat | Chat, or `/coral` `/amber` `/lime` `/orange` `/violet` | same |
-| Accept the last proposal | `/accept` in that chat | |
+| Keep the work and free the color | **Done** in the session window | |
 | Explain | `/explain` in chat, or `?` then `/explain` | same |
 | Skip the map | `/skipinbase` | |
 | Extract a blueprint | `/extract-blueprint` | |
@@ -335,18 +337,18 @@ The in-app **Instructions** overlay (bottom of the HUD) lists the same controls 
 | `inbase run` | Scan this repo and start the local map |
 | `inbase run --port 5174` | Start on another port |
 | `inbase run --target <dir>` | Map another folder |
-| `inbase accept [--session <id>]` | Accept the last proposal to finish (`/accept`) |
+| `inbase accept [--session <id>]` | Keep the files and free the color slot (same as **Done** in the session window) |
 | `inbase stop [--session <id>]` | Restore files, discard the session, and free the color slot (`/stop`) |
 | `inbase explain start [--question "..."]` | Open map-only explain mode. Omit `--question` to explain the current proposal or git diff |
 | `inbase explain report --step "..."` | Publish explanation steps and map focus |
 | `inbase explain stop` | Exit explain mode |
 | `inbase extract-blueprint <folder> <file>` | Scan a folder and print an inventory for `/extract-blueprint`. `--write` saves the curated blueprint |
 
-The installed skill runs session commands (`attach`, `read-blueprint`, `report-plan`, `accept`, `stop`, `propose-patch`, `explain`, `extract-blueprint`). You do not need to run them.
+The installed skill runs session commands (`attach`, `read-blueprint`, `report-plan`, `stop`, `propose-patch`, `explain`, `extract-blueprint`). You do not need to run them.
 
 ## Editor support
 
-The map runs in the browser. The LLM plan and patch loop works in **Cursor**, **Claude Code**, **Codex**, **GitHub Copilot**, and **Cline**. `inbase init` uses the editor adapters in `bin/editors/` to install the skill and slash commands. Cursor and Claude Code get command files (`/accept`, `/stop`). Codex, Copilot, Gemini CLI, and other SKILL.md agents get skill folders in `.agents/skills/` (`.github/skills/` for Copilot). Cline gets `SKILL.md` where its scanner looks (`.cline/skills/inbase/` and `.cline/SKILL.md`), an always-on rule as both `.cline/rules/inbase.md` and a root `.clinerules` file, plus slash-command workflows in `.cline/workflows/`. Those Cline files use `execute_command` XML so the model runs `npx inbase` instead of printing it. In Copilot or Cline chat type `/accept` or `/stop`; in Codex use `$accept` or `/skills`. Other editors can be added as adapters there.
+The map runs in the browser. The LLM plan and patch loop works in **Cursor**, **Claude Code**, **Codex**, **GitHub Copilot**, and **Cline**. `inbase init` uses the editor adapters in `bin/editors/` to install the skill and slash commands. Cursor and Claude Code get command files (`/stop`, `/explain`). Codex, Copilot, Gemini CLI, and other SKILL.md agents get skill folders in `.agents/skills/` (`.github/skills/` for Copilot). Cline gets `SKILL.md` where its scanner looks (`.cline/skills/inbase/` and `.cline/SKILL.md`), an always-on rule as both `.cline/rules/inbase.md` and a root `.clinerules` file, plus slash-command workflows in `.cline/workflows/`. Those Cline files use `execute_command` XML so the model runs `npx inbase` instead of printing it. In Copilot or Cline chat type `/stop`; in Codex use `$stop` or `/skills`. Other editors can be added as adapters there.
 
 ## Language support
 

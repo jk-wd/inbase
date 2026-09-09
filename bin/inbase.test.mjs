@@ -52,10 +52,10 @@ test('registers Cursor, Claude Code, Agent Skills, Copilot, and Cline adapters',
 
 test('Cline command markdown becomes execute_command XML', () => {
   const xml = toClineExecuteCommand(
-    'Run:\n\n```bash\nnpx inbase accept --session "<session-id>"\n```\n',
+    'Run:\n\n```bash\nnpx inbase stop --session "<session-id>"\n```\n',
   )
   assert.match(xml, /<execute_command>/)
-  assert.match(xml, /<command>npx inbase accept --session "SESSION_ID"<\/command>/)
+  assert.match(xml, /<command>npx inbase stop --session "SESSION_ID"<\/command>/)
   assert.match(xml, /<requires_approval>false<\/requires_approval>/)
   assert.equal(stripYamlFrontmatter('---\nname: inbase\n---\n\nBody\n'), 'Body\n')
 })
@@ -94,7 +94,7 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /VISUAL_CODER_NO_REQUEST/)
     assert.match(skillText, /VISUAL_CODER_DIFF/)
     assert.match(skillText, /Always work via the plan/)
-    assert.match(skillText, /Do not ask the user to review or `\/accept` a mid-plan step/)
+    assert.match(skillText, /Do not ask the user to review a mid-plan step/)
     assert.match(skillText, /Keep the applied project files/)
     assert.match(skillText, /from the point of the last proposal/)
     assert.match(skillText, /replaces the waiting proposal/)
@@ -143,7 +143,8 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(skillText, /VISUAL_CODER_NOT_RUNNING/)
     assert.match(skillText, /VISUAL_CODER_CHAT_LIMIT/)
     assert.match(skillText, /VISUAL_CODER_COLOR/)
-    assert.match(skillText, /\/accept/)
+    assert.doesNotMatch(skillText, /`\/accept`/)
+    assert.match(skillText, /Done/)
     assert.doesNotMatch(skillText, /\/go/)
     assert.match(skillText, /\/explain/)
     assert.match(skillText, /\/stop/)
@@ -152,7 +153,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(skillText, /VISUAL_CODER_NO_REQUEST/)
     assert.match(skillText, /VISUAL_CODER_DIFF/)
     assert.match(skillText, /Always work via the plan/)
-    assert.match(skillText, /Do not ask the user to review or `\/accept` a mid-plan step/)
+    assert.match(skillText, /Do not ask the user to review a mid-plan step/)
     assert.match(skillText, /Keep the applied project files/)
     assert.match(skillText, /from the point of the last proposal/)
     assert.match(skillText, /replaces the waiting proposal/)
@@ -225,33 +226,13 @@ test('init copies editor skills and gitignores .inbase', () => {
       /VISUAL_CODER_DIFF/,
     )
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/go.md')), false)
-    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/accept.md')), true)
-    assert.match(
-      fs.readFileSync(path.join(root, '.cursor/commands/accept.md'), 'utf8'),
-      /npx inbase accept/,
-    )
+    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/accept.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/stop.md')), true)
     assert.match(
       fs.readFileSync(path.join(root, '.cursor/commands/stop.md'), 'utf8'),
       /npx inbase stop/,
     )
-    assert.doesNotMatch(
-      fs.readFileSync(path.join(root, '.cursor/commands/accept.md'), 'utf8'),
-      /\/go/,
-    )
-    assert.match(
-      fs.readFileSync(path.join(root, '.cursor/commands/accept.md'), 'utf8'),
-      /last proposal/,
-    )
-    assert.match(
-      fs.readFileSync(path.join(root, '.cursor/commands/accept.md'), 'utf8'),
-      /VISUAL_CODER_FINISHED/,
-    )
-    assert.doesNotMatch(
-      fs.readFileSync(path.join(root, '.cursor/commands/accept.md'), 'utf8'),
-      /legacy \/accept command/,
-    )
-    assert.equal(fs.existsSync(path.join(packageRoot, 'skill/commands/accept.md')), true)
+    assert.equal(fs.existsSync(path.join(packageRoot, 'skill/commands/accept.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/coral.md')), true)
     assert.match(
       fs.readFileSync(path.join(root, '.cursor/commands/coral.md'), 'utf8'),
@@ -291,10 +272,6 @@ test('init copies editor skills and gitignores .inbase', () => {
       fs.readFileSync(path.join(root, '.cursor/sandbox.json'), 'utf8'),
     )
     assert.equal(sandbox.enableSharedBuildCache, true)
-    assert.doesNotMatch(
-      fs.readFileSync(path.join(root, '.cursor/commands/accept.md'), 'utf8'),
-      /disable-model-invocation:/,
-    )
     const claude = result.editors.find((editor) => editor.id === 'claude')
     assert.equal(claude?.label, 'Claude Code')
     assert.equal(claude?.skillDir, path.join(root, '.claude/skills/inbase'))
@@ -309,10 +286,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(claudeSkill, /allowed-tools: Bash\(npx inbase \*\)/)
     assert.equal(fs.existsSync(path.join(root, '.claude/commands/inbase.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.claude/commands/coral.md')), true)
-    const claudeGo = fs.readFileSync(path.join(root, '.claude/commands/accept.md'), 'utf8')
-    assert.match(claudeGo, /npx inbase accept/)
-    assert.match(claudeGo, /disable-model-invocation: true/)
-    assert.match(claudeGo, /allowed-tools: Bash\(npx inbase \*\)/)
+    assert.equal(fs.existsSync(path.join(root, '.claude/commands/accept.md')), false)
     const claudeCoral = fs.readFileSync(
       path.join(root, '.claude/commands/coral.md'),
       'utf8',
@@ -322,7 +296,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     const agents = result.editors.find((editor) => editor.id === 'agents')
     assert.equal(agents?.label, 'Agent Skills')
     assert.equal(agents?.skillDir, path.join(root, '.agents/skills/inbase'))
-    assert.equal(fs.existsSync(path.join(root, '.agents/skills/accept/SKILL.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.agents/skills/accept/SKILL.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.agents/skills/stop/SKILL.md')), true)
     assert.equal(
       fs.existsSync(path.join(root, '.agents/skills/extract-blueprint/SKILL.md')),
@@ -346,7 +320,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     fs.writeFileSync(path.join(root, '.cline/skills/accept/SKILL.md'), 'legacy command skill\n')
     initProject(root)
     assert.equal(fs.existsSync(path.join(root, '.cline/skills/accept/SKILL.md')), false)
-    assert.equal(fs.existsSync(path.join(root, '.cline/workflows/accept.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.cline/workflows/accept.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.cline/workflows/coral.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.clinerules/workflows')), false)
     assert.equal(fs.existsSync(path.join(root, '.clinerules/skills')), false)
@@ -361,19 +335,12 @@ test('init copies editor skills and gitignores .inbase', () => {
     const clineRootSkill = fs.readFileSync(path.join(root, '.cline/SKILL.md'), 'utf8')
     assert.match(clineRootSkill, /^---\nname: inbase\n/)
     assert.match(clineRootSkill, /<execute_command>/)
-    const clineAccept = fs.readFileSync(
-      path.join(root, '.cline/workflows/accept.md'),
-      'utf8',
-    )
-    assert.match(clineAccept, /npx inbase accept/)
     const clineRule = fs.readFileSync(path.join(root, '.cline/rules/inbase.md'), 'utf8')
     assert.match(clineRule, /<execute_command>/)
     assert.match(clineRule, /npx inbase attach/)
     assert.match(clineRule, /SESSION_ID/)
     assert.match(clineRule, /I see on the blueprint/)
     assert.match(clineRule, /\/extract-blueprint/)
-    assert.match(clineAccept, /<execute_command>/)
-    assert.match(clineAccept, /npx inbase accept --session "SESSION_ID"/)
     assert.equal(fs.statSync(path.join(root, '.clinerules')).isFile(), true)
     assert.match(
       fs.readFileSync(path.join(root, '.clinerules'), 'utf8'),
@@ -440,17 +407,21 @@ test('copySkillTree writes command skills and keeps the inbase skill', () => {
     assert.equal(skillText.split('allowed-tools: Bash(npx inbase *)').length - 1, 1)
     assert.doesNotMatch(skillText, /user-invocable:/)
     assert.equal(fs.existsSync(path.join(first.commandDir, 'inbase.md')), false)
-    const accept = fs.readFileSync(path.join(first.commandDir, 'accept/SKILL.md'), 'utf8')
-    assert.match(accept, /^---\nname: accept\n/)
-    assert.match(accept, /npx inbase accept/)
-    assert.match(accept, /disable-model-invocation: true/)
-    assert.match(accept, /allow_implicit_invocation: false/)
-    assert.equal(accept.split('disable-model-invocation: true').length - 1, 1)
+    assert.equal(fs.existsSync(path.join(first.commandDir, 'accept/SKILL.md')), false)
+    const stop = fs.readFileSync(path.join(first.commandDir, 'stop/SKILL.md'), 'utf8')
+    assert.match(stop, /^---\nname: stop\n/)
+    assert.match(stop, /npx inbase stop/)
+    assert.match(stop, /disable-model-invocation: true/)
+    assert.match(stop, /allow_implicit_invocation: false/)
+    assert.equal(stop.split('disable-model-invocation: true').length - 1, 1)
     assert.equal(fs.existsSync(path.join(first.commandDir, 'go/SKILL.md')), false)
     fs.mkdirSync(path.join(root, '.agents/skills/go'), { recursive: true })
     fs.writeFileSync(path.join(root, '.agents/skills/go/SKILL.md'), 'retired /go\n')
+    fs.mkdirSync(path.join(root, '.agents/skills/accept'), { recursive: true })
+    fs.writeFileSync(path.join(root, '.agents/skills/accept/SKILL.md'), 'retired /accept\n')
     copySkillTree(root, { id: 'agents', skillsRel: '.agents/skills' })
     assert.equal(fs.existsSync(path.join(root, '.agents/skills/go/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.agents/skills/accept/SKILL.md')), false)
     const coral = fs.readFileSync(path.join(first.commandDir, 'coral/SKILL.md'), 'utf8')
     assert.match(coral, /npx inbase attach --color coral/)
     assert.match(coral, /name: coral/)
@@ -1134,7 +1105,7 @@ test('recording a non-last step continues into the next step', async () => {
   }
 })
 
-test('propose-patch CLI auto-invokes the next step without waiting for /accept', async () => {
+test('propose-patch CLI auto-invokes the next step without waiting', async () => {
   const { root, cleanup } = tempProject()
   const target = path.join(root, 'app')
   const dataDir = path.join(root, '.inbase')
@@ -1172,7 +1143,7 @@ test('propose-patch CLI auto-invokes the next step without waiting for /accept',
   }
 })
 
-test('accept finishes the last step', async () => {
+test('accept keeps files and frees the session', async () => {
   const { root, cleanup } = tempProject()
   const target = path.join(root, 'app')
   const dataDir = path.join(root, '.inbase')
@@ -1382,7 +1353,7 @@ test('report-plan replaces a waiting last proposal', async () => {
     assert.match(result.stdout, /from step 1/)
     assert.match(result.stdout, /New remaining steps: 1\. Tint the value; 2\. Add helper/)
     assert.match(result.stdout, /Replaced the waiting proposal/)
-    assert.match(result.stdout, /Do not ask the user to \/accept the previous last proposal/)
+    assert.match(result.stdout, /Do not ask the user to close the session/)
     assert.match(result.stdout, /VISUAL_CODER_EXECUTE Step 1 is invoked: Tint the value/)
     const manifest = store.readManifest(dataDir, 'revise-last')
     assert.equal(manifest.phase, 'working')

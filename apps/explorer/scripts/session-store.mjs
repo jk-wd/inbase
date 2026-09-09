@@ -2,15 +2,16 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { spawnSync } from 'node:child_process'
+import { applyUnifiedPatch } from './patch-lib.mjs'
 import {
-  accumulatePatchAdditions,
-  applyUnifiedPatch,
-  applyUnifiedPatchToContents,
-  collectCreateFolders,
-  extractPatchImports,
-  foldersFromFileIds,
-  parseUnifiedPatch,
-} from './patch-lib.mjs'
+  dropMassKnownCreates,
+  emptyChangeOverlay,
+  overlayFileIds,
+  overlayFromPatchText,
+  overlayHasChanges,
+  normalizeChangeOverlay,
+} from './change-overlay.mjs'
+import { hasGitRepo, readWorkingTreeChanges } from './branch-changes.mjs'
 import { diffSourceTrees, restoreSourceTree, snapshotSourceTree } from './tree-diff.mjs'
 import { readExplain } from './explain-store.mjs'
 
@@ -43,7 +44,7 @@ export const GLOBAL_BLUEPRINT_COLOR = {
   hex: '#38bdf8',
 }
 export const CHAT_LIMIT_MESSAGE =
-  'VISUAL_CODER_CHAT_LIMIT Only 5 Inbase chats can be connected at once. Finish or type /stop in a connected chat, then start a new chat.'
+  'VISUAL_CODER_CHAT_LIMIT Only 5 Inbase chats can be connected at once. Click Done in a session window or type /stop in a connected chat, then start a new chat.'
 export const NOT_RUNNING_MESSAGE =
   "VISUAL_CODER_NOT_RUNNING Inbase isn't running. Start it with `npx inbase run`, then send this request again."
 export function colorUnknownMessage(query) {
@@ -51,7 +52,7 @@ export function colorUnknownMessage(query) {
   return `VISUAL_CODER_COLOR_UNKNOWN ${label} is not a chat color. Connect with /coral, /amber, /lime, /orange, or /violet (aliases: /red, /yellow, /green, /purple). Blue is the global blueprint, not a chat.`
 }
 export function colorBusyMessage(colorName) {
-  return `VISUAL_CODER_COLOR_BUSY The ${colorName} session already has a chat connected. Finish it or type /stop in that chat, then try again.`
+  return `VISUAL_CODER_COLOR_BUSY The ${colorName} session already has a chat connected. Click Done in that session window or type /stop in that chat, then try again.`
 }
 export function colorMissingMessage(colorName) {
   return `VISUAL_CODER_COLOR_UNKNOWN No ${colorName} session is open. Start Inbase with \`npx inbase run\`, then try again.`
@@ -384,11 +385,18 @@ export function listOpenSessionIds(dataDir, waiterIds = waiterSessionIds()) {
   return sessions.map((item) => item.sessionId)
 }
 
-export function listSessionIntents(dataDir, knownFileIds = []) {
+export function listSessionIntents(dataDir, knownFileIds = [], targetRoot = null) {
   const waiters = waiterSessionIds()
   return listOpenSessionIds(dataDir, waiters)
     .map((sessionId) =>
-      sessionIntent(dataDir, sessionId, knownFileIds, undefined, waiters),
+      sessionIntent(
+        dataDir,
+        sessionId,
+        knownFileIds,
+        undefined,
+        waiters,
+        targetRoot,
+      ),
     )
     .filter(Boolean)
     .sort((left, right) => compareSessionColorOrder(left.color, right.color))
@@ -814,13 +822,22 @@ export function writeManifest(dataDir, manifest) {
   atomicWrite(paths.manifest, `${JSON.stringify(manifest, null, 2)}\n`)
 }
 
-export function readDiff(dataDir, sessionId, entry) {
+export function readOverlay(dataDir, sessionId, entry) {
   const paths = sessionPaths(dataDir, sessionId)
   const absolute = path.resolve(paths.root, entry.file)
   if (!absolute.startsWith(`${paths.root}${path.sep}`)) {
     throw new Error(`Invalid diff path for ${entry.id}`)
   }
-  return fs.readFileSync(absolute, 'utf8')
+  if (!fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) {
+    return emptyChangeOverlay()
+  }
+  const raw = fs.readFileSync(absolute, 'utf8')
+  if (entry.file.endsWith('.patch')) return overlayFromPatchText(raw)
+  try {
+    return normalizeChangeOverlay(JSON.parse(raw))
+  } catch {
+    return overlayFromPatchText(raw)
+  }
 }
 
 function entryIndex(manifest, diffId) {
@@ -832,14 +849,6 @@ function entryIndex(manifest, diffId) {
 export function chainThrough(manifest, diffId = manifest.activeDiffId) {
   if (!diffId) return []
   return manifest.diffs.slice(0, entryIndex(manifest, diffId) + 1)
-}
-
-function isSupersededPatch(entry) {
-  return (
-    entry.status === 'rejected' ||
-    entry.status === 'extend' ||
-    entry.status === 'extended'
-  )
 }
 
 function liveEntries(manifest, diffId) {
@@ -859,109 +868,8 @@ function liveEntries(manifest, diffId) {
   })
 }
 
-function workingPatchEntries(manifest) {
-  return manifest.diffs.filter((entry) => !isSupersededPatch(entry))
-}
-
 function unresolvedEntries(manifest, diffId = manifest.activeDiffId) {
   return liveEntries(manifest, diffId).filter((entry) => entry.status !== 'applied')
-}
-
-export function previewPatchChain(patches, knownFileIds = []) {
-  const state = new Map()
-  const lineCounts = new Map()
-  const imports = new Map()
-
-  for (const patch of patches) {
-    const parsed = parseUnifiedPatch(patch)
-    for (const edge of extractPatchImports(parsed.entries, [
-      ...knownFileIds,
-      ...state.keys(),
-    ])) {
-      imports.set(`${edge.from}->${edge.to}`, edge)
-    }
-
-    for (const entry of parsed.entries) {
-      const previous = state.get(entry.id)
-      if (entry.kind === 'add') {
-        state.set(entry.id, 'add')
-        lineCounts.set(entry.id, Math.max(1, entry.addedLines))
-        continue
-      }
-      if (entry.kind === 'delete') {
-        if (previous === 'add') {
-          state.delete(entry.id)
-          lineCounts.delete(entry.id)
-        } else {
-          state.set(entry.id, 'delete')
-        }
-        continue
-      }
-
-      state.set(entry.id, previous === 'add' ? 'add' : 'modify')
-      if (previous === 'add') {
-        const delta = entry.hunks.reduce(
-          (total, hunk) => total + hunk.newCount - hunk.oldCount,
-          0,
-        )
-        lineCounts.set(entry.id, Math.max(1, (lineCounts.get(entry.id) ?? 1) + delta))
-      }
-    }
-  }
-
-  const deleted = new Set(
-    [...state.entries()].filter(([, kind]) => kind === 'delete').map(([id]) => id),
-  )
-  const creates = [...state.entries()]
-    .filter(([, kind]) => kind === 'add')
-    .map(([id]) => id)
-  return {
-    files: [...state.entries()]
-      .filter(([, kind]) => kind === 'modify')
-      .map(([id]) => id),
-    creates,
-    deletes: [...deleted],
-    createLines: Object.fromEntries(lineCounts),
-    createFolders: collectCreateFolders(
-      creates,
-      foldersFromFileIds(knownFileIds.filter((id) => !creates.includes(id))),
-    ),
-    imports: [...imports.values()].filter(
-      (edge) => !deleted.has(edge.from) && !deleted.has(edge.to),
-    ),
-    ...accumulatePatchAdditions(patches),
-  }
-}
-
-function dropMassKnownCreates(preview, knownFileIds = []) {
-  const known = new Set(knownFileIds)
-  const overlap = preview.creates.filter((id) => known.has(id))
-  const massFalseAdd =
-    overlap.length >= 20 && overlap.length >= Math.max(10, known.size * 0.15)
-  if (!massFalseAdd) return preview
-  const drop = new Set(overlap)
-  const creates = preview.creates.filter((id) => !drop.has(id))
-  const createLines = Object.fromEntries(
-    Object.entries(preview.createLines ?? {}).filter(([id]) => !drop.has(id)),
-  )
-  const keepSymbol = (item) => !drop.has(item.file)
-  return {
-    ...preview,
-    creates,
-    createLines,
-    createFolders: collectCreateFolders(
-      creates,
-      foldersFromFileIds(knownFileIds.filter((id) => !creates.includes(id))),
-    ),
-    imports: (preview.imports ?? []).filter(
-      (edge) => !drop.has(edge.from) && !drop.has(edge.to),
-    ),
-    addedFunctions: (preview.addedFunctions ?? []).filter(keepSymbol),
-    addedVariables: (preview.addedVariables ?? []).filter(keepSymbol),
-    addedImports: (preview.addedImports ?? []).filter(keepSymbol),
-    changedFunctions: (preview.changedFunctions ?? []).filter(keepSymbol),
-    changedVariables: (preview.changedVariables ?? []).filter(keepSymbol),
-  }
 }
 
 function readCodebaseFileIds(dataDir) {
@@ -979,12 +887,42 @@ function readCodebaseFileIds(dataDir) {
   }
 }
 
+function captureChangeOverlay(dataDir, sessionId, targetRoot, knownFileIds) {
+  if (hasGitRepo(targetRoot)) {
+    const git = readWorkingTreeChanges(targetRoot, knownFileIds)
+    if (overlayHasChanges(git)) return git
+  }
+  const patch = readLiveDiff(dataDir, sessionId, targetRoot)
+  return overlayFromPatchText(patch, knownFileIds)
+}
+
+function liveChangeOverlay(
+  dataDir,
+  sessionId,
+  targetRoot,
+  knownFileIds,
+  stored,
+) {
+  if (!targetRoot) return stored
+  if (hasGitRepo(targetRoot)) {
+    const git = readWorkingTreeChanges(targetRoot, knownFileIds)
+    if (overlayHasChanges(git)) return git
+    return stored
+  }
+  try {
+    return captureChangeOverlay(dataDir, sessionId, targetRoot, knownFileIds)
+  } catch {
+    return stored
+  }
+}
+
 export function sessionIntent(
   dataDir,
   sessionId,
   knownFileIds = [],
   selectedDiffId,
   waiterIds = waiterSessionIds(),
+  targetRoot = null,
 ) {
   const manifest = readManifest(dataDir, sessionId)
   if (!manifest) return null
@@ -992,16 +930,19 @@ export function sessionIntent(
   const selectedIndex = selectedId ? entryIndex(manifest, selectedId) : null
   const selected =
     selectedIndex === null ? null : manifest.diffs[selectedIndex]
-  const live = selectedId ? liveEntries(manifest, selectedId) : []
-  const livePatches = live.map((entry) => readDiff(dataDir, sessionId, entry))
-  const selectedPatches =
-    selectedIndex === null ? [] : [readDiff(dataDir, sessionId, selected)]
-  const chainPreview = previewPatchChain(livePatches, knownFileIds)
+  const stored = selected
+    ? readOverlay(dataDir, sessionId, selected)
+    : emptyChangeOverlay()
+  const browsingHistory = Boolean(
+    selectedDiffId && selected && selected.id !== manifest.activeDiffId,
+  )
   const preview = dropMassKnownCreates(
-    previewPatchChain(selectedPatches, knownFileIds),
+    browsingHistory
+      ? stored
+      : liveChangeOverlay(dataDir, sessionId, targetRoot, knownFileIds, stored),
     knownFileIds,
   )
-  const previewVisible = selectedPatches.length > 0
+  const previewVisible = overlayHasChanges(preview) || Boolean(selected)
   const activeView = !selectedDiffId || selectedId === manifest.activeDiffId
   const phaseStatus = {
     blueprint_ask: 'blueprint_ask',
@@ -1048,14 +989,29 @@ export function sessionIntent(
     diffId: selected?.id ?? null,
     parentDiffId: selected?.parentId ?? null,
     chainIndex: selectedIndex,
-    chain: manifest.diffs.map((entry, index) => ({
-      id: entry.id,
-      index,
-      step: entry.step,
-      title: entry.title,
-      status: entry.status,
-    })),
+    chain: manifest.diffs.map((entry, index) => {
+      const overlay = readOverlay(dataDir, sessionId, entry)
+      return {
+        id: entry.id,
+        index,
+        step: entry.step,
+        title: entry.title,
+        status: entry.status,
+        files: overlay.files,
+        creates: overlay.creates,
+        deletes: overlay.deletes,
+        createFolders: overlay.createFolders,
+        createLines: overlay.createLines,
+        imports: overlay.imports,
+        addedFunctions: overlay.addedFunctions,
+        addedVariables: overlay.addedVariables,
+        addedImports: overlay.addedImports,
+        changedFunctions: overlay.changedFunctions,
+        changedVariables: overlay.changedVariables,
+      }
+    }),
     isActiveDiff: Boolean(selected && selected.id === manifest.activeDiffId),
+    liveStep: manifest.currentStep,
     preview: previewVisible,
     working:
       !manifest.awaitingAttach &&
@@ -1080,7 +1036,6 @@ export function sessionIntent(
     userCreatedBlocks: blueprint.files,
     userCreatedIslands: blueprint.folders,
     ...preview,
-    createLines: { ...chainPreview.createLines, ...preview.createLines },
     blueprintFunctions: blueprint.addedFunctions,
     blueprintVariables: blueprint.addedVariables,
     blueprintImports: blueprint.addedImports,
@@ -1175,12 +1130,6 @@ function restoreSessionFiles(dataDir, sessionId, targetRoot) {
   unstagePaths(targetRoot, extraAbsolutes)
 }
 
-function replayPatches(dataDir, sessionId, targetRoot, entries) {
-  for (const entry of entries) {
-    applyUnifiedPatch(readDiff(dataDir, sessionId, entry), targetRoot)
-  }
-}
-
 function gitTopLevel(fromDir) {
   try {
     const result = spawnSync('git', ['rev-parse', '--show-toplevel'], {
@@ -1228,66 +1177,15 @@ function unstagePaths(fromDir, absolutePaths) {
   }
 }
 
-export function materializeDiff(dataDir, targetRoot, sessionId, diffId) {
-  const manifest = requireManifest(dataDir, sessionId)
-  const through = diffId || manifest.activeDiffId
-  if (!through) return manifest
-  restoreBaseline(dataDir, sessionId, targetRoot)
-  replayPatches(dataDir, sessionId, targetRoot, liveEntries(manifest, through))
-  return manifest
-}
-
-function loadReplayContents(dataDir, sessionId, targetRoot, patches) {
-  const baseline = readBaseline(dataDir, sessionId)
-  const paths = sessionPaths(dataDir, sessionId)
-  const fileIds = new Set(Object.keys(baseline.files))
-  for (const patchText of patches) {
-    for (const entry of parseUnifiedPatch(patchText).entries) {
-      fileIds.add(entry.id)
-    }
-  }
-
-  const files = new Map()
-  for (const fileId of fileIds) {
-    const info = baseline.files[fileId]
-    if (info) {
-      if (!info.existed) continue
-      const stored = resolveTargetFile(paths.baselineFiles, fileId).absolute
-      if (fs.existsSync(stored) && fs.statSync(stored).isFile()) {
-        files.set(fileId, fs.readFileSync(stored, 'utf8'))
-      }
-      continue
-    }
-    const { absolute } = resolveTargetFile(targetRoot, fileId)
-    if (fs.existsSync(absolute) && fs.statSync(absolute).isFile()) {
-      files.set(fileId, fs.readFileSync(absolute, 'utf8'))
-    }
-  }
-  return files
-}
-
-export function validateContinuation(dataDir, manifest, targetRoot, patchText) {
-  const prior = workingPatchEntries(manifest).map((entry) =>
-    readDiff(dataDir, manifest.sessionId, entry),
-  )
-  const patches = [...prior, patchText]
-  const files = loadReplayContents(
-    dataDir,
-    manifest.sessionId,
-    targetRoot,
-    patches,
-  )
-  for (const next of patches) applyUnifiedPatchToContents(files, next)
+export function materializeDiff(dataDir, _targetRoot, sessionId) {
+  return requireManifest(dataDir, sessionId)
 }
 
 export function inspectTargetFile(
-  dataDir,
+  _dataDir,
   targetRoot,
-  { sessionId, diffId, fileId } = {},
+  { fileId } = {},
 ) {
-  if (sessionId && readManifest(dataDir, sessionId)) {
-    materializeDiff(dataDir, targetRoot, sessionId, diffId)
-  }
   if (!fileId) return null
   const { absolute } = resolveTargetFile(targetRoot, fileId)
   if (!fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) {
@@ -1766,8 +1664,8 @@ export function invokeStep(dataDir, sessionId, step, targetRoot = null) {
     if (step !== expected) {
       throw new Error(
         last
-          ? `/accept on step ${active.step} to finish`
-          : `/accept on step ${active.step} to continue`,
+          ? `The last proposal is waiting. Click Done in the session window to finish.`
+          : `Step ${active.step} is already recorded.`,
       )
     }
     return continueDiff(dataDir, targetRoot, sessionId, active.id)
@@ -1795,7 +1693,9 @@ export function invokeStep(dataDir, sessionId, step, targetRoot = null) {
 
 export function snapshotPreStep(dataDir, sessionId, targetRoot) {
   const { preStep } = sessionPaths(dataDir, sessionId)
-  snapshotSourceTree(targetRoot, preStep, dataDir)
+  if (!fs.existsSync(preStep)) {
+    snapshotSourceTree(targetRoot, preStep, dataDir)
+  }
   return preStep
 }
 
@@ -1818,7 +1718,7 @@ export function appendDiff(dataDir, targetRoot, input) {
   )
   if (manifest.phase === 'review') {
     throw new Error(
-      `A proposal is waiting on step ${manifest.currentStep}. If the user asked for a change, run report-plan with the new remaining steps first — that replaces this proposal from step ${manifest.currentStep}. Do not /accept the waiting proposal. Do not edit files first. Then implement the invoked step and propose-patch.`,
+      `A proposal is waiting on step ${manifest.currentStep}. If the user asked for a change, run report-plan with the new remaining steps first — that replaces this proposal from step ${manifest.currentStep}. Do not edit files first. Then implement the invoked step and propose-patch.`,
     )
   }
   if (manifest.phase !== 'working') {
@@ -1844,24 +1744,30 @@ export function appendDiff(dataDir, targetRoot, input) {
     throw new Error(`The next diff must implement step ${parent.step + 1}`)
   }
 
-  const patchText = input.patchText ?? readLiveDiff(dataDir, sessionId, targetRoot)
-  if (!patchText.trim()) {
-    throw new Error('No file changes to record for this step')
-  }
-
+  const knownFileIds = readCodebaseFileIds(dataDir)
   const snapshotRoot = sessionPaths(dataDir, sessionId).preStep
   const originRoot = fs.existsSync(snapshotRoot) ? snapshotRoot : targetRoot
-  validateContinuation(dataDir, manifest, originRoot, patchText)
-  captureBaseline(
-    dataDir,
-    sessionId,
-    originRoot,
-    parseUnifiedPatch(patchText).entries.map((entry) => entry.id),
-  )
+  let overlay
+  if (input.overlay) {
+    overlay = normalizeChangeOverlay(input.overlay)
+  } else if (input.patchText) {
+    overlay = overlayFromPatchText(input.patchText, knownFileIds)
+    captureBaseline(dataDir, sessionId, originRoot, overlayFileIds(overlay))
+    applyUnifiedPatch(input.patchText, targetRoot)
+  } else {
+    overlay = captureChangeOverlay(dataDir, sessionId, targetRoot, knownFileIds)
+  }
+  overlay = normalizeChangeOverlay(overlay)
+  if (!overlayHasChanges(overlay)) {
+    throw new Error('No file changes to record for this step')
+  }
+  if (!input.patchText) {
+    captureBaseline(dataDir, sessionId, originRoot, overlayFileIds(overlay))
+  }
   if (parent?.status === 'extend') parent.status = 'extended'
 
   const id = String(manifest.diffs.length + 1).padStart(4, '0')
-  const file = `diffs/${id}.patch`
+  const file = `diffs/${id}.json`
   const isLast = step >= manifest.steps.length
   const entry = {
     id,
@@ -1876,10 +1782,7 @@ export function appendDiff(dataDir, targetRoot, input) {
   }
   const paths = sessionPaths(dataDir, sessionId)
   fs.mkdirSync(paths.diffs, { recursive: true })
-  atomicWrite(
-    path.join(paths.root, file),
-    patchText.endsWith('\n') ? patchText : `${patchText}\n`,
-  )
+  atomicWrite(path.join(paths.root, file), `${JSON.stringify(overlay, null, 2)}\n`)
   manifest.activeDiffId = id
   manifest.pendingInstruction = null
   manifest.diffs.push(entry)
@@ -1892,7 +1795,6 @@ export function appendDiff(dataDir, targetRoot, input) {
     manifest.workStartedAt = new Date().toISOString()
   }
   writeManifest(dataDir, manifest)
-  materializeDiff(dataDir, targetRoot, sessionId, id)
   focusSession(dataDir, sessionId)
   if (!isLast) {
     const nextTitle = manifest.steps.find(
@@ -1906,7 +1808,6 @@ export function appendDiff(dataDir, targetRoot, input) {
         ? `step ${manifest.currentStep} — ${nextTitle}`
         : `step ${manifest.currentStep}`,
     )
-    if (targetRoot) snapshotPreStep(dataDir, sessionId, targetRoot)
   }
   const latest = readManifest(dataDir, sessionId)
   if (!latest) {
@@ -1932,9 +1833,8 @@ function pendingActive(manifest, diffId) {
   return active
 }
 
-function applyUnresolved(dataDir, targetRoot, manifest, diffId) {
+function applyUnresolved(manifest, diffId) {
   const unresolved = unresolvedEntries(manifest, diffId)
-  materializeDiff(dataDir, targetRoot, manifest.sessionId, diffId)
   for (const entry of unresolved) {
     entry.status = 'applied'
     entry.decidedAt = new Date().toISOString()
@@ -1944,7 +1844,7 @@ function applyUnresolved(dataDir, targetRoot, manifest, diffId) {
 export function continueDiff(dataDir, targetRoot, sessionId, diffId) {
   const manifest = requireManifest(dataDir, sessionId)
   const active = pendingActive(manifest, diffId)
-  applyUnresolved(dataDir, targetRoot, manifest, diffId)
+  applyUnresolved(manifest, diffId)
 
   if (active.step >= manifest.steps.length) {
     manifest.phase = 'finished'
@@ -2218,6 +2118,15 @@ export function closeSession(dataDir, sessionId) {
 export function finalizeFinishedSession(dataDir, sessionId, targetRoot = null) {
   discardStoredSession(dataDir, sessionId, targetRoot, { restore: false })
   refillSessionPool(dataDir)
+}
+
+export function completeSession(dataDir, sessionId, targetRoot = null) {
+  const safeId = assertSessionId(sessionId)
+  if (!readManifest(dataDir, safeId)) {
+    throw new Error(`No workflow session found for ${safeId}`)
+  }
+  finalizeFinishedSession(dataDir, safeId, targetRoot)
+  return null
 }
 
 export function emptyBlueprint() {

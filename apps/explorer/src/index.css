@@ -1305,22 +1305,35 @@ button {
 
 .hud-branch-modes {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin: 0 0 8px;
 }
 
 .hud-branch-modes .hud-button {
   display: flex;
-  flex: 1 1 0;
+  flex: 1 1 auto;
   align-items: center;
   justify-content: center;
   padding: 6px 8px;
   font-size: 11px;
+  white-space: nowrap;
 }
 
 .hud-branch-modes .hud-button[data-active='true'] {
   border-color: #22ff66;
   color: #e7ebf2;
+}
+
+.hud-branch-commit {
+  display: flex;
+  margin: 0 0 8px;
+}
+
+.hud-branch-commit-select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .hud-panel-planned kbd {
@@ -1370,6 +1383,7 @@ button {
   padding: 0;
   list-style: none;
   color: #8b95a5;
+  pointer-events: auto;
 }
 
 .hud-steps li {
@@ -1675,6 +1689,7 @@ button {
   margin-top: 14px;
   color: #b7c0ce;
   font-size: 11px;
+  pointer-events: auto;
 }
 
 .hud-chain .hud-button {

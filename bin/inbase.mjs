@@ -59,7 +59,7 @@ Agent commands (used by the installed skill):
   inbase report-plan --session <id> --feature "name" --steps "one"
   inbase accept [--session <id>]
   inbase stop [--session <id>]
-  inbase propose-patch --session <id> [file.patch|-]
+  inbase propose-patch --session <id>
   inbase propose-patch --session <id> --clear
   inbase explain start [--question "How does this work?"]
   inbase explain report --step "..." --body "..."
@@ -346,7 +346,7 @@ export async function main(argv = process.argv.slice(2)) {
   }
   if (command === 'wait-for-approval') {
     console.error(
-      'wait-for-approval was removed. The user types /accept or /explain in chat.',
+      'wait-for-approval was removed. The user types /explain in chat or clicks Done in the session window.',
     )
     process.exit(1)
   }

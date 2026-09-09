@@ -8,9 +8,12 @@ import {
   foldersFromFileIds,
   parseUnifiedPatch,
 } from './patch-lib.mjs'
+import { dropMassKnownCreates, emptyChangeOverlay } from './change-overlay.mjs'
 import { shouldIgnoreRelativePath, toPosix } from './scan-ignore.mjs'
 
 const BINARY_PROBE_BYTES = 8000
+const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
+const BRANCH_COMMIT_LIMIT = 80
 
 function unique(ids) {
   return [...new Set(ids)]
@@ -55,7 +58,105 @@ function shouldSkipPath(fileId) {
 }
 
 export function normalizeBranchChangesMode(value) {
-  return value === 'remote' ? 'remote' : 'main'
+  if (value === 'remote' || value === 'current' || value === 'commit') return value
+  return 'main'
+}
+
+export function normalizeBranchChangesCommit(value) {
+  if (typeof value !== 'string') return null
+  const sha = value.trim().toLowerCase()
+  if (!/^[0-9a-f]{4,40}$/.test(sha)) return null
+  return sha
+}
+
+function parseCommitLog(text) {
+  const commits = []
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue
+    const first = line.indexOf('\t')
+    if (first < 0) continue
+    const second = line.indexOf('\t', first + 1)
+    if (second < 0) continue
+    const sha = line.slice(0, first).trim()
+    const short = line.slice(first + 1, second).trim()
+    const subject = line.slice(second + 1).trim()
+    if (!sha || !short) continue
+    commits.push({ sha, short, subject })
+  }
+  return commits
+}
+
+function gitLogCommits(gitRoot, extraArgs) {
+  const result = runGit(gitRoot, [
+    'log',
+    '--format=%H%x09%h%x09%s',
+    '--first-parent',
+    '-n',
+    String(BRANCH_COMMIT_LIMIT),
+    ...extraArgs,
+  ])
+  if (result.status !== 0) return []
+  return parseCommitLog(result.stdout)
+}
+
+export function listBranchCommits(targetRoot) {
+  if (!targetRoot || !fs.existsSync(targetRoot)) return []
+  const gitRoot = gitTopLevel(targetRoot)
+  if (!gitRoot) return []
+  const mergeBase = resolveMergeBase(gitRoot, resolveBaseRef(gitRoot))
+  const unique = gitLogCommits(gitRoot, ['HEAD', '--not', mergeBase])
+  if (unique.length > 0) return unique
+  return gitLogCommits(gitRoot, ['HEAD'])
+}
+
+function firstParentSha(gitRoot, sha) {
+  const result = runGit(gitRoot, [
+    'rev-parse',
+    '--verify',
+    '--quiet',
+    `${sha}^`,
+  ])
+  if (result.status === 0 && result.stdout.trim()) return result.stdout.trim()
+  return null
+}
+
+function resolveCommitOnBranch(gitRoot, commits, commitInput) {
+  const requested = normalizeBranchChangesCommit(commitInput)
+  if (requested) {
+    const listed = commits.find(
+      (commit) =>
+        commit.sha.startsWith(requested) || requested.startsWith(commit.sha),
+    )
+    if (listed) return listed
+    const resolved = runGit(gitRoot, [
+      'rev-parse',
+      '--verify',
+      '--quiet',
+      requested,
+    ])
+    const sha = resolved.status === 0 ? resolved.stdout.trim() : ''
+    if (sha) {
+      const ancestor = runGit(gitRoot, [
+        'merge-base',
+        '--is-ancestor',
+        sha,
+        'HEAD',
+      ])
+      if (ancestor.status === 0) {
+        const short = runGit(gitRoot, ['rev-parse', '--short', sha])
+        const subject = runGit(gitRoot, ['log', '-1', '--format=%s', sha])
+        return {
+          sha,
+          short:
+            short.status === 0 && short.stdout.trim()
+              ? short.stdout.trim()
+              : sha.slice(0, 7),
+          subject: subject.status === 0 ? subject.stdout.trim() : '',
+        }
+      }
+    }
+  }
+  return commits[0] ?? null
 }
 
 function currentBranch(cwd) {
@@ -180,18 +281,29 @@ export function emptyBranchChanges() {
     base: null,
     mode: 'main',
     remoteMissing: false,
-    files: [],
-    creates: [],
-    deletes: [],
-    createFolders: [],
-    createLines: {},
-    imports: [],
-    addedFunctions: [],
-    addedVariables: [],
-    addedImports: [],
-    changedFunctions: [],
-    changedVariables: [],
+    commit: null,
+    commits: [],
+    commitMissing: false,
+    ...emptyChangeOverlay(),
   }
+}
+
+export function hasGitRepo(targetRoot) {
+  return Boolean(targetRoot && gitTopLevel(targetRoot))
+}
+
+/** Working tree vs HEAD, including unstaged and untracked files. */
+export function readWorkingTreeChanges(targetRoot, knownFileIds = []) {
+  if (!hasGitRepo(targetRoot)) return emptyChangeOverlay()
+  return dropMassKnownCreates(
+    collectDiff(
+      targetRoot,
+      knownFileIds,
+      ['--no-color', '--no-ext-diff', '--no-renames', '--relative', 'HEAD'],
+      true,
+    ),
+    knownFileIds,
+  )
 }
 
 function collectDiff(targetRoot, knownFileIds, diffArgs, includeUntracked) {
@@ -227,7 +339,12 @@ function collectDiff(targetRoot, knownFileIds, diffArgs, includeUntracked) {
   }
 }
 
-export function readBranchChanges(targetRoot, knownFileIds = [], modeInput = 'main') {
+export function readBranchChanges(
+  targetRoot,
+  knownFileIds = [],
+  modeInput = 'main',
+  commitInput = null,
+) {
   const empty = emptyBranchChanges()
   const mode = normalizeBranchChangesMode(modeInput)
   if (!targetRoot || !fs.existsSync(targetRoot)) return { ...empty, mode }
@@ -235,6 +352,57 @@ export function readBranchChanges(targetRoot, knownFileIds = [], modeInput = 'ma
   if (!gitRoot) return { ...empty, mode }
 
   const branch = currentBranch(targetRoot) ?? currentBranch(gitRoot)
+  if (mode === 'commit') {
+    const commits = listBranchCommits(targetRoot)
+    const commit = resolveCommitOnBranch(gitRoot, commits, commitInput)
+    if (!commit) {
+      return {
+        ...empty,
+        available: true,
+        branch,
+        mode,
+        commitMissing: true,
+        commits,
+      }
+    }
+    const parent = firstParentSha(gitRoot, commit.sha)
+    const listed = commits.some((item) => item.sha === commit.sha)
+      ? commits
+      : [commit, ...commits]
+    return {
+      available: true,
+      branch,
+      base: commit.short,
+      mode,
+      remoteMissing: false,
+      commit,
+      commits: listed,
+      commitMissing: false,
+      ...collectDiff(
+        targetRoot,
+        knownFileIds,
+        [
+          '--no-color',
+          '--no-ext-diff',
+          '--no-renames',
+          '--relative',
+          parent ?? EMPTY_TREE,
+          commit.sha,
+        ],
+        false,
+      ),
+    }
+  }
+  if (mode === 'current') {
+    return {
+      available: true,
+      branch,
+      base: 'HEAD',
+      mode,
+      remoteMissing: false,
+      ...readWorkingTreeChanges(targetRoot, knownFileIds),
+    }
+  }
   if (mode === 'remote') {
     const remote = resolveRemoteRef(gitRoot, branch)
     if (!remote) {

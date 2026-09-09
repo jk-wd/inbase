@@ -122,11 +122,17 @@ export function clearDiffSessions(
 export function listSessionIntents(
   dataDir: string,
   knownFileIds?: string[],
+  targetRoot?: string | null,
 ): Array<Record<string, unknown>>
 export function readBlueprintSession(dataDir: string): string | null
 export function writeBlueprintSession(dataDir: string, sessionId: string | null): void
 export function readManifest(dataDir: string, sessionId: string): DiffManifest | null
 export function writeManifest(dataDir: string, manifest: DiffManifest): void
+export function readOverlay(
+  dataDir: string,
+  sessionId: string,
+  entry: DiffEntry,
+): import('./change-overlay.d.ts').ChangeOverlay
 export function isSessionStopped(dataDir: string, sessionId: string): boolean
 export function isWorkflowStopped(dataDir: string, sessionId: string): boolean
 export function sessionStoppedError(sessionId: string): Error
@@ -339,6 +345,7 @@ export function sessionIntent(
   knownFileIds?: string[],
   selectedDiffId?: string,
   waiterIds?: Set<string>,
+  targetRoot?: string | null,
 ): Record<string, unknown> | null
 export function resolveTargetFile(
   targetRoot: string,
@@ -385,6 +392,7 @@ export function appendDiff(
   targetRoot: string,
   input: {
     sessionId: string
+    overlay?: import('./change-overlay.d.ts').ChangeOverlay
     patchText?: string
   },
 ): { manifest: DiffManifest; entry: DiffEntry }
@@ -431,3 +439,8 @@ export function finalizeFinishedSession(
   sessionId: string,
   targetRoot?: string | null,
 ): void
+export function completeSession(
+  dataDir: string,
+  sessionId: string,
+  targetRoot?: string | null,
+): null

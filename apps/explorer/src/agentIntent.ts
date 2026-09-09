@@ -3,6 +3,7 @@ import type {
   AgentIntentBundle,
   BlueprintNote,
   BlueprintPointer,
+  DiffChainEntry,
   LoadBlueprintInput,
   LocalBlueprint,
   PatchImport,
@@ -93,6 +94,103 @@ function normalizeContextFiles(value: unknown): NonNullable<AgentIntent['context
   })
 }
 
+function overlayFromUnknown(value: unknown) {
+  const data = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+  return {
+    files: Array.isArray(data.files) ? data.files.filter((id) => typeof id === 'string') : [],
+    creates: Array.isArray(data.creates)
+      ? data.creates.filter((id) => typeof id === 'string')
+      : [],
+    deletes: Array.isArray(data.deletes)
+      ? data.deletes.filter((id) => typeof id === 'string')
+      : [],
+    createFolders: Array.isArray(data.createFolders)
+      ? data.createFolders.filter((id) => typeof id === 'string')
+      : [],
+    createLines:
+      data.createLines && typeof data.createLines === 'object'
+        ? (data.createLines as Record<string, number>)
+        : {},
+    imports: normalizeImports(data.imports),
+    addedFunctions: normalizeSymbolAdditions(data.addedFunctions),
+    addedVariables: normalizeSymbolAdditions(data.addedVariables),
+    addedImports: normalizeImportAdditions(data.addedImports),
+    changedFunctions: normalizeSymbolAdditions(data.changedFunctions),
+    changedVariables: normalizeSymbolAdditions(data.changedVariables),
+  }
+}
+
+function normalizeChain(value: unknown): DiffChainEntry[] {
+  if (!Array.isArray(value)) return []
+  return value.map((item, index) => {
+    const entry = item && typeof item === 'object' ? (item as Record<string, unknown>) : {}
+    const status = entry.status
+    return {
+      id: typeof entry.id === 'string' ? entry.id : String(index),
+      index: typeof entry.index === 'number' ? entry.index : index,
+      step: typeof entry.step === 'number' ? entry.step : index + 1,
+      title: typeof entry.title === 'string' ? entry.title : '',
+      status:
+        status === 'pending' ||
+        status === 'extend' ||
+        status === 'extended' ||
+        status === 'applied' ||
+        status === 'rejected'
+          ? status
+          : 'applied',
+      ...overlayFromUnknown(entry),
+    }
+  })
+}
+
+export function pinIntentToDiff(
+  intent: AgentIntent,
+  diffId: string | null,
+  followLive = diffId == null,
+): AgentIntent {
+  const latestId = intent.chain.at(-1)?.id ?? null
+  const liveStep = intent.liveStep ?? intent.step
+  if (followLive || !diffId) {
+    return {
+      ...intent,
+      liveStep,
+      diffId: latestId,
+      chainIndex: intent.chain.length > 0 ? intent.chain.length - 1 : null,
+      isActiveDiff: true,
+    }
+  }
+  const entry = intent.chain.find((item) => item.id === diffId)
+  if (!entry) return intent
+  return {
+    ...intent,
+    liveStep,
+    diffId: entry.id,
+    chainIndex: entry.index,
+    isActiveDiff: false,
+    step: entry.step,
+    reason: entry.title,
+    status: intent.working
+      ? intent.status
+      : entry.status === 'applied'
+        ? 'approved'
+        : entry.status === 'pending'
+          ? 'pending'
+          : intent.status,
+    preview: true,
+    files: entry.files,
+    creates: entry.creates,
+    deletes: entry.deletes,
+    createFolders: entry.createFolders,
+    createLines: entry.createLines,
+    imports: entry.imports,
+    addedFunctions: entry.addedFunctions,
+    addedVariables: entry.addedVariables,
+    addedImports: entry.addedImports,
+    changedFunctions: entry.changedFunctions,
+    changedVariables: entry.changedVariables,
+  }
+}
+
 export const emptyIntent: AgentIntent = {
   updatedAt: null,
   showMap: false,
@@ -122,6 +220,7 @@ export const emptyIntent: AgentIntent = {
   chainIndex: null,
   chain: [],
   isActiveDiff: false,
+  liveStep: null,
   preview: false,
   phase: null,
   working: false,
@@ -180,8 +279,9 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     diffId: data?.diffId ?? null,
     parentDiffId: data?.parentDiffId ?? null,
     chainIndex: typeof data?.chainIndex === 'number' ? data.chainIndex : null,
-    chain: Array.isArray(data?.chain) ? data.chain : [],
+    chain: normalizeChain(data?.chain),
     isActiveDiff: Boolean(data?.isActiveDiff),
+    liveStep: typeof data?.liveStep === 'number' ? data.liveStep : null,
     preview: Boolean(data?.preview),
     phase: data?.phase ?? null,
     working: Boolean(data?.working),

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { shouldIgnoreShortcut, isKeyboardIsolated } from './keyboard'
-import { emptyIntent, fetchAgentIntent, fetchAgentIntents, inspectTargetFile, loadBlueprintFile, performAgentAction, persistBlueprintCleanup, persistBlueprintClear, persistBlueprintHidden, persistSessionBlueprint, persistSessionFocus, saveBlueprintFile } from './agentIntent'
+import { emptyIntent, fetchAgentIntents, inspectTargetFile, loadBlueprintFile, performAgentAction, persistBlueprintCleanup, persistBlueprintClear, persistBlueprintHidden, persistSessionBlueprint, persistSessionFocus, pinIntentToDiff, saveBlueprintFile } from './agentIntent'
 import { emptyBranchChanges, fetchBranchChanges } from './branchChanges'
 import { fetchCodebase, updateCodebase } from './codebase'
 import {
@@ -47,6 +47,7 @@ import {
 } from './explain'
 import {
   fetchUserContext,
+  persistBranchChangesCommit,
   persistBranchChangesMode,
   persistShowBranchChanges,
   persistShowHiddenFiles,
@@ -89,6 +90,7 @@ import {
   type AgentIntent,
   type AimedRelation,
   type BranchChangesMode,
+  nextBranchChangesMode,
   type BlueprintNote,
   type BlueprintNoteKind,
   type BlueprintOption,
@@ -639,6 +641,9 @@ function intentSignature(intent: AgentIntent) {
     feature: intent.feature,
     creationMode: intent.creationMode,
     diffId: intent.diffId,
+    isActiveDiff: intent.isActiveDiff,
+    liveStep: intent.liveStep,
+    working: intent.working,
     chain: intent.chain,
     files: intent.files,
     creates: intent.creates,
@@ -768,6 +773,9 @@ function Explorer({
   const [wantBranchChanges, setWantBranchChanges] = useState(false)
   const [branchChangesMode, setBranchChangesMode] =
     useState<BranchChangesMode>('main')
+  const [branchChangesCommit, setBranchChangesCommit] = useState<string | null>(
+    null,
+  )
   const [showHiddenFiles, setShowHiddenFiles] = useState(false)
   const [branchChanges, setBranchChanges] = useState(emptyBranchChanges)
   const intent =
@@ -1076,8 +1084,10 @@ function Explorer({
   const [relationMode, setRelationMode] = useState<RelationMode>('targeted')
   const [changePathsOnly, setChangePathsOnly] = useState(false)
   const lastIntentSig = useRef<string | null>(null)
+  const lastLivePatchSig = useRef<string | null>(null)
   const viewedDiffId = useRef<Record<string, string | null>>({})
   const browsingHistory = useRef<Record<string, boolean>>({})
+  const liveIntentsRef = useRef<AgentIntent[]>([])
   const seenSessionIds = useRef<Set<string>>(new Set())
 
   const applyIntent = useCallback((next: AgentIntent, sessionId?: string) => {
@@ -1100,7 +1110,18 @@ function Explorer({
       })
       return nextList
     })
-    if (targetId && next.sessionId) viewedDiffId.current[targetId] = next.diffId
+    if (targetId && next.sessionId) {
+      viewedDiffId.current[targetId] = next.diffId
+      if (!browsingHistory.current[targetId]) {
+        liveIntentsRef.current = liveIntentsRef.current.some(
+          (item) => item.sessionId === targetId,
+        )
+          ? liveIntentsRef.current.map((item) =>
+              item.sessionId === targetId ? next : item,
+            )
+          : [...liveIntentsRef.current, next]
+      }
+    }
   }, [])
 
   const focusSessionPanel = useCallback((sessionId: string) => {
@@ -1219,8 +1240,9 @@ function Explorer({
         )
         browsingHistory.current[sessionId] = false
         lastIntentSig.current = null
-        if (action === 'stop') {
+        if (action === 'stop' || action === 'done') {
           const bundle = await fetchAgentIntents()
+          liveIntentsRef.current = bundle.intents
           setIntents(bundle.intents)
           await onRefreshGraph()
           return next
@@ -1242,31 +1264,25 @@ function Explorer({
     ],
   )
 
-  const navigateDiff = useCallback(
-    async (sessionId: string, diffId: string) => {
-      const current = intents.find((item) => item.sessionId === sessionId)
-      if (!current) return
-      try {
-        const latest = current.chain.at(-1)?.id
-        browsingHistory.current[sessionId] = diffId !== latest
-        try {
-          await inspectTargetFile({
-            sessionId,
-            diffId,
-          })
-        } catch {
-          // Still show the historical preview if disk replay failed.
-        }
-        const next = await fetchAgentIntent(sessionId, diffId)
-        lastIntentSig.current = null
-        applyIntent(next, sessionId)
-        setFocusedSessionId(sessionId)
-      } catch {
-        // Keep the current chain position if navigation failed.
-      }
-    },
-    [applyIntent, intents],
-  )
+  const navigateDiff = useCallback((sessionId: string, diffId: string | null) => {
+    const live =
+      liveIntentsRef.current.find((item) => item.sessionId === sessionId) ??
+      intents.find((item) => item.sessionId === sessionId)
+    if (!live) return
+    const latest = live.chain.at(-1)?.id ?? null
+    const followLive = diffId == null || (diffId === latest && !live.working)
+    lastIntentSig.current = null
+    if (followLive) {
+      browsingHistory.current[sessionId] = false
+      viewedDiffId.current[sessionId] = live.diffId
+      applyIntent(pinIntentToDiff(live, null, true), sessionId)
+    } else {
+      browsingHistory.current[sessionId] = true
+      viewedDiffId.current[sessionId] = diffId
+      applyIntent(pinIntentToDiff(live, diffId, false), sessionId)
+    }
+    setFocusedSessionId(sessionId)
+  }, [applyIntent, intents])
 
   const inspectFile = useCallback(
     async (fileId: string) => {
@@ -1303,9 +1319,14 @@ function Explorer({
       }
       if (
         context?.branchChangesMode === 'remote' ||
-        context?.branchChangesMode === 'main'
+        context?.branchChangesMode === 'main' ||
+        context?.branchChangesMode === 'current' ||
+        context?.branchChangesMode === 'commit'
       ) {
         setBranchChangesMode(context.branchChangesMode)
+      }
+      if (typeof context?.branchChangesCommit === 'string') {
+        setBranchChangesCommit(context.branchChangesCommit)
       }
       if (typeof context?.showHiddenFiles === 'boolean') {
         setShowHiddenFiles(context.showHiddenFiles)
@@ -2157,9 +2178,14 @@ function Explorer({
     [],
   )
 
+  const setBranchChangesCommitAndPersist = useCallback((next: string) => {
+    setBranchChangesCommit(next)
+    persistBranchChangesCommit(next)
+  }, [])
+
   const toggleBranchChangesMode = useCallback(() => {
     setBranchChangesMode((current) => {
-      const next = current === 'remote' ? 'main' : 'remote'
+      const next = nextBranchChangesMode(current)
       persistBranchChangesMode(next)
       return next
     })
@@ -2186,6 +2212,30 @@ function Explorer({
     setRelationMode(mode)
     setAimedRelation(null)
   }, [])
+
+  useEffect(() => {
+    const sessionId = intent.sessionId
+    if (!sessionId || browsingHistory.current[sessionId]) return
+    if (!intent.preview) return
+    const sig = JSON.stringify({
+      sessionId,
+      diffId: intent.diffId,
+      files: intent.files ?? [],
+      creates: intent.creates ?? [],
+      imports: intent.imports ?? [],
+    })
+    if (lastLivePatchSig.current === sig) return
+    lastLivePatchSig.current = sig
+    setRelationModeAndClearAim('changed')
+  }, [
+    intent.creates,
+    intent.diffId,
+    intent.files,
+    intent.imports,
+    intent.preview,
+    intent.sessionId,
+    setRelationModeAndClearAim,
+  ])
 
   const cycleRelationMode = useCallback(() => {
     setRelationMode((current) => {
@@ -2272,8 +2322,20 @@ function Explorer({
   useEffect(() => {
     let cancelled = false
     const load = async () => {
-      const next = await fetchBranchChanges(branchChangesMode)
-      if (!cancelled) setBranchChanges(next)
+      const next = await fetchBranchChanges(
+        branchChangesMode,
+        branchChangesCommit,
+      )
+      if (cancelled) return
+      setBranchChanges(next)
+      if (
+        next.mode === 'commit' &&
+        next.commit?.sha &&
+        next.commit.sha !== branchChangesCommit
+      ) {
+        setBranchChangesCommit(next.commit.sha)
+        persistBranchChangesCommit(next.commit.sha)
+      }
     }
     void load()
     if (!wantBranchChanges || llmBusy) {
@@ -2288,7 +2350,7 @@ function Explorer({
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [branchChangesMode, llmBusy, updatingModel, wantBranchChanges])
+  }, [branchChangesCommit, branchChangesMode, llmBusy, updatingModel, wantBranchChanges])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -2409,21 +2471,20 @@ function Explorer({
           if (cancelled) return
         }
         setNextAttachSessionId(bundle.nextAttachSessionId)
-        const merged: AgentIntent[] = []
-        for (const next of bundle.intents) {
+        liveIntentsRef.current = bundle.intents
+        const merged: AgentIntent[] = bundle.intents.map((next) => {
           const sessionId = next.sessionId
-          if (
-            sessionId &&
-            browsingHistory.current[sessionId] &&
-            viewedDiffId.current[sessionId]
-          ) {
-            merged.push(
-              await fetchAgentIntent(sessionId, viewedDiffId.current[sessionId] ?? undefined),
-            )
-          } else {
-            merged.push(next)
+          const pinned =
+            sessionId && browsingHistory.current[sessionId]
+              ? viewedDiffId.current[sessionId]
+              : null
+          if (sessionId && pinned) {
+            const frozen = pinIntentToDiff(next, pinned, false)
+            if (!frozen.isActiveDiff) return frozen
+            browsingHistory.current[sessionId] = false
           }
-        }
+          return next
+        })
         const signature = JSON.stringify(merged.map(intentSignature))
         if (cancelled || signature === lastIntentSig.current) {
           return
@@ -3068,6 +3129,7 @@ function Explorer({
         llmMakingChanges={llmBusy}
         onToggleShowBranchChanges={toggleShowBranchChanges}
         onBranchChangesModeChange={setBranchChangesModeAndPersist}
+        onBranchChangesCommitChange={setBranchChangesCommitAndPersist}
         showHiddenFiles={showHiddenFiles}
         onToggleShowHiddenFiles={toggleShowHiddenFiles}
         onUpdateModel={onUpdateModel}
