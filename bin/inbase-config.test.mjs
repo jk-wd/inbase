@@ -102,6 +102,7 @@ test('applyHostEnv uses inbase.json target and keeps data dir at the kickoff roo
     assert.equal(host.targetRoot, path.resolve(target))
     assert.equal(host.dataDir, path.join(root, '.inbase'))
     assert.equal(host.config.port, 5188)
+    assert.equal(host.instance, null)
     assert.equal(process.env.INBASE_CONFIG, path.join(root, CONFIG_FILE_NAME))
   } finally {
     restoreEnv(env)

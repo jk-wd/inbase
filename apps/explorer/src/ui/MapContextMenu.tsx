@@ -16,6 +16,8 @@ type MapContextMenuProps = {
   onAddFile: (folder: string, color?: string) => void
   onAddFolder: (folder: string, color?: string) => void
   onOpenFile?: (fileId: string) => void
+  onExplainFile?: (fileId: string) => void
+  onExplainFolder?: (folder: string) => void
   onPointToFolder?: (folder: string) => void
   onClose: () => void
 }
@@ -26,6 +28,8 @@ export function MapContextMenu({
   onAddFile,
   onAddFolder,
   onOpenFile,
+  onExplainFile,
+  onExplainFolder,
   onPointToFolder,
   onClose,
 }: MapContextMenuProps) {
@@ -58,7 +62,12 @@ export function MapContextMenu({
   const folder = menu.folder
   const pad = 8
   const width = 176
-  const height = fileId ? 44 : onPointToFolder ? 126 : 84
+  const itemHeight = 42
+  const fileItemCount =
+    1 + (onExplainFile ? 1 : 0) + (onExplainFolder && folder ? 1 : 0)
+  const folderItemCount =
+    2 + (onPointToFolder ? 1 : 0) + (onExplainFolder ? 1 : 0)
+  const height = (fileId ? fileItemCount : folderItemCount) * itemHeight
   const left = Math.min(
     Math.max(pad, menu.x),
     window.innerWidth - width - pad,
@@ -76,16 +85,42 @@ export function MapContextMenu({
       onContextMenu={(event) => event.preventDefault()}
     >
       {fileId ? (
-        <button
-          type="button"
-          role="menuitem"
-          onClick={() => {
-            onOpenFile?.(fileId)
-            onClose()
-          }}
-        >
-          Open file
-        </button>
+        <>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              onOpenFile?.(fileId)
+              onClose()
+            }}
+          >
+            Open file
+          </button>
+          {onExplainFile ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onExplainFile(fileId)
+                onClose()
+              }}
+            >
+              Explain file
+            </button>
+          ) : null}
+          {onExplainFolder && folder ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onExplainFolder(folder)
+                onClose()
+              }}
+            >
+              Explain folder
+            </button>
+          ) : null}
+        </>
       ) : folder ? (
         <>
           <button
@@ -121,6 +156,18 @@ export function MapContextMenu({
               {pointed ? 'Stop pointing' : 'Point to folder'}
             </button>
           )}
+          {onExplainFolder ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onExplainFolder(folder)
+                onClose()
+              }}
+            >
+              Explain folder
+            </button>
+          ) : null}
         </>
       ) : null}
     </div>,

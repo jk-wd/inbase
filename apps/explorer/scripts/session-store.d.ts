@@ -83,6 +83,7 @@ export function sessionPaths(
   preStep: string
   context: string
   stopped: string
+  released: string
 }
 export function touchSessionConnection(dataDir: string, sessionId: string): void
 export function recordSessionAck(
@@ -134,6 +135,7 @@ export function readOverlay(
   entry: DiffEntry,
 ): import('./change-overlay.d.ts').ChangeOverlay
 export function isSessionStopped(dataDir: string, sessionId: string): boolean
+export function isSessionReleased(dataDir: string, sessionId: string): boolean
 export function isWorkflowStopped(dataDir: string, sessionId: string): boolean
 export function sessionStoppedError(sessionId: string): Error
 export function startSession(

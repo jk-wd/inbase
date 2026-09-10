@@ -214,7 +214,7 @@ async function runServer(args) {
   console.log(`Inbase is mapping ${targetRoot}`)
   console.log(`Open ${local}`)
   console.log(
-    'Leave this running. Open a Cursor, Claude Code, Codex, Copilot, or Cline chat to connect — 5 chats can be connected at once.',
+    'Leave this running. Open a Cursor, Claude Code, Codex, Copilot, or Cline chat to connect — 10 chats can be connected at once.',
   )
 }
 
@@ -346,7 +346,7 @@ export async function main(argv = process.argv.slice(2)) {
   }
   if (command === 'wait-for-approval') {
     console.error(
-      'wait-for-approval was removed. The user types /explain in chat or clicks Done in the session window.',
+      'wait-for-approval was removed. The user types /explainit in chat or clicks Done in the session window.',
     )
     process.exit(1)
   }

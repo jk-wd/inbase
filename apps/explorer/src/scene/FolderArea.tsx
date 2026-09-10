@@ -5,7 +5,9 @@ import {
   BLUEPRINT_OVERLAY,
   CHANGE_HIGHLIGHT,
   CONFIG,
+  EXPLAIN_FOCUS,
   blueprintPalette,
+  dimColor,
   folderAisleColor,
   folderFloorColor,
   MAP_SELECTION,
@@ -88,6 +90,10 @@ export function FolderArea({
 
   const faded = overlay || opacity < 1
   const wash = overlay ? BLUEPRINT_OVERLAY.folderOpacity * opacity : opacity
+  const outlineColor =
+    outline && faded && !overlay
+      ? dimColor(outline, EXPLAIN_FOCUS.dimColorAmount)
+      : outline
   const floorMaterial = {
     transparent: faded,
     opacity: overlay ? wash : opacity,
@@ -103,11 +109,11 @@ export function FolderArea({
           : undefined
       }
     >
-      {outline && (
+      {outlineColor && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, overlay ? 0.02 : -0.01, 0]}>
           <planeGeometry args={[folder.width + 0.9, folder.depth + 0.9]} />
           <meshBasicMaterial
-            color={outline}
+            color={outlineColor}
             toneMapped={false}
             transparent={faded}
             opacity={
@@ -183,7 +189,9 @@ export function FolderArea({
               pointedColor
                 ? pointedColor
                 : highlight
-                  ? highlight.color
+                  ? faded
+                    ? dimColor(highlight.color, EXPLAIN_FOCUS.dimColorAmount)
+                    : highlight.color
                   : addedOnly
                     ? tint?.label ?? '#9ad8ff'
                     : '#8b95a5'

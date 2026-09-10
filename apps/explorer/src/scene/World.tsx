@@ -12,7 +12,6 @@ import {
 import { RelationLines } from './RelationLines'
 import { Player } from './Player'
 import { MapView, type MapBlueprintMenu, type MapFileLabel, type MapFocusBounds } from './MapView'
-import { SelectionController } from './SelectionController'
 import { UserContextTracker } from './UserContextTracker'
 import { WalkLodTracker } from './WalkLodTracker'
 import { computeWalkLod, type WalkLod } from './walkLod'
@@ -36,7 +35,6 @@ import { BLUEPRINT_OVERLAY, CONFIG, WORLD_VOID, blueprintPalette, explainItemOpa
 import type {
   CodebaseGraph,
   FileNode,
-  FlyTo,
   AimedRelation,
   PatchImport,
   PlacedBridge,
@@ -66,6 +64,7 @@ type WorldProps = {
   onLockedChange: (locked: boolean) => void
   onLand: (x: number, z: number) => void
   onWalkPosition: (x: number, z: number) => void
+  onExitWalk?: () => void
   onContext: (context: UserContext) => void
   plannedIds: string[]
   previewFiles: Record<string, PlacedFile>
@@ -73,12 +72,8 @@ type WorldProps = {
   createdIds: string[]
   deletedIds?: string[]
   createLines: Record<string, number>
-  flyTo: FlyTo | null
   aimedRelation: AimedRelation | null
   onAimRelation: (aim: AimedRelation | null) => void
-  onAimFile?: (fileId: string | null) => void
-  onInspect?: (fileId: string) => void
-  onTravelTo: (fromId: string, toId: string) => void
   importedBy?: boolean
   relationMode?: RelationMode
   namingId?: string | null
@@ -99,6 +94,7 @@ type WorldProps = {
   focusBounds?: MapFocusBounds | null
   focusFlightKey?: string | number
   landEnabled?: boolean
+  droppingWalk?: boolean
 }
 
 export function World({
@@ -116,6 +112,7 @@ export function World({
   onLockedChange,
   onLand,
   onWalkPosition,
+  onExitWalk,
   onContext,
   plannedIds,
   previewFiles,
@@ -123,12 +120,8 @@ export function World({
   createdIds,
   deletedIds = [],
   createLines,
-  flyTo,
   aimedRelation,
   onAimRelation,
-  onAimFile,
-  onInspect,
-  onTravelTo,
   importedBy = false,
   relationMode = 'targeted',
   namingId = null,
@@ -149,6 +142,7 @@ export function World({
   focusBounds = null,
   focusFlightKey = 0,
   landEnabled = true,
+  droppingWalk = false,
 }: WorldProps) {
   const created = new Set(createdIds)
   const deleted = new Set(deletedIds)
@@ -554,9 +548,10 @@ export function World({
         fileLabels={mapFileLabels}
         focusBounds={focusBounds}
         focusFlightKey={focusFlightKey}
-        hudReserve={explainActive ? 24 : 88}
+        hudReserve={88}
         topReserve={explainActive ? 24 : 28}
         landEnabled={landEnabled}
+        droppingWalk={droppingWalk}
         dimmedFolderPaths={dimmedFolderPaths}
         onLand={onLand}
         onSelect={onSelect}
@@ -743,14 +738,13 @@ export function World({
         />
       )}
       <Player
-        layout={layout}
         mode={mode}
         landAt={landAt}
         locked={locked}
         lockEnabled={!placing}
         onLockedChange={onLockedChange}
         onWalkPosition={onWalkPosition}
-        flyTo={flyTo}
+        onExitWalk={onExitWalk}
       />
       {!mapping && (
         <WalkLodTracker
@@ -763,15 +757,6 @@ export function World({
           onChange={setWalkLod}
         />
       )}
-      <SelectionController
-        locked={locked && !mapping}
-        onSelect={onSelect}
-        onInspect={onInspect}
-        onAimFile={onAimFile}
-        onAimRelation={onAimRelation}
-        onTravelTo={onTravelTo}
-        files={{ ...layout.files, ...ghosts }}
-      />
       <UserContextTracker
         graph={graph}
         layout={layout}

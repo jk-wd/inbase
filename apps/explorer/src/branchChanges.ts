@@ -1,34 +1,16 @@
-import type {
-  BranchChanges,
-  BranchChangesMode,
-  BranchCommit,
-} from './types'
-
-function normalizeCommit(data: unknown): BranchCommit | null {
-  if (!data || typeof data !== 'object') return null
-  const commit = data as Partial<BranchCommit>
-  if (typeof commit.sha !== 'string' || typeof commit.short !== 'string') {
-    return null
-  }
-  return {
-    sha: commit.sha,
-    short: commit.short,
-    subject: typeof commit.subject === 'string' ? commit.subject : '',
-  }
-}
+import type { BranchChanges, BranchRef } from './types'
 
 export const emptyBranchChanges: BranchChanges = {
   available: false,
   branch: null,
   base: null,
-  mode: 'main',
-  remoteMissing: false,
-  commit: null,
-  commits: [],
-  commitMissing: false,
+  current: true,
+  branches: [],
+  baseMissing: false,
   files: [],
   creates: [],
   deletes: [],
+  absent: [],
   createFolders: [],
   createLines: {},
   imports: [],
@@ -39,34 +21,27 @@ export const emptyBranchChanges: BranchChanges = {
   changedVariables: [],
 }
 
-function normalizeMode(value: unknown): BranchChangesMode {
-  if (
-    value === 'remote' ||
-    value === 'current' ||
-    value === 'commit'
-  ) {
-    return value
-  }
-  return 'main'
-}
-
 function normalize(data: Partial<BranchChanges> | null | undefined): BranchChanges {
   return {
     available: Boolean(data?.available),
     branch: typeof data?.branch === 'string' ? data.branch : null,
     base: typeof data?.base === 'string' ? data.base : null,
-    mode: normalizeMode(data?.mode),
-    remoteMissing: Boolean(data?.remoteMissing),
-    commit: normalizeCommit(data?.commit),
-    commits: Array.isArray(data?.commits)
-      ? data.commits
-          .map((item) => normalizeCommit(item))
-          .filter((item): item is BranchCommit => Boolean(item))
+    current: data?.current !== false,
+    branches: Array.isArray(data?.branches)
+      ? data.branches
+          .map((item): BranchRef | null => {
+            if (typeof item === 'string') return { name: item, remote: false }
+            if (!item || typeof item !== 'object') return null
+            if (typeof item.name !== 'string' || !item.name) return null
+            return { name: item.name, remote: Boolean(item.remote) }
+          })
+          .filter((item): item is BranchRef => Boolean(item))
       : [],
-    commitMissing: Boolean(data?.commitMissing),
+    baseMissing: Boolean(data?.baseMissing),
     files: Array.isArray(data?.files) ? data.files : [],
     creates: Array.isArray(data?.creates) ? data.creates : [],
     deletes: Array.isArray(data?.deletes) ? data.deletes : [],
+    absent: Array.isArray(data?.absent) ? data.absent : [],
     createFolders: Array.isArray(data?.createFolders) ? data.createFolders : [],
     createLines:
       data?.createLines && typeof data.createLines === 'object'
@@ -86,15 +61,13 @@ function normalize(data: Partial<BranchChanges> | null | undefined): BranchChang
 }
 
 export async function fetchBranchChanges(
-  mode: BranchChangesMode = 'main',
-  commit: string | null = null,
+  base: string | null = null,
 ): Promise<BranchChanges> {
   try {
     const params = new URLSearchParams({
-      mode,
       t: String(Date.now()),
     })
-    if (commit) params.set('commit', commit)
+    if (base) params.set('base', base)
     const response = await fetch(`/api/branch-changes?${params.toString()}`)
     if (!response.ok) return emptyBranchChanges
     return normalize((await response.json()) as BranchChanges)

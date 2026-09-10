@@ -104,7 +104,7 @@ function readShowBranchChanges(dataDir) {
 }
 
 function llmHidesBranchChanges(intent) {
-  if (!intent) return false
+  if (!intent || intent.awaitingAttach) return false
   return (
     intent.working ||
     intent.preview ||
@@ -156,24 +156,18 @@ async function readVisibleChanges(store, config) {
       pathToFileURL(path.join(explorerRoot, 'scripts/branch-changes.mjs')).href
     )
     const context = readUserContext(dataDir)
-    const mode = branchMod.normalizeBranchChangesMode(context?.branchChangesMode)
     const branch = branchMod.readBranchChanges(
       config.targetRoot,
       known,
-      mode,
-      context?.branchChangesCommit,
+      context?.branchChangesBase,
     )
     if (branch.available) {
       const vs =
-        branch.mode === 'commit' && branch.branch && branch.commit
-          ? ` (${branch.branch} · ${branch.commit.short} ${branch.commit.subject})`
-          : branch.mode === 'remote' && branch.branch && branch.base
-          ? ` (${branch.branch} staged vs ${branch.base})`
-          : branch.mode === 'current' && branch.branch
-            ? ` (${branch.branch} vs HEAD)`
-            : branch.branch && branch.base
-              ? ` (${branch.branch} vs ${branch.base})`
-              : ''
+        branch.current && branch.branch
+          ? ` (${branch.branch} vs last commit)`
+          : branch.branch && branch.base
+            ? ` (${branch.branch} vs ${branch.base})`
+            : ''
       return {
         kind: 'diff',
         question: 'What has changed in this diff?',
@@ -303,8 +297,8 @@ export async function attachSession(args) {
     ' If this conversation already printed VISUAL_CODER_SESSION, this is the wrong slot: stop, discard this id, and use the original session. Do not report a new plan here.'
   console.log(
     colorName
-      ? `VISUAL_CODER_ATTACHED Attached to the ${colorName} session (${manifest.phase}). Tell the user you connected to the ${colorName} chat. Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then report a plan if you can. After report-plan, implement every invoked step in this same turn. After the last recorded step, wait for /explain, /stop, or a change request in chat.${wrongSlot}`
-      : `VISUAL_CODER_ATTACHED Attached to the next waiting visualizer session ${manifest.name || manifest.sessionId} (${manifest.phase}). Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then report a plan if you can. After report-plan, implement every invoked step in this same turn. After the last recorded step, wait for /explain, /stop, or a change request in chat.${wrongSlot}`,
+      ? `VISUAL_CODER_ATTACHED Attached to the ${colorName} session (${manifest.phase}). Tell the user you connected to the ${colorName} chat. Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then report a plan if you can. After report-plan, implement every invoked step in this same turn. After the last recorded step, wait for /explainit, /stop, or a change request in chat.${wrongSlot}`
+      : `VISUAL_CODER_ATTACHED Attached to the next waiting visualizer session ${manifest.name || manifest.sessionId} (${manifest.phase}). Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then report a plan if you can. After report-plan, implement every invoked step in this same turn. After the last recorded step, wait for /explainit, /stop, or a change request in chat.${wrongSlot}`,
   )
 }
 
@@ -418,7 +412,7 @@ export async function readBlueprint(args) {
     )
   } else {
     console.log(
-      'VISUAL_CODER_NO_REQUEST No chat instruction and no enabled blueprint. Stop. Wait for the user to type a request, /explain, or /stop in chat.',
+      'VISUAL_CODER_NO_REQUEST No chat instruction and no enabled blueprint. Stop. Wait for the user to type a request, /explainit, or /stop in chat.',
     )
   }
   const attached = store.contextFileHandshake(config.dataDir, sessionId)
@@ -625,7 +619,7 @@ export async function proposePatch(args) {
   }
 
   console.log(
-    `VISUAL_CODER_STEP_READY Recorded the current map overlay as ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${overlay.files.length} changed, ${overlay.creates.length} added. That was the last plan step. Stop. The user clicks Done in the session window to keep the files and free the color. Wait for /explain, /stop, or a change request. A change request must report-plan with the new remaining steps first — that replaces this proposal from step ${entry.step}. Do not edit files before report-plan.`,
+    `VISUAL_CODER_STEP_READY Recorded the current map overlay as ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${overlay.files.length} changed, ${overlay.creates.length} added. That was the last plan step. Stop. The user clicks Done in the session window to keep the files and free the color. Wait for /explainit, /stop, or a change request. A change request must report-plan with the new remaining steps first — that replaces this proposal from step ${entry.step}. Do not edit files before report-plan.`,
   )
 }
 
@@ -648,7 +642,7 @@ export async function runExplain(args) {
   }
   if (parsed.action === 'wait') {
     console.error(
-      'explain wait was removed. The user types /explain in chat for a follow-up or a map ? click.',
+      'explain wait was removed. The user types /explainit in chat for a follow-up or a map ? click.',
     )
     process.exit(1)
   }
@@ -665,7 +659,7 @@ export async function runExplain(args) {
         `VISUAL_CODER_INSTRUCTION_START\n${parsed.question}\nVISUAL_CODER_INSTRUCTION_END`,
       )
       console.log(
-        `Run: npx inbase explain report --parent "${parent}" --question ${JSON.stringify(parsed.question)} --step "..." --body "..." --files path [--folders path] [--select path] [--zoom path] [--relations from:to] [--info] [--highlight function:name] [--point function:name]. Repeat --step for ${parent}.1, ${parent}.2, … Then stop. Wait for /explain in chat.`,
+        `Run: npx inbase explain report --parent "${parent}" --question ${JSON.stringify(parsed.question)} --step "..." --body "..." --files path [--folders path] [--select path] [--zoom path] [--relations from:to] [--info] [--highlight function:name] [--point function:name]. Repeat --step for ${parent}.1, ${parent}.2, … Then stop. Wait for /explainit in chat.`,
       )
       return
     }
@@ -712,7 +706,7 @@ export async function runExplain(args) {
     }
     console.log(`VISUAL_CODER_EXPLAIN_STARTED ${question}`)
     console.log(
-      'The map is in explain mode. Explore the codebase, then run inbase explain report with --step / --body / --files / --folders / --select / --zoom / --relations / --info / --highlight / --point. After reporting, stop. Wait for /explain in chat.',
+      'The map is in explain mode. Explore the codebase, then run inbase explain report with --step / --body / --files / --folders / --select / --zoom / --relations / --info / --highlight / --point. After reporting, stop. Wait for /explainit in chat.',
     )
     return
   }
@@ -741,6 +735,6 @@ export async function runExplain(args) {
     )
   }
   console.log(
-    'Stop. Wait for the user to type /explain in chat for a follow-up, or a change request to replace the waiting proposal.',
+    'Stop. Wait for the user to type /explainit in chat for a follow-up, or a change request to replace the waiting proposal.',
   )
 }

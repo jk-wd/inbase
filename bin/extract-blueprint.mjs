@@ -10,6 +10,11 @@ const SESSION_COLORS = [
   { id: 'lime', name: 'Lime', hex: '#a3e635' },
   { id: 'orange', name: 'Orange', hex: '#fb923c' },
   { id: 'violet', name: 'Violet', hex: '#c084fc' },
+  { id: 'teal', name: 'Teal', hex: '#2dd4bf' },
+  { id: 'crimson', name: 'Crimson', hex: '#dc2626' },
+  { id: 'forest', name: 'Forest', hex: '#15803d' },
+  { id: 'grey', name: 'Grey', hex: '#4b5563' },
+  { id: 'white', name: 'White', hex: '#f4f4f5' },
 ]
 
 export const EXTRACT_INSTRUCTION = `Extract a valuable Inbase blueprint, not a dump of the tree.

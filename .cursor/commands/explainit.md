@@ -2,7 +2,7 @@
 description: Explain a codebase question on the Inbase map
 ---
 
-The user invoked `/explain`. Do **not** edit project files. Do **not** run `inbase start-session`.
+The user invoked `/explainit`. Do **not** edit project files. Do **not** run `inbase start-session`.
 
 The user's question is:
 
@@ -51,7 +51,7 @@ npx inbase explain report \
 
 For a follow-up, add `--parent` from `VISUAL_CODER_PARENT`. For a `?` click, use a single `--step`. Repeat `--step` for every changed file or proposal step.
 
-4. **Stop.** Do not run `explain wait`. The user navigates the map. They type `/explain` again for a follow-up or another `?` click, or click **Done** in the session window to keep the files and free the color.
+4. **Stop.** Do not run `explain wait`. The user navigates the map. They type `/explainit` again for a follow-up or another `?` click, or click **Done** in the session window to keep the files and free the color.
 
 ## No proposal or diff
 
@@ -73,4 +73,4 @@ If that fails with `VISUAL_CODER_NOT_RUNNING`, reply with that message and stop.
 
 Keep steps small. Prefer real paths from the repo.
 
-5. **Stop.** Wait for `/explain` in chat for a follow-up. Do not run `explain wait`.
+5. **Stop.** Wait for `/explainit` in chat for a follow-up. Do not run `explain wait`.

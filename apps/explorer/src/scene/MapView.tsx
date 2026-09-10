@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Html, MapControls, OrthographicCamera } from '@react-three/drei'
 import * as THREE from 'three'
-import { folderAt, isBlueprintFolder, worldBounds } from '../layout'
+import { folderAt, folderOfFile, isBlueprintFolder, worldBounds } from '../layout'
 import type { ChangeKind } from '../theme'
 import { blueprintPalette } from '../theme'
 import type { PlacedFolder, WorldLayout } from '../types'
@@ -182,6 +182,7 @@ type MapViewProps = {
   hudReserve?: number
   topReserve?: number
   landEnabled?: boolean
+  droppingWalk?: boolean
   dimmedFolderPaths?: string[]
   onLand: (x: number, z: number) => void
   onSelect: (fileId: string | null) => void
@@ -207,6 +208,7 @@ export function MapView({
   hudReserve = 88,
   topReserve = 28,
   landEnabled = true,
+  droppingWalk = false,
   dimmedFolderPaths = [],
   onLand,
   onSelect,
@@ -238,8 +240,10 @@ export function MapView({
   const flightRef = useRef<MapFlight | null>(null)
   const flightKeyRef = useRef<number | string | null>(null)
   const focusingRef = useRef(false)
+  const preFocusPoseRef = useRef<MapPose | null>(null)
   const fittedRef = useRef(false)
   const [flying, setFlying] = useState(false)
+  const [dropAt, setDropAt] = useState<[number, number] | null>(null)
 
   const snapTo = (pose: MapPose) => {
     if (!(camera instanceof THREE.OrthographicCamera)) return
@@ -267,11 +271,38 @@ export function MapView({
     const key = focusing ? focusFlightKey : 'map'
     const wasFocusing = focusingRef.current
     const prevKey = flightKeyRef.current
+    if (focusing && !wasFocusing) {
+      preFocusPoseRef.current = poseRef.current
+    }
     focusingRef.current = focusing
     flightKeyRef.current = key
 
     if (!sized) {
+      if (!focusing && wasFocusing) {
+        const restore = preFocusPoseRef.current ?? poseOf(world)
+        preFocusPoseRef.current = null
+        snapTo(restore)
+        fittedRef.current = true
+        return
+      }
       snapTo(target)
+      return
+    }
+
+    if (!focusing && wasFocusing) {
+      const restore = preFocusPoseRef.current ?? poseOf(world)
+      preFocusPoseRef.current = null
+      flightRef.current = {
+        from: poseRef.current,
+        via: poseRef.current,
+        to: restore,
+        start: performance.now(),
+        duration: FOCUS_FLY_IN_MS,
+        split: 0,
+      }
+      setFlying(true)
+      fittedRef.current = true
+      invalidate()
       return
     }
 
@@ -297,7 +328,7 @@ export function MapView({
       return
     }
 
-    if (!fittedRef.current || prevKey !== 'map') {
+    if (!fittedRef.current) {
       snapTo(target)
       fittedRef.current = true
       return
@@ -368,10 +399,13 @@ export function MapView({
     const isWalkClick = (event: PointerEvent | MouseEvent) =>
       landEnabled && event.altKey
 
-    const isWalkButton = (event: PointerEvent) => event.button === 0
+    // Primary click only. Mac ctrl-click is a context-menu gesture (button 0 + ctrlKey).
+    const isSelectClick = (event: PointerEvent) =>
+      event.button === 0 && !event.ctrlKey
 
     const onDown = (event: PointerEvent) => {
-      if (!isWalkButton(event)) return
+      if (droppingWalk) return
+      if (!isSelectClick(event)) return
       drag.current = { x: event.clientX, y: event.clientY, moved: false, active: true }
       element.style.cursor = 'grabbing'
     }
@@ -436,7 +470,7 @@ export function MapView({
       element.style.cursor = restCursor
       const startedOnCanvas = drag.current.active
       drag.current.active = false
-      if (!startedOnCanvas || !isWalkButton(event) || drag.current.moved) return
+      if (!startedOnCanvas || !isSelectClick(event) || drag.current.moved) return
 
       if (
         !pickingImport &&
@@ -484,11 +518,11 @@ export function MapView({
       const pick = pickAt(event.clientX, event.clientY)
       if (!pick) return
       if (pick.fileId) {
-        onSelect(pick.fileId)
         onBlueprintMenu({
           x: event.clientX,
           y: event.clientY,
           file: pick.fileId,
+          folder: folderOfFile(pick.fileId),
         })
         return
       }
@@ -502,7 +536,6 @@ export function MapView({
         selectedFolder ??
         layout.folders['.']?.path
       if (!folderPath) return
-      onSelectFolder(folderPath, pick.folderPick?.layer ?? null)
       onBlueprintMenu({
         x: event.clientX,
         y: event.clientY,
@@ -587,7 +620,72 @@ export function MapView({
     pickingImport,
     scene,
     selectedFolder,
+    droppingWalk,
   ])
+
+  useEffect(() => {
+    if (!enabled || !droppingWalk || !landEnabled) {
+      setDropAt(null)
+      return
+    }
+    const element = gl.domElement
+    const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+    const ndc = new THREE.Vector2()
+    const hit = new THREE.Vector3()
+    const raycaster = new THREE.Raycaster()
+
+    const worldAt = (clientX: number, clientY: number) => {
+      const rect = element.getBoundingClientRect()
+      if (rect.width < 2 || rect.height < 2) return null
+      ndc.set(
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        -((clientY - rect.top) / rect.height) * 2 + 1,
+      )
+      raycaster.setFromCamera(ndc, camera)
+      if (!raycaster.ray.intersectPlane(ground, hit)) return null
+      return [hit.x, hit.z] as [number, number]
+    }
+
+    const overHudChrome = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Element)) return false
+      return Boolean(
+        target.closest(
+          '.hud-walk-drop, .hud-bottom, .hud-top, .hud-left-stack, .hud-right-stack, .hud-panel, .hud-instructions-overlay',
+        ),
+      )
+    }
+
+    const onDropMove = (event: PointerEvent) => {
+      if (overHudChrome(event)) {
+        setDropAt(null)
+        return
+      }
+      setDropAt(worldAt(event.clientX, event.clientY))
+    }
+
+    const onDropUp = (event: PointerEvent) => {
+      if (overHudChrome(event)) {
+        setDropAt(null)
+        return
+      }
+      const at = worldAt(event.clientX, event.clientY)
+      setDropAt(null)
+      if (!at) return
+      const lock = element.requestPointerLock()
+      if (lock && typeof lock.catch === 'function') {
+        void lock.catch(() => {})
+      }
+      onLand(at[0], at[1])
+    }
+
+    window.addEventListener('pointermove', onDropMove)
+    window.addEventListener('pointerup', onDropUp, true)
+    return () => {
+      window.removeEventListener('pointermove', onDropMove)
+      window.removeEventListener('pointerup', onDropUp, true)
+    }
+  }, [camera, droppingWalk, enabled, gl.domElement, landEnabled, onLand])
 
   return (
     <>
@@ -597,7 +695,7 @@ export function MapView({
       {enabled && sized && (
         <MapControls
           ref={controlsRef}
-          enabled={!flying}
+          enabled={!flying && !droppingWalk}
           enableRotate={false}
           enableDamping
           dampingFactor={0.12}
@@ -623,6 +721,7 @@ export function MapView({
         <MapFileLabels files={fileLabels} namingFileId={namingFileId} />
       )}
       {enabled && marker && <LandMarker marker={marker} />}
+      {enabled && dropAt && <WalkDropMarker at={dropAt} />}
     </>
   )
 }
@@ -1152,32 +1251,42 @@ function MapFileLabels({
   return null
 }
 
+function WalkDropMarker({ at }: { at: [number, number] }) {
+  return (
+    <group position={[at[0], 0.02, at[1]]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.55, 0.82, 32]} />
+        <meshBasicMaterial
+          color="#e8c36a"
+          transparent
+          opacity={0.9}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </mesh>
+      <Html
+        center
+        zIndexRange={[22, 12]}
+        style={{ pointerEvents: 'none' }}
+        position={[0, 2.4, 0]}
+      >
+        <div className="map-walk-drop-preview" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="28" height="28">
+            <circle cx="12" cy="5.2" r="3.3" fill="#e8c36a" />
+            <path
+              fill="#e8c36a"
+              d="M9.1 9.2c0-.7.6-1.3 1.3-1.3h3.2c.7 0 1.3.6 1.3 1.3v4.4c0 .4-.3.7-.7.7h-.5v7.1c0 .5-.4.9-.9.9h-.5c-.5 0-.9-.4-.9-.9v-7.1h-.5c-.4 0-.7-.3-.7-.7z"
+            />
+          </svg>
+        </div>
+      </Html>
+    </group>
+  )
+}
+
 function LandMarker({ marker }: { marker: [number, number] }) {
-  const camera = useThree((state) => state.camera)
-  const ring = useRef<THREE.Group>(null)
-
-  useFrame(() => {
-    if (!(camera instanceof THREE.OrthographicCamera) || !ring.current) return
-    const size = THREE.MathUtils.clamp(16 / Math.max(camera.zoom, 0.04), 2.4, 22)
-    ring.current.scale.setScalar(size)
-  })
-
   return (
     <group position={[marker[0], 0.35, marker[1]]}>
-      <group ref={ring}>
-        <mesh rotation={[-Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[0.62, 32]} />
-          <meshBasicMaterial color="#e8c36a" transparent opacity={0.28} />
-        </mesh>
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-          <ringGeometry args={[0.5, 0.72, 32]} />
-          <meshBasicMaterial color="#e8c36a" side={THREE.DoubleSide} />
-        </mesh>
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
-          <circleGeometry args={[0.18, 20]} />
-          <meshBasicMaterial color="#fff6d4" />
-        </mesh>
-      </group>
       <Html
         center
         zIndexRange={[20, 10]}

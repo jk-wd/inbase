@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-09-09T14:04:34.087Z",
+  "updatedAt": "2026-09-10T09:27:39.027Z",
   "mode": "map",
   "island": {
     "path": null,
@@ -13,8 +13,7 @@
     "x": 0,
     "z": 41.44
   },
-  "showBranchChanges": false,
+  "showBranchChanges": true,
   "showHiddenFiles": false,
-  "branchChangesMode": "main",
-  "branchChangesCommit": null
+  "branchChangesBase": null
 }

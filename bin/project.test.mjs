@@ -144,6 +144,47 @@ test('applyHostEnv keeps explicit target and data dir over a running instance', 
   }
 })
 
+test('applyHostEnv ignores a running map whose target is not this inbase.json', () => {
+  const { root, cleanup } = tempProject()
+  const home = path.join(root, 'home')
+  const env = snapshotEnv(
+    'VISUAL_CODER_TARGET',
+    'INBASE_DATA_DIR',
+    'INBASE_CONFIG',
+    'INBASE_HOME',
+  )
+  process.env.INBASE_HOME = home
+  try {
+    delete process.env.VISUAL_CODER_TARGET
+    delete process.env.INBASE_DATA_DIR
+    delete process.env.INBASE_CONFIG
+    writeRunningInstance({
+      dataDir: path.join(root, 'other-viz'),
+      targetRoot: path.join(root, 'other-app'),
+      port: 5199,
+      extraDirs: [globalInbaseDir()],
+    })
+    const kickoff = fs.mkdtempSync(path.join(packageRoot, '.tmp-cli-'))
+    try {
+      const target = path.join(kickoff, 'apps/web')
+      fs.mkdirSync(target, { recursive: true })
+      fs.writeFileSync(
+        path.join(kickoff, 'inbase.json'),
+        `${JSON.stringify({ target: 'apps/web' }, null, 2)}\n`,
+      )
+      const host = applyHostEnv({ cwd: kickoff })
+      assert.equal(host.targetRoot, path.resolve(target))
+      assert.equal(host.dataDir, path.join(kickoff, '.inbase'))
+      assert.equal(host.instance, null)
+    } finally {
+      fs.rmSync(kickoff, { recursive: true, force: true })
+    }
+  } finally {
+    restoreEnv(env)
+    cleanup()
+  }
+})
+
 test('readRunningInstance prefers cwd .inbase over a missing file', () => {
   const { root, cleanup } = tempProject()
   try {

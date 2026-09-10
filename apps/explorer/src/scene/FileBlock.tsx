@@ -56,11 +56,13 @@ function MapChangeMark({
   width,
   depth,
   height,
+  opacity = 1,
 }: {
   mark: string
   width: number
   depth: number
   height: number
+  opacity?: number
 }) {
   const size = Math.min(width, depth) * 0.78
   return (
@@ -70,6 +72,8 @@ function MapChangeMark({
         rotation={[-Math.PI / 2, 0, 0]}
         fontSize={size}
         color="#f4f7fb"
+        fillOpacity={opacity}
+        outlineOpacity={opacity}
         anchorX="center"
         anchorY="middle"
         outlineWidth={size * 0.09}
@@ -134,10 +138,15 @@ export const FileBlock = memo(function FileBlock({
       : pointed
         ? ['#f4f7fb']
         : []
+  const highlightColor = highlight
+    ? dimmed
+      ? dimColor(highlight.color, EXPLAIN_FOCUS.dimColorAmount)
+      : highlight.color
+    : null
   const labelColor = aimed
     ? '#9ad8ff'
-    : highlight
-      ? highlight.color
+    : highlightColor
+      ? highlightColor
       : tint
         ? tint.label
         : dimmed
@@ -145,8 +154,8 @@ export const FileBlock = memo(function FileBlock({
           : '#e7ebf2'
   const meshColor = aimed
     ? '#9ad8ff'
-    : highlight
-      ? highlight.color
+    : highlightColor
+      ? highlightColor
       : selected
         ? FILE_SELECTION.color
         : related
@@ -183,7 +192,9 @@ export const FileBlock = memo(function FileBlock({
               aimed
                 ? '#3a6a80'
                 : highlight
-                  ? highlight.emissive
+                  ? dimmed
+                    ? dimColor(highlight.emissive, EXPLAIN_FOCUS.dimColorAmount)
+                    : highlight.emissive
                   : selected
                     ? FILE_SELECTION.emissive
                     : related
@@ -200,7 +211,9 @@ export const FileBlock = memo(function FileBlock({
               aimed
                 ? 0.45
                 : highlight
-                  ? 0.95
+                  ? dimmed
+                    ? 0.2
+                    : 0.95
                   : selected
                     ? 0.55
                     : related
@@ -245,7 +258,13 @@ export const FileBlock = memo(function FileBlock({
         />
       )}
       {mapMode && !naming && mark && (
-        <MapChangeMark mark={mark} width={width} depth={depth} height={height} />
+        <MapChangeMark
+          mark={mark}
+          width={width}
+          depth={depth}
+          height={height}
+          opacity={opacity}
+        />
       )}
       {eyeColors.length > 0 && !naming && (
         <Html

@@ -104,6 +104,9 @@ function overlayFromUnknown(value: unknown) {
     deletes: Array.isArray(data.deletes)
       ? data.deletes.filter((id) => typeof id === 'string')
       : [],
+    absent: Array.isArray(data.absent)
+      ? data.absent.filter((id) => typeof id === 'string')
+      : [],
     createFolders: Array.isArray(data.createFolders)
       ? data.createFolders.filter((id) => typeof id === 'string')
       : [],
@@ -180,6 +183,7 @@ export function pinIntentToDiff(
     files: entry.files,
     creates: entry.creates,
     deletes: entry.deletes,
+    absent: entry.absent ?? [],
     createFolders: entry.createFolders,
     createLines: entry.createLines,
     imports: entry.imports,
@@ -205,6 +209,7 @@ export const emptyIntent: AgentIntent = {
   files: [],
   creates: [],
   deletes: [],
+  absent: [],
   createFolders: [],
   createLines: {},
   imports: [],
@@ -263,6 +268,7 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     files: Array.isArray(data?.files) ? data.files : [],
     creates: Array.isArray(data?.creates) ? data.creates : [],
     deletes: Array.isArray(data?.deletes) ? data.deletes : [],
+    absent: Array.isArray(data?.absent) ? data.absent : [],
     createFolders: Array.isArray(data?.createFolders) ? data.createFolders : [],
     createLines:
       data?.createLines && typeof data.createLines === 'object'

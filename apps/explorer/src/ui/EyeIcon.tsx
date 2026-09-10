@@ -79,6 +79,49 @@ export function FolderIcon({
   )
 }
 
+export function ColorPageIcon({
+  direction,
+  size = 14,
+}: {
+  direction: 'prev' | 'next'
+  size?: number
+}) {
+  return (
+    <StrokeIcon size={size}>
+      {direction === 'next' ? (
+        <path d="m9 6 6 6-6 6" />
+      ) : (
+        <path d="m15 18-6-6 6-6" />
+      )}
+    </StrokeIcon>
+  )
+}
+
+export function PersonIcon({
+  size = 22,
+  title,
+}: {
+  size?: number
+  title?: string
+}) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      aria-hidden={title ? undefined : true}
+      role={title ? 'img' : undefined}
+    >
+      {title ? <title>{title}</title> : null}
+      <circle cx="12" cy="5.2" r="3.3" fill="currentColor" />
+      <path
+        fill="currentColor"
+        d="M9.1 9.2c0-.7.6-1.3 1.3-1.3h3.2c.7 0 1.3.6 1.3 1.3v4.4c0 .4-.3.7-.7.7h-.5v7.1c0 .5-.4.9-.9.9h-.5c-.5 0-.9-.4-.9-.9v-7.1h-.5c-.4 0-.7-.3-.7-.7z"
+      />
+    </svg>
+  )
+}
+
 export function PanelToggleIcon({
   side,
   hidden,

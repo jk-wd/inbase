@@ -137,29 +137,6 @@ function placeFolder(
   })
 }
 
-export function standInFront(file: PlacedFile): [number, number] {
-  return [
-    file.position[0] + file.aisleFace * (file.size[0] / 2 + 2.6),
-    file.position[2],
-  ]
-}
-
-export function relationTravelTarget(
-  fromId: string,
-  toId: string,
-  x: number,
-  z: number,
-  files: Record<string, PlacedFile>,
-): string {
-  const from = files[fromId]
-  const to = files[toId]
-  if (!from) return toId
-  if (!to) return fromId
-  const distFrom = Math.hypot(x - from.position[0], z - from.position[2])
-  const distTo = Math.hypot(x - to.position[0], z - to.position[2])
-  return distFrom <= distTo ? toId : fromId
-}
-
 export function relationPairLabel(fromName: string, toName: string) {
   return `${fromName} <- ${toName}`
 }
@@ -234,6 +211,25 @@ export function filterGraphToChangePaths(
         files: folder.files.filter((id) => keepFiles.has(id)),
         children: folder.children.filter((path) => keepFolders.has(path)),
       })),
+  }
+}
+
+/** Drop mapped files that vanished without a git delete entry. */
+export function filterGraphAbsentFiles(
+  graph: CodebaseGraph,
+  absentIds: Iterable<string>,
+): CodebaseGraph {
+  const absent = new Set(absentIds)
+  if (absent.size === 0) return graph
+  const files = graph.files.filter((file) => !absent.has(file.id))
+  const keepFiles = new Set(files.map((file) => file.id))
+  return {
+    ...graph,
+    files,
+    folders: graph.folders.map((folder) => ({
+      ...folder,
+      files: folder.files.filter((id) => keepFiles.has(id)),
+    })),
   }
 }
 
@@ -667,6 +663,17 @@ export function fileChangeKind(
   return null
 }
 
+/** Island tint from contained changes: add (green) > edit (blue) > remove (red). */
+export function dominantChangeKind(
+  kinds: Iterable<ChangeKind>,
+): ChangeKind | null {
+  const set = kinds instanceof Set ? kinds : new Set(kinds)
+  if (set.has('add')) return 'add'
+  if (set.has('edit')) return 'edit'
+  if (set.has('remove')) return 'remove'
+  return null
+}
+
 /** Blueprint islands are planned structure, not git-added paths. */
 export function isBlueprintFolder(folder: PlacedFolder | undefined) {
   if (!folder) return false
@@ -692,18 +699,15 @@ export function folderChangeHighlights(
   }
   for (const id of deleted) addFolderKind(id, 'remove')
   for (const [folder, kinds] of folderKinds) {
-    if (kinds.size !== 1) continue
-    const kind = [...kinds][0]
+    const kind = dominantChangeKind(kinds)
+    if (!kind) continue
     if (kind === 'add' && isBlueprintFolder(folders[folder])) continue
     highlighted[folder] = kind
   }
   if (planned.size > 0 || deleted.size > 0) {
     for (const folder of Object.values(folders)) {
       if (!folder.added || isBlueprintFolder(folder)) continue
-      const kinds = folderKinds.get(folder.path)
-      if (!kinds || kinds.size === 1) {
-        highlighted[folder.path] ??= 'add'
-      }
+      highlighted[folder.path] ??= 'add'
     }
   }
   return highlighted

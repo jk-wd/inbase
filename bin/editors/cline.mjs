@@ -20,9 +20,10 @@ const LAYOUT = {
 
 const CLINE_PREAMBLE = `# Inbase visual edits (Cline)
 
-This rule is **mandatory** for every source-file change in this repository.
-Skip it only for git, lockfiles, \`.inbase\`, editor skill folders, questions
-with no code changes, or \`/extract-blueprint\`.
+This rule is **mandatory** for source-file changes inside the mapped target
+from \`inbase.json\` (\`target\`; default \`.\`). Skip it for files outside that
+folder, git, lockfiles, \`.inbase\`, editor skill folders, questions with no
+code changes, or \`/extract-blueprint\`.
 
 Cline (including Qwen) must **execute** tools. Do not paste \`npx inbase\`
 commands as chat text. Do not explore the repo first. Use this XML:
@@ -34,9 +35,10 @@ commands as chat text. Do not explore the repo first. Use this XML:
 
 Replace \`SESSION_ID\` with the \`VISUAL_CODER_SESSION\` value from this chat.
 
-On a new file-change request, in this order:
+On a new file-change request inside \`target\`, in this order:
 1. Run \`npx inbase attach\` (or \`npx inbase attach --color COLOR\` if the user
-   named a color). Stop if the output is \`VISUAL_CODER_NOT_RUNNING\`.
+   named a color). Stop if the output is \`VISUAL_CODER_NOT_RUNNING\`. If the
+   files are outside \`target\`, do not attach; edit them as a normal task.
 2. Reply: \`Connecting to the <color> session.\`
 3. Run \`npx inbase read-blueprint --session SESSION_ID\`
 4. Reply: \`I see on the blueprint ...\` (name files, folders, symbols, notes)

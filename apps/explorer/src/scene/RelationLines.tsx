@@ -561,21 +561,22 @@ export function RelationLines({
         const color = lineColor(mesh.planned, aimed, importedBy)
         const glow = aimed ? 2.4 : mesh.planned ? 1.7 : 1.4
         const relation = { relationFrom: mesh.from, relationTo: mesh.to }
+        const overlay = fromAbove
         return (
           <group key={mesh.id}>
             <mesh
               geometry={mesh.geometry}
               userData={relation}
-              renderOrder={mesh.planned ? 101 : 100}
+              renderOrder={overlay ? (mesh.planned ? 101 : 100) : 0}
             >
               <meshStandardMaterial
                 color={color}
                 emissive={color}
                 emissiveIntensity={glow}
                 roughness={0.3}
-                depthTest={false}
+                depthTest={!overlay}
                 depthWrite={false}
-                colorWrite={!fromAbove}
+                colorWrite={!overlay}
               />
             </mesh>
             {mesh.arrows.map((arrow, index) => (
@@ -584,7 +585,7 @@ export function RelationLines({
                 position={arrow.position}
                 quaternion={arrow.quaternion}
                 userData={relation}
-                renderOrder={mesh.planned ? 101 : 100}
+                renderOrder={overlay ? (mesh.planned ? 101 : 100) : 0}
               >
                 <coneGeometry args={[arrow.radius, arrow.height, 10]} />
                 <meshStandardMaterial
@@ -592,9 +593,9 @@ export function RelationLines({
                   emissive={color}
                   emissiveIntensity={glow}
                   roughness={0.3}
-                  depthTest={false}
+                  depthTest={!overlay}
                   depthWrite={false}
-                  colorWrite={!fromAbove}
+                  colorWrite={!overlay}
                 />
               </mesh>
             ))}

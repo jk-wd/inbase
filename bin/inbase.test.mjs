@@ -83,6 +83,10 @@ test('copyDir installs the skill template', () => {
     copyDir(skillTemplateDir, dest)
     const skillText = fs.readFileSync(path.join(dest, 'SKILL.md'), 'utf8')
     assert.match(skillText, /npx inbase attach/)
+    assert.match(skillText, /inside the mapped/)
+    assert.match(skillText, /inbase\.json/)
+    assert.match(skillText, /outside that target/)
+    assert.doesNotMatch(skillText, /whenever the work is file changes in this repository/)
     assert.match(skillText, /VISUAL_CODER_ACK/)
     assert.match(skillText, /Direct response/)
     assert.match(skillText, /VISUAL_CODER_NOT_RUNNING/)
@@ -114,7 +118,8 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /Do not prefix it with/)
     assert.match(skillText, /not wait for the user to click Run/)
     assert.match(skillText, /or wait for the user to approve `propose-patch`/)
-    assert.doesNotMatch(skillText, /\/go/)
+    assert.doesNotMatch(skillText, /\/go(?![a-z])/)
+    assert.doesNotMatch(skillText, /\/skipinbase/)
     assert.doesNotMatch(skillText, /user-invocable:/)
     assert.doesNotMatch(skillText, /allowed-tools:/)
   } finally {
@@ -129,6 +134,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     const result = initProject(root)
     fs.writeFileSync(path.join(root, '.cursor/commands/accept.md'), 'legacy /accept command\n')
     fs.writeFileSync(path.join(root, '.cursor/commands/go.md'), 'retired /go command\n')
+    fs.writeFileSync(path.join(root, '.cursor/commands/skipinbase.md'), 'retired /skipinbase command\n')
     initProject(root)
     const skill = path.join(root, '.cursor/skills/inbase/SKILL.md')
     assert.equal(result.skillDir, path.join(root, '.cursor/skills/inbase'))
@@ -139,14 +145,17 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.equal(fs.existsSync(skill), true)
     const skillText = fs.readFileSync(skill, 'utf8')
     assert.match(skillText, /npx inbase attach/)
+    assert.match(skillText, /inside the mapped/)
+    assert.match(skillText, /inbase\.json/)
     assert.match(skillText, /VISUAL_CODER_ACK/)
     assert.match(skillText, /VISUAL_CODER_NOT_RUNNING/)
     assert.match(skillText, /VISUAL_CODER_CHAT_LIMIT/)
     assert.match(skillText, /VISUAL_CODER_COLOR/)
     assert.doesNotMatch(skillText, /`\/accept`/)
     assert.match(skillText, /Done/)
-    assert.doesNotMatch(skillText, /\/go/)
-    assert.match(skillText, /\/explain/)
+    assert.doesNotMatch(skillText, /\/go(?![a-z])/)
+    assert.doesNotMatch(skillText, /\/skipinbase/)
+    assert.match(skillText, /\/explainit/)
     assert.match(skillText, /\/stop/)
     assert.match(skillText, /I see on the blueprint/)
     assert.match(skillText, /VISUAL_CODER_BLUEPRINT_ONLY/)
@@ -190,15 +199,16 @@ test('init copies editor skills and gitignores .inbase', () => {
       fs.readFileSync(path.join(root, '.cursor/commands/coral.md'), 'utf8'),
       /already printed `VISUAL_CODER_SESSION`/,
     )
-    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/skipinbase.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/skipinbase.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/explain.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/explainit.md')), true)
     assert.match(
-      fs.readFileSync(path.join(root, '.cursor/commands/skipinbase.md'), 'utf8'),
-      /\$ARGUMENTS/,
-    )
-    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/explain.md')), true)
-    assert.match(
-      fs.readFileSync(path.join(root, '.cursor/commands/explain.md'), 'utf8'),
+      fs.readFileSync(path.join(root, '.cursor/commands/explainit.md'), 'utf8'),
       /npx inbase explain start/,
+    )
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/explainit.md'), 'utf8'),
+      /\/explainit/,
     )
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/extract-blueprint.md')), true)
     assert.match(
@@ -214,19 +224,20 @@ test('init copies editor skills and gitignores .inbase', () => {
       /Do not extract everything/,
     )
     assert.doesNotMatch(
-      fs.readFileSync(path.join(root, '.cursor/commands/explain.md'), 'utf8'),
+      fs.readFileSync(path.join(root, '.cursor/commands/explainit.md'), 'utf8'),
       /npx inbase explain wait/,
     )
     assert.match(
-      fs.readFileSync(path.join(root, '.cursor/commands/explain.md'), 'utf8'),
+      fs.readFileSync(path.join(root, '.cursor/commands/explainit.md'), 'utf8'),
       /VISUAL_CODER_PROPOSAL/,
     )
     assert.match(
-      fs.readFileSync(path.join(root, '.cursor/commands/explain.md'), 'utf8'),
+      fs.readFileSync(path.join(root, '.cursor/commands/explainit.md'), 'utf8'),
       /VISUAL_CODER_DIFF/,
     )
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/go.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/accept.md')), false)
+    assert.equal(fs.existsSync(path.join(packageRoot, 'skill/commands/skipinbase.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/stop.md')), true)
     assert.match(
       fs.readFileSync(path.join(root, '.cursor/commands/stop.md'), 'utf8'),
@@ -250,6 +261,23 @@ test('init copies editor skills and gitignores .inbase', () => {
       fs.readFileSync(path.join(root, '.cursor/commands/violet.md'), 'utf8'),
       /If `\$ARGUMENTS` is empty/,
     )
+    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/crimson.md')), true)
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/crimson.md'), 'utf8'),
+      /npx inbase attach --color crimson/,
+    )
+    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/white.md')), true)
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/white.md'), 'utf8'),
+      /npx inbase attach --color white/,
+    )
+    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/darkgreen.md')), true)
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/darkgreen.md'), 'utf8'),
+      /npx inbase attach --color darkgreen/,
+    )
+    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/pink.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/fuchsia.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/red.md')), true)
     assert.match(
       fs.readFileSync(path.join(root, '.cursor/commands/red.md'), 'utf8'),
@@ -287,6 +315,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.equal(fs.existsSync(path.join(root, '.claude/commands/inbase.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.claude/commands/coral.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.claude/commands/accept.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.claude/commands/skipinbase.md')), false)
     const claudeCoral = fs.readFileSync(
       path.join(root, '.claude/commands/coral.md'),
       'utf8',
@@ -297,6 +326,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.equal(agents?.label, 'Agent Skills')
     assert.equal(agents?.skillDir, path.join(root, '.agents/skills/inbase'))
     assert.equal(fs.existsSync(path.join(root, '.agents/skills/accept/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.agents/skills/skipinbase/SKILL.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.agents/skills/stop/SKILL.md')), true)
     assert.equal(
       fs.existsSync(path.join(root, '.agents/skills/extract-blueprint/SKILL.md')),
@@ -321,6 +351,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     initProject(root)
     assert.equal(fs.existsSync(path.join(root, '.cline/skills/accept/SKILL.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.cline/workflows/accept.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cline/workflows/skipinbase.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.cline/workflows/coral.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.clinerules/workflows')), false)
     assert.equal(fs.existsSync(path.join(root, '.clinerules/skills')), false)
@@ -338,6 +369,8 @@ test('init copies editor skills and gitignores .inbase', () => {
     const clineRule = fs.readFileSync(path.join(root, '.cline/rules/inbase.md'), 'utf8')
     assert.match(clineRule, /<execute_command>/)
     assert.match(clineRule, /npx inbase attach/)
+    assert.match(clineRule, /mapped target/)
+    assert.match(clineRule, /inbase\.json/)
     assert.match(clineRule, /SESSION_ID/)
     assert.match(clineRule, /I see on the blueprint/)
     assert.match(clineRule, /\/extract-blueprint/)
@@ -1690,7 +1723,7 @@ test('explain start without a question walks the git branch diff', async () => {
   }
 })
 
-test('explain start without a question walks staged files vs remote', async () => {
+test('explain start without a question walks changes against a selected branch', async () => {
   const { root, cleanup } = tempProject()
   const target = path.join(root, 'app')
   const dataDir = path.join(root, '.inbase')
@@ -1707,7 +1740,7 @@ test('explain start without a question walks staged files vs remote', async () =
   fs.mkdirSync(dataDir, { recursive: true })
   fs.writeFileSync(
     path.join(dataDir, 'user-context.json'),
-    `${JSON.stringify({ showBranchChanges: true, branchChangesMode: 'remote' }, null, 2)}\n`,
+    `${JSON.stringify({ showBranchChanges: true, branchChangesBase: 'origin/main' }, null, 2)}\n`,
   )
   const env = {
     ...process.env,
@@ -1720,11 +1753,11 @@ test('explain start without a question walks staged files vs remote', async () =
     assert.equal(result.status, 0, result.stderr)
     assert.match(
       result.stdout,
-      /VISUAL_CODER_DIFF What has changed in this git diff \(main staged vs origin\/main\)/,
+      /VISUAL_CODER_DIFF What has changed in this git diff \(main vs origin\/main\)/,
     )
     assert.match(result.stdout, /VISUAL_CODER_CHANGES_START/)
     assert.match(result.stdout, /"src\/a.ts"/)
-    assert.doesNotMatch(result.stdout, /"src\/Clock.ts"/)
+    assert.match(result.stdout, /"src\/Clock.ts"/)
   } finally {
     cleanup()
   }

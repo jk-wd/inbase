@@ -68,7 +68,7 @@ export function ExplainAskCard({
           <p className="explain-body explain-ask-card-body">{copy.body}</p>
         ) : (
           <p className="explain-preparing" role="status">
-            Preparing an explanation… Type /explain in the chat.
+            Preparing an explanation… Type /explainit in the chat.
           </p>
         )}
       </div>

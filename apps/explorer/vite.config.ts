@@ -7,8 +7,7 @@ import { fileURLToPath } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { emptyIntent } from './scripts/patch-lib.mjs'
 import {
-  normalizeBranchChangesCommit,
-  normalizeBranchChangesMode,
+  normalizeBranchChangesBase,
   readBranchChanges,
 } from './scripts/branch-changes.mjs'
 import { globalInbaseDir, writeRunningInstance, isolatedViteConfig, packageDirFromPackage } from '../../bin/project.mjs'
@@ -24,6 +23,7 @@ import {
   answerBlueprint,
   clearDiffSessions,
   ensureSessionPool,
+  SESSION_SLOT_COUNT,
   continueDiff,
   inspectTargetFile,
   invokeStep,
@@ -174,9 +174,9 @@ function jsonFilePlugin(): Plugin {
         port: serverPort,
         extraDirs: [globalInbaseDir()],
       })
-      // Discard leftover LLM sessions, then open 5 empty chat slots.
+      // Discard leftover LLM sessions, then open an empty chat slot per color.
       clearDiffSessions(dataDir, targetRoot)
-      ensureSessionPool(dataDir)
+      ensureSessionPool(dataDir, { count: SESSION_SLOT_COUNT })
       rescanTarget('after discarding leftover LLM sessions')
       let lastLiveSessionKey = listOpenSessionIds(dataDir).join('\0')
       function syncDisconnectedSessions() {
@@ -272,8 +272,7 @@ function jsonFilePlugin(): Plugin {
             readBranchChanges(
               targetRoot,
               knownFileIds(),
-              url.searchParams.get('mode'),
-              url.searchParams.get('commit'),
+              url.searchParams.get('base'),
             ),
           )
           return
@@ -353,7 +352,7 @@ async function switchDevTarget(
     })
     stopExplain(dataDir)
     clearDiffSessions(dataDir, targetRoot)
-    ensureSessionPool(dataDir)
+    ensureSessionPool(dataDir, { count: SESSION_SLOT_COUNT })
     if (!rescanTarget('after switching target')) {
       sendJson(res, 500, { error: 'scan failed' })
       return
@@ -674,17 +673,13 @@ function readUserContext() {
     return {
       ...parsed,
       showBranchChanges: Boolean(parsed.showBranchChanges),
-      branchChangesMode: normalizeBranchChangesMode(parsed.branchChangesMode),
-      branchChangesCommit: normalizeBranchChangesCommit(
-        parsed.branchChangesCommit,
-      ),
+      branchChangesBase: normalizeBranchChangesBase(parsed.branchChangesBase),
       showHiddenFiles: Boolean(parsed.showHiddenFiles),
     }
   } catch {
     return {
       showBranchChanges: false,
-      branchChangesMode: 'main',
-      branchChangesCommit: null,
+      branchChangesBase: null,
       showHiddenFiles: false,
     }
   }
@@ -701,13 +696,10 @@ async function writeUserContext(req: IncomingMessage, res: ServerResponse) {
         typeof incoming.showBranchChanges === 'boolean'
           ? incoming.showBranchChanges
           : Boolean(existing.showBranchChanges),
-      branchChangesMode: normalizeBranchChangesMode(
-        incoming.branchChangesMode ?? existing.branchChangesMode,
-      ),
-      branchChangesCommit:
-        incoming.branchChangesCommit !== undefined
-          ? normalizeBranchChangesCommit(incoming.branchChangesCommit)
-          : existing.branchChangesCommit ?? null,
+      branchChangesBase:
+        incoming.branchChangesBase !== undefined
+          ? normalizeBranchChangesBase(incoming.branchChangesBase)
+          : existing.branchChangesBase ?? null,
       showHiddenFiles:
         typeof incoming.showHiddenFiles === 'boolean'
           ? incoming.showHiddenFiles
@@ -716,6 +708,8 @@ async function writeUserContext(req: IncomingMessage, res: ServerResponse) {
     delete next.followLook
     delete next.userCreatedBlocks
     delete next.userCreatedIslands
+    delete next.branchChangesMode
+    delete next.branchChangesCommit
     fs.mkdirSync(path.dirname(userContextFile), { recursive: true })
     fs.writeFileSync(userContextFile, `${JSON.stringify(next, null, 2)}\n`)
     res.statusCode = 204

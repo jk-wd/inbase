@@ -6,10 +6,9 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import {
   emptyBranchChanges,
-  listBranchCommits,
-  normalizeBranchChangesCommit,
-  normalizeBranchChangesMode,
+  normalizeBranchChangesBase,
   readBranchChanges,
+  readWorkingTreeChanges,
 } from './branch-changes.mjs'
 import { initGitRepo, runGit } from './git-test.mjs'
 
@@ -39,24 +38,21 @@ function fixture(nestedTarget = false) {
 test('empty branch changes are unavailable', () => {
   const empty = emptyBranchChanges()
   assert.equal(empty.available, false)
-  assert.equal(empty.mode, 'main')
-  assert.equal(empty.remoteMissing, false)
+  assert.equal(empty.current, true)
+  assert.equal(empty.baseMissing, false)
   assert.deepEqual(empty.files, [])
   assert.deepEqual(empty.creates, [])
-  assert.deepEqual(empty.commits, [])
-  assert.equal(empty.commit, null)
+  assert.deepEqual(empty.branches, [])
 })
 
-test('normalizes branch comparison modes', () => {
-  assert.equal(normalizeBranchChangesMode('remote'), 'remote')
-  assert.equal(normalizeBranchChangesMode('current'), 'current')
-  assert.equal(normalizeBranchChangesMode('commit'), 'commit')
-  assert.equal(normalizeBranchChangesMode('main'), 'main')
-  assert.equal(normalizeBranchChangesMode('other'), 'main')
-  assert.equal(normalizeBranchChangesMode(undefined), 'main')
-  assert.equal(normalizeBranchChangesCommit('abc1234'), 'abc1234')
-  assert.equal(normalizeBranchChangesCommit('HEAD'), null)
-  assert.equal(normalizeBranchChangesCommit(''), null)
+test('normalizes a comparison branch', () => {
+  assert.equal(normalizeBranchChangesBase('origin/main'), 'origin/main')
+  assert.equal(normalizeBranchChangesBase('feature/clock'), 'feature/clock')
+  assert.equal(normalizeBranchChangesBase('HEAD'), null)
+  assert.equal(normalizeBranchChangesBase(''), null)
+  assert.equal(normalizeBranchChangesBase('  main  '), 'main')
+  assert.equal(normalizeBranchChangesBase('-bad'), null)
+  assert.equal(normalizeBranchChangesBase(undefined), null)
 })
 
 test('returns unavailable outside a git repo', () => {
@@ -70,7 +66,7 @@ test('returns unavailable outside a git repo', () => {
   }
 })
 
-test('reads committed, unstaged, and untracked changes on a branch', () => {
+test('defaults to uncommitted working-tree changes vs last commit', () => {
   const env = fixture()
   try {
     runGit(env.repo, ['checkout', '-b', 'feature/clock'])
@@ -94,65 +90,21 @@ test('reads committed, unstaged, and untracked changes on a branch', () => {
       'export function Draft() {\n  return true\n}\n',
     )
 
-    const changes = readBranchChanges(env.targetRoot, ['src/a.ts', 'src/keep.ts'])
+    const changes = readBranchChanges(env.targetRoot, [
+      'src/a.ts',
+      'src/keep.ts',
+      'src/Clock.tsx',
+    ])
     assert.equal(changes.available, true)
-    assert.equal(changes.mode, 'main')
+    assert.equal(changes.current, true)
     assert.equal(changes.branch, 'feature/clock')
-    assert.equal(changes.base, 'main')
-    assert.deepEqual(changes.files, ['src/a.ts'])
-    assert.deepEqual(changes.creates.sort(), ['src/Clock.tsx', 'src/Draft.ts'])
-    assert.deepEqual(changes.deletes, ['src/keep.ts'])
-    assert.deepEqual(changes.addedFunctions, [
-      { name: 'Clock', file: 'src/Clock.tsx' },
-      { name: 'Draft', file: 'src/Draft.ts' },
-    ])
-    assert.deepEqual(changes.changedFunctions, [
-      { name: 'greet', file: 'src/a.ts' },
-    ])
-    assert.deepEqual(changes.addedVariables, [
-      { name: 'extra', file: 'src/a.ts' },
-    ])
-  } finally {
-    env.cleanup()
-  }
-})
-
-test('current mode is only uncommitted working-tree changes', () => {
-  const env = fixture()
-  try {
-    runGit(env.repo, ['checkout', '-b', 'feature/clock'])
-    fs.writeFileSync(
-      path.join(env.targetRoot, 'src/a.ts'),
-      'export function greet() {\n  return 2\n}\n',
-    )
-    fs.writeFileSync(
-      path.join(env.targetRoot, 'src/Clock.tsx'),
-      'export function Clock() {\n  return null\n}\n',
-    )
-    fs.rmSync(path.join(env.targetRoot, 'src/keep.ts'))
-    runGit(env.repo, ['add', '.'])
-    runGit(env.repo, ['commit', '-m', 'committed branch work'])
-    fs.writeFileSync(
-      path.join(env.targetRoot, 'src/a.ts'),
-      'export function greet() {\n  return 3\n}\nexport const extra = 1\n',
-    )
-    fs.writeFileSync(
-      path.join(env.targetRoot, 'src/Draft.ts'),
-      'export function Draft() {\n  return true\n}\n',
-    )
-
-    const changes = readBranchChanges(
-      env.targetRoot,
-      ['src/a.ts', 'src/keep.ts', 'src/Clock.tsx'],
-      'current',
-    )
-    assert.equal(changes.available, true)
-    assert.equal(changes.mode, 'current')
-    assert.equal(changes.base, 'HEAD')
+    assert.equal(changes.base, 'feature/clock')
     assert.deepEqual(changes.files, ['src/a.ts'])
     assert.deepEqual(changes.creates, ['src/Draft.ts'])
     assert.deepEqual(changes.deletes, [])
     assert.ok(!changes.creates.includes('src/Clock.tsx'))
+    assert.ok(changes.branches.some((item) => item.name === 'main' && !item.remote))
+    assert.ok(!changes.branches.some((item) => item.name === 'feature/clock'))
   } finally {
     env.cleanup()
   }
@@ -183,24 +135,21 @@ test('limits branch changes to a nested target folder', () => {
   }
 })
 
-test('remote mode compares staged files to origin of the same branch', () => {
+test('comparing against another local branch includes committed work', () => {
   const env = fixture()
   try {
     runGit(env.repo, ['checkout', '-b', 'feature/clock'])
     fs.writeFileSync(
-      path.join(env.targetRoot, 'src/Clock.tsx'),
-      'export function Clock() {\n  return null\n}\n',
-    )
-    runGit(env.repo, ['add', 'src/Clock.tsx'])
-    runGit(env.repo, ['commit', '-m', 'pushed branch work'])
-    const pushed = runGit(env.repo, ['rev-parse', 'HEAD']).stdout.trim()
-    runGit(env.repo, ['update-ref', 'refs/remotes/origin/feature/clock', pushed])
-
-    fs.writeFileSync(
       path.join(env.targetRoot, 'src/a.ts'),
       'export function greet() {\n  return 2\n}\n',
     )
-    runGit(env.repo, ['add', 'src/a.ts'])
+    fs.writeFileSync(
+      path.join(env.targetRoot, 'src/Clock.tsx'),
+      'export function Clock() {\n  return null\n}\n',
+    )
+    fs.rmSync(path.join(env.targetRoot, 'src/keep.ts'))
+    runGit(env.repo, ['add', '.'])
+    runGit(env.repo, ['commit', '-m', 'committed branch work'])
     fs.writeFileSync(
       path.join(env.targetRoot, 'src/a.ts'),
       'export function greet() {\n  return 3\n}\nexport const extra = 1\n',
@@ -209,33 +158,27 @@ test('remote mode compares staged files to origin of the same branch', () => {
       path.join(env.targetRoot, 'src/Draft.ts'),
       'export function Draft() {\n  return true\n}\n',
     )
-    fs.rmSync(path.join(env.targetRoot, 'src/keep.ts'))
 
-    const remote = readBranchChanges(
+    const changes = readBranchChanges(
       env.targetRoot,
       ['src/a.ts', 'src/keep.ts'],
-      'remote',
+      'main',
     )
-    assert.equal(remote.available, true)
-    assert.equal(remote.mode, 'remote')
-    assert.equal(remote.remoteMissing, false)
-    assert.equal(remote.branch, 'feature/clock')
-    assert.equal(remote.base, 'origin/feature/clock')
-    assert.deepEqual(remote.files, ['src/a.ts'])
-    assert.deepEqual(remote.creates, [])
-    assert.deepEqual(remote.deletes, [])
-    assert.deepEqual(remote.changedFunctions, [
+    assert.equal(changes.available, true)
+    assert.equal(changes.current, false)
+    assert.equal(changes.branch, 'feature/clock')
+    assert.equal(changes.base, 'main')
+    assert.deepEqual(changes.files, ['src/a.ts'])
+    assert.deepEqual(changes.creates.sort(), ['src/Clock.tsx', 'src/Draft.ts'])
+    assert.deepEqual(changes.deletes, ['src/keep.ts'])
+    assert.deepEqual(changes.addedFunctions, [
+      { name: 'Clock', file: 'src/Clock.tsx' },
+      { name: 'Draft', file: 'src/Draft.ts' },
+    ])
+    assert.deepEqual(changes.changedFunctions, [
       { name: 'greet', file: 'src/a.ts' },
     ])
-    assert.deepEqual(remote.addedVariables, [])
-    assert.deepEqual(remote.addedFunctions, [])
-
-    const vsMain = readBranchChanges(env.targetRoot, ['src/a.ts', 'src/keep.ts'])
-    assert.equal(vsMain.mode, 'main')
-    assert.deepEqual(vsMain.files, ['src/a.ts'])
-    assert.deepEqual(vsMain.creates.sort(), ['src/Clock.tsx', 'src/Draft.ts'])
-    assert.deepEqual(vsMain.deletes, ['src/keep.ts'])
-    assert.deepEqual(vsMain.addedVariables, [
+    assert.deepEqual(changes.addedVariables, [
       { name: 'extra', file: 'src/a.ts' },
     ])
   } finally {
@@ -243,12 +186,12 @@ test('remote mode compares staged files to origin of the same branch', () => {
   }
 })
 
-test('remote mode includes unpushed commits and staged files', () => {
+test('comparing against a remote branch uses that ref', () => {
   const env = fixture()
   try {
     runGit(env.repo, ['checkout', '-b', 'feature/clock'])
     const originSha = runGit(env.repo, ['rev-parse', 'HEAD']).stdout.trim()
-    runGit(env.repo, ['update-ref', 'refs/remotes/origin/feature/clock', originSha])
+    runGit(env.repo, ['update-ref', 'refs/remotes/origin/main', originSha])
     fs.writeFileSync(
       path.join(env.targetRoot, 'src/Clock.tsx'),
       'export function Clock() {\n  return null\n}\n',
@@ -259,102 +202,121 @@ test('remote mode includes unpushed commits and staged files', () => {
       path.join(env.targetRoot, 'src/a.ts'),
       'export function greet() {\n  return 2\n}\n',
     )
-    runGit(env.repo, ['add', 'src/a.ts'])
-
-    const remote = readBranchChanges(
-      env.targetRoot,
-      ['src/a.ts', 'src/keep.ts'],
-      'remote',
-    )
-    assert.equal(remote.base, 'origin/feature/clock')
-    assert.deepEqual(remote.files, ['src/a.ts'])
-    assert.deepEqual(remote.creates, ['src/Clock.tsx'])
-  } finally {
-    env.cleanup()
-  }
-})
-
-test('remote mode reports a missing upstream', () => {
-  const env = fixture()
-  try {
-    runGit(env.repo, ['checkout', '-b', 'feature/clock'])
-    const remote = readBranchChanges(env.targetRoot, ['src/a.ts'], 'remote')
-    assert.equal(remote.available, true)
-    assert.equal(remote.mode, 'remote')
-    assert.equal(remote.remoteMissing, true)
-    assert.equal(remote.base, null)
-    assert.deepEqual(remote.files, [])
-    assert.deepEqual(remote.creates, [])
-  } finally {
-    env.cleanup()
-  }
-})
-
-test('commit mode lists unique branch commits and diffs one of them', () => {
-  const env = fixture()
-  try {
-    runGit(env.repo, ['checkout', '-b', 'feature/clock'])
-    fs.writeFileSync(
-      path.join(env.targetRoot, 'src/a.ts'),
-      'export function greet() {\n  return 2\n}\n',
-    )
-    runGit(env.repo, ['add', 'src/a.ts'])
-    runGit(env.repo, ['commit', '-m', 'edit greet'])
-    const first = runGit(env.repo, ['rev-parse', 'HEAD']).stdout.trim()
-    fs.writeFileSync(
-      path.join(env.targetRoot, 'src/Clock.tsx'),
-      'export function Clock() {\n  return null\n}\n',
-    )
-    runGit(env.repo, ['add', 'src/Clock.tsx'])
-    runGit(env.repo, ['commit', '-m', 'add clock'])
-    const second = runGit(env.repo, ['rev-parse', 'HEAD']).stdout.trim()
     fs.writeFileSync(
       path.join(env.targetRoot, 'src/Draft.ts'),
       'export function Draft() {\n  return true\n}\n',
     )
 
-    const commits = listBranchCommits(env.targetRoot)
-    assert.equal(commits.length, 2)
-    assert.equal(commits[0].sha, second)
-    assert.equal(commits[1].sha, first)
-    assert.equal(commits[0].subject, 'add clock')
-    assert.equal(commits[1].subject, 'edit greet')
-
-    const latest = readBranchChanges(
+    const remote = readBranchChanges(
       env.targetRoot,
       ['src/a.ts', 'src/keep.ts'],
-      'commit',
+      'origin/main',
     )
-    assert.equal(latest.mode, 'commit')
-    assert.equal(latest.commit?.sha, second)
-    assert.deepEqual(latest.creates, ['src/Clock.tsx'])
-    assert.deepEqual(latest.files, [])
-    assert.deepEqual(latest.deletes, [])
-    assert.ok(!latest.creates.includes('src/Draft.ts'))
-    assert.deepEqual(latest.addedFunctions, [
-      { name: 'Clock', file: 'src/Clock.tsx' },
-    ])
+    assert.equal(remote.current, false)
+    assert.equal(remote.base, 'origin/main')
+    assert.equal(remote.baseMissing, false)
+    assert.ok(remote.branches.some((item) => item.name === 'origin/main' && item.remote))
+    assert.ok(remote.branches.some((item) => item.name === 'main' && !item.remote))
+    assert.deepEqual(remote.files, ['src/a.ts'])
+    assert.deepEqual(remote.creates.sort(), ['src/Clock.tsx', 'src/Draft.ts'])
+  } finally {
+    env.cleanup()
+  }
+})
 
-    const earlier = readBranchChanges(
-      env.targetRoot,
-      ['src/a.ts', 'src/keep.ts'],
-      'commit',
-      first,
+test('a missing comparison branch falls back to last commit', () => {
+  const env = fixture()
+  try {
+    runGit(env.repo, ['checkout', '-b', 'feature/clock'])
+    fs.writeFileSync(
+      path.join(env.targetRoot, 'src/Draft.ts'),
+      'export function Draft() {\n  return true\n}\n',
     )
-    assert.equal(earlier.commit?.sha, first)
-    assert.deepEqual(earlier.files, ['src/a.ts'])
-    assert.deepEqual(earlier.creates, [])
-    assert.deepEqual(earlier.changedFunctions, [
-      { name: 'greet', file: 'src/a.ts' },
-    ])
+    const missing = readBranchChanges(env.targetRoot, ['src/a.ts'], 'no-such-branch')
+    assert.equal(missing.available, true)
+    assert.equal(missing.current, true)
+    assert.equal(missing.baseMissing, true)
+    assert.equal(missing.base, 'feature/clock')
+    assert.deepEqual(missing.creates, ['src/Draft.ts'])
+  } finally {
+    env.cleanup()
+  }
+})
 
-    const fallback = readBranchChanges(
-      env.targetRoot,
-      ['src/a.ts'],
-      'commit',
-      'deadbeef',
+test('selecting the current branch is last commit', () => {
+  const env = fixture()
+  try {
+    runGit(env.repo, ['checkout', '-b', 'feature/clock'])
+    fs.writeFileSync(
+      path.join(env.targetRoot, 'src/Clock.tsx'),
+      'export function Clock() {\n  return null\n}\n',
     )
-    assert.equal(fallback.commit?.sha, second)
+    runGit(env.repo, ['add', 'src/Clock.tsx'])
+    runGit(env.repo, ['commit', '-m', 'committed'])
+    fs.writeFileSync(
+      path.join(env.targetRoot, 'src/Draft.ts'),
+      'export function Draft() {\n  return true\n}\n',
+    )
+    const changes = readBranchChanges(
+      env.targetRoot,
+      ['src/a.ts', 'src/Clock.tsx'],
+      'feature/clock',
+    )
+    assert.equal(changes.current, true)
+    assert.equal(changes.base, 'feature/clock')
+    assert.deepEqual(changes.creates, ['src/Draft.ts'])
+    assert.ok(!changes.creates.includes('src/Clock.tsx'))
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('deleted untracked mapped file is absent, not still created', () => {
+  const env = fixture()
+  try {
+    fs.writeFileSync(
+      path.join(env.targetRoot, 'src/randomColor.ts'),
+      'export const randomColor = () => "#fff"\n',
+    )
+    fs.writeFileSync(
+      path.join(env.targetRoot, 'src/a.ts'),
+      'export function greet() {\n  return 2\n}\n',
+    )
+
+    const whilePresent = readWorkingTreeChanges(env.targetRoot, [
+      'src/a.ts',
+      'src/keep.ts',
+      'src/randomColor.ts',
+    ])
+    assert.ok(whilePresent.creates.includes('src/randomColor.ts'))
+    assert.deepEqual(whilePresent.absent, [])
+
+    fs.rmSync(path.join(env.targetRoot, 'src/randomColor.ts'))
+
+    const afterDelete = readWorkingTreeChanges(env.targetRoot, [
+      'src/a.ts',
+      'src/keep.ts',
+      'src/randomColor.ts',
+    ])
+    assert.ok(!afterDelete.creates.includes('src/randomColor.ts'))
+    assert.ok(!afterDelete.deletes.includes('src/randomColor.ts'))
+    assert.deepEqual(afterDelete.absent, ['src/randomColor.ts'])
+    assert.ok(afterDelete.files.includes('src/a.ts'))
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('tracked deletes still show as deletes, not absent', () => {
+  const env = fixture()
+  try {
+    fs.rmSync(path.join(env.targetRoot, 'src/keep.ts'))
+    const changes = readWorkingTreeChanges(env.targetRoot, [
+      'src/a.ts',
+      'src/keep.ts',
+    ])
+    assert.deepEqual(changes.deletes, ['src/keep.ts'])
+    assert.ok(!changes.absent.includes('src/keep.ts'))
   } finally {
     env.cleanup()
   }

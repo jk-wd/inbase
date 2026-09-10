@@ -14,6 +14,7 @@ import {
   extractBlueprint,
 } from './extract-blueprint.mjs'
 import { parseBlueprintDocument } from '../apps/explorer/scripts/blueprint-files.mjs'
+import { SESSION_COLORS } from '../apps/explorer/scripts/session-store.mjs'
 import { buildScanGraph } from '../apps/explorer/scripts/scan-target.mjs'
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -169,7 +170,7 @@ test('extract-blueprint --write saves a curated document', async () => {
     ])
     assert.equal(document.global.addedFunctions[0].name, 'App')
     assert.equal(document.global.notes[0].note.includes('data fetching'), true)
-    assert.equal(document.locals.length, 5)
+    assert.equal(document.locals.length, SESSION_COLORS.length)
   } finally {
     env.cleanup()
   }

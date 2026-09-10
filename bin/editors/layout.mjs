@@ -7,7 +7,17 @@ import {
   skillTemplateDir,
 } from '../project.mjs'
 
-const RETIRED_COMMAND_NAMES = ['go', 'accept']
+const RETIRED_COMMAND_NAMES = [
+  'explain',
+  'go',
+  'accept',
+  'skipinbase',
+  'pink',
+  'emerald',
+  'fuchsia',
+  'magenta',
+  'gold',
+]
 
 export function looksLikeInbaseFile(file) {
   try {

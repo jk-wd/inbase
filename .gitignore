@@ -12,3 +12,4 @@ apps/explorer/src/data/blueprint.json
 apps/explorer/src/data/dev-target.json
 apps/explorer/src/data/diff-sessions/*
 !apps/explorer/src/data/diff-sessions/.gitkeep
+.inbase/

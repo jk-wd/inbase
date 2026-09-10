@@ -8,6 +8,8 @@ export type ChangeOverlay = {
   files: string[]
   creates: string[]
   deletes: string[]
+  /** Mapped files missing on disk that git did not report as deletes. */
+  absent: string[]
   createFolders: string[]
   createLines: Record<string, number>
   imports: PatchImport[]

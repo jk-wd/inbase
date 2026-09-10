@@ -1,10 +1,4 @@
-import type {
-  BranchChangesMode,
-  CodebaseGraph,
-  FileNode,
-  UserContext,
-  UserFileRef,
-} from './types'
+import type { CodebaseGraph, FileNode, UserContext, UserFileRef } from './types'
 
 export function toFileRef(file: FileNode): UserFileRef {
   return {
@@ -39,21 +33,11 @@ export function persistShowBranchChanges(showBranchChanges: boolean) {
   })
 }
 
-export function persistBranchChangesMode(branchChangesMode: BranchChangesMode) {
+export function persistBranchChangesBase(branchChangesBase: string | null) {
   fetch('/api/user-context', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: `${JSON.stringify({ branchChangesMode })}\n`,
-  }).catch(() => {
-    lastWritten = ''
-  })
-}
-
-export function persistBranchChangesCommit(branchChangesCommit: string | null) {
-  fetch('/api/user-context', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: `${JSON.stringify({ branchChangesCommit })}\n`,
+    body: `${JSON.stringify({ branchChangesBase })}\n`,
   }).catch(() => {
     lastWritten = ''
   })
@@ -82,8 +66,7 @@ function flushUserContext() {
   if (!context) return
   const {
     showBranchChanges: _showBranchChanges,
-    branchChangesMode: _branchChangesMode,
-    branchChangesCommit: _branchChangesCommit,
+    branchChangesBase: _branchChangesBase,
     showHiddenFiles: _showHiddenFiles,
     userCreatedBlocks: _userCreatedBlocks,
     userCreatedIslands: _userCreatedIslands,

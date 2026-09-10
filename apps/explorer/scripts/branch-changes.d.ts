@@ -1,26 +1,22 @@
 import type { ChangeOverlay } from './change-overlay.d.ts'
 import type { PatchImport, PatchImportAddition, PatchSymbolAddition } from './patch-lib.d.ts'
 
-export type BranchChangesMode = 'main' | 'remote' | 'current' | 'commit'
-
-export type BranchCommit = {
-  sha: string
-  short: string
-  subject: string
+export type BranchRef = {
+  name: string
+  remote: boolean
 }
 
 export type BranchChanges = {
   available: boolean
   branch: string | null
   base: string | null
-  mode: BranchChangesMode
-  remoteMissing: boolean
-  commit: BranchCommit | null
-  commits: BranchCommit[]
-  commitMissing: boolean
+  current: boolean
+  branches: BranchRef[]
+  baseMissing: boolean
   files: string[]
   creates: string[]
   deletes: string[]
+  absent: string[]
   createFolders: string[]
   createLines: Record<string, number>
   imports: PatchImport[]
@@ -31,11 +27,18 @@ export type BranchChanges = {
   changedVariables: PatchSymbolAddition[]
 }
 
-export function normalizeBranchChangesMode(value: unknown): BranchChangesMode
-export function normalizeBranchChangesCommit(value: unknown): string | null
-export function listBranchCommits(targetRoot: string): BranchCommit[]
+export function normalizeBranchChangesBase(value: unknown): string | null
+export function listCompareBranches(
+  gitRoot: string,
+  current?: string | null,
+): BranchRef[]
 export function emptyBranchChanges(): BranchChanges
 export function hasGitRepo(targetRoot: string | null | undefined): boolean
+export function withAbsentMappedFiles(
+  overlay: Partial<ChangeOverlay> | null | undefined,
+  targetRoot: string | null | undefined,
+  knownFileIds?: string[],
+): ChangeOverlay
 export function readWorkingTreeChanges(
   targetRoot: string,
   knownFileIds?: string[],
@@ -43,6 +46,5 @@ export function readWorkingTreeChanges(
 export function readBranchChanges(
   targetRoot: string,
   knownFileIds?: string[],
-  modeInput?: unknown,
-  commitInput?: unknown,
+  baseInput?: unknown,
 ): BranchChanges

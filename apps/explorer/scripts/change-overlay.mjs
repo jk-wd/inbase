@@ -11,6 +11,7 @@ export function emptyChangeOverlay() {
     files: [],
     creates: [],
     deletes: [],
+    absent: [],
     createFolders: [],
     createLines: {},
     imports: [],
@@ -26,7 +27,8 @@ export function overlayHasChanges(overlay) {
   return (
     (overlay?.files?.length ?? 0) > 0 ||
     (overlay?.creates?.length ?? 0) > 0 ||
-    (overlay?.deletes?.length ?? 0) > 0
+    (overlay?.deletes?.length ?? 0) > 0 ||
+    (overlay?.absent?.length ?? 0) > 0
   )
 }
 
@@ -92,6 +94,7 @@ export function normalizeChangeOverlay(value) {
     files: asStringArray(overlay.files),
     creates: asStringArray(overlay.creates),
     deletes: asStringArray(overlay.deletes),
+    absent: asStringArray(overlay.absent),
     createFolders: asStringArray(overlay.createFolders),
     createLines,
     imports: asImportEdges(overlay.imports),

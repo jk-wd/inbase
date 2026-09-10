@@ -75,12 +75,6 @@ export type ViewMode = 'map' | 'walk'
 
 export type RelationMode = 'all' | 'off' | 'changed' | 'targeted'
 
-export type FlyTo = {
-  nonce: number
-  from: [number, number]
-  lookAt: [number, number, number]
-}
-
 export type UserFileRef = {
   id: string
   name: string
@@ -108,26 +102,31 @@ export type UserCreatedIsland = {
   colorHex?: string
 }
 
-export type BranchChangesMode = 'main' | 'remote' | 'current' | 'commit'
-
-export type BranchCommit = {
-  sha: string
-  short: string
-  subject: string
+export type BranchRef = {
+  name: string
+  remote: boolean
 }
 
-export const BRANCH_CHANGES_MODES: BranchChangesMode[] = [
-  'main',
-  'remote',
-  'current',
-  'commit',
-]
-
-export function nextBranchChangesMode(
-  mode: BranchChangesMode,
-): BranchChangesMode {
-  const index = BRANCH_CHANGES_MODES.indexOf(mode)
-  return BRANCH_CHANGES_MODES[index < 0 ? 0 : (index + 1) % BRANCH_CHANGES_MODES.length]
+export type BranchChanges = {
+  available: boolean
+  branch: string | null
+  base: string | null
+  current: boolean
+  branches: BranchRef[]
+  baseMissing: boolean
+  files: string[]
+  creates: string[]
+  deletes: string[]
+  /** Mapped files missing on disk that were never in the git ref (hide, don't mark D). */
+  absent: string[]
+  createFolders: string[]
+  createLines: Record<string, number>
+  imports: PatchImport[]
+  addedFunctions: PatchSymbolAddition[]
+  addedVariables: PatchSymbolAddition[]
+  addedImports: PatchImportAddition[]
+  changedFunctions: PatchSymbolAddition[]
+  changedVariables: PatchSymbolAddition[]
 }
 
 export type UserContext = {
@@ -146,8 +145,7 @@ export type UserContext = {
     z: number
   }
   showBranchChanges?: boolean
-  branchChangesMode?: BranchChangesMode
-  branchChangesCommit?: string | null
+  branchChangesBase?: string | null
   showHiddenFiles?: boolean
   userCreatedBlocks?: UserCreatedBlock[]
   userCreatedIslands?: UserCreatedIsland[]
@@ -192,7 +190,9 @@ export function llmIsMakingChanges(intent: {
   working: boolean
   preview: boolean
   status: AgentIntentStatus
+  awaitingAttach?: boolean
 }) {
+  if (intent.awaitingAttach) return false
   return (
     intent.working ||
     intent.preview ||
@@ -203,28 +203,6 @@ export function llmIsMakingChanges(intent: {
     intent.status === 'extend' ||
     intent.status === 'extended'
   )
-}
-
-export type BranchChanges = {
-  available: boolean
-  branch: string | null
-  base: string | null
-  mode: BranchChangesMode
-  remoteMissing: boolean
-  commit: BranchCommit | null
-  commits: BranchCommit[]
-  commitMissing: boolean
-  files: string[]
-  creates: string[]
-  deletes: string[]
-  createFolders: string[]
-  createLines: Record<string, number>
-  imports: PatchImport[]
-  addedFunctions: PatchSymbolAddition[]
-  addedVariables: PatchSymbolAddition[]
-  addedImports: PatchImportAddition[]
-  changedFunctions: PatchSymbolAddition[]
-  changedVariables: PatchSymbolAddition[]
 }
 
 export type PlanStep = {
@@ -280,6 +258,7 @@ export type DiffChainEntry = {
   files: string[]
   creates: string[]
   deletes: string[]
+  absent: string[]
   createFolders: string[]
   createLines: Record<string, number>
   imports: PatchImport[]
@@ -341,22 +320,38 @@ export const SESSION_COLORS = [
   { id: 'lime', name: 'Lime', hex: '#a3e635' },
   { id: 'orange', name: 'Orange', hex: '#fb923c' },
   { id: 'violet', name: 'Violet', hex: '#c084fc' },
+  { id: 'teal', name: 'Teal', hex: '#2dd4bf' },
+  { id: 'crimson', name: 'Crimson', hex: '#dc2626' },
+  { id: 'forest', name: 'Forest', hex: '#15803d' },
+  { id: 'grey', name: 'Grey', hex: '#4b5563' },
+  { id: 'white', name: 'White', hex: '#f4f4f5' },
 ] as const
 
-export const SESSION_COLOR_ORDER = [
-  'coral',
-  'amber',
-  'lime',
-  'orange',
-  'violet',
-] as const
+export const SESSION_COLOR_PAGE_SIZE = 5
+
+export const SESSION_COLOR_ORDER = SESSION_COLORS.map((color) => color.id)
+
+export type SessionColorId = (typeof SESSION_COLORS)[number]['id']
 
 export function sessionColorOrderIndex(colorId?: string | null) {
   if (!colorId) return SESSION_COLOR_ORDER.length
-  const index = SESSION_COLOR_ORDER.indexOf(
-    colorId as (typeof SESSION_COLOR_ORDER)[number],
-  )
+  const index = SESSION_COLOR_ORDER.indexOf(colorId as SessionColorId)
   return index === -1 ? SESSION_COLOR_ORDER.length : index
+}
+
+export function sessionColorPageCount() {
+  return Math.max(1, Math.ceil(SESSION_COLORS.length / SESSION_COLOR_PAGE_SIZE))
+}
+
+export function sessionColorsOnPage(page: number) {
+  const start = Math.max(0, page) * SESSION_COLOR_PAGE_SIZE
+  return SESSION_COLORS.slice(start, start + SESSION_COLOR_PAGE_SIZE)
+}
+
+export function sessionColorPageIndex(colorId?: string | null) {
+  const index = SESSION_COLORS.findIndex((color) => color.id === colorId)
+  if (index < 0) return 0
+  return Math.floor(index / SESSION_COLOR_PAGE_SIZE)
 }
 
 export function compareSessionColorOrder(
@@ -500,6 +495,7 @@ export type AgentIntent = {
   files: string[]
   creates: string[]
   deletes: string[]
+  absent: string[]
   createFolders: string[]
   createLines: Record<string, number>
   imports: PatchImport[]

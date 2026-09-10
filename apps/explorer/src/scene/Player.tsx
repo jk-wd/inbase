@@ -1,46 +1,55 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { PerspectiveCamera, PointerLockControls } from '@react-three/drei'
 import type { PointerLockControls as PointerLockControlsImpl } from 'three-stdlib'
 import * as THREE from 'three'
 import { CONFIG } from '../theme'
 import { isKeyboardIsolated, shouldIgnoreShortcut } from '../keyboard'
-import type { FlyTo, ViewMode, WorldLayout } from '../types'
+import type { ViewMode } from '../types'
 
-const lookDir = new THREE.Vector3()
-const flyPos = new THREE.Vector3()
-const flyLook = new THREE.Vector3()
+const aimNdc = new THREE.Vector2(0, 0)
+const aimRay = new THREE.Raycaster()
+const aimHit = new THREE.Vector3()
+const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
 
-function smootherstep(t: number) {
-  const x = Math.min(1, Math.max(0, t))
-  return x * x * x * (x * (x * 6 - 15) + 10)
-}
+const JUMP_MAX = 220
+const JUMP_STAND_BACK = 1.6
 
-function quadBezier(
-  out: THREE.Vector3,
-  a: THREE.Vector3,
-  b: THREE.Vector3,
-  c: THREE.Vector3,
-  t: number,
-) {
-  const u = 1 - t
-  out.set(
-    u * u * a.x + 2 * u * t * b.x + t * t * c.x,
-    u * u * a.y + 2 * u * t * b.y + t * t * c.y,
-    u * u * a.z + 2 * u * t * b.z + t * t * c.z,
+function jumpToCrosshair(camera: THREE.Camera, scene: THREE.Scene) {
+  aimRay.setFromCamera(aimNdc, camera)
+  const hits = aimRay.intersectObjects(scene.children, true)
+  const mesh = hits.find((item) => {
+    if (item.distance < 0.45 || item.distance > JUMP_MAX) return false
+    if (item.object.userData.relationTo) return false
+    return item.object instanceof THREE.Mesh
+  })
+  if (mesh) {
+    aimHit.copy(mesh.point)
+    const dir = aimRay.ray.direction
+    const horiz = Math.hypot(dir.x, dir.z)
+    if (horiz > 0.001) {
+      aimHit.x -= (dir.x / horiz) * JUMP_STAND_BACK
+      aimHit.z -= (dir.z / horiz) * JUMP_STAND_BACK
+    }
+  } else if (!aimRay.ray.intersectPlane(ground, aimHit)) {
+    return
+  }
+  const dist = Math.hypot(
+    aimHit.x - camera.position.x,
+    aimHit.z - camera.position.z,
   )
-  return out
+  if (dist < 0.4 || dist > JUMP_MAX) return
+  camera.position.set(aimHit.x, CONFIG.eyeHeight, aimHit.z)
 }
 
 type PlayerProps = {
-  layout: WorldLayout
   mode: ViewMode
   landAt: [number, number]
   locked: boolean
   lockEnabled?: boolean
   onLockedChange: (locked: boolean) => void
   onWalkPosition: (x: number, z: number) => void
-  flyTo: FlyTo | null
+  onExitWalk?: () => void
 }
 
 export function Player({
@@ -50,9 +59,9 @@ export function Player({
   lockEnabled = true,
   onLockedChange,
   onWalkPosition,
-  flyTo,
+  onExitWalk,
 }: PlayerProps) {
-  const { camera } = useThree()
+  const { camera, scene } = useThree()
   const walking = mode === 'walk'
   const keys = useRef({
     forward: false,
@@ -65,82 +74,22 @@ export function Player({
   const right = useRef(new THREE.Vector3())
   const up = useRef(new THREE.Vector3(0, 1, 0))
   const move = useRef(new THREE.Vector3())
-  const lastFly = useRef(0)
-  const [steering, setSteering] = useState(true)
   const controlsRef = useRef<PointerLockControlsImpl>(null)
   const capturedLook = useRef(false)
   const lookHeld = useRef(false)
-  const poseReady = useRef(false)
-  const groundedPose = useRef({
-    pos: new THREE.Vector3(),
-    look: new THREE.Vector3(),
-  })
-  const flying = useRef<{
-    startPos: THREE.Vector3
-    midPos: THREE.Vector3
-    endPos: THREE.Vector3
-    startLook: THREE.Vector3
-    endLook: THREE.Vector3
-    duration: number
-    t: number
-  } | null>(null)
+  const selfUnlock = useRef(false)
 
   useLayoutEffect(() => {
     if (!walking) {
-      flying.current = null
       capturedLook.current = false
-      poseReady.current = false
-      setSteering(true)
       return
     }
-    if (flyTo && flyTo.nonce !== lastFly.current) {
-      lastFly.current = flyTo.nonce
-      const endPos = new THREE.Vector3(landAt[0], CONFIG.eyeHeight, landAt[1])
-      const endLook = new THREE.Vector3(flyTo.lookAt[0], flyTo.lookAt[1], flyTo.lookAt[2])
-      const startPos = flying.current
-        ? camera.position.clone()
-        : poseReady.current
-          ? groundedPose.current.pos.clone()
-          : new THREE.Vector3(flyTo.from[0], CONFIG.eyeHeight, flyTo.from[1])
-      const startLook = new THREE.Vector3()
-      if (flying.current || poseReady.current) {
-        camera.getWorldDirection(lookDir)
-        startLook.copy(startPos).addScaledVector(lookDir, 16)
-      } else {
-        startLook.copy(startPos).lerp(endLook, 0.4)
-      }
-
-      const dist = startPos.distanceTo(endPos)
-      if (dist < 0.2) {
-        placeCamera(camera, endPos, endLook)
-        return
-      }
-
-      const lift = Math.min(26, 6 + dist * 0.22)
-      flying.current = {
-        startPos,
-        midPos: new THREE.Vector3(
-          (startPos.x + endPos.x) * 0.5,
-          CONFIG.eyeHeight + lift,
-          (startPos.z + endPos.z) * 0.5,
-        ),
-        endPos,
-        startLook,
-        endLook,
-        duration: Math.min(2.6, Math.max(0.8, 0.55 + dist * 0.04)),
-        t: 0,
-      }
-      placeCamera(camera, startPos, startLook)
-      setSteering(false)
-      return
-    }
-    if (flying.current) return
     placeCamera(
       camera,
       new THREE.Vector3(landAt[0], CONFIG.eyeHeight, landAt[1]),
       new THREE.Vector3(landAt[0], CONFIG.eyeHeight, landAt[1] + 10),
     )
-  }, [camera, flyTo, landAt, walking])
+  }, [camera, landAt, walking])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent, down: boolean) => {
@@ -154,21 +103,32 @@ export function Player({
 
     const down = (event: KeyboardEvent) => onKey(event, true)
     const up = (event: KeyboardEvent) => onKey(event, false)
+    const onJump = (event: KeyboardEvent) => {
+      if (event.repeat || event.code !== 'Space') return
+      if (shouldIgnoreShortcut(event)) return
+      if (mode !== 'walk' || !locked) return
+      event.preventDefault()
+      jumpToCrosshair(camera, scene)
+    }
     window.addEventListener('keydown', down)
+    window.addEventListener('keydown', onJump)
     window.addEventListener('keyup', up)
     return () => {
       window.removeEventListener('keydown', down)
+      window.removeEventListener('keydown', onJump)
       window.removeEventListener('keyup', up)
     }
-  }, [])
+  }, [camera, locked, mode, scene])
 
   useEffect(() => {
     if (!walking || !lockEnabled) {
+      selfUnlock.current = true
       controlsRef.current?.unlock()
       document.exitPointerLock()
       return
     }
-    if (!steering || capturedLook.current) return
+    selfUnlock.current = false
+    if (capturedLook.current) return
     const controls = controlsRef.current
     const element = controls?.domElement
     if (!controls || !element) return
@@ -179,7 +139,7 @@ export function Player({
       return
     }
     controls.lock()
-  }, [lockEnabled, onLockedChange, steering, walking])
+  }, [lockEnabled, onLockedChange, walking])
 
   useEffect(() => {
     if (!walking) return
@@ -194,6 +154,7 @@ export function Player({
 
     const onDblClick = () => {
       if (!lookHeld.current) return
+      selfUnlock.current = true
       controlsRef.current?.unlock()
       document.exitPointerLock()
     }
@@ -208,26 +169,7 @@ export function Player({
 
   useFrame((_, delta) => {
     try {
-      if (walking && flying.current) {
-        const flight = flying.current
-        flight.t += Math.min(delta, 0.05) / flight.duration
-        const t = Math.min(1, flight.t)
-        const ease = smootherstep(t)
-        quadBezier(flyPos, flight.startPos, flight.midPos, flight.endPos, ease)
-        flyLook.lerpVectors(flight.startLook, flight.endLook, ease)
-        camera.position.copy(flyPos)
-        camera.up.set(0, 1, 0)
-        camera.lookAt(flyLook)
-        camera.rotation.order = 'YXZ'
-        if (t >= 1) {
-          placeCamera(camera, flight.endPos, flight.endLook)
-          flying.current = null
-          poseReady.current = true
-          groundedPose.current.pos.copy(flight.endPos)
-          groundedPose.current.look.copy(flight.endLook)
-          setSteering(true)
-        }
-      } else if (walking && locked) {
+      if (walking && locked) {
         if (isKeyboardIsolated()) {
           keys.current.forward = false
           keys.current.back = false
@@ -253,12 +195,6 @@ export function Player({
       }
 
       if (!walking) return
-      if (!flying.current) {
-        poseReady.current = true
-        groundedPose.current.pos.copy(camera.position)
-        camera.getWorldDirection(lookDir)
-        groundedPose.current.look.copy(camera.position).addScaledVector(lookDir, 16)
-      }
       onWalkPosition(camera.position.x, camera.position.z)
     } catch {
       // Movement must never stop the render loop.
@@ -275,17 +211,24 @@ export function Player({
         ref={controlsRef}
         makeDefault
         selector=".stage canvas"
-        enabled={steering && lockEnabled}
+        enabled={lockEnabled}
         onLock={() => {
           if (!lockEnabled) {
+            selfUnlock.current = true
             controlsRef.current?.unlock()
             document.exitPointerLock()
             onLockedChange(false)
             return
           }
+          selfUnlock.current = false
           onLockedChange(true)
         }}
-        onUnlock={() => onLockedChange(false)}
+        onUnlock={() => {
+          const fromSelf = selfUnlock.current
+          selfUnlock.current = false
+          onLockedChange(false)
+          if (!fromSelf) onExitWalk?.()
+        }}
       />
     </>
   )

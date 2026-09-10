@@ -11,21 +11,30 @@ import {
   overlayHasChanges,
   normalizeChangeOverlay,
 } from './change-overlay.mjs'
-import { hasGitRepo, readWorkingTreeChanges } from './branch-changes.mjs'
+import {
+  hasGitRepo,
+  readWorkingTreeChanges,
+  withAbsentMappedFiles,
+} from './branch-changes.mjs'
 import { diffSourceTrees, restoreSourceTree, snapshotSourceTree } from './tree-diff.mjs'
 import { readExplain } from './explain-store.mjs'
 
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const CONNECTED_TTL_MS = 15_000
 const STALLED_WAIT_MS = 2_000
-export const SESSION_SLOT_COUNT = 5
 export const SESSION_COLORS = [
   { id: 'coral', name: 'Coral', hex: '#f87171' },
   { id: 'amber', name: 'Amber', hex: '#fbbf24' },
   { id: 'lime', name: 'Lime', hex: '#a3e635' },
   { id: 'orange', name: 'Orange', hex: '#fb923c' },
   { id: 'violet', name: 'Violet', hex: '#c084fc' },
+  { id: 'teal', name: 'Teal', hex: '#2dd4bf' },
+  { id: 'crimson', name: 'Crimson', hex: '#dc2626' },
+  { id: 'forest', name: 'Forest', hex: '#15803d' },
+  { id: 'grey', name: 'Grey', hex: '#4b5563' },
+  { id: 'white', name: 'White', hex: '#f4f4f5' },
 ]
+export const SESSION_SLOT_COUNT = SESSION_COLORS.length
 export const SESSION_COLOR_ALIASES = {
   coral: 'coral',
   red: 'coral',
@@ -36,6 +45,13 @@ export const SESSION_COLOR_ALIASES = {
   orange: 'orange',
   violet: 'violet',
   purple: 'violet',
+  teal: 'teal',
+  crimson: 'crimson',
+  forest: 'forest',
+  darkgreen: 'forest',
+  grey: 'grey',
+  gray: 'grey',
+  white: 'white',
 }
 const GLOBAL_COLOR_QUERIES = new Set(['blue', 'global', 'sky'])
 export const GLOBAL_BLUEPRINT_COLOR = {
@@ -43,13 +59,28 @@ export const GLOBAL_BLUEPRINT_COLOR = {
   name: 'Global',
   hex: '#38bdf8',
 }
+
+function joinOrList(items) {
+  if (items.length <= 1) return items[0] ?? ''
+  if (items.length === 2) return `${items[0]} or ${items[1]}`
+  return `${items.slice(0, -1).join(', ')}, or ${items.at(-1)}`
+}
+
+function sessionColorCommandHelp() {
+  const commands = SESSION_COLORS.map((color) => `/${color.id}`)
+  const aliases = Object.entries(SESSION_COLOR_ALIASES)
+    .filter(([alias, id]) => alias !== id)
+    .map(([alias]) => `/${alias}`)
+  return `Connect with ${joinOrList(commands)} (aliases: ${joinOrList(aliases)}). Blue is the global blueprint, not a chat.`
+}
+
 export const CHAT_LIMIT_MESSAGE =
-  'VISUAL_CODER_CHAT_LIMIT Only 5 Inbase chats can be connected at once. Click Done in a session window or type /stop in a connected chat, then start a new chat.'
+  `VISUAL_CODER_CHAT_LIMIT Only ${SESSION_SLOT_COUNT} Inbase chats can be connected at once. Click Done in a session window or type /stop in a connected chat, then start a new chat.`
 export const NOT_RUNNING_MESSAGE =
   "VISUAL_CODER_NOT_RUNNING Inbase isn't running. Start it with `npx inbase run`, then send this request again."
 export function colorUnknownMessage(query) {
   const label = typeof query === 'string' && query.trim() ? query.trim() : 'That color'
-  return `VISUAL_CODER_COLOR_UNKNOWN ${label} is not a chat color. Connect with /coral, /amber, /lime, /orange, or /violet (aliases: /red, /yellow, /green, /purple). Blue is the global blueprint, not a chat.`
+  return `VISUAL_CODER_COLOR_UNKNOWN ${label} is not a chat color. ${sessionColorCommandHelp()}`
 }
 export function colorBusyMessage(colorName) {
   return `VISUAL_CODER_COLOR_BUSY The ${colorName} session already has a chat connected. Click Done in that session window or type /stop in that chat, then try again.`
@@ -142,6 +173,12 @@ function nextSessionColor(dataDir) {
 function ensureManifestColor(dataDir, manifest) {
   if (!manifest) return manifest
   if (resolveSessionColor(manifest.color)) return manifest
+  if (
+    isSessionStopped(dataDir, manifest.sessionId) ||
+    isSessionReleased(dataDir, manifest.sessionId)
+  ) {
+    return manifest
+  }
   manifest.color = nextSessionColor(dataDir)
   const { manifest: file } = sessionPaths(dataDir, manifest.sessionId)
   atomicWrite(file, `${JSON.stringify(manifest, null, 2)}\n`)
@@ -161,6 +198,7 @@ export function sessionPaths(dataDir, sessionId) {
     preStep: path.join(root, 'pre-step'),
     context: path.join(root, 'context'),
     stopped: path.join(dataDir, 'diff-sessions', `${safeId}.stopped`),
+    released: path.join(dataDir, 'diff-sessions', `${safeId}.released`),
   }
 }
 
@@ -170,8 +208,16 @@ export function sessionStoppedError(sessionId) {
   )
 }
 
+function sessionMissingError(sessionId) {
+  return new Error(`No workflow session found for ${assertSessionId(sessionId)}`)
+}
+
 export function isSessionStopped(dataDir, sessionId) {
   return fs.existsSync(sessionPaths(dataDir, sessionId).stopped)
+}
+
+export function isSessionReleased(dataDir, sessionId) {
+  return fs.existsSync(sessionPaths(dataDir, sessionId).released)
 }
 
 export function isWorkflowStopped(dataDir, sessionId) {
@@ -189,9 +235,29 @@ function writeStoppedMarker(dataDir, sessionId) {
   )
 }
 
+function writeReleasedMarker(dataDir, sessionId) {
+  const { released } = sessionPaths(dataDir, sessionId)
+  atomicWrite(
+    released,
+    `${JSON.stringify({ sessionId: assertSessionId(sessionId), releasedAt: new Date().toISOString() }, null, 2)}\n`,
+  )
+}
+
 function clearStoppedMarker(dataDir, sessionId) {
   const { stopped } = sessionPaths(dataDir, sessionId)
   if (fs.existsSync(stopped)) fs.unlinkSync(stopped)
+}
+
+function clearReleasedMarker(dataDir, sessionId) {
+  const { released } = sessionPaths(dataDir, sessionId)
+  if (fs.existsSync(released)) fs.unlinkSync(released)
+}
+
+function assertSessionWritable(dataDir, sessionId) {
+  const safeId = assertSessionId(sessionId)
+  if (isSessionStopped(dataDir, safeId)) throw sessionStoppedError(safeId)
+  if (isSessionReleased(dataDir, safeId)) throw sessionMissingError(safeId)
+  return safeId
 }
 
 function requireManifest(dataDir, sessionId, missingMessage) {
@@ -199,6 +265,7 @@ function requireManifest(dataDir, sessionId, missingMessage) {
   const manifest = readManifest(dataDir, safeId)
   if (manifest) return manifest
   if (isSessionStopped(dataDir, safeId)) throw sessionStoppedError(safeId)
+  if (isSessionReleased(dataDir, safeId)) throw sessionMissingError(safeId)
   throw new Error(missingMessage ?? `Unknown session ${safeId}`)
 }
 
@@ -241,6 +308,7 @@ function ackFile(dataDir, sessionId) {
 
 export function recordSessionAck(dataDir, sessionId, kind, detail = '') {
   const safeId = assertSessionId(sessionId)
+  if (isSessionReleased(dataDir, safeId)) return null
   if (isSessionStopped(dataDir, safeId) && kind !== 'stopped' && kind !== 'finished') {
     return null
   }
@@ -275,7 +343,7 @@ function isFreshTimestamp(value, now = Date.now()) {
 
 export function touchSessionConnection(dataDir, sessionId) {
   const safeId = assertSessionId(sessionId)
-  if (isSessionStopped(dataDir, safeId)) return
+  if (isSessionStopped(dataDir, safeId) || isSessionReleased(dataDir, safeId)) return
   atomicWrite(
     connectionFile(dataDir, safeId),
     `${JSON.stringify({ sessionId: safeId, connectedAt: new Date().toISOString() }, null, 2)}\n`,
@@ -445,8 +513,10 @@ export function sessionPoolSize(dataDir) {
 
 export function ensureSessionPool(dataDir, options = {}) {
   const size = sessionPoolSize(dataDir)
-  if (size <= 0) {
-    enableSessionPool(dataDir, options.count ?? SESSION_SLOT_COUNT)
+  if (options.count != null && options.count !== size) {
+    enableSessionPool(dataDir, options.count)
+  } else if (size <= 0) {
+    enableSessionPool(dataDir, SESSION_SLOT_COUNT)
   }
   const count = sessionPoolSize(dataDir)
   const created = []
@@ -817,7 +887,8 @@ export function readManifest(dataDir, sessionId) {
 }
 
 export function writeManifest(dataDir, manifest) {
-  const paths = sessionPaths(dataDir, manifest.sessionId)
+  const safeId = assertSessionWritable(dataDir, manifest.sessionId)
+  const paths = sessionPaths(dataDir, safeId)
   manifest.updatedAt = new Date().toISOString()
   atomicWrite(paths.manifest, `${JSON.stringify(manifest, null, 2)}\n`)
 }
@@ -936,10 +1007,14 @@ export function sessionIntent(
   const browsingHistory = Boolean(
     selectedDiffId && selected && selected.id !== manifest.activeDiffId,
   )
-  const preview = dropMassKnownCreates(
-    browsingHistory
-      ? stored
-      : liveChangeOverlay(dataDir, sessionId, targetRoot, knownFileIds, stored),
+  const preview = withAbsentMappedFiles(
+    dropMassKnownCreates(
+      browsingHistory || manifest.awaitingAttach
+        ? stored
+        : liveChangeOverlay(dataDir, sessionId, targetRoot, knownFileIds, stored),
+      knownFileIds,
+    ),
+    targetRoot,
     knownFileIds,
   )
   const previewVisible = overlayHasChanges(preview) || Boolean(selected)
@@ -990,7 +1065,11 @@ export function sessionIntent(
     parentDiffId: selected?.parentId ?? null,
     chainIndex: selectedIndex,
     chain: manifest.diffs.map((entry, index) => {
-      const overlay = readOverlay(dataDir, sessionId, entry)
+      const overlay = withAbsentMappedFiles(
+        readOverlay(dataDir, sessionId, entry),
+        targetRoot,
+        knownFileIds,
+      )
       return {
         id: entry.id,
         index,
@@ -1000,6 +1079,7 @@ export function sessionIntent(
         files: overlay.files,
         creates: overlay.creates,
         deletes: overlay.deletes,
+        absent: overlay.absent,
         createFolders: overlay.createFolders,
         createLines: overlay.createLines,
         imports: overlay.imports,
@@ -1242,6 +1322,7 @@ export function autoAdvance(dataDir, sessionId, targetRoot = null) {
 export function startSession(dataDir, input) {
   const sessionId = assertSessionId(input.sessionId)
   clearStoppedMarker(dataDir, sessionId)
+  clearReleasedMarker(dataDir, sessionId)
   const existing = readManifest(dataDir, sessionId)
   const name = sessionName(input.name) || sessionName(input.feature)
   if (existing) {
@@ -1293,6 +1374,7 @@ export function setupSession(dataDir, input = {}) {
     discardStoredSession(dataDir, sessionId, null, { restore: false })
   }
   clearStoppedMarker(dataDir, sessionId)
+  clearReleasedMarker(dataDir, sessionId)
   const now = new Date().toISOString()
   const name = sessionName(input.name)
   const manifest = {
@@ -1427,7 +1509,11 @@ export function removeContextFile(dataDir, sessionId, fileId) {
 function generateVisualizerSessionId(dataDir) {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const sessionId = `viz-${crypto.randomBytes(6).toString('hex')}`
-    if (!readManifest(dataDir, sessionId) && !isSessionStopped(dataDir, sessionId)) {
+    if (
+      !readManifest(dataDir, sessionId) &&
+      !isSessionStopped(dataDir, sessionId) &&
+      !isSessionReleased(dataDir, sessionId)
+    ) {
       return sessionId
     }
   }
@@ -1552,6 +1638,9 @@ export function reportPlan(dataDir, input) {
   const existing = readManifest(dataDir, sessionId)
   if (!existing && isSessionStopped(dataDir, sessionId)) {
     throw sessionStoppedError(sessionId)
+  }
+  if (!existing && isSessionReleased(dataDir, sessionId)) {
+    throw sessionMissingError(sessionId)
   }
   const now = new Date().toISOString()
 
@@ -2116,7 +2205,9 @@ export function closeSession(dataDir, sessionId) {
 }
 
 export function finalizeFinishedSession(dataDir, sessionId, targetRoot = null) {
-  discardStoredSession(dataDir, sessionId, targetRoot, { restore: false })
+  const safeId = assertSessionId(sessionId)
+  writeReleasedMarker(dataDir, safeId)
+  discardStoredSession(dataDir, safeId, targetRoot, { restore: false })
   refillSessionPool(dataDir)
 }
 

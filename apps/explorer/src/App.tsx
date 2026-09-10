@@ -13,10 +13,9 @@ import {
 import {
   layoutWorld,
   markCreatedFolders,
-  standInFront,
-  relationTravelTarget,
   withPreviewGraph,
   filterGraphToChangePaths,
+  filterGraphAbsentFiles,
   mapPointOntoFolder,
   regionBounds,
 } from './layout'
@@ -47,8 +46,7 @@ import {
 } from './explain'
 import {
   fetchUserContext,
-  persistBranchChangesCommit,
-  persistBranchChangesMode,
+  persistBranchChangesBase,
   persistShowBranchChanges,
   persistShowHiddenFiles,
   persistUserContext,
@@ -89,8 +87,6 @@ import {
   llmIsMakingChanges,
   type AgentIntent,
   type AimedRelation,
-  type BranchChangesMode,
-  nextBranchChangesMode,
   type BlueprintNote,
   type BlueprintNoteKind,
   type BlueprintOption,
@@ -99,7 +95,6 @@ import {
   type CodebaseGraph,
   type ExplainSession,
   type ExplainTargetKind,
-  type FlyTo,
   GLOBAL_BLUEPRINT_COLOR,
   SESSION_COLORS,
   compareSessionColorOrder,
@@ -648,6 +643,7 @@ function intentSignature(intent: AgentIntent) {
     files: intent.files,
     creates: intent.creates,
     deletes: intent.deletes,
+    absent: intent.absent,
     createFolders: intent.createFolders,
     imports: intent.imports,
     addedFunctions: intent.addedFunctions,
@@ -771,12 +767,11 @@ function Explorer({
     null,
   )
   const [wantBranchChanges, setWantBranchChanges] = useState(false)
-  const [branchChangesMode, setBranchChangesMode] =
-    useState<BranchChangesMode>('main')
-  const [branchChangesCommit, setBranchChangesCommit] = useState<string | null>(
+  const [branchChangesBase, setBranchChangesBase] = useState<string | null>(
     null,
   )
   const [showHiddenFiles, setShowHiddenFiles] = useState(false)
+  const [hideChanges, setHideChanges] = useState(false)
   const [branchChanges, setBranchChanges] = useState(emptyBranchChanges)
   const intent =
     intents.find((item) => item.sessionId === focusedSessionId) ??
@@ -784,11 +779,16 @@ function Explorer({
     emptyIntent
   const canPlace = true
   const llmBusy = intents.some(llmIsMakingChanges)
-  const llmPreviewing = intent.preview || isPatchPreview(intent.status)
+  const llmOverlay =
+    !intent.awaitingAttach &&
+    (intent.preview || isPatchPreview(intent.status))
+  const hidingChanges = hideChanges && !llmBusy && !llmOverlay
+  const llmPreviewing = llmOverlay && !hidingChanges
   const showingBranchChanges =
     wantBranchChanges &&
+    !hidingChanges &&
     !llmBusy &&
-    !llmPreviewing &&
+    !llmOverlay &&
     branchChanges.available
   const changeSet = llmPreviewing
     ? intent
@@ -796,6 +796,11 @@ function Explorer({
       ? branchChanges
       : emptyIntent
   const previewing = llmPreviewing || showingBranchChanges
+  const absentIds = previewing ? (changeSet.absent ?? []) : []
+  const mappedGraph = useMemo(
+    () => filterGraphAbsentFiles(graph, absentIds),
+    [absentIds, graph],
+  )
   const plannedCreates = previewing ? changeSet.creates : []
   const previewCreateIds = previewing
     ? [
@@ -803,7 +808,7 @@ function Explorer({
           ...plannedCreates,
           ...Object.keys(changeSet.createLines ?? {}),
         ]),
-      ]
+      ].filter((id) => !absentIds.includes(id))
     : []
   const [userBlocks, setUserBlocks] = useState<UserCreatedBlock[]>([])
   const [userIslands, setUserIslands] = useState<UserCreatedIsland[]>([])
@@ -859,6 +864,7 @@ function Explorer({
   const blueprintPointersRef = useRef(blueprintPointers)
   const persistBlueprintRef = useRef<() => void>(() => {})
   const selectBlueprintColorRef = useRef<(color: string) => void>(() => {})
+  const globalBlueprintSelectedRef = useRef(true)
   const notesDirty = useRef(false)
   const blueprintPersistGen = useRef(0)
   const notePersistTimer = useRef<number | null>(null)
@@ -872,9 +878,9 @@ function Explorer({
   const namingId = userBlocks.find((block) => block.naming)?.id ?? null
   const namingIslandId = userIslands.find((island) => island.naming)?.id ?? null
   const previewGraph = useMemo(() => {
-    if (!previewing) return graph
+    if (!previewing) return mappedGraph
     return withPreviewGraph(
-      graph,
+      mappedGraph,
       previewCreateIds,
       changeSet.createLines ?? {},
       changeSet.createFolders ?? [],
@@ -884,7 +890,7 @@ function Explorer({
     changeSet.createFolders,
     changeSet.createLines,
     changeSet.imports,
-    graph,
+    mappedGraph,
     previewCreateIds,
     previewing,
   ])
@@ -1049,6 +1055,8 @@ function Explorer({
   >(null)
   const dismissedCardQuestionRef = useRef<string | null>(null)
   dismissedCardQuestionRef.current = dismissedCardQuestion
+  const explainExitPendingRef = useRef(false)
+  const explainEpochRef = useRef(0)
   const cardExplain = explainIsCard(explain)
   const explaining =
     explain.active &&
@@ -1076,10 +1084,9 @@ function Explorer({
   const pickImportTargetRef = useRef<(fileId: string) => void>(() => {})
   const [mapMenu, setMapMenu] = useState<MapContextMenuState | null>(null)
   const [aimedRelation, setAimedRelation] = useState<AimedRelation | null>(null)
-  const [aimedFileId, setAimedFileId] = useState<string | null>(null)
   const [inspectTick, setInspectTick] = useState(0)
-  const [flyTo, setFlyTo] = useState<FlyTo | null>(null)
   const [locked, setLocked] = useState(false)
+  const [walkDrop, setWalkDrop] = useState<{ x: number; y: number } | null>(null)
   const [importedBy, setImportedBy] = useState(false)
   const [relationMode, setRelationMode] = useState<RelationMode>('targeted')
   const [changePathsOnly, setChangePathsOnly] = useState(false)
@@ -1089,6 +1096,8 @@ function Explorer({
   const browsingHistory = useRef<Record<string, boolean>>({})
   const liveIntentsRef = useRef<AgentIntent[]>([])
   const seenSessionIds = useRef<Set<string>>(new Set())
+  // null until the first poll seeds waiting/attached state per session.
+  const awaitingAttachBySession = useRef<Map<string, boolean> | null>(null)
 
   const applyIntent = useCallback((next: AgentIntent, sessionId?: string) => {
     const targetId = next.sessionId ?? sessionId ?? null
@@ -1129,6 +1138,18 @@ function Explorer({
     persistSessionFocus(sessionId)
   }, [])
 
+  const startWalkDrop = useCallback((x: number, y: number) => {
+    setWalkDrop({ x, y })
+  }, [])
+
+  const moveWalkDrop = useCallback((x: number, y: number) => {
+    setWalkDrop({ x, y })
+  }, [])
+
+  const endWalkDrop = useCallback(() => {
+    setWalkDrop(null)
+  }, [])
+
   const rememberWalk = useCallback((x: number, z: number) => {
     walkPos.current = [x, z]
   }, [])
@@ -1142,6 +1163,7 @@ function Explorer({
 
   const openWalk = useCallback(() => {
     if (explaining) return
+    setAimedRelation(null)
     setMode('walk')
   }, [explaining])
 
@@ -1149,19 +1171,20 @@ function Explorer({
     if (explaining) return
     if (mode === 'walk') {
       setLandAt(walkPos.current)
-      setFlyTo(null)
       setLocked(false)
       document.exitPointerLock()
       setMode('map')
       return
     }
+    setAimedRelation(null)
     setMode('walk')
   }, [explaining, mode])
 
   const land = useCallback((x: number, z: number) => {
     if (explaining) return
     walkPos.current = [x, z]
-    setFlyTo(null)
+    setAimedRelation(null)
+    setWalkDrop(null)
     setLandAt([x, z])
     setMode('walk')
   }, [explaining])
@@ -1180,38 +1203,6 @@ function Explorer({
       land(mapped[0], mapped[1])
     },
     [changePathLayout, changePathsOnly, hasChangeSet, land, layout],
-  )
-
-  const travelToFile = useCallback(
-    (fileId: string, fly: boolean) => {
-      const placed = layout.files[fileId]
-      if (!placed) return
-      const from = walkPos.current
-      const [x, z] = standInFront(placed)
-      walkPos.current = [x, z]
-      setAimedRelation(null)
-      setLandAt([x, z])
-      setFlyTo(
-        fly
-          ? {
-              nonce: Date.now(),
-              from: [from[0], from[1]],
-              lookAt: [placed.position[0], placed.position[1], placed.position[2]],
-            }
-          : null,
-      )
-      setMode('walk')
-    },
-    [layout.files],
-  )
-
-  const flyAlongRelation = useCallback(
-    (fromId: string, toId: string) => {
-      if (mode !== 'walk') return
-      const [x, z] = walkPos.current
-      travelToFile(relationTravelTarget(fromId, toId, x, z, layout.files), true)
-    },
-    [layout.files, mode, travelToFile],
   )
 
   const runWorkflowAction = useCallback(
@@ -1253,7 +1244,17 @@ function Explorer({
         }
         return next
       } catch {
-        // Keep the pending patch visible if apply failed.
+        if (action === 'stop' || action === 'done') {
+          try {
+            const bundle = await fetchAgentIntents()
+            liveIntentsRef.current = bundle.intents
+            lastIntentSig.current = null
+            setIntents(bundle.intents)
+            await onRefreshGraph()
+          } catch {
+            // Explorer may be restarting while the session is already gone.
+          }
+        }
         return false
       }
     },
@@ -1311,22 +1312,26 @@ function Explorer({
   }, [toggleMap])
 
   useEffect(() => {
+    if (mode !== 'walk') return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code !== 'Escape') return
+      if (shouldIgnoreShortcut(event)) return
+      event.preventDefault()
+      openMap()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [mode, openMap])
+
+  useEffect(() => {
     let cancelled = false
     void fetchUserContext().then((context) => {
       if (cancelled) return
       if (typeof context?.showBranchChanges === 'boolean') {
         setWantBranchChanges(context.showBranchChanges)
       }
-      if (
-        context?.branchChangesMode === 'remote' ||
-        context?.branchChangesMode === 'main' ||
-        context?.branchChangesMode === 'current' ||
-        context?.branchChangesMode === 'commit'
-      ) {
-        setBranchChangesMode(context.branchChangesMode)
-      }
-      if (typeof context?.branchChangesCommit === 'string') {
-        setBranchChangesCommit(context.branchChangesCommit)
+      if (typeof context?.branchChangesBase === 'string') {
+        setBranchChangesBase(context.branchChangesBase)
       }
       if (typeof context?.showHiddenFiles === 'boolean') {
         setShowHiddenFiles(context.showHiddenFiles)
@@ -1340,9 +1345,14 @@ function Explorer({
   useEffect(() => {
     let cancelled = false
     const poll = async () => {
+      const epoch = explainEpochRef.current
       const next = await fetchExplain()
-      if (cancelled) return
+      if (cancelled || epoch !== explainEpochRef.current) return
       setExplain((current) => {
+        if (explainExitPendingRef.current) {
+          if (!next.active) explainExitPendingRef.current = false
+          return emptyExplain()
+        }
         if (
           current.presentation === 'card' &&
           current.active &&
@@ -1400,14 +1410,23 @@ function Explorer({
     void persistExplainStep(step)
   }, [])
 
-  const exitExplain = useCallback(() => {
-    setExplain(emptyExplain())
-    void persistExplainStop()
-  }, [])
+  const exitExplain = useCallback(
+    (options?: { dismissQuestion?: string | null }) => {
+      explainEpochRef.current += 1
+      explainExitPendingRef.current = true
+      setDismissedCardQuestion(options?.dismissQuestion ?? null)
+      setExplain(emptyExplain())
+      openMap()
+      void persistExplainStop().finally(() => {
+        explainExitPendingRef.current = false
+        explainEpochRef.current += 1
+      })
+    },
+    [openMap],
+  )
 
   const closeAskCard = useCallback(() => {
-    setDismissedCardQuestion(explain.question)
-    exitExplain()
+    exitExplain({ dismissQuestion: explain.question })
   }, [exitExplain, explain.question])
 
   const startExplainTarget = useCallback(
@@ -1424,6 +1443,8 @@ function Explorer({
         return
       }
       const question = explainTargetQuestion(input.kind, target, name)
+      explainEpochRef.current += 1
+      explainExitPendingRef.current = false
       setDismissedCardQuestion(null)
       setExplain({
         active: true,
@@ -2165,31 +2186,28 @@ function Explorer({
     if (!wantBranchChanges && !branchChanges.available) return
     setWantBranchChanges((current) => {
       const next = !current
+      if (next) setHideChanges(false)
       persistShowBranchChanges(next)
       return next
     })
   }, [branchChanges.available, llmBusy, wantBranchChanges])
 
-  const setBranchChangesModeAndPersist = useCallback(
-    (next: BranchChangesMode) => {
-      setBranchChangesMode(next)
-      persistBranchChangesMode(next)
+  const toggleHideChanges = useCallback(() => {
+    setHideChanges((current) => !current)
+  }, [])
+
+  useEffect(() => {
+    if (!llmBusy && !llmOverlay) return
+    setHideChanges(false)
+  }, [llmBusy, llmOverlay])
+
+  const setBranchChangesBaseAndPersist = useCallback(
+    (next: string | null) => {
+      setBranchChangesBase(next)
+      persistBranchChangesBase(next)
     },
     [],
   )
-
-  const setBranchChangesCommitAndPersist = useCallback((next: string) => {
-    setBranchChangesCommit(next)
-    persistBranchChangesCommit(next)
-  }, [])
-
-  const toggleBranchChangesMode = useCallback(() => {
-    setBranchChangesMode((current) => {
-      const next = nextBranchChangesMode(current)
-      persistBranchChangesMode(next)
-      return next
-    })
-  }, [])
 
   const toggleShowHiddenFiles = useCallback(() => {
     setShowHiddenFiles((current) => {
@@ -2257,36 +2275,26 @@ function Explorer({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat || event.code !== 'KeyK') return
+      if (explaining) return
       if (shouldIgnoreShortcut(event)) return
       event.preventDefault()
       toggleImportedBy()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [toggleImportedBy])
+  }, [explaining, toggleImportedBy])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat || event.code !== 'KeyG') return
       if (shouldIgnoreShortcut(event)) return
-      if (event.shiftKey) {
-        if (!canToggleBranchChanges || !wantBranchChanges) return
-        event.preventDefault()
-        toggleBranchChangesMode()
-        return
-      }
       if (!canToggleBranchChanges) return
       event.preventDefault()
       toggleShowBranchChanges()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [
-    canToggleBranchChanges,
-    toggleBranchChangesMode,
-    toggleShowBranchChanges,
-    wantBranchChanges,
-  ])
+  }, [canToggleBranchChanges, toggleShowBranchChanges])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -2322,19 +2330,12 @@ function Explorer({
   useEffect(() => {
     let cancelled = false
     const load = async () => {
-      const next = await fetchBranchChanges(
-        branchChangesMode,
-        branchChangesCommit,
-      )
+      const next = await fetchBranchChanges(branchChangesBase)
       if (cancelled) return
       setBranchChanges(next)
-      if (
-        next.mode === 'commit' &&
-        next.commit?.sha &&
-        next.commit.sha !== branchChangesCommit
-      ) {
-        setBranchChangesCommit(next.commit.sha)
-        persistBranchChangesCommit(next.commit.sha)
+      if (next.baseMissing && branchChangesBase) {
+        setBranchChangesBase(null)
+        persistBranchChangesBase(null)
       }
     }
     void load()
@@ -2350,7 +2351,7 @@ function Explorer({
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [branchChangesCommit, branchChangesMode, llmBusy, updatingModel, wantBranchChanges])
+  }, [branchChangesBase, llmBusy, updatingModel, wantBranchChanges])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -2364,7 +2365,7 @@ function Explorer({
   }, [cycleRelationMode])
 
   useEffect(() => {
-    if (mode !== 'map' || !hasChangeSet) return
+    if (mode !== 'map' || !hasChangeSet || explaining) return
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat || event.code !== 'KeyC') return
       if (shouldIgnoreShortcut(event)) return
@@ -2373,7 +2374,7 @@ function Explorer({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [hasChangeSet, mode, toggleChangePathsOnly])
+  }, [explaining, hasChangeSet, mode, toggleChangePathsOnly])
 
   const applyBlueprintContents = useCallback(
     (blueprint: SharedBlueprint, keepDrafts = true) => {
@@ -2506,6 +2507,17 @@ function Explorer({
           serverFocus != null && !seenSessionIds.current.has(serverFocus)
         seenSessionIds.current = nextIds
         setFocusedSessionId((current) => {
+          const selectedColor = blueprintColorRef.current
+          if (
+            selectedColor &&
+            selectedColor !== GLOBAL_BLUEPRINT_COLOR.id
+          ) {
+            const match = merged.find((item) => item.color === selectedColor)
+            if (match?.sessionId) return match.sessionId
+          }
+          if (globalBlueprintSelectedRef.current) {
+            return current
+          }
           if (appeared && serverFocus && nextIds.has(serverFocus)) {
             return serverFocus
           }
@@ -2541,8 +2553,8 @@ function Explorer({
     ...blueprintImportEdges,
   ]
   const deletedIds = previewing ? changeSet.deletes : []
-  const blueprintHasContent = visibleBlueprintColors.some((color) => {
-    const contents = createdContentsForColor(color)
+  const blueprintHasContent = (() => {
+    const contents = createdContentsForColor(blueprintColor)
     return blueprintLiveEnabled(
       contents.blocks,
       contents.islands,
@@ -2552,9 +2564,9 @@ function Explorer({
       contents.notes,
       contents.pointers,
     )
-  })
-  const blueprintCanCleanup = visibleBlueprintColors.some((color) => {
-    const contents = createdContentsForColor(color)
+  })()
+  const blueprintCanCleanup = (() => {
+    const contents = createdContentsForColor(blueprintColor)
     return (
       contents.blocks.some(
         (block) => !block.naming && knownFileIds.has(block.id),
@@ -2563,7 +2575,7 @@ function Explorer({
         (island) => !island.naming && knownFolderPaths.has(island.path),
       )
     )
-  })
+  })()
   const canDeleteSelected =
     Boolean(
       selectedId &&
@@ -2766,14 +2778,61 @@ function Explorer({
 
   const selectBlueprintColor = useCallback(
     (color: string) => {
+      globalBlueprintSelectedRef.current = color === GLOBAL_BLUEPRINT_COLOR.id
       if (!currentVisibleColors().includes(color)) {
         applyHiddenToColors([color], false)
       }
       activateBlueprintColor(color)
+      if (color === GLOBAL_BLUEPRINT_COLOR.id) return
+      const match =
+        liveIntentsRef.current.find((item) => item.color === color) ??
+        intents.find((item) => item.color === color)
+      if (match?.sessionId) {
+        setFocusedSessionId(match.sessionId)
+        persistSessionFocus(match.sessionId)
+      }
     },
-    [activateBlueprintColor, applyHiddenToColors, currentVisibleColors],
+    [activateBlueprintColor, applyHiddenToColors, currentVisibleColors, intents],
   )
   selectBlueprintColorRef.current = selectBlueprintColor
+
+  useEffect(() => {
+    if (globalBlueprintSelectedRef.current) return
+    const focused =
+      intents.find((item) => item.sessionId === focusedSessionId) ??
+      intents.find((item) => item.sessionId) ??
+      null
+    const color = focused?.color
+    if (!color || color === blueprintColorRef.current) return
+    selectBlueprintColor(color)
+  }, [focusedSessionId, intents, selectBlueprintColor])
+
+  // When a color slot goes from waiting → LLM attached (running), show that session.
+  useEffect(() => {
+    const next = new Map<string, boolean>()
+    for (const item of intents) {
+      if (!item.sessionId) continue
+      next.set(item.sessionId, Boolean(item.awaitingAttach))
+    }
+    const prev = awaitingAttachBySession.current
+    awaitingAttachBySession.current = next
+    if (!prev) return
+
+    const started = intents.filter((item) => {
+      if (!item.sessionId || item.awaitingAttach !== false || !item.color) {
+        return false
+      }
+      if (!prev.has(item.sessionId)) return true
+      return prev.get(item.sessionId) === true
+    })
+    if (started.length === 0) return
+
+    const pick =
+      started.find((item) => item.sessionId === focusedSessionId) ??
+      started[started.length - 1]
+    if (!pick?.color) return
+    selectBlueprintColorRef.current(pick.color)
+  }, [focusedSessionId, intents])
 
   const writeCreatedContents = useCallback(
     (
@@ -2868,29 +2927,14 @@ function Explorer({
     ],
   )
 
-  const toggleBlueprintColor = useCallback(
-    (color: string) => {
-      const visible = currentVisibleColors()
-      if (visible.includes(color)) {
-        applyHiddenToColors([color], true)
-        const remaining = visible.filter((id) => id !== color)
-        if (color === blueprintColorRef.current && remaining.length > 0) {
-          activateBlueprintColor(remaining[remaining.length - 1]!)
-        }
-        return
-      }
-      selectBlueprintColor(color)
-    },
-    [
-      activateBlueprintColor,
-      applyHiddenToColors,
-      currentVisibleColors,
-      selectBlueprintColor,
-    ],
-  )
+  const toggleActiveBlueprintHidden = useCallback(() => {
+    const color = blueprintColorRef.current
+    if (!color) return
+    applyHiddenToColors([color], currentVisibleColors().includes(color))
+  }, [applyHiddenToColors, currentVisibleColors])
 
   const clearSharedBlueprint = useCallback(() => {
-    const colors = currentVisibleColors()
+    const colors = [blueprintColorRef.current]
     if (colors.length === 0) return
     blueprintPersistGen.current += 1
     for (const color of colors) {
@@ -2924,10 +2968,10 @@ function Explorer({
       }
       void persistBlueprintClear(color)
     }
-  }, [currentVisibleColors, rememberLiveBlueprint, replaceStoredBlueprints])
+  }, [rememberLiveBlueprint, replaceStoredBlueprints])
 
   const cleanupSharedBlueprint = useCallback(() => {
-    const colors = currentVisibleColors()
+    const colors = [blueprintColorRef.current]
     if (colors.length === 0) return
     blueprintPersistGen.current += 1
     const files = knownFileIds
@@ -2982,7 +3026,6 @@ function Explorer({
     }
   }, [
     createdContentsForColor,
-    currentVisibleColors,
     knownFileIds,
     knownFolderPaths,
     rememberLiveBlueprint,
@@ -3026,6 +3069,7 @@ function Explorer({
             onLockedChange={setLocked}
             onLand={landFromMap}
             onWalkPosition={rememberWalk}
+            onExitWalk={openMap}
             onContext={persistUserContext}
             plannedIds={plannedIds}
             previewFiles={{}}
@@ -3033,12 +3077,8 @@ function Explorer({
             createdIds={plannedCreates}
             deletedIds={deletedIds}
             createLines={changeSet.createLines ?? {}}
-            flyTo={flyTo}
             aimedRelation={aimedRelation}
             onAimRelation={setAimedRelation}
-            onAimFile={setAimedFileId}
-            onInspect={inspectBlock}
-            onTravelTo={flyAlongRelation}
             importedBy={mapImportedBy}
             relationMode={relationMode}
             namingId={namingId}
@@ -3073,6 +3113,7 @@ function Explorer({
             focusBounds={explainBounds}
             focusFlightKey={explaining ? explain.currentStep : 0}
             landEnabled={!explaining}
+            droppingWalk={Boolean(walkDrop)}
           />
         </Canvas>
         </CanvasErrorBoundary>
@@ -3098,7 +3139,7 @@ function Explorer({
             </>
           ) : null}
         </>
-      ) : (
+      ) : null}
       <HUD
         graph={displayGraph}
         mode={mode}
@@ -3111,8 +3152,6 @@ function Explorer({
         overlayLayers={overlayLayers}
         canDeleteSelected={canDeleteSelected}
         onSelectFolder={selectFolder}
-        aimedRelation={aimedRelation}
-        aimedFileId={aimedFileId}
         intent={intent}
         intents={intents}
         focusedSessionId={focusedSessionId}
@@ -3122,14 +3161,19 @@ function Explorer({
         onNavigateDiff={navigateDiff}
         onOpenMap={openMap}
         onWalk={openWalk}
+        walkDrop={walkDrop}
+        onWalkDropStart={startWalkDrop}
+        onWalkDropMove={moveWalkDrop}
+        onWalkDropEnd={endWalkDrop}
         showBranchChanges={showingBranchChanges}
+        wantBranchChanges={wantBranchChanges}
+        hideChanges={hidingChanges}
         branchChanges={branchChanges}
-        branchChangesMode={branchChangesMode}
         canShowBranchChanges={canToggleBranchChanges}
         llmMakingChanges={llmBusy}
         onToggleShowBranchChanges={toggleShowBranchChanges}
-        onBranchChangesModeChange={setBranchChangesModeAndPersist}
-        onBranchChangesCommitChange={setBranchChangesCommitAndPersist}
+        onToggleHideChanges={toggleHideChanges}
+        onBranchChangesBaseChange={setBranchChangesBaseAndPersist}
         showHiddenFiles={showHiddenFiles}
         onToggleShowHiddenFiles={toggleShowHiddenFiles}
         onUpdateModel={onUpdateModel}
@@ -3178,7 +3222,7 @@ function Explorer({
         blueprintOptions={blueprintOptions}
         blueprintColorPointers={blueprintColorPointers}
         onSelectBlueprintColor={selectBlueprintColor}
-        onToggleBlueprintColor={toggleBlueprintColor}
+        onToggleBlueprintHidden={toggleActiveBlueprintHidden}
         onClearBlueprint={clearSharedBlueprint}
         onCleanupBlueprint={cleanupSharedBlueprint}
         savedBlueprint={savedBlueprint}
@@ -3186,8 +3230,8 @@ function Explorer({
         onLoadBlueprint={loadCurrentBlueprint}
         devTargets={devTargets}
         onSelectDevTarget={onSelectDevTarget}
+        explainMode={explaining}
       />
-      )}
       {!explaining && (
       <MapContextMenu
         menu={mapMenu}
@@ -3199,6 +3243,12 @@ function Explorer({
         onAddFile={beginAddFile}
         onAddFolder={beginAddFolder}
         onOpenFile={inspectFile}
+        onExplainFile={(fileId) =>
+          startExplainTarget({ kind: 'file', path: fileId })
+        }
+        onExplainFolder={(folder) =>
+          startExplainTarget({ kind: 'folder', path: folder })
+        }
         onPointToFolder={(folder) =>
           applyBlueprintPointer({ kind: 'folder', path: folder })
         }

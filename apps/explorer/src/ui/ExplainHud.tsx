@@ -46,7 +46,6 @@ export function ExplainHud({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat) return
-      if (shouldIgnoreShortcut(event) && event.code !== 'Escape') return
       if (event.code === 'Escape') {
         event.preventDefault()
         onExit()
@@ -66,8 +65,8 @@ export function ExplainHud({
         if (previous) goTo(previous)
       }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [goTo, hasSteps, neighbor, onExit])
 
   useEffect(() => {
@@ -88,7 +87,7 @@ export function ExplainHud({
           className="hud-button explain-exit"
           type="button"
           aria-label="Exit explain mode"
-          title="Exit explain mode"
+          title="Exit explain mode (Esc)"
           onClick={onExit}
         >
           <svg
@@ -106,6 +105,10 @@ export function ExplainHud({
           </svg>
         </button>
       </header>
+
+      <p className="explain-esc-hint">
+        Hit <kbd>Esc</kbd> to return to map
+      </p>
 
       {starting ? (
         <p className="explain-body">Preparing an explanation…</p>
@@ -155,7 +158,7 @@ export function ExplainHud({
                   ) : null}
                   {active && !preparingFollowUp ? (
                     <p className="explain-ask-hint">
-                      Type /explain your question in the chat.
+                      Type /explainit your question in the chat.
                     </p>
                   ) : null}
                 </li>

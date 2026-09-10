@@ -61,6 +61,7 @@ import {
   listLocalBlueprints,
   writeManifest,
   isSessionStopped,
+  isSessionReleased,
   isWorkflowStopped,
 } from './session-store.mjs'
 import { initGitRepo, runGit } from './git-test.mjs'
@@ -168,6 +169,46 @@ test('setup session opens blueprint placement with no LLM attached', () => {
     assert.equal(intent.llmIdle, true)
     assert.equal(intent.awaitingAttach, true)
     assert.equal(intent.initialInstruction, null)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('waiting sessions do not preview live git changes', () => {
+  const env = fixture({ git: true })
+  try {
+    runGit(env.root, ['add', 'target'])
+    runGit(env.root, ['commit', '-m', 'init'])
+    const started = setupSession(env.dataDir)
+    fs.writeFileSync(
+      path.join(env.targetRoot, 'src/a.ts'),
+      'export const value = 2\n',
+    )
+
+    const waiting = sessionIntent(
+      env.dataDir,
+      started.sessionId,
+      ['src/a.ts'],
+      undefined,
+      new Set(),
+      env.targetRoot,
+    )
+    assert.equal(waiting.awaitingAttach, true)
+    assert.equal(waiting.preview, false)
+    assert.deepEqual(waiting.files, [])
+
+    attachSession(env.dataDir, started.sessionId)
+    const attached = sessionIntent(
+      env.dataDir,
+      started.sessionId,
+      ['src/a.ts'],
+      undefined,
+      new Set([started.sessionId]),
+      env.targetRoot,
+    )
+    assert.equal(attached.awaitingAttach, false)
+    assert.equal(attached.preview, true)
+    assert.ok(attached.files.includes('src/a.ts'))
   } finally {
     env.cleanup()
   }
@@ -400,14 +441,19 @@ test('parseSessionColorQuery maps aliases and rejects blue', () => {
   assert.equal(parseSessionColorQuery('green').id, 'lime')
   assert.equal(parseSessionColorQuery('purple').id, 'violet')
   assert.equal(parseSessionColorQuery('orange').id, 'orange')
+  assert.equal(parseSessionColorQuery('teal').id, 'teal')
+  assert.equal(parseSessionColorQuery('crimson').id, 'crimson')
+  assert.equal(parseSessionColorQuery('darkgreen').id, 'forest')
+  assert.equal(parseSessionColorQuery('gray').id, 'grey')
+  assert.equal(parseSessionColorQuery('white').id, 'white')
   assert.equal(parseSessionColorQuery(''), null)
   assert.throws(
     () => parseSessionColorQuery('blue'),
     (error) => String(error.message).includes('VISUAL_CODER_COLOR_UNKNOWN'),
   )
   assert.throws(
-    () => parseSessionColorQuery('pink'),
-    (error) => String(error.message) === colorUnknownMessage('pink'),
+    () => parseSessionColorQuery('navy'),
+    (error) => String(error.message) === colorUnknownMessage('navy'),
   )
 })
 
@@ -640,7 +686,16 @@ test('attach fails when no visualizer session is waiting', () => {
   }
 })
 
-test('startup opens five empty unconnected sessions', () => {
+test('session colors are ten slots and never blue', () => {
+  assert.equal(SESSION_COLORS.length, SESSION_SLOT_COUNT)
+  assert.equal(SESSION_SLOT_COUNT, 10)
+  assert.equal(
+    SESSION_COLORS.some((color) => color.id === 'blue' || color.id === 'global'),
+    false,
+  )
+})
+
+test('startup opens an empty unconnected session per color', () => {
   const env = fixture()
   try {
     const created = ensureSessionPool(env.dataDir)
@@ -669,7 +724,7 @@ test('startup opens five empty unconnected sessions', () => {
   }
 })
 
-test('the sixth chat is refused while five are connected', () => {
+test('an extra chat is refused while every slot is connected', () => {
   const env = fixture()
   try {
     const created = ensureSessionPool(env.dataDir)
@@ -693,6 +748,29 @@ test('stopping a connected chat opens a new empty slot', () => {
     assert.equal(
       ids.filter((sessionId) => readManifest(env.dataDir, sessionId).awaitingAttach)
         .length,
+      SESSION_SLOT_COUNT,
+    )
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('completeSession while the LLM is preparing frees the color slot', () => {
+  const env = fixture()
+  try {
+    const created = ensureSessionPool(env.dataDir)
+    const sessionId = created[0].sessionId
+    const color = readManifest(env.dataDir, sessionId).color
+    attachSession(env.dataDir, sessionId)
+    assert.equal(readManifest(env.dataDir, sessionId).phase, 'preparing')
+    completeSession(env.dataDir, sessionId, env.targetRoot)
+    assert.equal(readManifest(env.dataDir, sessionId), null)
+    const waiting = listOpenSessionIds(env.dataDir).map((id) =>
+      readManifest(env.dataDir, id),
+    )
+    assert.equal(waiting.some((manifest) => manifest.color === color), true)
+    assert.equal(
+      waiting.filter((manifest) => manifest.awaitingAttach).length,
       SESSION_SLOT_COUNT,
     )
   } finally {
@@ -730,6 +808,53 @@ test('completeSession keeps files and frees the color slot', () => {
       waiting.filter((manifest) => manifest.awaitingAttach).length,
       SESSION_SLOT_COUNT,
     )
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('completeSession drops the LLM connection without a stop signal', () => {
+  const env = fixture()
+  try {
+    const created = ensureSessionPool(env.dataDir)
+    const sessionId = created[0].sessionId
+    const color = readManifest(env.dataDir, sessionId).color
+    attachSession(env.dataDir, sessionId)
+    const leftover = readManifest(env.dataDir, sessionId)
+    completeSession(env.dataDir, sessionId, env.targetRoot)
+
+    assert.equal(readManifest(env.dataDir, sessionId), null)
+    assert.equal(isSessionReleased(env.dataDir, sessionId), true)
+    assert.equal(isSessionStopped(env.dataDir, sessionId), false)
+    assert.equal(isWorkflowStopped(env.dataDir, sessionId), false)
+
+    touchSessionConnection(env.dataDir, sessionId)
+    assert.equal(
+      fs.existsSync(path.join(env.dataDir, 'diff-sessions', sessionId)),
+      false,
+    )
+    assert.throws(
+      () => writeManifest(env.dataDir, leftover),
+      (error) => String(error.message).includes('No workflow session found'),
+    )
+    assert.throws(
+      () =>
+        reportPlan(env.dataDir, {
+          sessionId,
+          feature: 'Resurrect after cancel',
+          stepTitles: ['Build value'],
+          targetRoot: env.targetRoot,
+        }),
+      (error) => String(error.message).includes('No workflow session found'),
+    )
+    assert.equal(readManifest(env.dataDir, sessionId), null)
+
+    const waiting = listOpenSessionIds(env.dataDir).map((id) =>
+      readManifest(env.dataDir, id),
+    )
+    const next = waiting.find((manifest) => manifest.color === color)
+    assert.equal(next.awaitingAttach, true)
+    assert.notEqual(next.sessionId, sessionId)
   } finally {
     env.cleanup()
   }
@@ -2142,7 +2267,7 @@ test('visualizer startup discards leftover LLM sessions', () => {
       'export const value = 2\n',
     )
 
-    assert.deepEqual(recoverOpenDiffSessions(env.dataDir, env.targetRoot).length, 5)
+    assert.deepEqual(recoverOpenDiffSessions(env.dataDir, env.targetRoot).length, SESSION_SLOT_COUNT)
     assert.equal(readManifest(env.dataDir, 'boot-chat'), null)
     assert.equal(listOpenSessionIds(env.dataDir).length, SESSION_SLOT_COUNT)
     assert.equal(

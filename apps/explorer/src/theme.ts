@@ -37,7 +37,7 @@ export function fileEmphasisScale(
   changeKind: ChangeKind | null,
   added = false,
 ) {
-  if (overlay || added || changeKind === 'add' || changeKind === 'edit') {
+  if (overlay || added || changeKind) {
     return FILE_EMPHASIS_SCALE
   }
   return 1
@@ -83,7 +83,7 @@ export const MAP_SELECTION = {
   explainPad: 0.16,
 }
 
-/** How strongly /explain mode recedes everything outside the focused island. */
+/** How strongly /explainit mode recedes everything outside the focused island. */
 export const EXPLAIN_FOCUS = {
   dimOpacity: 0.18,
   dimColorAmount: 0.5,

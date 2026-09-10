@@ -6,16 +6,18 @@ import {
   isReviewingIntent,
   type AgentIntent,
   type AgentIntentStatus,
-  type AimedRelation,
   type BlueprintNote,
   type BlueprintNoteKind,
   GLOBAL_BLUEPRINT_COLOR,
+  SESSION_COLORS,
   compareSessionColorOrder,
+  sessionColorPageCount,
+  sessionColorPageIndex,
+  sessionColorsOnPage,
   type BlueprintOption,
   type BlueprintPointer,
   type BlueprintPointerKind,
   type BranchChanges,
-  type BranchChangesMode,
   type CodebaseGraph,
   type ExplainTargetKind,
   type PatchImportAddition,
@@ -31,10 +33,11 @@ import {
 import { findBlueprintNote, findBlueprintPointer } from '../userCreated'
 import type { BlueprintOverlayLayer } from '../userCreated'
 import { fileInfoMeta, folderOfFile, folderParent } from '../layout'
-import { EyeIcon, FileIcon, FolderIcon, PanelToggleIcon } from './EyeIcon'
+import { ColorPageIcon, EyeIcon, FileIcon, FolderIcon, PanelToggleIcon } from './EyeIcon'
+import { WalkDrop } from './WalkDrop'
 import { beginKeyboardIsolation, shouldIgnoreShortcut } from '../keyboard'
 import type { DevTargetsState } from '../devTargets'
-import { fetchSavedBlueprints } from '../agentIntent'
+import { emptyIntent, fetchSavedBlueprints } from '../agentIntent'
 
 const RELATION_MODE_OPTIONS: { id: RelationMode; label: string }[] = [
   { id: 'targeted', label: 'Targeted' },
@@ -86,6 +89,24 @@ function sessionSlashCommand(intent: Pick<AgentIntent, 'color'>) {
   return `/${color}`
 }
 
+function isPendingSessionId(sessionId: string | null | undefined) {
+  return Boolean(sessionId?.startsWith('pending:'))
+}
+
+function waitingColorIntent(colorId: string): AgentIntent {
+  const color = SESSION_COLORS.find((item) => item.id === colorId)
+  return {
+    ...emptyIntent,
+    status: 'blueprint',
+    awaitingAttach: true,
+    creationMode: true,
+    sessionId: `pending:${colorId}`,
+    color: colorId,
+    colorName: color?.name ?? null,
+    colorHex: color?.hex ?? null,
+  }
+}
+
 function ColorConnectHint({
   colorCommand,
   queued,
@@ -95,23 +116,15 @@ function ColorConnectHint({
 }) {
   return (
     <p>
-      {queued && colorCommand ? (
+      {colorCommand ? (
         <>
-          Type <kbd>{colorCommand}</kbd> in a chat to skip the queue and
-          connect here.{' '}
+          Type <kbd>{colorCommand}</kbd> in a chat
+          {queued ? ' to skip the queue and connect here' : ' to connect here'}
+          .{' '}
         </>
       ) : null}
-      Use <kbd>/coral</kbd>, <kbd>/amber</kbd>, <kbd>/lime</kbd>,{' '}
-      <kbd>/orange</kbd>, or <kbd>/violet</kbd> to connect to that color
-      {!queued && colorCommand ? (
-        <>
-          {' '}
-          — this session is <kbd>{colorCommand}</kbd>
-        </>
-      ) : null}
-      . Aliases: <kbd>/red</kbd>, <kbd>/yellow</kbd>, <kbd>/green</kbd>,{' '}
-      <kbd>/purple</kbd>. A color command with no extra text starts from the
-      enabled blueprint. <kbd>/blue</kbd> is the global blueprint, not a chat.
+      A color command with no extra text starts from the enabled blueprint.{' '}
+      <kbd>/blue</kbd> is the global blueprint, not a chat.
     </p>
   )
 }
@@ -123,13 +136,15 @@ function sessionDisplayName(intent: AgentIntent) {
 function SessionSwatch({
   colorHex,
   className = 'hud-session-swatch',
+  busy = false,
 }: {
   colorHex?: string | null
   className?: string
+  busy?: boolean
 }) {
   return (
     <span
-      className={className}
+      className={busy ? `${className} hud-session-swatch-busy` : className}
       aria-hidden="true"
       style={
         colorHex
@@ -138,6 +153,60 @@ function SessionSwatch({
       }
     />
   )
+}
+
+function ColorPageButton({
+  direction,
+  onClick,
+}: {
+  direction: 'prev' | 'next'
+  onClick: () => void
+}) {
+  const label =
+    direction === 'next'
+      ? 'Show the next session colors'
+      : 'Show the previous session colors'
+  return (
+    <button
+      className="hud-button hud-color-page"
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+    >
+      <ColorPageIcon direction={direction} />
+    </button>
+  )
+}
+
+function ColorPager({
+  page,
+  pageCount,
+  onPageChange,
+}: {
+  page: number
+  pageCount: number
+  onPageChange: (page: number) => void
+}) {
+  if (pageCount <= 1) return null
+  const direction = page >= pageCount - 1 ? 'prev' : 'next'
+  return (
+    <ColorPageButton
+      direction={direction}
+      onClick={() =>
+        onPageChange(direction === 'next' ? page + 1 : Math.max(0, page - 1))
+      }
+    />
+  )
+}
+
+function pagedBlueprintOptions(options: BlueprintOption[], page: number) {
+  const global = options.filter((option) => option.kind === 'global')
+  const sessions = options.filter((option) => option.kind !== 'global')
+  const visibleIds = new Set<string>(
+    sessionColorsOnPage(page).map((color) => color.id),
+  )
+  return [...global, ...sessions.filter((option) => visibleIds.has(option.id))]
 }
 
 function defaultAddLayerColor(
@@ -174,8 +243,16 @@ function AddItemModal({
   const [color, setColor] = useState(() =>
     lockedColor ?? defaultAddLayerColor(visibleColors, currentColor),
   )
+  const [colorPage, setColorPage] = useState(() =>
+    sessionColorPageIndex(lockedColor ?? color),
+  )
   const colorRef = useRef(color)
   colorRef.current = lockedColor ?? color
+  const pageCount = sessionColorPageCount()
+  const visibleLayerOptions = lockedColor
+    ? layerOptions
+    : pagedBlueprintOptions(layerOptions, colorPage)
+  const showPager = !lockedColor && pageCount > 1
 
   return (
     <div
@@ -205,7 +282,7 @@ function AddItemModal({
             role="radiogroup"
             aria-label="Layer"
           >
-            {layerOptions.map((option) => {
+            {visibleLayerOptions.map((option) => {
               const selected = option.id === (lockedColor ?? color)
               return (
                 <button
@@ -258,6 +335,13 @@ function AddItemModal({
                 </button>
               )
             })}
+            {showPager ? (
+              <ColorPager
+                page={colorPage}
+                pageCount={pageCount}
+                onPageChange={setColorPage}
+              />
+            ) : null}
           </div>
         )}
       </div>
@@ -586,25 +670,6 @@ function PatchSymbolChanges({
   )
 }
 
-function MutationFold({
-  hasContent,
-  children,
-}: {
-  hasContent: boolean
-  children: ReactNode
-}) {
-  if (!hasContent) return null
-  return (
-    <details
-      className="hud-fold"
-      onKeyDown={(event) => event.stopPropagation()}
-    >
-      <summary className="hud-section-title hud-fold-summary">Mutations</summary>
-      {children}
-    </details>
-  )
-}
-
 function AddIntentRow({
   placeholder,
   onAdd,
@@ -921,6 +986,10 @@ function HidePanelsButton({
   )
 }
 
+function PanelControlMark({ kind }: { kind: 'minus' | 'plus' }) {
+  return <span className="hud-panel-control-mark" data-kind={kind} aria-hidden="true" />
+}
+
 function PanelChrome({
   title,
   subtitle,
@@ -942,45 +1011,43 @@ function PanelChrome({
 }) {
   return (
     <div className="hud-panel-chrome">
-      <div className="hud-panel-chrome-heading">
-        <div className="hud-panel-chrome-title-row">
-          <div className="hud-panel-chrome-title">
-            {title}
-            {onExplain ? (
-              <ExplainButton
-                label={explainLabel ?? 'Explain'}
-                onClick={onExplain}
-              />
-            ) : null}
-          </div>
-          {badge}
+      <div className="hud-panel-chrome-top">
+        <div className="hud-panel-chrome-title">
+          {title}
+          {onExplain ? (
+            <ExplainButton
+              label={explainLabel ?? 'Explain'}
+              onClick={onExplain}
+            />
+          ) : null}
         </div>
-        {subtitle ? (
-          <div className="hud-panel-chrome-subtitle">{subtitle}</div>
-        ) : null}
+        <div className="hud-panel-controls">
+          {badge}
+          {onMinimize && (
+            <button
+              className="hud-button hud-icon-button hud-panel-control"
+              type="button"
+              aria-label={minimized ? 'Restore' : 'Minimize'}
+              onClick={onMinimize}
+            >
+              <PanelControlMark kind={minimized ? 'plus' : 'minus'} />
+            </button>
+          )}
+          {onClose && (
+            <button
+              className="hud-button hud-icon-button hud-panel-control"
+              type="button"
+              aria-label="Close"
+              onClick={onClose}
+            >
+              ×
+            </button>
+          )}
+        </div>
       </div>
-      <div className="hud-panel-controls">
-        {onMinimize && (
-          <button
-            className="hud-button hud-icon-button hud-panel-control"
-            type="button"
-            aria-label={minimized ? 'Restore' : 'Minimize'}
-            onClick={onMinimize}
-          >
-            {minimized ? '+' : '−'}
-          </button>
-        )}
-        {onClose && (
-          <button
-            className="hud-button hud-icon-button hud-panel-control"
-            type="button"
-            aria-label="Close"
-            onClick={onClose}
-          >
-            ×
-          </button>
-        )}
-      </div>
+      {subtitle ? (
+        <div className="hud-panel-chrome-subtitle">{subtitle}</div>
+      ) : null}
     </div>
   )
 }
@@ -1073,10 +1140,10 @@ function sessionLiveStatus(intent: AgentIntent) {
     return { text: 'Waiting for a chat', busy: false }
   }
   if (intent.pendingExplain) {
-    return { text: 'Type /explain in chat', busy: false }
+    return { text: 'Type /explainit in chat', busy: false }
   }
   if (intent.explainActive || kind === 'explain') {
-    return { text: 'Explanation is on the map — /explain for a follow-up', busy: false }
+    return { text: 'Explanation is on the map — /explainit for a follow-up', busy: false }
   }
   if (browsingHistory) {
     return {
@@ -1150,7 +1217,6 @@ function LiveStatus({
 
   return (
     <div className="hud-live" data-busy={status.busy} data-flash={flash}>
-      {status.busy ? <span className="hud-spinner" aria-hidden="true" /> : null}
       <span>{status.text}</span>
     </div>
   )
@@ -1203,7 +1269,6 @@ function SessionPanel({
   const preparing = intent.status === 'preparing'
   const working = intent.status === 'working' || intent.status === 'replanning'
   const planReady = intent.status === 'planned' && !pending
-  const previewing = intent.preview
   const chainIndex = intent.chainIndex ?? 0
   const previousDiff = intent.chain[chainIndex - 1]
   const nextDiff = intent.chain[chainIndex + 1]
@@ -1219,11 +1284,6 @@ function SessionPanel({
     intent.step && intent.steps?.length > 0
       ? `Step ${intent.step} of ${intent.steps.length}`
       : 'Patch'
-  const addedFunctions = intent.addedFunctions ?? []
-  const addedVariables = intent.addedVariables ?? []
-  const addedImports = intent.addedImports ?? []
-  const changedFunctions = intent.changedFunctions ?? []
-  const changedVariables = intent.changedVariables ?? []
   const acceptedSteps = new Set(
     intent.status === 'finished'
       ? intent.steps.map((step) => step.index)
@@ -1250,6 +1310,8 @@ function SessionPanel({
     intent.status === 'approved' ||
     acceptedSteps.size > 0 ||
     canAcceptProposal
+  const llmRunning = sessionLiveStatus(intent).busy
+  const closeLabel = llmRunning ? 'Cancel' : 'Done'
 
   if (!sessionId || !isReviewingIntent(intent.status)) return null
 
@@ -1421,29 +1483,23 @@ function SessionPanel({
                     const canOpenDiff = Boolean(stepDiff) || canResumeLive
                     const viewing =
                       Boolean(stepDiff) && intent.step === step.index
-                    const showCommandHint =
+                    const lastStepDone =
                       canAcceptProposal &&
                       proposed &&
                       step.index === intent.steps.length
+                    const stepDone = accepted || lastStepDone
                     const stepBody = (
                       <>
                         <span className="hud-step-index">{step.index}.</span>
                         <span className="hud-step-main">
                           <span className="hud-step-title">{step.title}</span>
-                          {showCommandHint && (
-                            <span className="hud-step-actions">
-                              <span className="hud-step-hint">
-                                Done · /explain
-                              </span>
-                            </span>
-                          )}
                         </span>
                       </>
                     )
                     return (
                       <li
                         key={step.index}
-                        data-done={accepted}
+                        data-done={stepDone}
                         data-active={processing || proposed || viewing}
                       >
                         {canOpenDiff ? (
@@ -1516,138 +1572,37 @@ function SessionPanel({
                   </button>
                 </div>
               )}
-              <MutationFold
-                hasContent={
-                  previewing &&
-                  (intent.files.length > 0 ||
-                    (intent.createFolders ?? []).length > 0 ||
-                    intent.creates.length > 0 ||
-                    intent.deletes.length > 0 ||
-                    addedFunctions.length > 0 ||
-                    addedVariables.length > 0 ||
-                    addedImports.length > 0 ||
-                    changedFunctions.length > 0 ||
-                    changedVariables.length > 0 ||
-                    (intent.imports ?? []).length > 0)
-                }
-              >
-                {intent.files.length > 0 && (
-                  <>
-                    <div className="hud-section-title hud-section-title-edit">
-                      Changed
-                    </div>
-                    <ul>
-                      {intent.files.map((id) => (
-                        <li className="hud-file-edit" key={id}>
-                          {id}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-                {(intent.createFolders ?? []).length > 0 && (
-                  <>
-                    <div className="hud-section-title hud-section-title-add">
-                      Added folders
-                    </div>
-                    <ul>
-                      {intent.createFolders.map((id) => (
-                        <li className="hud-file-add" key={id}>
-                          {id}/
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-                {intent.creates.length > 0 && (
-                  <>
-                    <div className="hud-section-title hud-section-title-add">
-                      Added
-                    </div>
-                    <ul>
-                      {intent.creates.map((id) => (
-                        <li className="hud-file-add" key={id}>
-                          {id}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-                {intent.deletes.length > 0 && (
-                  <>
-                    <div className="hud-section-title hud-section-title-remove">
-                      Removed
-                    </div>
-                    <ul>
-                      {intent.deletes.map((id) => (
-                        <li className="hud-file-remove" key={id}>
-                          {id}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-                <PanelList
-                  title="Changed functions"
-                  items={symbolLabels(changedFunctions)}
-                  tone="edit"
-                />
-                <PanelList
-                  title="Added functions"
-                  items={symbolLabels(addedFunctions)}
-                  tone="add"
-                />
-                <PanelList
-                  title="Changed variables"
-                  items={symbolLabels(changedVariables)}
-                  tone="edit"
-                />
-                <PanelList
-                  title="Added variables"
-                  items={symbolLabels(addedVariables)}
-                  tone="add"
-                />
-                {addedImports.length > 0 && (
-                  <PanelList title="Imports" items={importLabels(addedImports)} />
-                )}
-                {addedImports.length === 0 && (intent.imports ?? []).length > 0 && (
-                  <>
-                    <div className="hud-section-title">Imports</div>
-                    <ul>
-                      {intent.imports.map((edge) => (
-                        <li key={`${edge.from}->${edge.to}`}>
-                          {edge.from.split('/').pop()} → {edge.to.split('/').pop()}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-              </MutationFold>
               {(planReady || (pending && !llmDisconnected)) && showPlaceHint && (
                 <div className="hud-session-actions">
-                  <PlaceFilesHint />
-                </div>
-              )}
-              {llmConnected && !llmDisconnected && (
-                <div className="hud-session-actions">
-                  <div className="hud-decide">
-                    <button
-                      className="hud-button hud-button-approve"
-                      type="button"
-                      aria-label="Done — keep changes and free this color"
-                      onPointerDown={(event) => event.stopPropagation()}
-                      onClick={(event) => {
-                        event.preventDefault()
-                        event.stopPropagation()
-                        act('done')
-                      }}
-                    >
-                      Done
-                    </button>
-                  </div>
+                  <p className="hud-place-hint">
+                    Want a deeper explanation? Type /explainit in the chat.
+                  </p>
                 </div>
               )}
             </>
+          )}
+          {intent.awaitingAttach === false && (
+            <div className="hud-session-actions">
+              <div className="hud-decide">
+                <button
+                  className="hud-button hud-button-approve"
+                  type="button"
+                  aria-label={
+                    llmRunning
+                      ? 'Cancel — drop this LLM connection and free this color'
+                      : 'Done — keep changes and free this color'
+                  }
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    act('done')
+                  }}
+                >
+                  {closeLabel}
+                </button>
+              </div>
+            </div>
           )}
         </>
       )}
@@ -1657,215 +1612,89 @@ function SessionPanel({
 
 function BranchChangesPanel({
   changes,
-  mode,
-  onModeChange,
-  onCommitChange,
+  hideChanges,
+  onBaseChange,
+  onToggleHideChanges,
 }: {
   changes: BranchChanges
-  mode: BranchChangesMode
-  onModeChange?: (next: BranchChangesMode) => void
-  onCommitChange?: (sha: string) => void
+  hideChanges: boolean
+  onBaseChange?: (next: string | null) => void
+  onToggleHideChanges?: () => void
 }) {
-  const [minimized, setMinimized] = useState(false)
-  const addedFunctions = changes.addedFunctions ?? []
-  const addedVariables = changes.addedVariables ?? []
-  const addedImports = changes.addedImports ?? []
-  const changedFunctions = changes.changedFunctions ?? []
-  const changedVariables = changes.changedVariables ?? []
-  const subtitle =
-    changes.mode === 'commit' && changes.branch
-      ? changes.commit
-        ? `${changes.branch} · ${changes.commit.short}`
-        : changes.branch
-      : changes.mode === 'current' && changes.branch
-      ? `${changes.branch} vs HEAD`
-      : changes.mode === 'remote' && changes.branch && changes.base
-      ? `${changes.branch} staged vs ${changes.base}`
-      : changes.branch && changes.base
-        ? `${changes.branch} vs ${changes.base}`
-        : changes.branch
-          ? changes.branch
-          : null
-  const emptyMessage = changes.remoteMissing
-    ? 'No remote for this branch.'
-    : changes.commitMissing
-      ? 'No commits on this branch.'
-      : changes.mode === 'remote'
-      ? 'No staged changes vs remote.'
-      : changes.mode === 'current'
-        ? 'No uncommitted file changes.'
-        : changes.mode === 'commit'
-          ? 'No file changes in this commit.'
-          : 'No file changes on this branch.'
-  const selectedCommit =
-    changes.commit?.sha ?? changes.commits[0]?.sha ?? ''
+  const selectedBase = changes.current ? '' : (changes.base ?? '')
+  const subtitle = changes.current
+    ? changes.branch
+      ? `${changes.branch} vs last commit`
+      : 'vs last commit'
+    : changes.branch && changes.base
+      ? `${changes.branch} vs ${changes.base}`
+      : changes.base
+  const emptyMessage = changes.current
+    ? 'No uncommitted file changes.'
+    : 'No file changes against this branch.'
   const hasContent =
     changes.files.length > 0 ||
     (changes.createFolders ?? []).length > 0 ||
     changes.creates.length > 0 ||
     changes.deletes.length > 0 ||
-    addedFunctions.length > 0 ||
-    addedVariables.length > 0 ||
-    addedImports.length > 0 ||
-    changedFunctions.length > 0 ||
-    changedVariables.length > 0 ||
+    (changes.addedFunctions ?? []).length > 0 ||
+    (changes.addedVariables ?? []).length > 0 ||
+    (changes.addedImports ?? []).length > 0 ||
+    (changes.changedFunctions ?? []).length > 0 ||
+    (changes.changedVariables ?? []).length > 0 ||
     (changes.imports ?? []).length > 0
 
   return (
-    <aside
-      className="hud-panel hud-panel-planned hud-panel-done"
-      data-minimized={minimized}
-    >
-      <PanelChrome
-        title="Branch changes"
-        minimized={minimized}
-        onMinimize={() => setMinimized((current) => !current)}
-      />
-      {!minimized && (
-        <>
-          <div
-            className="hud-branch-modes"
-            role="tablist"
-            aria-label="Branch comparison"
-          >
-            <button
-              className="hud-button"
-              type="button"
-              role="tab"
-              data-active={mode === 'main'}
-              aria-selected={mode === 'main'}
-              onClick={() => onModeChange?.('main')}
-            >
-              vs main
-            </button>
-            <button
-              className="hud-button"
-              type="button"
-              role="tab"
-              data-active={mode === 'remote'}
-              aria-selected={mode === 'remote'}
-              onClick={() => onModeChange?.('remote')}
-            >
-              vs remote
-            </button>
-            <button
-              className="hud-button"
-              type="button"
-              role="tab"
-              data-active={mode === 'current'}
-              aria-selected={mode === 'current'}
-              onClick={() => onModeChange?.('current')}
-            >
-              current changes
-            </button>
-            <button
-              className="hud-button"
-              type="button"
-              role="tab"
-              data-active={mode === 'commit'}
-              aria-selected={mode === 'commit'}
-              onClick={() => onModeChange?.('commit')}
-            >
-              commit
-            </button>
-          </div>
-          {mode === 'commit' && changes.commits.length > 0 && (
-            <label className="hud-branch-commit">
-              <select
-                className="hud-button hud-target-select-control hud-branch-commit-select"
-                aria-label="Commit on this branch"
-                value={selectedCommit}
-                onChange={(event) => onCommitChange?.(event.target.value)}
-              >
-                {changes.commits.map((commit) => (
-                  <option key={commit.sha} value={commit.sha}>
-                    {commit.short} {commit.subject}
+    <>
+      <p className="hud-branch-menu-title">Branch changes</p>
+      <label className="hud-branch-base">
+        <span>Compare against</span>
+        <select
+          className="hud-button hud-target-select-control hud-branch-base-select"
+          aria-label="Compare against"
+          value={selectedBase}
+          onChange={(event) => {
+            const next = event.target.value
+            onBaseChange?.(next || null)
+          }}
+        >
+          <option value="">Last commit</option>
+          {changes.branches.some((item) => !item.remote) && (
+            <optgroup label="Local">
+              {changes.branches
+                .filter((item) => !item.remote)
+                .map((item) => (
+                  <option key={item.name} value={item.name}>
+                    {item.name}
                   </option>
                 ))}
-              </select>
-            </label>
+            </optgroup>
           )}
-          {subtitle && <p className="hud-feature">{subtitle}</p>}
-          {!hasContent ? (
-            <p>{emptyMessage}</p>
-          ) : (
-            <MutationFold hasContent>
-              {changes.files.length > 0 && (
-                <>
-                  <div className="hud-section-title hud-section-title-edit">
-                    Changed
-                  </div>
-                  <ul>
-                    {changes.files.map((id) => (
-                      <li className="hud-file-edit" key={id}>
-                        {id}
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-              {(changes.createFolders ?? []).length > 0 && (
-                <>
-                  <div className="hud-section-title hud-section-title-add">
-                    Added folders
-                  </div>
-                  <ul>
-                    {changes.createFolders.map((id) => (
-                      <li className="hud-file-add" key={id}>
-                        {id}/
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-              {changes.creates.length > 0 && (
-                <>
-                  <div className="hud-section-title hud-section-title-add">
-                    Added
-                  </div>
-                  <ul>
-                    {changes.creates.map((id) => (
-                      <li className="hud-file-add" key={id}>
-                        {id}
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-              {changes.deletes.length > 0 && (
-                <>
-                  <div className="hud-section-title hud-section-title-remove">
-                    Removed
-                  </div>
-                  <ul>
-                    {changes.deletes.map((id) => (
-                      <li className="hud-file-remove" key={id}>
-                        {id}
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-              <PatchSymbolChanges
-                title="Functions"
-                added={addedFunctions}
-                changed={changedFunctions}
-              />
-              <PatchSymbolChanges
-                title="Vars"
-                added={addedVariables}
-                changed={changedVariables}
-              />
-              <PanelList
-                title="Imports"
-                items={importLabels(addedImports)}
-                tone="add"
-              />
-            </MutationFold>
+          {changes.branches.some((item) => item.remote) && (
+            <optgroup label="Remote">
+              {changes.branches
+                .filter((item) => item.remote)
+                .map((item) => (
+                  <option key={item.name} value={item.name}>
+                    {item.name}
+                  </option>
+                ))}
+            </optgroup>
           )}
-        </>
-      )}
-    </aside>
+        </select>
+      </label>
+      {subtitle && <p className="hud-feature">{subtitle}</p>}
+      {!hasContent && !hideChanges && <p>{emptyMessage}</p>}
+      <button
+        className="hud-button hud-branch-hide"
+        type="button"
+        aria-pressed={hideChanges}
+        data-active={hideChanges}
+        onClick={() => onToggleHideChanges?.()}
+      >
+        Hide changes
+      </button>
+    </>
   )
 }
 
@@ -1912,7 +1741,6 @@ function explorerInstructions({
   canToggleImportedBy,
   relationMode,
   showBranchChanges,
-  branchChangesMode,
   canShowBranchChanges,
   showHiddenFiles,
   leftPanelsHidden,
@@ -1927,7 +1755,6 @@ function explorerInstructions({
   canToggleImportedBy: boolean
   relationMode: RelationMode
   showBranchChanges: boolean
-  branchChangesMode: BranchChangesMode
   canShowBranchChanges: boolean
   showHiddenFiles: boolean
   leftPanelsHidden: boolean
@@ -1965,22 +1792,6 @@ function explorerInstructions({
             ? 'Hide branch changes'
             : 'Show branch changes',
         },
-        ...(showBranchChanges
-          ? [
-              {
-                id: 'branch-mode',
-                keys: ['Shift', 'G'],
-                label:
-                  branchChangesMode === 'remote'
-                    ? 'Compare current changes'
-                    : branchChangesMode === 'current'
-                      ? 'Compare a commit'
-                      : branchChangesMode === 'commit'
-                        ? 'Compare to main'
-                        : 'Compare to remote',
-              },
-            ]
-          : []),
       ]
     : []
   const hidden: ExplorerInstruction[] = [
@@ -2010,22 +1821,17 @@ function explorerInstructions({
         { id: 'wasd', keys: ['W', 'A', 'S', 'D'], label: 'Walk' },
         { id: 'mouse-look', keys: ['Mouse'], label: 'Look around' },
         { id: 'shift', keys: ['Shift'], label: 'Sprint' },
+        { id: 'jump', keys: ['Space'], label: 'Jump to the crosshair' },
         ...(canPlace
           ? [
               {
                 id: 'point-to',
                 keys: ['Point to'],
-                label: 'Keep a file, folder, or function in mind',
+                label: 'Keep a file, folder, function, or variable in mind',
               },
             ]
           : []),
         ...backspace,
-        {
-          id: 'dblclick-info',
-          keys: ['Double-click'],
-          label: 'A file or folder for info',
-        },
-        { id: 'aim-line', keys: ['Click'], label: 'Aim a line to fly' },
         ...info,
         ...imported,
         {
@@ -2041,25 +1847,25 @@ function explorerInstructions({
         ...panels,
         {
           id: 'update-model',
-          keys: ['Update model'],
+          keys: ['More', 'Update model'],
           label: 'Rescan files and folders',
         },
         {
           id: 'cursor-chat',
           keys: ['Chat'],
           label:
-            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; Done in the session window, /explain /stop; 5 chats at once',
+            'Connects to the next empty session, or a color command for that slot; Done in the session window, /explainit /stop; 10 chats at once',
         },
         {
           id: 'blueprint-select',
           keys: ['Blueprint colors'],
           label:
-            'Selected colors stay visible; click again to hide. New files go on the last color you selected',
+            'The color above the session window is the active blueprint. Global blueprint sits next to the fold-in control, draws on the shared blue layer, and hides the session window',
         },
         {
           id: 'blueprint-toggle',
-          keys: ['Hide/Show'],
-          label: 'Hide or show every selected blueprint color',
+          keys: ['Hide'],
+          label: 'Hide or show the active blueprint overlay',
         },
         {
           id: 'blueprint-opacity',
@@ -2069,12 +1875,12 @@ function explorerInstructions({
         {
           id: 'blueprint-clear',
           keys: ['Clear'],
-          label: 'Remove planned files and folders on the selected colors',
+          label: 'Remove planned files, folders, and symbols on the active color',
         },
         {
           id: 'blueprint-cleanup',
           keys: ['Cleanup'],
-          label: 'Drop existing files and folders on the selected colors',
+          label: 'Drop existing files and folders on the active color',
         },
         {
           id: 'blueprint-save',
@@ -2091,10 +1897,10 @@ function explorerInstructions({
           keys: ['More', 'Load blueprint'],
           label: 'Load a saved blueprint onto the map',
         },
-        { id: 'toggle-map', keys: ['M'], label: 'Toggle map' },
+        { id: 'toggle-map', keys: ['M', 'Esc'], label: 'Back to map' },
         {
           id: 'release',
-          keys: ['Double-click', 'Esc'],
+          keys: ['Double-click'],
           label: 'Release mouse',
         },
       ],
@@ -2115,6 +1921,11 @@ function explorerInstructions({
           ? [
               { id: 'select-island', keys: ['Click'], label: 'Select a folder' },
               {
+                id: 'right-click-file',
+                keys: ['Right-click'],
+                label: 'A file to open or explain',
+              },
+              {
                 id: 'add-file-folder',
                 keys: ['Right-click'],
                 label: 'Create a file or folder, or point to a folder',
@@ -2122,9 +1933,14 @@ function explorerInstructions({
             ]
           : []),
         {
+          id: 'walk-drop',
+          keys: [],
+          label: 'Drag the person onto the map to walk there',
+        },
+        {
           id: 'option-click-walk',
           keys: ['Option', 'Click'],
-          label: 'A folder to walk',
+          label: 'A place on the map to walk',
         },
         {
           id: 'gold-pin',
@@ -2158,25 +1974,25 @@ function explorerInstructions({
         ...panels,
         {
           id: 'update-model',
-          keys: ['Update model'],
+          keys: ['More', 'Update model'],
           label: 'Rescan files and folders',
         },
         {
           id: 'cursor-chat',
           keys: ['Chat'],
           label:
-            'Connects to the next empty session, or /coral /amber /lime /orange /violet for that color; Done in the session window, /explain /stop; 5 chats at once',
+            'Connects to the next empty session, or a color command for that slot; Done in the session window, /explainit /stop; 10 chats at once',
         },
         {
           id: 'blueprint-select',
           keys: ['Blueprint colors'],
           label:
-            'Selected colors stay visible; click again to hide. New files go on the last color you selected',
+            'The color above the session window is the active blueprint. Global blueprint sits next to the fold-in control, draws on the shared blue layer, and hides the session window',
         },
         {
           id: 'blueprint-toggle',
-          keys: ['Hide/Show'],
-          label: 'Hide or show every selected blueprint color',
+          keys: ['Hide'],
+          label: 'Hide or show the active blueprint overlay',
         },
         {
           id: 'blueprint-opacity',
@@ -2186,12 +2002,12 @@ function explorerInstructions({
         {
           id: 'blueprint-clear',
           keys: ['Clear'],
-          label: 'Remove planned files and folders on the selected colors',
+          label: 'Remove planned files, folders, and symbols on the active color',
         },
         {
           id: 'blueprint-cleanup',
           keys: ['Cleanup'],
-          label: 'Drop existing files and folders on the selected colors',
+          label: 'Drop existing files and folders on the active color',
         },
         {
           id: 'blueprint-save',
@@ -2226,8 +2042,6 @@ type HUDProps = {
   overlayLayers?: BlueprintOverlayLayer[]
   canDeleteSelected?: boolean
   onSelectFolder?: (folderPath: string | null, layer?: string | null) => void
-  aimedRelation: AimedRelation | null
-  aimedFileId?: string | null
   intent: AgentIntent
   intents?: AgentIntent[]
   focusedSessionId?: string | null
@@ -2241,14 +2055,19 @@ type HUDProps = {
   onNavigateDiff: (sessionId: string, diffId: string | null) => void
   onOpenMap: () => void
   onWalk: () => void
+  walkDrop?: { x: number; y: number } | null
+  onWalkDropStart?: (x: number, y: number) => void
+  onWalkDropMove?: (x: number, y: number) => void
+  onWalkDropEnd?: () => void
   showBranchChanges?: boolean
+  wantBranchChanges?: boolean
+  hideChanges?: boolean
   branchChanges?: BranchChanges
-  branchChangesMode?: BranchChangesMode
   canShowBranchChanges?: boolean
   llmMakingChanges?: boolean
   onToggleShowBranchChanges?: () => void
-  onBranchChangesModeChange?: (mode: BranchChangesMode) => void
-  onBranchChangesCommitChange?: (sha: string) => void
+  onToggleHideChanges?: () => void
+  onBranchChangesBaseChange?: (base: string | null) => void
   showHiddenFiles?: boolean
   onToggleShowHiddenFiles?: () => void
   onUpdateModel: () => void
@@ -2315,7 +2134,7 @@ type HUDProps = {
   blueprintOptions?: BlueprintOption[]
   blueprintColorPointers?: BlueprintColorOption[]
   onSelectBlueprintColor?: (color: string) => void
-  onToggleBlueprintColor?: (color: string) => void
+  onToggleBlueprintHidden?: () => void
   onClearBlueprint?: () => void
   onCleanupBlueprint?: () => void
   savedBlueprint?: SavedBlueprintInfo | null
@@ -2323,6 +2142,7 @@ type HUDProps = {
   onLoadBlueprint?: (input: LoadBlueprintInput) => Promise<void>
   devTargets?: DevTargetsState
   onSelectDevTarget?: (id: string) => void
+  explainMode?: boolean
 }
 
 export function HUD({
@@ -2337,8 +2157,6 @@ export function HUD({
   overlayLayers = [],
   canDeleteSelected = false,
   onSelectFolder,
-  aimedRelation,
-  aimedFileId = null,
   intent,
   intents,
   focusedSessionId = null,
@@ -2348,14 +2166,19 @@ export function HUD({
   onNavigateDiff,
   onOpenMap,
   onWalk,
+  walkDrop = null,
+  onWalkDropStart,
+  onWalkDropMove,
+  onWalkDropEnd,
   showBranchChanges = false,
+  wantBranchChanges = false,
+  hideChanges = false,
   branchChanges,
-  branchChangesMode = 'main',
   canShowBranchChanges = false,
   llmMakingChanges = false,
   onToggleShowBranchChanges,
-  onBranchChangesModeChange,
-  onBranchChangesCommitChange,
+  onToggleHideChanges,
+  onBranchChangesBaseChange,
   showHiddenFiles = false,
   onToggleShowHiddenFiles,
   onUpdateModel,
@@ -2403,7 +2226,7 @@ export function HUD({
   blueprintOptions = [],
   blueprintColorPointers = [],
   onSelectBlueprintColor,
-  onToggleBlueprintColor,
+  onToggleBlueprintHidden,
   onClearBlueprint,
   onCleanupBlueprint,
   savedBlueprint = null,
@@ -2411,6 +2234,7 @@ export function HUD({
   onLoadBlueprint,
   devTargets,
   onSelectDevTarget,
+  explainMode = false,
 }: HUDProps) {
   const selected = graph.files.find((file) => file.id === selectedId)
   const selectedFolderNode = graph.folders.find(
@@ -2478,7 +2302,6 @@ export function HUD({
     ? blueprintOptions.find((option) => option.id === selectedFolderLayer)
         ?.name
     : null
-  const aimed = graph.files.find((file) => file.id === aimedRelation?.flyTo)
   const importers = selected
     ? graph.files.filter((file) => file.imports.includes(selected.id))
     : []
@@ -2489,12 +2312,37 @@ export function HUD({
   const sessionTabs = [...sessions].sort((left, right) =>
     compareSessionColorOrder(left.color, right.color),
   )
+  const activeBlueprint =
+    blueprintOptions.find((option) => option.id === blueprintColor) ??
+    SESSION_COLORS.find((color) => color.id === blueprintColor) ??
+    (blueprintColor === GLOBAL_BLUEPRINT_COLOR.id
+      ? GLOBAL_BLUEPRINT_COLOR
+      : null)
   const nextAttachSession =
     sessions.find((session) => session.sessionId === nextAttachSessionId) ??
     [...sessions].reverse().find((session) => session.awaitingAttach) ??
     null
-  const [walkIntro, setWalkIntro] = useState(false)
-  const walkIntroSeen = useRef(false)
+  const colorSession =
+    blueprintColor && blueprintColor !== GLOBAL_BLUEPRINT_COLOR.id
+      ? sessions.find((session) => session.color === blueprintColor) ??
+        (intent.color === blueprintColor &&
+        intent.sessionId &&
+        isReviewingIntent(intent.status)
+          ? intent
+          : null)
+      : null
+  const sessionPanelIntent =
+    colorSession ??
+    (blueprintColor && blueprintColor !== GLOBAL_BLUEPRINT_COLOR.id
+      ? waitingColorIntent(blueprintColor)
+      : null)
+  const [colorPage, setColorPage] = useState(() =>
+    sessionColorPageIndex(intent.color),
+  )
+  const colorPageCount = sessionColorPageCount()
+  useEffect(() => {
+    setColorPage(sessionColorPageIndex(intent.color))
+  }, [intent.sessionId, intent.color])
   const [instructionsOpen, setInstructionsOpen] = useState(false)
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false)
   const [actionsMenuPosition, setActionsMenuPosition] = useState<CSSProperties>()
@@ -2502,6 +2350,9 @@ export function HUD({
   const [relationsMenuOpen, setRelationsMenuOpen] = useState(false)
   const [relationsMenuPosition, setRelationsMenuPosition] = useState<CSSProperties>()
   const relationsMenuRef = useRef<HTMLDivElement>(null)
+  const [branchMenuOpen, setBranchMenuOpen] = useState(false)
+  const [branchMenuPosition, setBranchMenuPosition] = useState<CSSProperties>()
+  const branchMenuRef = useRef<HTMLDivElement>(null)
   const [noteEditor, setNoteEditor] = useState<{
     file: string
     kind: BlueprintNoteKind
@@ -2577,8 +2428,14 @@ export function HUD({
         )
       })
   }
-  const overlay = showBranchChanges && branchChanges ? branchChanges : intent
-  const previewing = intent.preview || showBranchChanges
+  const overlay =
+    hideChanges
+      ? emptyIntent
+      : showBranchChanges && branchChanges
+        ? branchChanges
+        : intent
+  const previewing =
+    !hideChanges && (intent.preview || showBranchChanges)
   const addedFunctions = overlay.addedFunctions ?? []
   const addedVariables = overlay.addedVariables ?? []
   const addedImports = overlay.addedImports ?? []
@@ -2695,25 +2552,6 @@ export function HUD({
     (!userCreated || (intent.creates ?? []).includes(fileId))
 
   useEffect(() => {
-    if (mode !== 'walk') {
-      walkIntroSeen.current = false
-      setWalkIntro(false)
-      return
-    }
-    if (locked || naming) {
-      walkIntroSeen.current = true
-      setWalkIntro(false)
-      return
-    }
-    if (walkIntroSeen.current) {
-      setWalkIntro(false)
-      return
-    }
-    const timer = window.setTimeout(() => setWalkIntro(true), 160)
-    return () => window.clearTimeout(timer)
-  }, [locked, mode, naming])
-
-  useEffect(() => {
     infoPanelRef.current?.scrollTo({ top: 0 })
   }, [selectedId, selectedFolder, selectedFolderLayer])
 
@@ -2761,11 +2599,6 @@ export function HUD({
       if (rightPanelsHidden) {
         setRightPanelsHidden(false)
         if (!infoVisible) {
-          const blockId = aimedFileId ?? selectedId
-          if (mode === 'walk') {
-            if (!blockId) return
-            onInspectBlock?.(blockId)
-          }
           setInfoMinimized(false)
           setInfoVisible(true)
         }
@@ -2776,17 +2609,12 @@ export function HUD({
         setInfoMinimized(false)
         return
       }
-      const blockId = aimedFileId ?? selectedId
-      if (mode === 'walk') {
-        if (!blockId) return
-        onInspectBlock?.(blockId)
-      }
       setInfoMinimized(false)
       setInfoVisible(true)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [aimedFileId, infoVisible, mode, onInspectBlock, rightPanelsHidden, selectedId])
+  }, [infoVisible, rightPanelsHidden])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -2827,6 +2655,8 @@ export function HUD({
     if (!instructionsOpen) return
     document.exitPointerLock()
     setActionsMenuOpen(false)
+    setRelationsMenuOpen(false)
+    setBranchMenuOpen(false)
     const onKey = (event: KeyboardEvent) => {
       if (event.code !== 'Escape') return
       if (shouldIgnoreShortcut(event)) return
@@ -2869,6 +2699,22 @@ export function HUD({
     window.addEventListener('resize', updatePosition)
     return () => window.removeEventListener('resize', updatePosition)
   }, [relationsMenuOpen])
+
+  useLayoutEffect(() => {
+    if (!branchMenuOpen) return
+    const updatePosition = () => {
+      const trigger = branchMenuRef.current
+      if (!trigger) return
+      const rect = trigger.getBoundingClientRect()
+      setBranchMenuPosition({
+        right: window.innerWidth - rect.right,
+        bottom: window.innerHeight - rect.top + 8,
+      })
+    }
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    return () => window.removeEventListener('resize', updatePosition)
+  }, [branchMenuOpen])
 
   useEffect(() => {
     if (!actionsMenuOpen) return
@@ -2926,6 +2772,47 @@ export function HUD({
     }
   }, [relationsMenuOpen])
 
+  useEffect(() => {
+    if (!branchMenuOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code !== 'Escape') return
+      if (shouldIgnoreShortcut(event)) return
+      event.preventDefault()
+      event.stopPropagation()
+      setBranchMenuOpen(false)
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (
+        target instanceof Element &&
+        (branchMenuRef.current?.contains(target) ||
+          target.closest('[data-branch-menu]'))
+      ) {
+        return
+      }
+      setBranchMenuOpen(false)
+    }
+    window.addEventListener('keydown', onKey, true)
+    window.addEventListener('pointerdown', onPointerDown, true)
+    return () => {
+      window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('pointerdown', onPointerDown, true)
+    }
+  }, [branchMenuOpen])
+
+  useEffect(() => {
+    if (canShowBranchChanges) return
+    setBranchMenuOpen(false)
+  }, [canShowBranchChanges])
+
+  useEffect(() => {
+    if (!explainMode) return
+    setActionsMenuOpen(false)
+    setInstructionsOpen(false)
+    setNoteEditor(null)
+    setBlueprintFileDialog(null)
+  }, [explainMode])
+
   const canToggleImportedBy = Boolean(selectedId)
   const instructionSections = explorerInstructions({
     canPlace,
@@ -2940,34 +2827,50 @@ export function HUD({
     canToggleImportedBy,
     relationMode,
     showBranchChanges,
-    branchChangesMode,
     canShowBranchChanges,
     showHiddenFiles,
     leftPanelsHidden,
     rightPanelsHidden,
   })
   const currentInstructionView: InstructionView = mapping ? 'map' : 'walk'
+  const modeButtons = (
+    <div className="hud-mode">
+      <button
+        className="hud-button"
+        data-active={mapping}
+        type="button"
+        onClick={onOpenMap}
+      >
+        Map
+      </button>
+      <button
+        className="hud-button"
+        data-active={!mapping}
+        type="button"
+        onClick={onWalk}
+      >
+        Walk
+      </button>
+    </div>
+  )
+  if (!mapping) {
+    return (
+      <div className="hud">
+        {locked && <div className="crosshair" />}
+        <div className="hud-walk-bar">
+          <p className="hud-walk-hint">
+            Hit <kbd>Space</kbd> to jump to the crosshair. Hit <kbd>Esc</kbd> to
+            return to map
+          </p>
+          {modeButtons}
+        </div>
+      </div>
+    )
+  }
+  const bottomBarInactive = explainMode
   return (
     <div className="hud">
-      {mode === 'walk' && !locked && walkIntro && !naming && (
-        <div className="hud-gate">
-          <div className="hud-gate-card">
-            <h1>Walk</h1>
-            <p>
-              Click to look around. Double-click to release the mouse. Press{' '}
-              <kbd>M</kbd> to open the map, press <kbd>M</kbd> again to return
-              here.
-            </p>
-            <p>
-              <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> walk,{' '}
-              <kbd>Shift</kbd> sprint, double-click a file or folder or press{' '}
-              <kbd>I</kbd> for info.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {addingKind && addingParent && onCommitAdd && onCancelAdd && (
+      {!explainMode && addingKind && addingParent && onCommitAdd && onCancelAdd && (
         <AddItemModal
           key={`${addingKind}:${addingParent}:${addingLockedColor ?? ''}`}
           kind={addingKind}
@@ -2983,141 +2886,183 @@ export function HUD({
         />
       )}
 
-      {mode === 'walk' && locked && (
-        <div className="crosshair" data-aim={Boolean(aimed)} />
-      )}
-      {mode === 'walk' && locked && aimed && (
-        <div className="hud-aim">Click to fly to {aimed.name}</div>
-      )}
-
+      {!explainMode && (
       <div className="hud-top">
-        <div className="hud-mode">
-          <button
-            className="hud-button"
-            data-active={mapping}
-            type="button"
-            onClick={onOpenMap}
-          >
-            Map
-          </button>
-          <button
-            className="hud-button"
-            data-active={!mapping}
-            type="button"
-            onClick={onWalk}
-          >
-            Walk
-          </button>
-        </div>
-        <HidePanelsButton
-          side="left"
-          hidden={leftPanelsHidden}
-          onToggle={() => setLeftPanelsHidden((current) => !current)}
-        />
-        {(selected ||
-          (devTargets?.enabled &&
-            onSelectDevTarget &&
-            devTargets.targets.length > 0)) && (
-          <div className="hud-top-end">
-            {selected && <div className="hud-chip">{selected.path}</div>}
-            {devTargets?.enabled &&
-              onSelectDevTarget &&
-              devTargets.targets.length > 0 && (
-                <label className="hud-target-select">
-                  <span>Look at</span>
-                  <select
-                    className="hud-button hud-target-select-control"
-                    aria-label="Look at"
-                    title="Choose which project the map scans. Only available while developing Inbase."
-                    value={devTargets.currentId ?? ''}
-                    disabled={updatingModel}
-                    onChange={(event) => {
-                      const next = event.target.value
-                      if (!next || next === devTargets.currentId) return
-                      onSelectDevTarget(next)
-                    }}
-                  >
-                    {devTargets.targets.map((target) => (
-                      <option key={target.id} value={target.id}>
-                        {target.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-          </div>
-        )}
-        <HidePanelsButton
-          side="right"
-          hidden={rightPanelsHidden}
-          onToggle={() => setRightPanelsHidden((current) => !current)}
-        />
-      </div>
-
-      {(sessions.length > 0 || showBranchChanges) && (
-        <div className="hud-left-stack" hidden={leftPanelsHidden}>
-          {sessions.length > 1 && (
-            <div className="hud-session-tabs" role="tablist" aria-label="LLM sessions">
-              {sessionTabs.map((session) => {
-                const active =
-                  session.sessionId === (focusedSessionId ?? intent.sessionId)
-                const attached = session.awaitingAttach === false
-                const label = sessionDisplayName(session) || 'Session'
-                return (
-                  <button
-                    className="hud-button hud-session-tab"
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    aria-label={
-                      attached ? `${label}, attached` : `${label}, waiting`
-                    }
-                    data-active={active}
-                    data-attached={attached}
-                    key={session.sessionId}
-                    title={attached ? `${label} · Attached` : `${label} · Waiting`}
-                    style={
-                      session.colorHex
-                        ? ({
-                            '--session-color': session.colorHex,
-                          } as CSSProperties)
-                        : undefined
-                    }
-                    onClick={() => {
-                      if (session.sessionId) onFocusSession?.(session.sessionId)
-                      if (session.color) onSelectBlueprintColor?.(session.color)
-                    }}
-                  >
-                    <SessionSwatch colorHex={session.colorHex} />
-                  </button>
-                )
-              })}
-            </div>
+        <div className="hud-top-left-tools">
+          <HidePanelsButton
+            side="left"
+            hidden={leftPanelsHidden}
+            onToggle={() => setLeftPanelsHidden((current) => !current)}
+          />
+          {onSelectBlueprintColor && (
+            <button
+              className="hud-button hud-blueprint-option"
+              type="button"
+              aria-pressed={blueprintColor === GLOBAL_BLUEPRINT_COLOR.id}
+              data-active={
+                blueprintColor === GLOBAL_BLUEPRINT_COLOR.id
+                  ? 'true'
+                  : undefined
+              }
+              aria-label="Global blueprint"
+              title="Global blueprint. New files go here. The session window stays closed."
+              style={
+                {
+                  '--session-color': GLOBAL_BLUEPRINT_COLOR.hex,
+                } as CSSProperties
+              }
+              onClick={() =>
+                onSelectBlueprintColor(GLOBAL_BLUEPRINT_COLOR.id)
+              }
+            >
+              <SessionSwatch
+                colorHex={GLOBAL_BLUEPRINT_COLOR.hex}
+                className="hud-session-swatch hud-blueprint-swatch"
+              />
+              <span className="hud-blueprint-select-label">
+                Global blueprint
+              </span>
+            </button>
           )}
-          {sessions.length > 0 && (
+        </div>
+        <div className="hud-top-end">
+          {selected && <div className="hud-chip">{selected.path}</div>}
+          {devTargets?.enabled &&
+            onSelectDevTarget &&
+            devTargets.targets.length > 0 && (
+              <label className="hud-target-select">
+                <span>Look at</span>
+                <select
+                  className="hud-button hud-target-select-control"
+                  aria-label="Look at"
+                  title="Choose which project the map scans. Only available while developing Inbase."
+                  value={devTargets.currentId ?? ''}
+                  disabled={updatingModel}
+                  onChange={(event) => {
+                    const next = event.target.value
+                    if (!next || next === devTargets.currentId) return
+                    onSelectDevTarget(next)
+                  }}
+                >
+                  {devTargets.targets.map((target) => (
+                    <option key={target.id} value={target.id}>
+                      {target.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          {modeButtons}
+          <HidePanelsButton
+            side="right"
+            hidden={rightPanelsHidden}
+            onToggle={() => setRightPanelsHidden((current) => !current)}
+          />
+        </div>
+      </div>
+      )}
+
+      {!explainMode && (onSelectBlueprintColor || sessions.length > 0) && (
+        <div className="hud-left-stack" hidden={leftPanelsHidden}>
+          {onSelectBlueprintColor && (
+            <div
+              className="hud-session-tabs"
+              role="tablist"
+              aria-label="LLM sessions"
+            >
+              {sessionColorsOnPage(colorPage).map((color) => {
+                  const session = sessionTabs.find(
+                    (item) => item.color === color.id,
+                  )
+                  const active = color.id === blueprintColor
+                  const attached = session?.awaitingAttach === false
+                  const busy = Boolean(session && sessionLiveStatus(session).busy)
+                  const label =
+                    (session ? sessionDisplayName(session) : color.name) ||
+                    color.name
+                  const stateLabel = session
+                    ? busy
+                      ? 'LLM working'
+                      : attached
+                        ? 'Attached'
+                        : 'Waiting'
+                    : null
+                  const baseLabel = stateLabel
+                    ? `${label}, ${stateLabel}`
+                    : `${color.name} blueprint`
+                  const toggleHint = active
+                    ? 'Click again for global blueprint'
+                    : null
+                  return (
+                    <button
+                      className="hud-button hud-session-tab"
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      aria-label={
+                        toggleHint ? `${baseLabel}. ${toggleHint}` : baseLabel
+                      }
+                      data-active={active}
+                      data-busy={busy ? true : undefined}
+                      key={color.id}
+                      title={
+                        toggleHint
+                          ? stateLabel
+                            ? `${label} · ${stateLabel} · ${toggleHint}`
+                            : `${color.name} blueprint · ${toggleHint}`
+                          : stateLabel
+                            ? `${label} · ${stateLabel}`
+                            : `${color.name} blueprint`
+                      }
+                      style={
+                        {
+                          '--session-color': color.hex,
+                        } as CSSProperties
+                      }
+                      onClick={() => {
+                        if (active) {
+                          onSelectBlueprintColor(GLOBAL_BLUEPRINT_COLOR.id)
+                          return
+                        }
+                        if (session?.sessionId)
+                          onFocusSession?.(session.sessionId)
+                        onSelectBlueprintColor(color.id)
+                      }}
+                    >
+                      <SessionSwatch colorHex={color.hex} busy={busy} />
+                    </button>
+                  )
+                })}
+                <ColorPager
+                  page={colorPage}
+                  pageCount={colorPageCount}
+                  onPageChange={setColorPage}
+                />
+              </div>
+          )}
+          {sessionPanelIntent && (
             <SessionPanel
-              intent={intent}
+              intent={sessionPanelIntent}
               focused
               naming={naming}
               nextAttachSession={nextAttachSession}
               onFocus={() => {
-                if (intent.sessionId) onFocusSession?.(intent.sessionId)
+                if (
+                  sessionPanelIntent.sessionId &&
+                  !isPendingSessionId(sessionPanelIntent.sessionId)
+                ) {
+                  onFocusSession?.(sessionPanelIntent.sessionId)
+                }
               }}
               onWorkflowAction={onWorkflowAction}
               onNavigateDiff={onNavigateDiff}
             />
           )}
-          {showBranchChanges && branchChanges && (
-            <BranchChangesPanel
-              changes={branchChanges}
-              mode={branchChangesMode}
-              onModeChange={onBranchChangesModeChange}
-              onCommitChange={onBranchChangesCommitChange}
-            />
-          )}
         </div>
       )}
 
+      {!explainMode && (
+      <>
       <div className="hud-right-stack" hidden={rightPanelsHidden}>
       {selected && infoVisible && (
         <aside
@@ -3150,26 +3095,15 @@ export function HUD({
             <div ref={infoPanelRef} className="hud-panel-body">
           <p className="path">{selected.path}</p>
           <p>{fileInfoMeta(selected)}</p>
-          {(onExplainTarget ||
-            canInspectFile(selected.id, selected.userCreated)) && (
+          {canInspectFile(selected.id, selected.userCreated) && (
             <div className="hud-file-actions">
-              {onExplainTarget ? (
-                <ExplainButton
-                  label={`Explain ${selected.name}`}
-                  onClick={() =>
-                    onExplainTarget({ kind: 'file', path: selected.id })
-                  }
-                />
-              ) : null}
-              {canInspectFile(selected.id, selected.userCreated) && (
-                <button
-                  className="hud-button hud-inspect"
-                  type="button"
-                  onClick={() => onInspectFile?.(selected.id)}
-                >
-                  Inspect file
-                </button>
-              )}
+              <button
+                className="hud-button hud-inspect"
+                type="button"
+                onClick={() => onInspectFile?.(selected.id)}
+              >
+                Inspect file
+              </button>
             </div>
           )}
           {canEditBlueprint && onToggleBlueprintPointer && (
@@ -3722,27 +3656,15 @@ export function HUD({
                     <FileIcon />
                     <span>{file.name}</span>
                   </button>
-                  {(onExplainTarget ||
-                    canInspectFile(file.id, file.userCreated)) && (
+                  {canInspectFile(file.id, file.userCreated) && (
                     <div className="hud-item-actions">
-                      {onExplainTarget ? (
-                        <ExplainButton
-                          compact
-                          label={`Explain ${file.name}`}
-                          onClick={() =>
-                            onExplainTarget({ kind: 'file', path: file.id })
-                          }
-                        />
-                      ) : null}
-                      {canInspectFile(file.id, file.userCreated) && (
-                        <button
-                          className="hud-item-inspect"
-                          type="button"
-                          onClick={() => onInspectFile?.(file.id)}
-                        >
-                          Inspect
-                        </button>
-                      )}
+                      <button
+                        className="hud-item-inspect"
+                        type="button"
+                        onClick={() => onInspectFile?.(file.id)}
+                      >
+                        Inspect
+                      </button>
                     </div>
                   )}
                 </li>
@@ -3906,74 +3828,37 @@ export function HUD({
           </div>
         </div>
       )}
+      </>
+      )}
 
-      <div className="hud-bottom">
-        <div className="hud-bottom-actions">
-          {(onToggleBlueprintColor || onSelectBlueprintColor) &&
-            blueprintOptions.length > 0 && (
-            <div
-              className="hud-blueprint-select"
-              role="group"
-              aria-label="Blueprint"
+      <div
+        className="hud-bottom"
+        data-explain={explainMode ? 'true' : undefined}
+      >
+        <div
+          className="hud-bottom-actions"
+          data-inactive={bottomBarInactive ? 'true' : undefined}
+          aria-disabled={bottomBarInactive}
+        >
+          {activeBlueprint && (
+            <span
+              className="hud-blueprint-active"
+              title={`${activeBlueprint.name} blueprint`}
+              aria-label={`Active blueprint: ${activeBlueprint.name}`}
             >
-              {blueprintOptions.map((option) => {
-                const selected = blueprintColors.includes(option.id)
-                return (
-                  <button
-                    key={option.id}
-                    className={
-                      option.kind === 'global'
-                        ? 'hud-button hud-blueprint-option'
-                        : 'hud-button hud-blueprint-option hud-blueprint-option-swatch'
-                    }
-                    type="button"
-                    role="checkbox"
-                    aria-checked={selected}
-                    data-active={selected ? 'true' : undefined}
-                    aria-label={
-                      option.kind === 'global'
-                        ? selected
-                          ? 'Hide global blueprint'
-                          : 'Show global blueprint'
-                        : selected
-                          ? `Hide ${option.name} session blueprint`
-                          : `Show ${option.name} session blueprint`
-                    }
-                    title={
-                      option.kind === 'global'
-                        ? selected
-                          ? 'Hide the global blueprint. Click again to show it.'
-                          : 'Show the global blueprint. New files go here.'
-                        : selected
-                          ? `Hide the ${option.name} blueprint. Click again to show it.`
-                          : `Show the ${option.name} blueprint. New files go here.`
-                    }
-                    style={
-                      {
-                        '--session-color': option.hex,
-                      } as CSSProperties
-                    }
-                    onClick={() =>
-                      (onToggleBlueprintColor ?? onSelectBlueprintColor)?.(
-                        option.id,
-                      )
-                    }
-                  >
-                    <SessionSwatch
-                      colorHex={option.hex}
-                      className="hud-session-swatch hud-blueprint-swatch"
-                    />
-                    {option.kind === 'global' ? (
-                      <span className="hud-blueprint-select-label">Global</span>
-                    ) : null}
-                  </button>
-                )
-              })}
-            </div>
+              <SessionSwatch
+                colorHex={activeBlueprint.hex}
+                className="hud-session-swatch hud-blueprint-swatch"
+              />
+            </span>
           )}
           <label
             className="hud-button hud-blueprint-opacity"
-            title="Blueprint overlay opacity"
+            title={
+              bottomBarInactive
+                ? 'Unavailable in explain mode'
+                : 'Blueprint overlay opacity'
+            }
           >
             <span className="hud-blueprint-opacity-label">Opacity</span>
             <input
@@ -3987,6 +3872,7 @@ export function HUD({
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={Math.round(blueprintOpacity * 100)}
+              disabled={bottomBarInactive}
               onChange={(event) =>
                 onBlueprintOpacityChange?.(Number(event.target.value) / 100)
               }
@@ -3999,9 +3885,13 @@ export function HUD({
             <button
               className="hud-button"
               type="button"
-              aria-label="Clear selected blueprints"
-              title="Remove planned files, folders, and symbols on the selected colors"
-              disabled={!blueprintHasContent}
+              aria-label="Clear the active blueprint"
+              title={
+                bottomBarInactive
+                  ? 'Unavailable in explain mode'
+                  : 'Remove planned files, folders, and symbols on the active color'
+              }
+              disabled={bottomBarInactive || !blueprintHasContent}
               onClick={onClearBlueprint}
             >
               Clear
@@ -4011,16 +3901,55 @@ export function HUD({
             <button
               className="hud-button"
               type="button"
-              aria-label="Cleanup selected blueprints"
-              title="Remove existing files and folders on the selected colors"
-              disabled={!blueprintCanCleanup}
+              aria-label="Cleanup the active blueprint"
+              title={
+                bottomBarInactive
+                  ? 'Unavailable in explain mode'
+                  : 'Remove existing files and folders on the active color'
+              }
+              disabled={bottomBarInactive || !blueprintCanCleanup}
               onClick={onCleanupBlueprint}
             >
               Cleanup
             </button>
           )}
+          {onToggleBlueprintHidden && (
+            <button
+              className="hud-button"
+              type="button"
+              aria-label={
+                blueprintColor && !blueprintColors.includes(blueprintColor)
+                  ? 'Show the active blueprint'
+                  : 'Hide the active blueprint'
+              }
+              title={
+                bottomBarInactive
+                  ? 'Unavailable in explain mode'
+                  : blueprintColor && !blueprintColors.includes(blueprintColor)
+                    ? 'Show the active blueprint overlay'
+                    : 'Hide the active blueprint overlay'
+              }
+              disabled={bottomBarInactive}
+              onClick={onToggleBlueprintHidden}
+            >
+              {blueprintColor && !blueprintColors.includes(blueprintColor)
+                ? 'Show'
+                : 'Hide'}
+            </button>
+          )}
         </div>
         <div className="hud-icon-row">
+          {!bottomBarInactive &&
+            onWalkDropStart &&
+            onWalkDropMove &&
+            onWalkDropEnd && (
+            <WalkDrop
+              cursor={walkDrop}
+              onStart={onWalkDropStart}
+              onMove={onWalkDropMove}
+              onEnd={onWalkDropEnd}
+            />
+          )}
           {onRelationModeChange && (
             <div className="hud-actions-menu" ref={relationsMenuRef}>
               <button
@@ -4036,6 +3965,7 @@ export function HUD({
                 type="button"
                 onClick={() => {
                   setActionsMenuOpen(false)
+                  setBranchMenuOpen(false)
                   setRelationsMenuOpen((open) => !open)
                 }}
               >
@@ -4096,7 +4026,10 @@ export function HUD({
                 )}
             </div>
           )}
-          {mapping && hasChangeSet && onToggleChangePathsOnly && (
+          {!bottomBarInactive &&
+            mapping &&
+            hasChangeSet &&
+            onToggleChangePathsOnly && (
             <button
               className="hud-button hud-icon-button"
               data-active={changePathsOnly}
@@ -4135,6 +4068,7 @@ export function HUD({
               </span>
             </button>
           )}
+          {!bottomBarInactive && (
           <button
             className="hud-button hud-icon-button"
             data-active={importedBy && canToggleImportedBy}
@@ -4177,6 +4111,7 @@ export function HUD({
                   : 'K show imported by'}
             </span>
           </button>
+          )}
           <button
             className="hud-button hud-icon-button"
             data-active={showHiddenFiles}
@@ -4207,53 +4142,82 @@ export function HUD({
               {showHiddenFiles ? 'H hide hidden files' : 'H show hidden files'}
             </span>
           </button>
-          <button
-            className="hud-button hud-icon-button"
-            data-active={showBranchChanges}
-            aria-label={
-              llmMakingChanges
-                ? 'Show branch changes unavailable while the LLM is making changes'
-                : showBranchChanges
-                  ? 'Hide branch changes'
-                  : 'Show branch changes'
-            }
-            aria-keyshortcuts="G"
-            aria-pressed={showBranchChanges}
-            aria-disabled={!canShowBranchChanges}
-            type="button"
-            onClick={() => {
-              if (!canShowBranchChanges) return
-              onToggleShowBranchChanges?.()
-            }}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="18"
-              height="18"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+          <div className="hud-actions-menu" ref={branchMenuRef}>
+            <button
+              className="hud-button hud-icon-button"
+              data-active={showBranchChanges}
+              aria-label={
+                llmMakingChanges
+                  ? 'Show branch changes unavailable while the LLM is making changes'
+                  : 'Branch changes'
+              }
+              aria-keyshortcuts="G"
+              aria-haspopup="dialog"
+              aria-expanded={branchMenuOpen}
+              aria-pressed={showBranchChanges}
+              aria-disabled={!canShowBranchChanges}
+              type="button"
+              onClick={() => {
+                if (!canShowBranchChanges) return
+                setActionsMenuOpen(false)
+                setRelationsMenuOpen(false)
+                setBranchMenuOpen((open) => {
+                  const next = !open
+                  if (next && !wantBranchChanges) onToggleShowBranchChanges?.()
+                  return next
+                })
+              }}
             >
-              <circle cx="6" cy="5" r="2.4" />
-              <circle cx="6" cy="19" r="2.4" />
-              <circle cx="18" cy="12" r="2.4" />
-              <path d="M6 7.4v9.2" />
-              <path d="M6 12h7.2" />
-              <path d="M13.2 12c2.2 0 2.2-4.6 4.4-4.6" />
-            </svg>
-            <span className="hud-tooltip">
-              {llmMakingChanges
-                ? 'Unavailable while the LLM is making changes'
-                : !canShowBranchChanges
-                  ? 'No git branch to show'
-                  : showBranchChanges
-                    ? 'G hide branch changes · Shift+G switch comparison'
-                    : 'G show branch changes'}
-            </span>
-          </button>
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="6" cy="5" r="2.4" />
+                <circle cx="6" cy="19" r="2.4" />
+                <circle cx="18" cy="12" r="2.4" />
+                <path d="M6 7.4v9.2" />
+                <path d="M6 12h7.2" />
+                <path d="M13.2 12c2.2 0 2.2-4.6 4.4-4.6" />
+              </svg>
+              <span className="hud-tooltip">
+                {llmMakingChanges
+                  ? 'Unavailable while the LLM is making changes'
+                  : !canShowBranchChanges
+                    ? 'No git branch to show'
+                    : showBranchChanges
+                      ? 'G hide branch changes'
+                      : 'G show branch changes'}
+              </span>
+            </button>
+            {branchMenuOpen &&
+              branchMenuPosition &&
+              branchChanges &&
+              createPortal(
+                <div
+                  className="hud-branch-menu-panel"
+                  data-branch-menu="true"
+                  role="dialog"
+                  aria-label="Branch changes"
+                  style={branchMenuPosition}
+                >
+                  <BranchChangesPanel
+                    changes={branchChanges}
+                    hideChanges={hideChanges}
+                    onBaseChange={onBranchChangesBaseChange}
+                    onToggleHideChanges={onToggleHideChanges}
+                  />
+                </div>,
+                document.body,
+              )}
+          </div>
+          {!bottomBarInactive && (
           <div className="hud-actions-menu" ref={actionsMenuRef}>
             <button
               className="hud-button hud-icon-button"
@@ -4264,6 +4228,7 @@ export function HUD({
               aria-expanded={actionsMenuOpen}
               onClick={() => {
                 setRelationsMenuOpen(false)
+                setBranchMenuOpen(false)
                 setActionsMenuOpen((open) => !open)
               }}
             >
@@ -4376,6 +4341,7 @@ export function HUD({
                 document.body,
               )}
           </div>
+          )}
         </div>
       </div>
     </div>

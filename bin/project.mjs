@@ -183,9 +183,22 @@ export function applyHostEnv({
 } = {}) {
   const config = rememberInbaseConfig(loadInbaseConfig(cwd))
   const explicitTarget = typeof target === 'string' && target.trim() ? target.trim() : ''
-  const running = !explicitTarget && !dataDir ? readRunningInstance(cwd) : null
+  const discovered = !explicitTarget && !dataDir ? readRunningInstance(cwd) : null
   const configTargetRoot =
     config.target && config.dir ? resolveConfigPath(config.target, config.dir) : null
+  const localInstance = readInstanceFile(path.join(path.resolve(cwd), '.inbase', INSTANCE_FILE))
+  const discoveredIsLocal =
+    Boolean(discovered && localInstance) &&
+    path.resolve(localInstance.dataDir) === path.resolve(discovered.dataDir)
+  // Prefer a cwd/.inbase map, or a global map that matches this inbase.json.
+  // A live map for another project must not override this kickoff's config.
+  const running =
+    discovered &&
+    (discoveredIsLocal ||
+      !configTargetRoot ||
+      path.resolve(discovered.targetRoot) === path.resolve(configTargetRoot))
+      ? discovered
+      : null
   const targetRoot = resolveOptionalPath(
     explicitTarget || null,
     running?.targetRoot ?? configTargetRoot ?? cwd,
