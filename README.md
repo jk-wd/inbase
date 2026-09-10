@@ -5,7 +5,9 @@
   </picture>
 </p>
 
-<!-- screenshot: hero / product shot -->
+<p align="center">
+  <img src="docs/main.png" alt="Inbase map with blueprint and file info panel" width="680" />
+</p>
 
 ## Blueprint based development
 
@@ -64,9 +66,9 @@ inbase run                    # start the map
 # <editor> is optional: one editor only (cursor, claude, agents, copilot, cline)
 ```
 
-Open the printed URL (http://127.0.0.1:5173 by default). **Ctrl+click** the link in the terminal (Cmd+click on macOS) to open the InBase UI inside your editor:
+Open the printed URL (http://127.0.0.1:5173 by default). **Ctrl+click** the link in the terminal (Cmd+click on macOS) to open the InBase UI inside your editor.
 
-<!-- screenshot: map landing in Cursor -->
+<img src="docs/clickon-url-in-cursor.png" alt="Terminal showing the printed Inbase URL" width="480" />
 
 Or paste the URL into a separate browser — useful on a dual-screen or ultrawide setup.
 

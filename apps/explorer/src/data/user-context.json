@@ -1,29 +1,29 @@
 {
-  "updatedAt": "2026-09-10T11:08:58.500Z",
+  "updatedAt": "2026-09-10T11:44:21.828Z",
   "mode": "map",
   "island": {
     "path": "src",
     "name": "src"
   },
   "lookingAt": {
-    "id": "src/App.tsx",
-    "name": "App.tsx",
-    "path": "src/App.tsx",
-    "folder": "src"
+    "id": "src/Utils/mouse.ts",
+    "name": "mouse.ts",
+    "path": "src/Utils/mouse.ts",
+    "folder": "src/Utils"
   },
   "lookingAtFiles": [
     {
-      "id": "src/App.tsx",
-      "name": "App.tsx",
-      "path": "src/App.tsx",
-      "folder": "src"
+      "id": "src/Utils/mouse.ts",
+      "name": "mouse.ts",
+      "path": "src/Utils/mouse.ts",
+      "folder": "src/Utils"
     }
   ],
   "selected": {
-    "id": "src/App.tsx",
-    "name": "App.tsx",
-    "path": "src/App.tsx",
-    "folder": "src"
+    "id": "src/Utils/mouse.ts",
+    "name": "mouse.ts",
+    "path": "src/Utils/mouse.ts",
+    "folder": "src/Utils"
   },
   "filesOnIsland": [
     {
@@ -52,8 +52,8 @@
     }
   ],
   "position": {
-    "x": 0,
-    "z": 101.84
+    "x": -8.84,
+    "z": 74.05
   },
   "showBranchChanges": true,
   "showHiddenFiles": false,

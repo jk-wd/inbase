@@ -1,92 +1,11 @@
 {
-  "active": true,
-  "question": "the main strucutre of the codebase",
-  "steps": [
-    {
-      "index": "1",
-      "title": "New components folder",
-      "body": "This diff adds a src/components folder under the app source tree. That is the new home for UI pieces pulled out of the root App entry.",
-      "asked": "",
-      "files": [],
-      "folders": [
-        "src/components"
-      ],
-      "select": null,
-      "zoom": "src/components",
-      "relations": [],
-      "importedBy": false,
-      "info": false,
-      "highlights": [],
-      "point": null
-    },
-    {
-      "index": "2",
-      "title": "Random color component",
-      "body": "RandomColorGenerator.tsx is the new file. It defines randomHexColor to pick a hex value, RandomColor to hold color state and the UI, and RandomColorGenerator as the default export wrapper.",
-      "asked": "",
-      "files": [
-        "src/components/RandomColorGenerator.tsx"
-      ],
-      "folders": [],
-      "select": "src/components/RandomColorGenerator.tsx",
-      "zoom": "src/components",
-      "relations": [],
-      "importedBy": false,
-      "info": true,
-      "highlights": [
-        {
-          "kind": "function",
-          "name": "randomHexColor"
-        },
-        {
-          "kind": "function",
-          "name": "RandomColor"
-        },
-        {
-          "kind": "function",
-          "name": "RandomColorGenerator"
-        }
-      ],
-      "point": {
-        "kind": "function",
-        "name": "RandomColorGenerator"
-      }
-    },
-    {
-      "index": "3",
-      "title": "App wires it in",
-      "body": "App.tsx now imports RandomColorGenerator and renders it under the Hello World heading. The import relation on the map runs from App into the new component file.",
-      "asked": "",
-      "files": [
-        "src/App.tsx"
-      ],
-      "folders": [],
-      "select": "src/App.tsx",
-      "zoom": null,
-      "relations": [
-        {
-          "from": "src/App.tsx",
-          "to": "src/components/RandomColorGenerator.tsx"
-        }
-      ],
-      "importedBy": false,
-      "info": true,
-      "highlights": [
-        {
-          "kind": "function",
-          "name": "App"
-        }
-      ],
-      "point": {
-        "kind": "function",
-        "name": "App"
-      }
-    }
-  ],
-  "currentStep": "3",
+  "active": false,
+  "question": "",
+  "steps": [],
+  "currentStep": "1",
   "pendingQuestion": null,
   "pendingStart": null,
   "answering": false,
   "presentation": "walk",
-  "updatedAt": "2026-09-10T11:08:58.488Z"
+  "updatedAt": "2026-09-10T11:43:26.426Z"
 }
