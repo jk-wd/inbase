@@ -1,59 +1,17 @@
 {
-  "updatedAt": "2026-09-10T11:44:21.828Z",
+  "updatedAt": "2026-09-10T17:19:15.852Z",
   "mode": "map",
   "island": {
-    "path": "src",
-    "name": "src"
+    "path": null,
+    "name": "open ground"
   },
-  "lookingAt": {
-    "id": "src/Utils/mouse.ts",
-    "name": "mouse.ts",
-    "path": "src/Utils/mouse.ts",
-    "folder": "src/Utils"
-  },
-  "lookingAtFiles": [
-    {
-      "id": "src/Utils/mouse.ts",
-      "name": "mouse.ts",
-      "path": "src/Utils/mouse.ts",
-      "folder": "src/Utils"
-    }
-  ],
-  "selected": {
-    "id": "src/Utils/mouse.ts",
-    "name": "mouse.ts",
-    "path": "src/Utils/mouse.ts",
-    "folder": "src/Utils"
-  },
-  "filesOnIsland": [
-    {
-      "id": "src/App.tsx",
-      "name": "App.tsx",
-      "path": "src/App.tsx",
-      "folder": "src"
-    },
-    {
-      "id": "src/index.css",
-      "name": "index.css",
-      "path": "src/index.css",
-      "folder": "src"
-    },
-    {
-      "id": "src/main.tsx",
-      "name": "main.tsx",
-      "path": "src/main.tsx",
-      "folder": "src"
-    },
-    {
-      "id": "src/vite-env.d.ts",
-      "name": "vite-env.d.ts",
-      "path": "src/vite-env.d.ts",
-      "folder": "src"
-    }
-  ],
+  "lookingAt": null,
+  "lookingAtFiles": [],
+  "selected": null,
+  "filesOnIsland": [],
   "position": {
-    "x": -8.84,
-    "z": 74.05
+    "x": 0,
+    "z": 66.82
   },
   "showBranchChanges": true,
   "showHiddenFiles": false,

@@ -9,7 +9,7 @@
   <img src="docs/main.png" alt="Inbase map with blueprint and file info panel" width="680" />
 </p>
 
-## Blueprint based development
+## Blueprint-driven development
 
 When an LLM writes code, it takes over the mental map of the codebase. You lose track of what went where, you lose the mantal map of the codebase.
 
