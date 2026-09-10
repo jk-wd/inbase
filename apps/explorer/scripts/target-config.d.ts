@@ -5,10 +5,15 @@ export const dataDir: string
 export function persistedTargetFile(dir?: string): string
 export function readPersistedTargetId(dir?: string): string | null
 export function writePersistedTargetId(id: string, dir?: string): void
+export function envToggleEnabled(
+  value: string | undefined | null,
+  defaultEnabled?: boolean,
+): boolean
 export function isWorkspaceDevSwitcherEnabled(options?: {
   exampleTarget?: string
   resolvedDataDir?: string
   explorerDataDir?: string
+  lookAt?: string | null
 }): boolean
 export type WorkspaceTarget = {
   id: string

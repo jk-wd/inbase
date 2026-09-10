@@ -12,6 +12,45 @@ const defaultDataDir = path.resolve(explorerRoot, 'src/data')
 const DEV_TARGET_FILE = 'dev-target.json'
 const EXPLORER_APP_NAME = 'explorer'
 const REPO_TARGET_ID = 'repo'
+const LOOK_AT_OFF = new Set(['0', 'false', 'off', 'no'])
+const LOOK_AT_ON = new Set(['1', 'true', 'on', 'yes'])
+
+/** Load repo-root `.env` without overriding vars already set in the shell. */
+function loadOptionalEnvFile(file) {
+  try {
+    const text = fs.readFileSync(file, 'utf8')
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+      const eq = trimmed.indexOf('=')
+      if (eq <= 0) continue
+      const key = trimmed.slice(0, eq).trim()
+      if (!key || process.env[key] !== undefined) continue
+      let value = trimmed.slice(eq + 1).trim()
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1)
+      }
+      process.env[key] = value
+    }
+  } catch {
+    // Optional file.
+  }
+}
+
+loadOptionalEnvFile(path.join(repoRoot, '.env'))
+
+/** Parse INBASE_LOOK_AT-style toggles. Unset → defaultEnabled. */
+export function envToggleEnabled(value, defaultEnabled = true) {
+  if (value == null) return defaultEnabled
+  const raw = String(value).trim().toLowerCase()
+  if (!raw) return defaultEnabled
+  if (LOOK_AT_OFF.has(raw)) return false
+  if (LOOK_AT_ON.has(raw)) return true
+  return defaultEnabled
+}
 
 export function resolvePathValue(value, fallback) {
   const raw = value?.trim()
@@ -63,12 +102,15 @@ export function writePersistedTargetId(id, dir = dataDir) {
 /**
  * True when this checkout still has the bundled demo app and the explorer is
  * using its own src/data dir — i.e. `npm run dev`, not `inbase run`.
+ * Set INBASE_LOOK_AT=false (also 0/off/no) to hide the Look at control.
  */
 export function isWorkspaceDevSwitcherEnabled({
   exampleTarget = defaultTargetRoot,
   resolvedDataDir = dataDir,
   explorerDataDir = defaultDataDir,
+  lookAt = process.env.INBASE_LOOK_AT,
 } = {}) {
+  if (!envToggleEnabled(lookAt, true)) return false
   return fs.existsSync(exampleTarget) && samePath(resolvedDataDir, explorerDataDir)
 }
 

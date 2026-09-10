@@ -5,99 +5,72 @@
   </picture>
 </p>
 
-<p align="center">
-  <img src="docs/manual-proposal.png" alt="Pending proposal with changed files and added functions" width="680" />
-</p>
+<!-- screenshot: hero / product shot -->
 
 ## Blueprint based development
 
-When an LLM writes code, it takes over decisions about what goes where. You stop building your own mental map of the codebase. The model has it. You do not.
+When an LLM writes code, it takes over the mental map of the codebase. You lose track of what went where, you lose the mantal map of the codebase.
 
-Inbase is a structured way to collaborate with an LLM. It visualizes the codebase as a map. Every step the model takes updates that visualization, so the new mental map is in front of you each time. You see what went where. That cuts AI brain-fry and skill degradation.
+Inbase puts that map in front of you. You draw the intended change as a **blueprint** on a visualization of the real code — planned files, folders, functions, variables, imports, and notes. The LLM must follow that layout. Every step updates the map, so you see the new structure as it lands.
 
-You draw the intended change on a map of the real codebase before the model writes a file. That drawing is a **blueprint**: planned files, folders, functions, variables, imports, notes, and pointers, laid on the existing code. The LLM must follow that layout.
 
-The model reads the blueprint, says what it sees (`I see on the blueprint ...`) so you can confirm the reading, reports a plan that matches it, and implements every step. You walk the diffs on the map. **Done** in the session window keeps the files and frees that color for another chat. If a proposal is wrong, type the change in the attached chat (that replaces the waiting proposal), change the blueprint, or type **`/stop`**.
-
-Blueprints have two layers:
-
-- **Global (blue):** shared by every chat. Put structure here that every session should follow.
-- **Session (coral, amber, lime, orange, violet, teal, crimson, forest, grey, white):** local to one chat. Put the work for that chat here.
-
-Planned files stay on the map after they exist on disk. Hide a color with its chip, or clear or clean them up when you are done. When a session finishes, Inbase discards its slot and opens a new empty one. The global blueprint stays.
-
-Inbase does not call a model. The coding loop works in **Cursor**, **Claude Code**, **Codex**, **GitHub Copilot**, and **Cline**. `inbase init` installs a skill so the agent uses the map instead of editing files on its own.
 
 ---
 
 ## Support overview
 
-The map draws every text file. Hidden files (names starting with `.`) stay off the map until you turn on **Show hidden files**. Colors, relations, structure, and editor install are plug-in modules.
-
 | | Today | Fallback | Add more |
 | --- | --- | --- | --- |
-| Colors | JS, TS, CSS, SCSS, JSON, HTML | Dark grey | `apps/explorer/src/file-colors.ts` |
+| Colors | JS/JSX/MJS/CJS, TS/TSX, CSS, SCSS, JSON, HTML/HTM | Dark grey | `apps/explorer/src/file-colors.ts` |
 | Relations | ESM `import`, `require()`, HTML `<script src>` | Packages and remote URLs | `apps/explorer/scripts/relations/` |
-| Structure | Functions, classes, vars in JS/TS | Block with no cubes | `apps/explorer/scripts/structure/` |
+| Structure | Functions, classes, vars in JS/TS (info panel) | No symbols listed | `apps/explorer/scripts/structure/` |
 | Editors | Cursor, Claude Code, Codex, Copilot, Cline (`inbase init`) | Map still runs in the browser | `bin/editors/` |
-
-Relative import specifiers become edges when they resolve on disk. `inbase init` copies editor skills and slash commands.
 
 ---
 
 ## Manual
 
-Keep `inbase run` open while you work. Language colors, import analyzers, and editor install are summarized in [Support overview](#support-overview).
+Keep `inbase run` open while you work.
 
 1. [Install and start](#install-and-start)
-2. [Config](#config)
-3. [The map](#the-map)
-4. [Sessions and colors](#sessions-and-colors)
-5. [Drawing a blueprint](#drawing-a-blueprint)
-6. [Connecting a chat](#connecting-a-chat)
-7. [The plan and Done](#the-plan-and-done)
-8. [Explain mode](#explain-mode)
-9. [Reviewing changes](#reviewing-changes)
-10. [Branch changes](#branch-changes)
-11. [Controls](#controls)
-12. [Commands](#commands)
-13. [Language support](#language-support)
+2. [Using the map](#using-the-map)
+3. [LLM interaction](#llm-interaction)
+4. [Starting a LLM session](#starting-a-llm-session)
+5. [Walk mode](#walk-mode)
+6. [Explain mode](#explain-mode)
+7. [InBase cli](#inbase-cli)
 
 ### Install and start
 
-The npm package is `@jkwd/inbase` (npm blocks the unscoped name `inbase`). The command name is `inbase`.
+The npm package is `@jkwd/inbase`.
+
+Local install:
 
 ```bash
-npm install -D @jkwd/inbase
-npx inbase init
-npx inbase run
+npm install -D @jkwd/inbase     # add the package
+npx inbase init <editor>        # install editor skills + inbase.json
+npx inbase run                  # start the map
+
+# <editor> is optional: one editor only (cursor, claude, agents, copilot, cline)
 ```
 
-Or install globally:
+Or global:
 
 ```bash
-npm install -g @jkwd/inbase
-inbase init
-inbase run
+npm install -g @jkwd/inbase   # add the package
+inbase init <editor>          # install editor skills + inbase.json
+inbase run                    # start the map
+
+# <editor> is optional: one editor only (cursor, claude, agents, copilot, cline)
 ```
 
-Open the printed URL (http://127.0.0.1:5173 by default). In a Cursor or VS Code terminal, **Cmd+click** the link (Ctrl+click on Windows/Linux) to open it in the editor. Hover the URL to see the prompt. You can also paste the URL into an external browser.
+Open the printed URL (http://127.0.0.1:5173 by default). **Ctrl+click** the link in the terminal (Cmd+click on macOS) to open the InBase UI inside your editor:
 
-![Follow link (Cmd+click) in the Cursor terminal](docs/manual-open-url.png)
+<!-- screenshot: map landing in Cursor -->
 
-![Map open after inbase run](docs/manual-start.png)
+Or paste the URL into a separate browser — useful on a dual-screen or ultrawide setup.
 
-`inbase run` maps `target` from `inbase.json` when that file is present, otherwise the current directory. If a map is already running, this command prints the URL and exits instead of starting another server.
-
-To map another folder for one run:
-
-```bash
-inbase run --target /path/to/your/project
-```
-
-`inbase init` copies a Cursor skill into `.cursor/skills/inbase/`, a Cursor Auto-review policy into `.cursor/permissions.json`, a Claude Code skill into `.claude/skills/inbase/`, shared Agent Skills into `.agents/skills/`, Copilot skills into `.github/skills/`, Cline skills into `.cline/skills/inbase/` and `.cline/SKILL.md`, Cline workflows into `.cline/workflows/`, Cline rules into `.cline/rules/inbase.md` and a root `.clinerules` file, writes `inbase.json` if it is missing, and gitignores `.inbase/`. `inbase init cline` (or `cursor`, `claude`, `agents`, `copilot`) installs only that editor. `inbase cleanup` removes those files so you can turn Inbase off, including leftover Inbase skills and editor rules (for example `.cursor/rules` and `.cline/rules`). `inbase cleanup cline` removes only that editor. Keep `inbase run` open, then ask the agent to change source files in `target`. The LLM follows the visual plan and patch loop below. File changes outside `target` do not connect a color session.
-
-### Config
+#### Config
 
 Commit an `inbase.json` next to where you run `inbase`. CLI flags and env vars still win: **CLI > env > `inbase.json` > defaults**. `target` is resolved from the config file's directory.
 
@@ -117,7 +90,9 @@ Commit an `inbase.json` next to where you run `inbase`. CLI flags and env vars s
 
 Runtime data stays in `.inbase/` (gitignored). Do not put session or camera state in `inbase.json`.
 
-### The map
+### Using the map
+
+![Landing on the map](docs/landing-on-the-map.png)
 
 The map is top-down.
 
@@ -129,32 +104,46 @@ The map is top-down.
 - The **gold pin** is your Walk position
 - **Hidden files** are off by default; press **H** or use the HUD toggle to show them
 
-![Top-down map of the codebase](docs/manual-map.png)
-
 Reading the map:
 
 - Each **file** is a block. Taller blocks have more lines of code.
-- Small cubes on a block are **functions** (blue) and **variables** (tan).
+- Click a block (or press **I**) to open the **info panel** — functions, variables, and imports live there, not on the block itself.
 - Each **folder** is an area with a center path.
 - At the far end of an area, **bridges** lead into child folders. The folder name hangs above the bridge.
 - Click a block to see **import relations**. Connected files stay lit and arcs draw to them. Press **K** to flip between imports and imported-by.
 
 **More → Update model** rescans files and folders after the tree has changed outside the LLM loop.
 
-**Walk** is a first-person view of the same map. Switch with the **Map** / **Walk** buttons, or press **M**. Click the scene to capture the mouse. On the map, option-click where you want to land.
+#### Controls
 
-- **WASD:** walk
-- **Mouse:** look around
-- **Shift:** sprint
-- **Space:** jump to where the crosshair is pointing
-- **Esc:** return to the map
-- **Double-click:** release the mouse
+| Action | Control |
+| --- | --- |
+| Zoom / pan | Scroll, drag |
+| File info | Click, I |
+| Import relations | Click a block |
+| Imports / imported-by | K |
+| Switch to Walk | M |
+| Walk onto the map | Option-click, or drag the person |
+| Place file or folder | Right-click a folder |
+| Open or explain a file | Right-click a file |
+| Point to a target | Right-click, Point to folder |
+| Save / load / rescan | More menu |
+| Show only changed paths | C |
+| Hidden files | H |
+| Connect a chat | Chat, or `/coral` `/amber` `/lime` `/orange` `/violet` `/teal` `/crimson` `/forest` `/grey` `/white` |
+| Keep the work and free the color | **Done** in the session window |
+| Explain | `/explainit` in chat, or `?` then `/explainit` |
+| Extract a blueprint | `/extract-blueprint` |
 
-![First-person Walk view of the codebase](docs/manual-walk.png)
+The in-app **Instructions** overlay (bottom of the HUD) lists the same controls for the view you are in.
 
-### Sessions and colors
+### LLM interaction
 
-`npx inbase run` opens **10 empty chat slots** on the map. Each slot has a color. The HUD shows five session colors at a time; use the arrow to see the other five. Global blue stays in the bottom bar.
+#### Sessions and colors
+
+`npx inbase run` opens **10 empty chat slots** on the map. Each slot has a color.
+
+![LLM session colors](docs/LLM-session-colors.png)
 
 | Color | Command | Alias |
 | --- | --- | --- |
@@ -169,81 +158,130 @@ Reading the map:
 | Grey | `/grey` | `/gray` |
 | White | `/white` | |
 
-![Five colored session slots on the HUD](docs/manual-sessions.png)
+Connect a regular chat by starting with a color command and your request:
 
-`/blue` selects the global blueprint. There is no Blue LLM session.
+![Color command with request](docs/color-chat-example.png)
 
-A regular chat connects to the next unconnected slot (oldest first) when the agent is changing files in `target`. File changes outside that folder do not attach. Inbase skips sessions that have an LLM. The map window does not need focus. The cap is 10 connected chats.
+That attaches the chat to that color’s empty slot — Coral in the example above.
 
-Type `/coral` (or another color) to skip the queue and attach to that slot. A new chat always starts clean: leftover plan, patches, and working state from a previous LLM on that color are discarded, and recorded file changes are restored. User-placed blueprint files stay. With no text after the command, the agent starts from the enabled blueprint only: create those files and structure, and ask if it needs more information. Add a request after the command, like `/coral add a login page`, when you want extra instruction.
+If you skip the command and only send the request, Inbase attaches the **first available** color instead:
 
-When a session finishes, Inbase discards it and opens a new empty slot. The global blueprint stays. Restarting the visualizer discards leftover sessions and opens 10 new empty slots.
+![Request without a color command](docs/color-chat-example-no-color.png)
 
-If Inbase is not running, start it with `npx inbase run`.
+When a chat is attached, the map opens that color’s **LLM session window**. Look for **ATTACHED** / **LLM CONNECTED** and the current status (for example “LLM is drafting the plan”):
 
-### Drawing a blueprint
+![LLM session window attached](docs/llm-attached.png)
 
-The blueprint is the spatial plan the LLM must follow. Draw it before a chat connects, or keep placing after the chat has attached.
+There is no `/blue` command: blue is not a chat slot. It is the **global blueprint**, shared by every LLM session — covered in the next section.
 
-Pick a session color in the row above the session window. That color is the active blueprint. **Global blueprint** (next to the fold-in control) draws on the shared blue layer and hides the session window. Hide, Clear, and Cleanup apply to the active color.
+#### Drawing a blueprint
 
-Right-click a folder to create a file or folder on the selected blueprint, or to point at it. Right-click a file to open it, or explain it when a chat is attached.
+You draw a blueprint **on top of the map** — the spatial plan the LLM must follow. Place it before a chat connects, or keep adding after the chat has attached.
 
-Open a file's **info panel** (click in map, or press **I**) to add **functions**, **vars**, and **imports**. Add a **file note** or a symbol note for extra instructions or pseudo code.
+Pick a session color in the row above the session window to draw on that color’s local blueprint. **Global blueprint** (next to the fold-in control) draws on the shared blue layer and hides the session window. Hide, Clear, and Cleanup apply to the active color.
 
-![Folder info panel with files, Point to, Add file, and Add folder](docs/manual-info-panel.png)
+##### Add folders
 
-**Point to** a file, folder, function, or variable to keep it in mind for that color. Pointers travel with the blueprint the chat receives.
+Right-click a folder on the map and choose **Add folder**. For example, plan a `components` folder under `src`:
 
-To capture an existing area as a blueprint, type **`/extract-blueprint [folder] [output file]`** in chat, or run `inbase extract-blueprint <folder> <output-file>`. The agent scans the folder, then keeps only the architecture that belongs on a blueprint: important folders, files, functions, vars, and notes. It does not dump the whole tree.
+1. Open the context menu and choose **Add folder**:
 
-The LLM treats an enabled blueprint as leading. It creates those paths and symbols, including ones that are not on disk yet. The agent may edit existing files when the feature needs them. Extra new files that are not in the blueprint are a deviation. The agent must ask before it reports a plan that differs.
+![Add folder from the map context menu](docs/creating-an-components-folder-add-folder.png)
 
-The bottom bar has:
+2. Enter the name and choose which blueprint it belongs to — **Global** or a session color:
 
-- **Clear:** remove every planned file, folder, and symbol on the active color.
-- **Cleanup:** drop blueprint files and folders that exist on disk. Planned items that are missing stay.
-- **Hide:** hide or show the active color's overlay on the map.
+![Name the folder and pick Global or a session color](docs/creating-an-components-folder-input.png)
 
-The hamburger **More** menu has **Save blueprint**, **Save blueprint as**, **Load blueprint**, and **Update model**. Save writes the current global and session-colored layers into a `blueprints/` folder at the project root (created on first save). Name the blueprint, then save. Save as writes the same file to another folder. Load lists saved blueprints from that folder; **Choose file…** loads one from somewhere else. Saved blueprints are skipped on the map scan so they do not appear as files.
+3. The planned folder appears on the map (blue when it is on the global blueprint):
 
-### Connecting a chat
+![Planned components folder on the map](docs/creating-an-components-folder-result.png)
 
-<p>
-  <img src="docs/manual-blueprint.png" alt="Map waiting for a chat" width="58%" />
-  <img src="docs/manual-cursor-chat.png" alt="Chat with the /coral command" width="40%" />
-</p>
+##### Add files
 
-1. Draw a blueprint, then open a Cursor, Claude Code, Codex, Copilot, or Cline chat. Skip the drawing if the chat request is enough.
-2. Type `/coral` (or another color) to connect. That is enough when a blueprint is already on the map. Add a request after the command, like `/coral add a settings page`, when you want extra instruction.
-3. The chat attaches to a slot. The HUD shows **LLM connected** on that color.
-4. The agent reads the global blueprint, that session's local blueprint, and any request. It says what it sees (`I see on the blueprint ...`) so you can confirm the reading. With no request, it plans only from the blueprint: create those files and structure. It can ask if it needs more information.
-5. It implements every plan step. **Done** in the session window keeps the files and frees that color.
+Right-click a folder and choose **Add file**. For example, `RandomColorGenerator.tsx` inside `components`:
 
-The chat request does not override an enabled blueprint. If they conflict, the agent asks before planning.
+1. Open the context menu and choose **Add file**:
 
-You do not pass a session id or run CLI session commands. The skill does that. If attach fails because Inbase is not running, start it and send the request again.
+![Add file from the folder context menu](docs/creating-a-file-add-file.png)
 
-### The plan and Done
+2. Enter the file name (it is created in that folder on the active blueprint):
 
-The HUD lists every plan step. The LLM implements the full plan without waiting between steps. You can walk **Previous** / **Next** over the diffs; **Done** in the session window keeps the files and frees that color for another chat.
+![Name the planned file](docs/creating-a-file-input.png)
 
-1. The agent reports the plan and implements each step in one go, recording a map snapshot after every step. Those stored overlays are the session record.
-2. The HUD shows each proposal: added, changed, and removed files, plus functions, vars, and imports.
-3. After the last recorded patch you can click **Done** to keep the work and free the color, type a change in the same chat to replace that last step, or **`/stop`**. Do not start a new chat to update the work.
+3. The file block appears on the map. Click it to open the **info panel**:
 
-<p>
-  <img src="docs/inbase-llm.png" alt="Plan ready on the HUD with Done in the session window" width="58%" />
-  <img src="docs/manual-accept-chat.png" alt="Chat attached to an Inbase session" width="40%" />
-</p>
+![Planned file on the map with info panel](docs/creating-a-file-result.png)
 
-While a proposal is waiting:
+##### Add function and vars
 
-- Type the change in the **same** attached chat to **replace** that proposal. The agent updates the plan from that last step (for example steps A, B, C waiting on C → keep A and B, replace C with one or more new remaining steps), then records a new proposal. Do not click Done just so you can start over. Do not open a new chat.
-- Type **`/explainit`** to walk what has changed in the current proposal on the map.
-- Type **`/stop`** in the attached chat to end the session. That restores files, discards the plan, and frees the color slot.
+In the info panel, add the **functions** and **vars** the file should contain. Type a name and click **Add** — the LLM treats those symbols as part of the blueprint:
 
-![Pending proposal with changed files and added functions](docs/manual-proposal.png)
+![Add functions and vars in the info panel](docs/add-functions-and-vars.png)
+
+You can also add **imports**, or a note on a symbol for extra instructions or pseudo code.
+
+##### File notes
+
+Use a **file note** for free-form instructions the LLM should follow for that file. In the info panel, click **Add file note**:
+
+![Add file note button](docs/addfile-note-button.png)
+
+Write what the file should do, then close the note:
+
+![File note editor](docs/addfile-note-input.png)
+
+##### Session specific blueprint
+
+**Blue** is always the **global** blueprint — every LLM session sees it. The other colors are **session-specific**: only the chat attached to that color receives that layer.
+
+When you add a folder or file, pick **Global** or a session color at the bottom of the dialog:
+
+![Choose Global or a session color](docs/session-specific.png)
+
+Planned items take that color on the map. Here `components` is global (blue) and `session-specific` belongs to Coral (red):
+
+![Global and session-specific folders on the map](docs/session-specific-result.png)
+
+![Multiple session blueprints next to the global layer](docs/session-specific-result-2.png)
+
+Left to right: the first folder is local to `/coral`, the second is local to `/amber`, and the blue folder is the **global** blueprint — shared with both LLM sessions.
+
+### Starting a LLM session
+
+When you start an LLM session — for example `/coral build a random color generator component` — the chat attaches to that color and the session window opens on the map:
+
+![LLM session working through a plan](docs/llm-working.png)
+
+The LLM lists the steps it will take to reach the goal. Each step is visualized on the map so you can see what changed.
+
+You can keep chatting in the same thread to steer the work in a different direction whenever you want.
+
+When the work is applied, click **Clear** to remove the blueprint overlay. The new files stay on the map:
+
+![Clear blueprint control](docs/clear-blueprint.png)
+
+![Applied changes on the map after clearing the blueprint](docs/changes-applied.png)
+
+### Walk mode
+
+![First-person Walk view of the map](docs/walkmode.png)
+
+**Walk** is a first-person view of the same map. Switch with the **Map** / **Walk** buttons, or press **M**. Click the scene to capture the mouse. On the map, option-click where you want to land, or drag the person onto the map.
+
+#### Controls
+
+| Action | Control |
+| --- | --- |
+| Walk | WASD |
+| Look | Mouse |
+| Sprint | Shift |
+| Jump to crosshair | Space |
+| Switch to Map | M, Esc |
+| Release mouse | Double-click |
+| File info | I |
+| Imports / imported-by | K |
+| Point to a target | Point to |
+| Hidden files | H |
 
 ### Explain mode
 
@@ -251,130 +289,37 @@ Explain mode walks a question on the map. It does not edit project files or star
 
 **From a question**
 
-Type `/explainit How does login work?` while the map is open. The HUD hides and an **X** exits. The LLM publishes an explanation you step through in the overlay.
+Type `/explainit` with a question while the map is open — for example the main structure of the codebase:
 
-![Explain overlay stepping through App.tsx on the map](docs/manual-explain.png)
+![Explain mode chat command](docs/explainit-chat.png)
 
-**From a proposal**
+The HUD hides and an **X** exits. The LLM publishes an explanation you step through in the overlay. Each step can focus a folder or file on the map:
 
-If a plan or proposal is waiting, `/explainit` with no question explains **what has changed in that proposal**. Add a question for extra focus.
+![Explain mode stepping through a folder on the map](docs/explain-mode-result-1.png)
 
-**From a git diff**
+A later step can open the file **info panel**, highlight functions and vars, and draw arrows to the symbols it names:
 
-When **Show branch changes** is on, `/explainit` with no question explains **what has changed in this diff**. Add a question for extra focus.
+![Explain mode highlighting functions in the info panel](docs/explain-mode-result-2.png)
 
-**From a `?` click**
+### InBase cli
 
-Click the **?** next to a file or folder name, then type `/explainit` in the chat. The LLM explains that path and where it fits.
+The command name is `inbase` (via `npx inbase` or a global install). Run `inbase help` for the same overview in the terminal.
 
-**On the overlay**
-
-- Each step can dim the rest of the map, select a block to show import relations, and zoom into a folder.
-- A step can open the file **info panel**, highlight functions and vars, and draw an arrow that points at a symbol.
-- Type `/explainit` with a follow-up question to drill into sub-steps (`7.1`, `7.2`) until you return to the next original step.
-- Arrow keys or the step list move through the explanation.
-
-Close with **X**. Click **Done** in the session window to keep the files and free the color.
-
-### Reviewing changes
-
-Every recorded step is a snapshot of what the map showed.
-
-- **Previous** / **Next** walk those snapshots without changing files. Stepping back while the LLM is still working freezes that snapshot; **Next** (or the current live step) turns auto-follow back on.
-- The session panel lists changed, added, and removed files, plus functions, vars, and imports for the current snapshot.
-- The map highlights those files. Press **C** to show only changed paths.
-- Click a highlighted block to see which functions and vars that overlay added or edited.
-- Type **`/explainit`** with no question to walk what has changed in the current overlay.
-
-While a session is active, the map shows the regular git working-tree diff (current changes). `propose-patch` stores that overlay. You do not write unified diffs.
-
-### Branch changes
-
-When no LLM is making changes, turn on **Show branch changes** (or press **G**) to highlight git changes on the map. The map shows the current uncommitted working-tree changes against the last commit on this branch (staged, unstaged, and untracked). Use **Compare against** to pick a different local or remote branch.
-
-Type **`/explainit`** with no question to walk what has changed in that diff.
-
-![Branch changes panel on the map](docs/manual-branch.png)
-
-Inbase disables this control while an LLM session is writing or reviewing changes.
-
-### Controls
-
-| Action | Walk | Map |
-| --- | --- | --- |
-| Walk / look | WASD, mouse, Shift, Space | |
-| Switch view | M, Esc | M |
-| File info | I | Click, I |
-| Import relations | | Click a block |
-| Imports / imported-by | K | K |
-| Walk onto the map | | Option-click, or drag the person |
-| Place file or folder | | Right-click a folder |
-| Open or explain a file | | Right-click a file |
-| Point to a target | Point to | Right-click, Point to folder |
-| Save / load / rescan | More menu | same |
-| Show only changed paths | | C |
-| Hidden files | H | H |
-| Branch changes | G | G |
-| Release mouse | Double-click | |
-| Connect a chat | Chat, or `/coral` `/amber` `/lime` `/orange` `/violet` `/teal` `/crimson` `/forest` `/grey` `/white` | same |
-| Keep the work and free the color | **Done** in the session window | |
-| Explain | `/explainit` in chat, or `?` then `/explainit` | same |
-| Extract a blueprint | `/extract-blueprint` | |
-
-The in-app **Instructions** overlay (bottom of the HUD) lists the same controls for the view you are in.
-
----
-
-## Commands
+#### Project commands
 
 | Command | What it does |
 | --- | --- |
-| `inbase init` | Install Cursor, Claude Code, Codex, Copilot, and Cline skills in this repo and write `inbase.json` if missing |
-| `inbase init cline` | Install only that editor's skills (`cursor`, `claude`, `agents`, `copilot`, `cline`) |
+| `inbase init` | Install Cursor, Claude Code, Codex, Copilot, and Cline skills; write `inbase.json` if missing; gitignore `.inbase/` |
+| `inbase init <editor>` | Install only that editor (`cursor`, `claude`, `agents`, `copilot`, `cline`) |
 | `inbase cleanup` | Remove installed skills and rules, `.inbase/`, `inbase.json`, and the `.gitignore` entry |
-| `inbase cleanup cline` | Remove only that editor's skills (`cursor`, `claude`, `agents`, `copilot`, `cline`) |
-| `inbase run` | Scan this repo and start the local map |
-| `inbase run --port 5174` | Start on another port |
-| `inbase run --target <dir>` | Map another folder |
-| `inbase accept [--session <id>]` | Keep the files and free the color slot (same as **Done** in the session window) |
-| `inbase stop [--session <id>]` | Restore files, discard the session, and free the color slot (`/stop`) |
-| `inbase explain start [--question "..."]` | Open map-only explain mode. Omit `--question` to explain the current proposal or git diff |
-| `inbase explain report --step "..."` | Publish explanation steps and map focus |
-| `inbase explain stop` | Exit explain mode |
+| `inbase cleanup <editor>` | Remove only that editor's skills |
+| `inbase run` | Scan the project and start the local map. Maps `target` from `inbase.json`, else the current directory. If a map is already running, prints the URL and exits |
+| `inbase run --target <dir>` | Map another folder for this run |
+| `inbase run --port <number>` | Start on another port (default: `inbase.json` port, else 5173) |
 | `inbase extract-blueprint <folder> <file>` | Scan a folder and print an inventory for `/extract-blueprint`. `--write` saves the curated blueprint |
+| `inbase help` | Show CLI help |
 
-The installed skill runs session commands (`attach`, `read-blueprint`, `report-plan`, `stop`, `propose-patch`, `explain`, `extract-blueprint`). You do not need to run them.
-
-## Editor support
-
-The map runs in the browser. The LLM plan and patch loop works in **Cursor**, **Claude Code**, **Codex**, **GitHub Copilot**, and **Cline**. `inbase init` uses the editor adapters in `bin/editors/` to install the skill and slash commands. Cursor and Claude Code get command files (`/stop`, `/explainit`). Codex, Copilot, Gemini CLI, and other SKILL.md agents get skill folders in `.agents/skills/` (`.github/skills/` for Copilot). Cline gets `SKILL.md` where its scanner looks (`.cline/skills/inbase/` and `.cline/SKILL.md`), an always-on rule as both `.cline/rules/inbase.md` and a root `.clinerules` file, plus slash-command workflows in `.cline/workflows/`. Those Cline files use `execute_command` XML so the model runs `npx inbase` instead of printing it. In Copilot or Cline chat type `/stop`; in Codex use `$stop` or `/skills`. Other editors can be added as adapters there.
-
-## Language support
-
-Inbase draws every text file in the project as a block. Unknown extensions use the default dark grey. JavaScript and TypeScript also get **functions**, **classes**, and **variables** from the structure analyzer. Relation analyzers turn relative ESM `import`s, `require()` calls, and HTML `<script src>` into edges when they resolve, including `.astro` and other JS-style modules. Package names like `react` or `@angular/core` do not. Binary files are skipped. See [Support overview](#support-overview).
-
-## Develop Inbase itself
-
-This repository is a workspace. The bundled demo target is `apps/example-target`.
-
-```bash
-npm install
-npm run dev
-```
-
-`npm run dev` maps `apps/example-target` by default (`inbase.json`). In the map, **Look at** switches to the complete repository (and later example apps). That control exists in `npm run dev`, not in `inbase run`.
-
-To map a different project without the CLI:
-
-```bash
-VISUAL_CODER_TARGET=/path/to/your/project npm run dev
-```
-
-To run the example React app:
-
-```bash
-npm run dev:target
-```
+---
 
 ## Contributing
 

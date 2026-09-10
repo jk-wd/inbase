@@ -27,12 +27,49 @@
       "name": "App.tsx",
       "path": "src/App.tsx",
       "folder": "src",
-      "lines": 10,
+      "lines": 13,
       "language": "tsx",
       "symbols": [
         {
           "name": "App",
           "kind": "function"
+        }
+      ],
+      "imports": [
+        "src/components/RandomColorGenerator.tsx"
+      ]
+    },
+    {
+      "id": "src/components/RandomColorGenerator.tsx",
+      "name": "RandomColorGenerator.tsx",
+      "path": "src/components/RandomColorGenerator.tsx",
+      "folder": "src/components",
+      "lines": 48,
+      "language": "tsx",
+      "symbols": [
+        {
+          "name": "randomHexColor",
+          "kind": "function"
+        },
+        {
+          "name": "RandomColor",
+          "kind": "function"
+        },
+        {
+          "name": "RandomColorGenerator",
+          "kind": "function"
+        },
+        {
+          "name": "value",
+          "kind": "variable"
+        },
+        {
+          "name": "color",
+          "kind": "variable"
+        },
+        {
+          "name": "setColor",
+          "kind": "variable"
         }
       ],
       "imports": []
@@ -120,6 +157,17 @@
         "src/index.css",
         "src/main.tsx",
         "src/vite-env.d.ts"
+      ],
+      "children": [
+        "src/components"
+      ]
+    },
+    {
+      "path": "src/components",
+      "name": "components",
+      "parent": "src",
+      "files": [
+        "src/components/RandomColorGenerator.tsx"
       ],
       "children": []
     }

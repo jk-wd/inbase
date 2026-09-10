@@ -5,6 +5,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import {
+  envToggleEnabled,
   isWorkspaceDevSwitcherEnabled,
   listWorkspaceTargets,
   matchWorkspaceTargetId,
@@ -93,6 +94,7 @@ test('enables the switcher only for explorer src/data with the demo app present'
       exampleTarget: defaultTarget,
       resolvedDataDir: defaultDataDir,
       explorerDataDir: defaultDataDir,
+      lookAt: undefined,
     }),
     true,
   )
@@ -101,6 +103,7 @@ test('enables the switcher only for explorer src/data with the demo app present'
       exampleTarget: defaultTarget,
       resolvedDataDir: path.join(repoRoot, '.inbase'),
       explorerDataDir: defaultDataDir,
+      lookAt: undefined,
     }),
     false,
   )
@@ -109,8 +112,34 @@ test('enables the switcher only for explorer src/data with the demo app present'
       exampleTarget: '/tmp/missing-example-target',
       resolvedDataDir: defaultDataDir,
       explorerDataDir: defaultDataDir,
+      lookAt: undefined,
     }),
     false,
+  )
+})
+
+test('INBASE_LOOK_AT toggles the Look at switcher', () => {
+  assert.equal(envToggleEnabled(undefined), true)
+  assert.equal(envToggleEnabled('false'), false)
+  assert.equal(envToggleEnabled('0'), false)
+  assert.equal(envToggleEnabled('true'), true)
+  assert.equal(
+    isWorkspaceDevSwitcherEnabled({
+      exampleTarget: defaultTarget,
+      resolvedDataDir: defaultDataDir,
+      explorerDataDir: defaultDataDir,
+      lookAt: 'false',
+    }),
+    false,
+  )
+  assert.equal(
+    isWorkspaceDevSwitcherEnabled({
+      exampleTarget: defaultTarget,
+      resolvedDataDir: defaultDataDir,
+      explorerDataDir: defaultDataDir,
+      lookAt: 'true',
+    }),
+    true,
   )
 })
 
