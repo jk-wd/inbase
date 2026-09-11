@@ -9,6 +9,7 @@ import {
   isWorkspaceDevSwitcherEnabled,
   listWorkspaceTargets,
   matchWorkspaceTargetId,
+  configTargetRelativePath,
   readPersistedTargetId,
   resolveDataDir,
   resolveInitialTargetRoot,
@@ -20,8 +21,8 @@ import {
 const here = path.dirname(fileURLToPath(import.meta.url))
 const explorerRoot = path.resolve(here, '..')
 const defaultTarget = path.resolve(explorerRoot, '../example-target')
-const defaultDataDir = path.resolve(explorerRoot, 'src/data')
 const repoRoot = path.resolve(explorerRoot, '../..')
+const defaultDataDir = path.resolve(repoRoot, 'inbase-dev')
 
 test('defaults to apps/example-target', () => {
   assert.equal(resolveTargetRoot(''), defaultTarget)
@@ -88,12 +89,12 @@ test('matches a workspace target id from its root', () => {
   assert.equal(matchWorkspaceTargetId('/tmp/other-app', targets), null)
 })
 
-test('enables the switcher only for explorer src/data with the demo app present', () => {
+test('enables the switcher only for inbase-dev with the demo app present', () => {
   assert.equal(
     isWorkspaceDevSwitcherEnabled({
       exampleTarget: defaultTarget,
       resolvedDataDir: defaultDataDir,
-      explorerDataDir: defaultDataDir,
+      devDataDir: defaultDataDir,
       lookAt: undefined,
     }),
     true,
@@ -102,7 +103,7 @@ test('enables the switcher only for explorer src/data with the demo app present'
     isWorkspaceDevSwitcherEnabled({
       exampleTarget: defaultTarget,
       resolvedDataDir: path.join(repoRoot, '.inbase'),
-      explorerDataDir: defaultDataDir,
+      devDataDir: defaultDataDir,
       lookAt: undefined,
     }),
     false,
@@ -111,7 +112,7 @@ test('enables the switcher only for explorer src/data with the demo app present'
     isWorkspaceDevSwitcherEnabled({
       exampleTarget: '/tmp/missing-example-target',
       resolvedDataDir: defaultDataDir,
-      explorerDataDir: defaultDataDir,
+      devDataDir: defaultDataDir,
       lookAt: undefined,
     }),
     false,
@@ -127,7 +128,7 @@ test('INBASE_LOOK_AT toggles the Look at switcher', () => {
     isWorkspaceDevSwitcherEnabled({
       exampleTarget: defaultTarget,
       resolvedDataDir: defaultDataDir,
-      explorerDataDir: defaultDataDir,
+      devDataDir: defaultDataDir,
       lookAt: 'false',
     }),
     false,
@@ -136,10 +137,19 @@ test('INBASE_LOOK_AT toggles the Look at switcher', () => {
     isWorkspaceDevSwitcherEnabled({
       exampleTarget: defaultTarget,
       resolvedDataDir: defaultDataDir,
-      explorerDataDir: defaultDataDir,
+      devDataDir: defaultDataDir,
       lookAt: 'true',
     }),
     true,
+  )
+})
+
+test('configTargetRelativePath maps Look-at roots to inbase.json targets', () => {
+  assert.equal(configTargetRelativePath(repoRoot), '.')
+  assert.equal(configTargetRelativePath(defaultTarget), 'apps/example-target')
+  assert.equal(
+    configTargetRelativePath(path.join(repoRoot, 'apps/explorer')),
+    'apps/explorer',
   )
 })
 
@@ -195,7 +205,7 @@ test('restores a persisted workspace target when the switcher is on', () => {
   }
 })
 
-test('defaults data dir to explorer src/data', () => {
+test('defaults data dir to repo inbase-dev', () => {
   assert.equal(resolveDataDir(''), defaultDataDir)
   assert.equal(resolveDataDir(undefined), defaultDataDir)
 })

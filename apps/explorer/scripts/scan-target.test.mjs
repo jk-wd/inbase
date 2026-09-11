@@ -206,6 +206,7 @@ test('ignores node_modules, dist, and lockfiles at any depth', () => {
     shouldIgnoreRelativePath('apps/explorer/src/data/vite/deps/three.js'),
     true,
   )
+  assert.equal(shouldIgnoreRelativePath('inbase-dev/codebase.json'), true)
   assert.equal(shouldIgnoreRelativePath('apps/web/vite.config.ts'), false)
 })
 

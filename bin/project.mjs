@@ -124,6 +124,7 @@ export function readRunningInstance(cwd = process.cwd()) {
   const files = [
     path.join(cwd, '.inbase', INSTANCE_FILE),
     path.join(globalInbaseDir(), INSTANCE_FILE),
+    path.join(packageRoot, 'inbase-dev', INSTANCE_FILE),
     path.join(explorerRoot, 'src/data', INSTANCE_FILE),
   ]
   const seen = new Set()

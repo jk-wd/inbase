@@ -14,7 +14,10 @@ npm test
 npm run dev
 ```
 
-`npm run dev` maps `apps/example-target` by default. Use **Look at** in the map to switch to the complete repository. Set `INBASE_LOOK_AT=false` in a repo-root `.env` (or the shell) to hide that control. To map another project:
+`npm run dev` maps `apps/example-target` by default and stores runtime data in
+repo-root `inbase-dev/` (gitignored, visible for debugging). Use **Look at** in
+the map to switch to the complete repository. Set `INBASE_LOOK_AT=false` in a
+repo-root `.env` (or the shell) to hide that control. To map another project:
 
 ```bash
 VISUAL_CODER_TARGET=/path/to/your/project npm run dev
@@ -30,7 +33,7 @@ npm run dev:target
 
 - Keep the change focused. Prefer one concern per PR.
 - Run `npm test` before you open the PR.
-- Do not commit `.inbase/`, session data, or `*.tgz` packs.
+- Do not commit `.inbase/`, `inbase-dev/`, session data, or `*.tgz` packs.
 - Match the style of nearby code. No drive-by refactors or formatting-only diffs.
 
 The skill in `skill/inbase/` is what `inbase init` copies into other

@@ -360,6 +360,7 @@ async function switchDevTarget(
     sendJson(res, 200, {
       ...workspaceDevTargetsState(),
       codebase: readCodebase(),
+      reload: true,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'invalid request'
@@ -758,7 +759,7 @@ export default defineConfig({
     watch: {
       // Session snapshots copy target source into the data dir. If Vite
       // watches those writes, completing a session full-reloads the visualizer.
-      ignored: ['**/src/data/**', isDataDirPath],
+      ignored: ['**/src/data/**', '**/inbase-dev/**', isDataDirPath],
     },
   },
 })

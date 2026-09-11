@@ -12,7 +12,7 @@ export function envToggleEnabled(
 export function isWorkspaceDevSwitcherEnabled(options?: {
   exampleTarget?: string
   resolvedDataDir?: string
-  explorerDataDir?: string
+  devDataDir?: string
   lookAt?: string | null
 }): boolean
 export type WorkspaceTarget = {
@@ -46,4 +46,8 @@ export function workspaceDevTargetsState(): {
   currentId: string | null
   targets: Array<{ id: string; label: string }>
 }
+export function configTargetRelativePath(
+  root: string,
+  repositoryRoot?: string,
+): string
 export function setWorkspaceTarget(id: string): WorkspaceTarget

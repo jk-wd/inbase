@@ -9,6 +9,7 @@ export const IGNORE_DIR_NAMES = new Set([
   'coverage',
   '.git',
   '.inbase',
+  'inbase-dev',
   '.next',
   'blueprints',
 ])

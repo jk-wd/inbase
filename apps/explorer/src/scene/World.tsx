@@ -558,9 +558,7 @@ export function World({
         onSelectFolder={onSelectFolder}
         pickingImport={pickingImport}
         onBlueprintMenu={
-          mapping && !placing && !explainActive && onBlueprintMenu
-            ? onBlueprintMenu
-            : undefined
+          mapping && !placing && onBlueprintMenu ? onBlueprintMenu : undefined
         }
       />
 

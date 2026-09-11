@@ -153,6 +153,30 @@ export function writeInbaseConfig(projectRoot, values = INIT_INBASE_CONFIG) {
   return true
 }
 
+/**
+ * Update `target` in an existing inbase.json. Preserves other fields.
+ * Returns false when the file is missing.
+ */
+export function updateInbaseConfigTarget(projectRoot, target) {
+  const trimmed = typeof target === 'string' ? target.trim() : ''
+  if (!trimmed) throw configError(null, '"target" must be a non-empty string')
+  const dest = path.join(path.resolve(projectRoot), CONFIG_FILE_NAME)
+  if (!isFile(dest)) return false
+  let raw
+  try {
+    raw = JSON.parse(fs.readFileSync(dest, 'utf8'))
+  } catch {
+    throw configError(dest, 'is not valid JSON')
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw configError(dest, 'must be a JSON object')
+  }
+  const next = { ...raw, target: trimmed }
+  parseInbaseConfig(JSON.stringify(next), dest)
+  fs.writeFileSync(dest, `${JSON.stringify(next, null, 2)}\n`)
+  return true
+}
+
 export function removeInbaseConfig(projectRoot) {
   const dest = path.join(path.resolve(projectRoot), CONFIG_FILE_NAME)
   try {

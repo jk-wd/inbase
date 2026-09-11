@@ -4,12 +4,6 @@ dist
 *.local
 .tmp-*
 *.tgz
-apps/explorer/src/data/instance.json
-apps/explorer/src/data/active-session.json
-apps/explorer/src/data/attach-queue.json
-apps/explorer/src/data/blueprint-session.json
-apps/explorer/src/data/blueprint.json
-apps/explorer/src/data/dev-target.json
-apps/explorer/src/data/diff-sessions/*
-!apps/explorer/src/data/diff-sessions/.gitkeep
+# Explorer `npm run dev` runtime (visible for debugging)
+inbase-dev/
 .inbase/

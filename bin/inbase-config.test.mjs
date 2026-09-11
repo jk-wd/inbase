@@ -11,6 +11,7 @@ import {
   parseInbaseConfig,
   resolveConfigPath,
   resolvePort,
+  updateInbaseConfigTarget,
   writeInbaseConfig,
 } from './inbase-config.mjs'
 import { applyHostEnv } from './project.mjs'
@@ -145,6 +146,30 @@ test('writeInbaseConfig is a no-op when the file already exists', () => {
     fs.mkdirSync(other)
     assert.equal(writeInbaseConfig(other), true)
     assert.equal(JSON.parse(fs.readFileSync(path.join(other, CONFIG_FILE_NAME), 'utf8')).target, '.')
+  } finally {
+    cleanup()
+  }
+})
+
+test('updateInbaseConfigTarget rewrites target and preserves other fields', () => {
+  const { root, cleanup } = tempGitProject()
+  try {
+    writeConfig(root, { target: 'apps/web', port: 5188, ignore: ['vendor'] })
+    assert.equal(updateInbaseConfigTarget(root, 'apps/example-target'), true)
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, CONFIG_FILE_NAME), 'utf8')), {
+      target: 'apps/example-target',
+      port: 5188,
+      ignore: ['vendor'],
+    })
+    assert.equal(updateInbaseConfigTarget(root, '.'), true)
+    assert.equal(
+      JSON.parse(fs.readFileSync(path.join(root, CONFIG_FILE_NAME), 'utf8')).target,
+      '.',
+    )
+    const missing = path.join(root, 'missing')
+    fs.mkdirSync(missing)
+    assert.equal(updateInbaseConfigTarget(missing, 'apps/web'), false)
+    assert.throws(() => updateInbaseConfigTarget(root, '  '), /non-empty string/)
   } finally {
     cleanup()
   }

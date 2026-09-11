@@ -1,14 +1,20 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { loadInbaseConfig, rememberInbaseConfig, resolveConfigPath } from '../../../bin/inbase-config.mjs'
+import {
+  loadInbaseConfig,
+  rememberInbaseConfig,
+  resolveConfigPath,
+  updateInbaseConfigTarget,
+} from '../../../bin/inbase-config.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const explorerRoot = path.resolve(here, '..')
 const repoRoot = path.resolve(explorerRoot, '../..')
 const appsDir = path.resolve(explorerRoot, '..')
 const defaultTargetRoot = path.resolve(explorerRoot, '../example-target')
-const defaultDataDir = path.resolve(explorerRoot, 'src/data')
+/** Visible, gitignored runtime dir for explorer `npm run dev` (not `inbase run`). */
+const defaultDataDir = path.resolve(repoRoot, 'inbase-dev')
 const DEV_TARGET_FILE = 'dev-target.json'
 const EXPLORER_APP_NAME = 'explorer'
 const REPO_TARGET_ID = 'repo'
@@ -101,17 +107,17 @@ export function writePersistedTargetId(id, dir = dataDir) {
 
 /**
  * True when this checkout still has the bundled demo app and the explorer is
- * using its own src/data dir — i.e. `npm run dev`, not `inbase run`.
+ * using the repo `inbase-dev/` dir — i.e. `npm run dev`, not `inbase run`.
  * Set INBASE_LOOK_AT=false (also 0/off/no) to hide the Look at control.
  */
 export function isWorkspaceDevSwitcherEnabled({
   exampleTarget = defaultTargetRoot,
   resolvedDataDir = dataDir,
-  explorerDataDir = defaultDataDir,
+  devDataDir = defaultDataDir,
   lookAt = process.env.INBASE_LOOK_AT,
 } = {}) {
   if (!envToggleEnabled(lookAt, true)) return false
-  return fs.existsSync(exampleTarget) && samePath(resolvedDataDir, explorerDataDir)
+  return fs.existsSync(exampleTarget) && samePath(resolvedDataDir, devDataDir)
 }
 
 export function listWorkspaceTargets({
@@ -227,11 +233,19 @@ export function workspaceDevTargetsState() {
   return { enabled: true, currentId, targets: publicTargets }
 }
 
+/** Repo-relative `inbase.json` target for a workspace Look-at root. */
+export function configTargetRelativePath(root, repositoryRoot = repoRoot) {
+  const relative = path.relative(path.resolve(repositoryRoot), path.resolve(root))
+  if (!relative) return '.'
+  return relative.split(path.sep).join('/')
+}
+
 export function setWorkspaceTarget(id) {
   const targets = listWorkspaceTargets()
   const match = targets.find((target) => target.id === id)
   if (!match) throw new Error(`Unknown workspace target: ${id}`)
   applyTargetRoot(match.root)
   writePersistedTargetId(match.id)
+  updateInbaseConfigTarget(repoRoot, configTargetRelativePath(match.root))
   return match
 }

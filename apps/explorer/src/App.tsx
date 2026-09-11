@@ -702,7 +702,15 @@ export default function App() {
       setUpdatingModel(true)
       try {
         const result = await selectDevTarget(id)
-        if (!result?.graph) {
+        if (!result) {
+          setLoadError((current) => current ?? 'Could not switch project.')
+          return
+        }
+        if (result.reload) {
+          window.location.reload()
+          return
+        }
+        if (!result.graph) {
           setLoadError((current) => current ?? 'Could not switch project.')
           return
         }
@@ -2168,6 +2176,10 @@ function Explorer({
   }, [addingItem, mode])
 
   useEffect(() => {
+    if (explaining) setMapMenu(null)
+  }, [explaining])
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat || (event.code !== 'Backspace' && event.code !== 'Delete'))
         return
@@ -3084,7 +3096,12 @@ function Explorer({
             namingId={namingId}
             namingIslandId={namingIslandId}
             onBlueprintMenu={
-              canPlace && !explaining ? setMapMenu : undefined
+              canPlace
+                ? (menu) => {
+                    if (explaining && !menu.file) return
+                    setMapMenu(menu)
+                  }
+                : undefined
             }
             userCreatedBlocks={mapBlueprint.blocks}
             userCreatedIslands={mapBlueprint.islands}
@@ -3232,7 +3249,6 @@ function Explorer({
         onSelectDevTarget={onSelectDevTarget}
         explainMode={explaining}
       />
-      {!explaining && (
       <MapContextMenu
         menu={mapMenu}
         pointed={
@@ -3243,18 +3259,23 @@ function Explorer({
         onAddFile={beginAddFile}
         onAddFolder={beginAddFolder}
         onOpenFile={inspectFile}
-        onExplainFile={(fileId) =>
-          startExplainTarget({ kind: 'file', path: fileId })
+        onExplainFile={
+          explaining
+            ? undefined
+            : (fileId) => startExplainTarget({ kind: 'file', path: fileId })
         }
-        onExplainFolder={(folder) =>
-          startExplainTarget({ kind: 'folder', path: folder })
+        onExplainFolder={
+          explaining
+            ? undefined
+            : (folder) => startExplainTarget({ kind: 'folder', path: folder })
         }
-        onPointToFolder={(folder) =>
-          applyBlueprintPointer({ kind: 'folder', path: folder })
+        onPointToFolder={
+          explaining
+            ? undefined
+            : (folder) => applyBlueprintPointer({ kind: 'folder', path: folder })
         }
         onClose={() => setMapMenu(null)}
       />
-      )}
     </>
   )
 }

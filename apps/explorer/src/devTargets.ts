@@ -47,6 +47,7 @@ export async function fetchDevTargets(): Promise<DevTargetsState> {
 export async function selectDevTarget(id: string): Promise<{
   state: DevTargetsState
   graph: CodebaseGraph | null
+  reload: boolean
 } | null> {
   try {
     const response = await fetch('/api/dev-targets', {
@@ -55,10 +56,14 @@ export async function selectDevTarget(id: string): Promise<{
       body: JSON.stringify({ id }),
     })
     if (!response.ok) return null
-    const payload = (await response.json()) as { codebase?: unknown }
+    const payload = (await response.json()) as {
+      codebase?: unknown
+      reload?: boolean
+    }
     return {
       state: parseState(payload),
       graph: parseCodebase(payload.codebase),
+      reload: payload.reload === true,
     }
   } catch {
     return null
