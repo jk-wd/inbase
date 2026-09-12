@@ -1,5 +1,5 @@
 {
-  "target": "apps/example-target",
+  "target": ".",
   "port": 5173,
   "ignore": []
 }

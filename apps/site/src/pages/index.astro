@@ -1,0 +1,238 @@
+---
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Inbase</title>
+    <script is:inline>
+      (() => {
+        const stored = localStorage.getItem("theme");
+        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const theme =
+          stored === "light" || stored === "dark"
+            ? stored
+            : prefersDark
+              ? "dark"
+              : "light";
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+    <style is:global>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        display: grid;
+        place-items: center;
+        background: linear-gradient(180deg, #d4d4d4 0%, #f0f0f0 100%);
+        transition: background 200ms ease;
+      }
+
+      html[data-theme="dark"] body {
+        background: linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 100%);
+      }
+
+      .logo {
+        display: block;
+        max-width: min(312px, 51vw);
+        height: auto;
+      }
+
+      .site-nav {
+        position: fixed;
+        top: 1.25rem;
+        left: 1.25rem;
+        right: 1.25rem;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        pointer-events: none;
+      }
+
+      .site-nav a,
+      .site-nav button {
+        pointer-events: auto;
+      }
+
+      .site-menu {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        margin: 0;
+        padding: 0.3rem;
+        list-style: none;
+        border: 1px solid rgba(0, 0, 0, 0.14);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.82);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+        transition:
+          background 200ms ease,
+          border-color 200ms ease;
+      }
+
+      .site-menu a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 2.15rem;
+        padding: 0 0.95rem;
+        border-radius: 999px;
+        color: #1a1a1a;
+        font: 500 0.95rem/1 system-ui, sans-serif;
+        letter-spacing: 0.01em;
+        text-decoration: none;
+        transition:
+          background 200ms ease,
+          color 200ms ease;
+      }
+
+      .site-menu a:hover {
+        background: rgba(0, 0, 0, 0.06);
+      }
+
+      .theme-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.75rem;
+        height: 2.75rem;
+        padding: 0;
+        border: 1px solid rgba(0, 0, 0, 0.14);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.82);
+        color: #1a1a1a;
+        cursor: pointer;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+        transition:
+          background 200ms ease,
+          border-color 200ms ease,
+          color 200ms ease;
+      }
+
+      .theme-toggle:hover {
+        background: #fff;
+      }
+
+      html[data-theme="dark"] .site-menu {
+        border-color: rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.1);
+        box-shadow: none;
+      }
+
+      html[data-theme="dark"] .site-menu a {
+        color: #f5f5f5;
+      }
+
+      html[data-theme="dark"] .site-menu a:hover {
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      html[data-theme="dark"] .theme-toggle {
+        border-color: rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.1);
+        color: #f5f5f5;
+        box-shadow: none;
+      }
+
+      html[data-theme="dark"] .theme-toggle:hover {
+        background: rgba(255, 255, 255, 0.16);
+      }
+
+      .theme-toggle svg {
+        width: 1.2rem;
+        height: 1.2rem;
+      }
+
+      .theme-toggle .icon-sun {
+        display: none;
+      }
+
+      html[data-theme="dark"] .theme-toggle .icon-moon {
+        display: none;
+      }
+
+      html[data-theme="dark"] .theme-toggle .icon-sun {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="site-nav" aria-label="Site">
+      <ul class="site-menu">
+        <li>
+          <a href="/docs">Docs</a>
+        </li>
+      </ul>
+      <button
+        class="theme-toggle"
+        type="button"
+        aria-label="Switch to dark mode"
+        title="Switch to dark mode"
+      >
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M21 14.3A8.5 8.5 0 0 1 9.7 3 7 7 0 1 0 21 14.3Z"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.8" />
+          <path
+            d="M12 2.5v2.2M12 19.3v2.2M4.7 4.7l1.6 1.6M17.7 17.7l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.7 19.3l1.6-1.6M17.7 6.3l1.6-1.6"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+          />
+        </svg>
+      </button>
+    </nav>
+
+    <img
+      class="logo"
+      src="/logo-on-white.png"
+      alt="InBase. Dive into your codebase"
+      data-logo
+    />
+
+    <script is:inline>
+      (() => {
+        const root = document.documentElement;
+        const button = document.querySelector(".theme-toggle");
+        const logo = document.querySelector("[data-logo]");
+        const logos = {
+          light: "/logo-on-white.png",
+          dark: "/logo-on-black.png",
+        };
+
+        function applyTheme(theme) {
+          root.dataset.theme = theme;
+          if (logo instanceof HTMLImageElement) {
+            logo.src = logos[theme];
+          }
+          if (button instanceof HTMLButtonElement) {
+            const next = theme === "dark" ? "light" : "dark";
+            button.setAttribute("aria-label", `Switch to ${next} mode`);
+            button.title = `Switch to ${next} mode`;
+          }
+        }
+
+        applyTheme(root.dataset.theme === "dark" ? "dark" : "light");
+
+        button?.addEventListener("click", () => {
+          const next = root.dataset.theme === "dark" ? "light" : "dark";
+          localStorage.setItem("theme", next);
+          applyTheme(next);
+        });
+      })();
+    </script>
+  </body>
+</html>

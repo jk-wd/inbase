@@ -1,0 +1,360 @@
+---
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { createMarkdownProcessor } from "@astrojs/markdown-remark";
+
+const readmePath = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../../README.md",
+);
+const source = fs
+  .readFileSync(readmePath, "utf8")
+  .replace(/(src|srcset)="docs\//g, '$1="/doc-assets/');
+
+const processor = await createMarkdownProcessor();
+const { code: readmeHtml } = await processor.render(source);
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Docs · Inbase</title>
+    <script is:inline>
+      (() => {
+        const stored = localStorage.getItem("theme");
+        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const theme =
+          stored === "light" || stored === "dark"
+            ? stored
+            : prefersDark
+              ? "dark"
+              : "light";
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+    <style is:global>
+      html,
+      body {
+        min-height: 100%;
+        margin: 0;
+      }
+
+      body {
+        background: linear-gradient(180deg, #d4d4d4 0%, #f0f0f0 100%);
+        color: #1a1a1a;
+        font: 16px/1.55 system-ui, sans-serif;
+        transition:
+          background 200ms ease,
+          color 200ms ease;
+      }
+
+      html[data-theme="dark"] body {
+        background: linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 100%);
+        color: #f0f0f0;
+      }
+
+      .site-nav {
+        position: fixed;
+        top: 1.25rem;
+        left: 1.25rem;
+        right: 1.25rem;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        pointer-events: none;
+      }
+
+      .site-nav a,
+      .site-nav button {
+        pointer-events: auto;
+      }
+
+      .site-menu {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        margin: 0;
+        padding: 0.3rem;
+        list-style: none;
+        border: 1px solid rgba(0, 0, 0, 0.14);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.82);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+        transition:
+          background 200ms ease,
+          border-color 200ms ease;
+      }
+
+      .site-menu a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 2.15rem;
+        padding: 0 0.95rem;
+        border-radius: 999px;
+        color: #1a1a1a;
+        font: 500 0.95rem/1 system-ui, sans-serif;
+        letter-spacing: 0.01em;
+        text-decoration: none;
+        transition:
+          background 200ms ease,
+          color 200ms ease;
+      }
+
+      .site-menu a:hover {
+        background: rgba(0, 0, 0, 0.06);
+      }
+
+      .site-menu a[aria-current="page"] {
+        background: rgba(0, 0, 0, 0.1);
+      }
+
+      .theme-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.75rem;
+        height: 2.75rem;
+        padding: 0;
+        border: 1px solid rgba(0, 0, 0, 0.14);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.82);
+        color: #1a1a1a;
+        cursor: pointer;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+        transition:
+          background 200ms ease,
+          border-color 200ms ease,
+          color 200ms ease;
+      }
+
+      .theme-toggle:hover {
+        background: #fff;
+      }
+
+      html[data-theme="dark"] .site-menu {
+        border-color: rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.1);
+        box-shadow: none;
+      }
+
+      html[data-theme="dark"] .site-menu a {
+        color: #f5f5f5;
+      }
+
+      html[data-theme="dark"] .site-menu a:hover {
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      html[data-theme="dark"] .site-menu a[aria-current="page"] {
+        background: rgba(255, 255, 255, 0.18);
+      }
+
+      html[data-theme="dark"] .theme-toggle {
+        border-color: rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.1);
+        color: #f5f5f5;
+        box-shadow: none;
+      }
+
+      html[data-theme="dark"] .theme-toggle:hover {
+        background: rgba(255, 255, 255, 0.16);
+      }
+
+      .theme-toggle svg {
+        width: 1.2rem;
+        height: 1.2rem;
+      }
+
+      .theme-toggle .icon-sun {
+        display: none;
+      }
+
+      html[data-theme="dark"] .theme-toggle .icon-moon {
+        display: none;
+      }
+
+      html[data-theme="dark"] .theme-toggle .icon-sun {
+        display: block;
+      }
+
+      .docs {
+        box-sizing: border-box;
+        width: min(760px, calc(100% - 2.5rem));
+        margin: 5.5rem auto 3rem;
+        padding: 1.75rem 1.5rem 2.25rem;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 1.25rem;
+        background: rgba(255, 255, 255, 0.88);
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.06);
+      }
+
+      html[data-theme="dark"] .docs {
+        border-color: rgba(255, 255, 255, 0.12);
+        background: rgba(22, 22, 22, 0.92);
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+      }
+
+      .docs h1,
+      .docs h2,
+      .docs h3 {
+        line-height: 1.25;
+        letter-spacing: -0.02em;
+      }
+
+      .docs h1 {
+        margin: 0 0 1rem;
+        font-size: 1.85rem;
+      }
+
+      .docs h2 {
+        margin: 2rem 0 0.75rem;
+        font-size: 1.35rem;
+      }
+
+      .docs h3,
+      .docs h4 {
+        margin: 1.5rem 0 0.5rem;
+      }
+
+      .docs p,
+      .docs ul,
+      .docs ol,
+      .docs table {
+        margin: 0 0 1rem;
+      }
+
+      .docs a {
+        color: inherit;
+      }
+
+      .docs img {
+        display: block;
+        max-width: 100%;
+        height: auto;
+        margin: 1rem auto;
+      }
+
+      .docs pre {
+        overflow-x: auto;
+        padding: 0.9rem 1rem;
+        border-radius: 0.75rem;
+        background: rgba(0, 0, 0, 0.06);
+      }
+
+      html[data-theme="dark"] .docs pre {
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      .docs code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.9em;
+      }
+
+      .docs :not(pre) > code {
+        padding: 0.12em 0.35em;
+        border-radius: 0.35em;
+        background: rgba(0, 0, 0, 0.06);
+      }
+
+      html[data-theme="dark"] .docs :not(pre) > code {
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .docs table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.95rem;
+      }
+
+      .docs th,
+      .docs td {
+        padding: 0.55rem 0.65rem;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      html[data-theme="dark"] .docs th,
+      html[data-theme="dark"] .docs td {
+        border-color: rgba(255, 255, 255, 0.14);
+      }
+
+      .docs hr {
+        margin: 2rem 0;
+        border: 0;
+        border-top: 1px solid rgba(0, 0, 0, 0.12);
+      }
+
+      html[data-theme="dark"] .docs hr {
+        border-top-color: rgba(255, 255, 255, 0.14);
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="site-nav" aria-label="Site">
+      <ul class="site-menu">
+        <li>
+          <a href="/">Home</a>
+        </li>
+        <li>
+          <a href="/docs" aria-current="page">Docs</a>
+        </li>
+      </ul>
+      <button
+        class="theme-toggle"
+        type="button"
+        aria-label="Switch to dark mode"
+        title="Switch to dark mode"
+      >
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M21 14.3A8.5 8.5 0 0 1 9.7 3 7 7 0 1 0 21 14.3Z"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.8" />
+          <path
+            d="M12 2.5v2.2M12 19.3v2.2M4.7 4.7l1.6 1.6M17.7 17.7l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.7 19.3l1.6-1.6M17.7 6.3l1.6-1.6"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+          />
+        </svg>
+      </button>
+    </nav>
+
+    <article class="docs" set:html={readmeHtml} />
+
+    <script is:inline>
+      (() => {
+        const root = document.documentElement;
+        const button = document.querySelector(".theme-toggle");
+
+        function applyTheme(theme) {
+          root.dataset.theme = theme;
+          if (button instanceof HTMLButtonElement) {
+            const next = theme === "dark" ? "light" : "dark";
+            button.setAttribute("aria-label", `Switch to ${next} mode`);
+            button.title = `Switch to ${next} mode`;
+          }
+        }
+
+        applyTheme(root.dataset.theme === "dark" ? "dark" : "light");
+
+        button?.addEventListener("click", () => {
+          const next = root.dataset.theme === "dark" ? "light" : "dark";
+          localStorage.setItem("theme", next);
+          applyTheme(next);
+        });
+      })();
+    </script>
+  </body>
+</html>

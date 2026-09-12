@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/inbase-logo-white.png" />
-    <img src="docs/inbase-logo.png" alt="InBase. Dive into your codebase" width="520" />
+    <img src="docs/inbase-logo.png" alt="InBase. Dive into your codebase" width="268" />
   </picture>
 </p>
 
