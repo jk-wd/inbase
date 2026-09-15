@@ -419,31 +419,17 @@ export function withUserCreatedLayout(
       nextIndex.get(block.folder) ??
       baseFileCountInFolder(withIslands, block.folder)
     nextIndex.set(block.folder, index + 1)
-    const spot =
-      block.x != null && block.z != null
-        ? { x: block.x, z: block.z }
-        : (defaultBlockSpot(withIslands, block.folder, index) ?? {
-            x: 0,
-            z: 0,
-          })
-    let x = spot.x
-    const z = spot.z
-    const candidate: PlacedFile = {
+    files[block.id] = placeCreatedFile({
       id: block.id,
-      position: [x, height / 2, z],
-      size: [CONFIG.fileWidth, height, CONFIG.fileDepth],
-      aisleFace: folder && x >= folder.x ? -1 : 1,
-    }
-    const occupied = mapOccupancy(withIslands, {}, files, undefined, block.id)
-    for (let step = 0; step < 40; step += 1) {
-      const rect = fileOccupancy(candidate)
-      const hit = occupied.find((other) => occupancyOverlaps(rect, other))
-      if (!hit) break
-      x = hit.right + CONFIG.siblingGap + CONFIG.fileWidth / 2
-      candidate.position = [x, candidate.position[1], candidate.position[2]]
-      candidate.aisleFace = folder && x >= folder.x ? -1 : 1
-    }
-    files[block.id] = candidate
+      folder,
+      preferred:
+        block.x != null && block.z != null
+          ? { x: block.x, z: block.z }
+          : null,
+      startIndex: index,
+      y: height / 2,
+      occupied: filesOccupancy([withIslands.files, files], block.id),
+    })
   }
   return { ...withIslands, files }
 }
@@ -503,6 +489,80 @@ function occupancyOverlaps(left: OccupiedRect, right: OccupiedRect) {
     left.top < right.bottom &&
     left.bottom > right.top
   )
+}
+
+function fileOverlapsAny(file: PlacedFile, occupied: OccupiedRect[]) {
+  const rect = fileOccupancy(file)
+  return occupied.some((other) => occupancyOverlaps(rect, other))
+}
+
+function fileFitsInFolder(file: PlacedFile, folder: PlacedFolder) {
+  const rect = fileOccupancy(file)
+  const area = folderOccupancy(folder)
+  return (
+    rect.left >= area.left - 1e-4 &&
+    rect.right <= area.right + 1e-4 &&
+    rect.top >= area.top - 1e-4 &&
+    rect.bottom <= area.bottom + 1e-4
+  )
+}
+
+function filesOccupancy(
+  groups: Record<string, PlacedFile>[],
+  skipFileId?: string,
+) {
+  const rects: OccupiedRect[] = []
+  for (const group of groups) {
+    for (const file of Object.values(group)) {
+      if (file.id === skipFileId) continue
+      rects.push(fileOccupancy(file))
+    }
+  }
+  return rects
+}
+
+function aisleSpotOnFolder(folder: PlacedFolder, fileIndex: number) {
+  const side: 1 | -1 = fileIndex % 2 === 0 ? -1 : 1
+  const row = Math.floor(fileIndex / 2)
+  return {
+    x: folder.x + side * (CONFIG.aisleWidth / 2 + CONFIG.fileWidth / 2 + 0.7),
+    z: folder.z + CONFIG.areaPadding + row * CONFIG.fileSpacing,
+  }
+}
+
+function placeCreatedFile(opts: {
+  id: string
+  folder?: PlacedFolder
+  preferred?: { x: number; z: number } | null
+  startIndex: number
+  y: number
+  occupied: OccupiedRect[]
+}): PlacedFile {
+  const height = fileHeight(12)
+  const make = (x: number, z: number): PlacedFile => ({
+    id: opts.id,
+    position: [x, opts.y, z],
+    size: [CONFIG.fileWidth, height, CONFIG.fileDepth],
+    aisleFace: opts.folder && x >= opts.folder.x ? -1 : 1,
+  })
+  const usable = (candidate: PlacedFile) => {
+    if (opts.folder && !fileFitsInFolder(candidate, opts.folder)) return false
+    return !fileOverlapsAny(candidate, opts.occupied)
+  }
+  if (opts.preferred) {
+    const candidate = make(opts.preferred.x, opts.preferred.z)
+    if (usable(candidate)) return candidate
+  }
+  if (opts.folder) {
+    for (let index = opts.startIndex; index < opts.startIndex + 48; index += 1) {
+      const spot = aisleSpotOnFolder(opts.folder, index)
+      const candidate = make(spot.x, spot.z)
+      if (usable(candidate)) return candidate
+    }
+    const fallback = aisleSpotOnFolder(opts.folder, opts.startIndex)
+    return make(fallback.x, fallback.z)
+  }
+  return make(opts.preferred?.x ?? 0, opts.preferred?.z ?? 0)
 }
 
 function mapOccupancy(
@@ -788,25 +848,20 @@ function placeOverlayBlocks(
     nextIndex.set(folderPath, index + 1)
     const spot = folder
       ? defaultBlockSpot(foldersForSpot, folderPath, index)
-      : { x: block.x ?? 0, z: block.z ?? 0, folder: folderPath }
-    let x = spot?.x ?? block.x ?? 0
-    const z = spot?.z ?? block.z ?? 0
-    const candidate: PlacedFile = {
+      : null
+    files[block.id] = placeCreatedFile({
       id: block.id,
-      position: [x, fileLift + height / 2, z],
-      size: [CONFIG.fileWidth, height, CONFIG.fileDepth],
-      aisleFace: folder && x >= folder.x ? -1 : 1,
-    }
-    const occupied = mapOccupancy(base, overlayFolders, files, undefined, block.id)
-    for (let step = 0; step < 40; step += 1) {
-      const rect = fileOccupancy(candidate)
-      const hit = occupied.find((other) => occupancyOverlaps(rect, other))
-      if (!hit) break
-      x = hit.right + CONFIG.siblingGap + CONFIG.fileWidth / 2
-      candidate.position = [x, candidate.position[1], candidate.position[2]]
-      candidate.aisleFace = folder && x >= folder.x ? -1 : 1
-    }
-    files[block.id] = candidate
+      folder,
+      preferred:
+        block.x != null && block.z != null
+          ? { x: block.x, z: block.z }
+          : spot
+            ? { x: spot.x, z: spot.z }
+            : { x: 0, z: 0 },
+      startIndex: index,
+      y: fileLift + height / 2,
+      occupied: filesOccupancy([base.files, files], block.id),
+    })
   }
   return { files, filledIds }
 }
@@ -901,13 +956,8 @@ export function defaultBlockSpot(
 ): { x: number; z: number; folder: string } | null {
   const folder = layout.folders[folderPath]
   if (!folder) return null
-  const side: 1 | -1 = fileIndex % 2 === 0 ? -1 : 1
-  const row = Math.floor(fileIndex / 2)
-  return {
-    x: folder.x + side * (CONFIG.aisleWidth / 2 + CONFIG.fileWidth / 2 + 0.7),
-    z: folder.z + CONFIG.areaPadding + row * CONFIG.fileSpacing,
-    folder: folderPath,
-  }
+  const spot = aisleSpotOnFolder(folder, fileIndex)
+  return { ...spot, folder: folderPath }
 }
 
 export function isBlueprintSymbolName(value: string) {
