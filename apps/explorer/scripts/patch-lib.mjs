@@ -525,6 +525,7 @@ export const emptyIntent = {
   addedImports: [],
   changedFunctions: [],
   changedVariables: [],
+  changeNotes: {},
   reason: null,
   sessionId: null,
   diffId: null,

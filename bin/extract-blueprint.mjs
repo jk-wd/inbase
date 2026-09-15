@@ -191,7 +191,7 @@ function normalizeNote(item) {
   const note = typeof item.note === 'string' ? item.note.trim() : ''
   const kind = item.kind
   if (!file || !note) return null
-  if (kind === 'file') return { file, kind: 'file', note }
+  if (kind == null || kind === 'file') return { file, kind: 'file', note }
   if (kind !== 'function' && kind !== 'variable') return null
   const name = typeof item.name === 'string' ? item.name.trim() : ''
   if (!name) return null

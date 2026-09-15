@@ -19,7 +19,6 @@ import {
   type BlueprintPointerKind,
   type BranchChanges,
   type CodebaseGraph,
-  type ExplainTargetKind,
   type PatchImportAddition,
   type PatchSymbolAddition,
   type LoadBlueprintInput,
@@ -32,8 +31,12 @@ import {
 } from '../types'
 import { findBlueprintNote, findBlueprintPointer } from '../userCreated'
 import type { BlueprintOverlayLayer } from '../userCreated'
-import { fileInfoMeta, folderOfFile, folderParent } from '../layout'
-import { ColorPageIcon, EyeIcon, FileIcon, FolderIcon, PanelToggleIcon } from './EyeIcon'
+import { folderOfFile, folderParent } from '../layout'
+import {
+  llmChangeNoteForPath,
+  overlayPathChangeKind,
+} from '../../scripts/change-notes.mjs'
+import { ColorPageIcon, EyeIcon, FileIcon, FolderIcon, MenuIcon, PanelToggleIcon } from './EyeIcon'
 import { WalkDrop } from './WalkDrop'
 import { beginKeyboardIsolation, shouldIgnoreShortcut } from '../keyboard'
 import type { DevTargetsState } from '../devTargets'
@@ -495,9 +498,11 @@ function PointColorControl({
         aria-label={compact ? (pointed ? pointedLabel : idleLabel) : undefined}
         disabled={disabled}
         style={
-          {
-            '--session-color': currentHex,
-          } as CSSProperties
+          compact
+            ? undefined
+            : ({
+                '--session-color': currentHex,
+              } as CSSProperties)
         }
         onClick={() => {
           if (!showMenu || disabled) return
@@ -670,6 +675,29 @@ function PatchSymbolChanges({
   )
 }
 
+function LlmChangeNote({
+  colorName,
+  colorHex,
+  note,
+}: {
+  colorName: string
+  colorHex?: string | null
+  note: string
+}) {
+  if (!note) return null
+  return (
+    <p className="hud-llm-note">
+      <span
+        className="hud-llm-note-session"
+        style={colorHex ? { color: colorHex } : undefined}
+      >
+        ({colorName})
+      </span>
+      <span className="hud-llm-note-body">{note}</span>
+    </p>
+  )
+}
+
 function AddIntentRow({
   placeholder,
   onAdd,
@@ -816,7 +844,6 @@ function BlueprintSymbolRow({
   canRemove,
   onRemove,
   onOpenNote,
-  onExplain,
   pointerTarget,
   colorPointers,
   currentColorId,
@@ -830,7 +857,6 @@ function BlueprintSymbolRow({
   canRemove?: boolean
   onRemove?: () => void
   onOpenNote: () => void
-  onExplain?: () => void
   pointerTarget?: {
     kind: BlueprintPointerKind
     path: string
@@ -840,54 +866,49 @@ function BlueprintSymbolRow({
   currentColorId?: string | null
   onTogglePoint?: (color?: string) => void
 }) {
-  const showActions = Boolean(onExplain) || canEdit
+  if (!canEdit) {
+    return (
+      <li>
+        <span className={className}>{name}</span>
+      </li>
+    )
+  }
   return (
     <li>
       <span className={className}>{name}</span>
-      {showActions && (
-        <div className="hud-item-actions">
-          {onExplain ? (
-            <ExplainButton
-              compact
-              label={`Explain ${name}`}
-              onClick={onExplain}
-            />
-          ) : null}
-          {canEdit && onTogglePoint && pointerTarget && (
-            <PointColorControl
-              compact
-              target={pointerTarget}
-              colorPointers={colorPointers}
-              currentColorId={currentColorId}
-              idleLabel={`Point to ${name}`}
-              pointedLabel={`Stop pointing to ${name}`}
-              onToggle={onTogglePoint}
-            />
-          )}
-          {canEdit && (
-            <button
-              className="hud-item-note"
-              type="button"
-              data-has-note={hasNote ? 'true' : 'false'}
-              data-open={noteOpen ? 'true' : 'false'}
-              aria-label={`Edit note for ${name}`}
-              onClick={onOpenNote}
-            >
-              Note
-            </button>
-          )}
-          {canEdit && canRemove && (
-            <button
-              className="hud-item-remove"
-              type="button"
-              aria-label={`Remove ${name}`}
-              onClick={onRemove}
-            >
-              ×
-            </button>
-          )}
-        </div>
-      )}
+      <div className="hud-item-actions">
+        {onTogglePoint && pointerTarget && (
+          <PointColorControl
+            compact
+            target={pointerTarget}
+            colorPointers={colorPointers}
+            currentColorId={currentColorId}
+            idleLabel={`Point to ${name}`}
+            pointedLabel={`Stop pointing to ${name}`}
+            onToggle={onTogglePoint}
+          />
+        )}
+        <button
+          className="hud-item-note"
+          type="button"
+          data-has-note={hasNote ? 'true' : 'false'}
+          data-open={noteOpen ? 'true' : 'false'}
+          aria-label={`Edit note for ${name}`}
+          onClick={onOpenNote}
+        >
+          Note
+        </button>
+        {canRemove && (
+          <button
+            className="hud-item-remove"
+            type="button"
+            aria-label={`Remove ${name}`}
+            onClick={onRemove}
+          >
+            ×
+          </button>
+        )}
+      </div>
     </li>
   )
 }
@@ -905,47 +926,54 @@ function AttachStateBadge({ attached }: { attached: boolean }) {
   )
 }
 
-function ExplainButton({
-  label,
-  onClick,
-  compact = false,
-}: {
-  label: string
-  onClick: () => void
-  compact?: boolean
-}) {
-  return (
-    <button
-      className={
-        compact
-          ? 'hud-explain-button hud-explain-inline'
-          : 'hud-explain-button'
-      }
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={(event) => {
-        event.stopPropagation()
-        onClick()
-      }}
-    >
-      ?
-    </button>
-  )
-}
-
 function InfoKindTitle({
   kind,
   children,
+  onOpen,
+  openLabel,
 }: {
   kind: 'file' | 'folder'
   children: ReactNode
+  onOpen?: () => void
+  openLabel?: string
 }) {
+  const icon = kind === 'folder' ? <FolderIcon /> : <FileIcon />
+  if (!onOpen) {
+    return (
+      <span className="hud-info-kind-title">
+        {icon}
+        {children}
+      </span>
+    )
+  }
+  const label = openLabel ?? (typeof children === 'string' ? children : 'file')
+  if (typeof children !== 'string') {
+    return (
+      <span className="hud-info-kind-title">
+        <button
+          type="button"
+          className="hud-info-open-title"
+          onClick={onOpen}
+          title={`Open ${label}`}
+          aria-label={`Open ${label}`}
+        >
+          {icon}
+        </button>
+        {children}
+      </span>
+    )
+  }
   return (
-    <span className="hud-info-kind-title">
-      {kind === 'folder' ? <FolderIcon /> : <FileIcon />}
+    <button
+      type="button"
+      className="hud-info-kind-title hud-info-open-title"
+      onClick={onOpen}
+      title={`Open ${label}`}
+      aria-label={`Open ${label}`}
+    >
+      {icon}
       {children}
-    </span>
+    </button>
   )
 }
 
@@ -990,38 +1018,247 @@ function PanelControlMark({ kind }: { kind: 'minus' | 'plus' }) {
   return <span className="hud-panel-control-mark" data-kind={kind} aria-hidden="true" />
 }
 
+type InfoMenuItem = {
+  key: string
+  label: string
+  disabled?: boolean
+  active?: boolean
+  onClick: () => void
+}
+
+function InfoActionsMenu({ items }: { items: InfoMenuItem[] }) {
+  const triggerRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false)
+
+  useLayoutEffect(() => {
+    if (!open) return
+    const place = () => {
+      const trigger = triggerRef.current
+      const menu = menuRef.current
+      if (!trigger || !menu) return
+      const rect = trigger.getBoundingClientRect()
+      const width = Math.max(rect.width, 188)
+      menu.style.maxHeight = 'none'
+      const { top, left, maxHeight } = placeAnchoredMenu(
+        rect,
+        menu.offsetHeight,
+        width,
+        true,
+      )
+      menu.style.top = `${top}px`
+      menu.style.left = `${left}px`
+      menu.style.width = `${width}px`
+      menu.style.maxHeight = `${maxHeight}px`
+      menu.style.visibility = 'visible'
+    }
+    place()
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    return () => {
+      window.removeEventListener('resize', place)
+      window.removeEventListener('scroll', place, true)
+    }
+  }, [open, items.length])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code !== 'Escape') return
+      if (shouldIgnoreShortcut(event)) return
+      event.preventDefault()
+      setOpen(false)
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const node = event.target
+      if (
+        node instanceof Element &&
+        (triggerRef.current?.contains(node) ||
+          menuRef.current?.contains(node) ||
+          node.closest('.hud-info-menu-list'))
+      ) {
+        return
+      }
+      setOpen(false)
+    }
+    window.addEventListener('keydown', onKey, true)
+    window.addEventListener('pointerdown', onPointerDown, true)
+    return () => {
+      window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('pointerdown', onPointerDown, true)
+    }
+  }, [open])
+
+  if (items.length === 0) return null
+
+  return (
+    <div ref={triggerRef} className="hud-info-menu">
+      <button
+        className="hud-button hud-icon-button hud-panel-control"
+        type="button"
+        aria-label="Info actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        data-active={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <MenuIcon size={16} />
+      </button>
+      {open &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className="hud-actions-menu-list hud-info-menu-list"
+            role="menu"
+          >
+            {items.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                role="menuitem"
+                disabled={item.disabled}
+                data-active={item.active ? 'true' : undefined}
+                onClick={() => {
+                  if (item.disabled) return
+                  setOpen(false)
+                  item.onClick()
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </div>
+  )
+}
+
+function pointerMenuItem(
+  target: { kind: 'file' | 'folder'; path: string },
+  colorPointers: BlueprintColorOption[],
+  onOpen: () => void,
+  disabled = false,
+): InfoMenuItem[] {
+  if (colorPointers.length === 0) return []
+  const pointed = colorPointers.some((option) => optionPointed(option, target))
+  return [
+    {
+      key: 'point',
+      label: `Point to ${target.kind}`,
+      active: pointed,
+      disabled,
+      onClick: onOpen,
+    },
+  ]
+}
+
+function BlueprintPointModal({
+  title,
+  subtitle,
+  target,
+  colorPointers,
+  onToggle,
+  onClose,
+}: {
+  title: string
+  subtitle: string
+  target: { kind: BlueprintPointerKind; path: string; name?: string }
+  colorPointers: BlueprintColorOption[]
+  onToggle: (color?: string) => void
+  onClose: () => void
+}) {
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
+  useEffect(() => {
+    const release = beginKeyboardIsolation()
+    document.exitPointerLock()
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== 'Escape') return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      onCloseRef.current()
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+      release()
+    }
+  }, [])
+
+  return (
+    <div className="hud-note-overlay" onClick={onClose}>
+      <div
+        className="hud-blueprint-file-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="hud-point-picker-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="hud-note-header">
+          <div className="hud-note-heading">
+            <h1 id="hud-point-picker-title">{title}</h1>
+            <p className="hud-note-subtitle">{subtitle}</p>
+          </div>
+          <button className="hud-button" type="button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <ul className="hud-point-picker-list">
+          {colorPointers.map((option) => {
+            const pointed = optionPointed(option, target)
+            return (
+              <li key={option.id}>
+                <button
+                  className="hud-button hud-point-picker-item"
+                  type="button"
+                  data-pointed={pointed ? 'true' : 'false'}
+                  aria-pressed={pointed}
+                  style={
+                    {
+                      '--session-color': option.hex,
+                    } as CSSProperties
+                  }
+                  onClick={() => onToggle(option.id)}
+                >
+                  <EyeIcon size={15} />
+                  <span>{option.kind === 'global' ? 'Global' : option.name}</span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+    </div>
+  )
+}
+
 function PanelChrome({
   title,
   subtitle,
   badge,
+  menu,
   minimized = false,
   onMinimize,
   onClose,
-  onExplain,
-  explainLabel,
 }: {
   title: ReactNode
   subtitle?: ReactNode
   badge?: ReactNode
+  menu?: ReactNode
   minimized?: boolean
   onMinimize?: () => void
   onClose?: () => void
-  onExplain?: () => void
-  explainLabel?: string
 }) {
   return (
     <div className="hud-panel-chrome">
       <div className="hud-panel-chrome-top">
         <div className="hud-panel-chrome-title">
           {title}
-          {onExplain ? (
-            <ExplainButton
-              label={explainLabel ?? 'Explain'}
-              onClick={onExplain}
-            />
-          ) : null}
         </div>
         <div className="hud-panel-controls">
+          {menu}
           {badge}
           {onMinimize && (
             <button
@@ -1345,6 +1582,11 @@ function SessionPanel({
       data-minimized={minimized}
       data-focused={focused}
       data-attached={llmConnected && !llmDisconnected}
+      style={
+        intent.colorHex
+          ? ({ '--session-color': intent.colorHex } as CSSProperties)
+          : undefined
+      }
       onPointerDown={(event) => {
         const target = event.target
         if (
@@ -1854,7 +2096,7 @@ function explorerInstructions({
           id: 'cursor-chat',
           keys: ['Chat'],
           label:
-            'Connects to the next empty session, or a color command for that slot; Done in the session window, /explainit /stop; 10 chats at once',
+            'Connects to the next empty session, or a color command for that slot; Done in the session window, /explainit /stop; one chat per color',
         },
         {
           id: 'blueprint-select',
@@ -1981,7 +2223,7 @@ function explorerInstructions({
           id: 'cursor-chat',
           keys: ['Chat'],
           label:
-            'Connects to the next empty session, or a color command for that slot; Done in the session window, /explainit /stop; 10 chats at once',
+            'Connects to the next empty session, or a color command for that slot; Done in the session window, /explainit /stop; one chat per color',
         },
         {
           id: 'blueprint-select',
@@ -2120,11 +2362,6 @@ type HUDProps = {
   onRenameCreatedFile?: (fileId: string, name: string) => string | null
   onInspectFile?: (fileId: string) => void
   onInspectBlock?: (fileId: string) => void
-  onExplainTarget?: (input: {
-    kind: ExplainTargetKind
-    path: string
-    name?: string
-  }) => void
   blueprintOpacity?: number
   onBlueprintOpacityChange?: (opacity: number) => void
   blueprintHasContent?: boolean
@@ -2216,7 +2453,6 @@ export function HUD({
   onRenameCreatedFile,
   onInspectFile,
   onInspectBlock,
-  onExplainTarget,
   blueprintOpacity = 0.55,
   onBlueprintOpacityChange,
   blueprintHasContent = false,
@@ -2361,6 +2597,12 @@ export function HUD({
     subtitle: string
     placeholder: string
   } | null>(null)
+  const [pointPicker, setPointPicker] = useState<{
+    kind: 'file' | 'folder'
+    path: string
+    title: string
+    subtitle: string
+  } | null>(null)
   const [blueprintFileDialog, setBlueprintFileDialog] = useState<
     null | 'save' | 'save-as' | 'load'
   >(null)
@@ -2436,6 +2678,32 @@ export function HUD({
         : intent
   const previewing =
     !hideChanges && (intent.preview || showBranchChanges)
+  const llmChangeOverlay =
+    !hideChanges && !showBranchChanges && previewing ? overlay : null
+  const llmChangeReason = intent.reason || intent.feature || ''
+  const llmChangeColor = intent.colorName?.trim() || 'LLM'
+  const selectedFileChangeKind = selected && llmChangeOverlay
+    ? overlayPathChangeKind(llmChangeOverlay, selected.id)
+    : null
+  const selectedFileLlmNote =
+    selected && selectedFileChangeKind && llmChangeOverlay
+      ? llmChangeNoteForPath(llmChangeOverlay, selected.id, {
+          reason: llmChangeReason,
+        })
+      : ''
+  const selectedFolderPath =
+    selectedFolderNode?.path ?? selectedFolder ?? ''
+  const selectedFolderChangeKind =
+    !selected && selectedFolderPath && llmChangeOverlay
+      ? overlayPathChangeKind(llmChangeOverlay, selectedFolderPath, true)
+      : null
+  const selectedFolderLlmNote =
+    selectedFolderChangeKind && llmChangeOverlay
+      ? llmChangeNoteForPath(llmChangeOverlay, selectedFolderPath, {
+          folder: true,
+          reason: llmChangeReason,
+        })
+      : ''
   const addedFunctions = overlay.addedFunctions ?? []
   const addedVariables = overlay.addedVariables ?? []
   const addedImports = overlay.addedImports ?? []
@@ -2519,9 +2787,11 @@ export function HUD({
   const selectedFileNote = selected
     ? findBlueprintNote(blueprintNotes, selected.id, 'file')
     : ''
+  const folderPath = selectedFolderNode?.path ?? selectedFolder ?? ''
   const openFileNote = () => {
     if (!selected || !onSetBlueprintNote) return
     setInstructionsOpen(false)
+    setPointPicker(null)
     setNoteEditor({
       file: selected.id,
       kind: 'file',
@@ -2530,12 +2800,35 @@ export function HUD({
       placeholder: 'Extra instructions or pseudo code for this file',
     })
   }
+  const openFilePointer = () => {
+    if (!selected || !onToggleBlueprintPointer) return
+    setInstructionsOpen(false)
+    setNoteEditor(null)
+    setPointPicker({
+      kind: 'file',
+      path: selected.id,
+      title: 'Point to file',
+      subtitle: selected.path,
+    })
+  }
+  const openFolderPointer = () => {
+    if (!folderPath || !onToggleBlueprintPointer) return
+    setInstructionsOpen(false)
+    setNoteEditor(null)
+    setPointPicker({
+      kind: 'folder',
+      path: folderPath,
+      title: 'Point to folder',
+      subtitle: folderPath,
+    })
+  }
   const openSymbolNote = (
     kind: 'function' | 'variable',
     name: string,
   ) => {
     if (!selected || !onSetBlueprintNote) return
     setInstructionsOpen(false)
+    setPointPicker(null)
     setNoteEditor({
       file: selected.id,
       kind,
@@ -2550,9 +2843,81 @@ export function HUD({
     !fileId.startsWith('draft:') &&
     !(previewing && (intent.deletes ?? []).includes(fileId)) &&
     (!userCreated || (intent.creates ?? []).includes(fileId))
+  const selectedFileMenuItems: InfoMenuItem[] = selected
+    ? [
+        ...(canInspectFile(selected.id, selected.userCreated)
+          ? [
+              {
+                key: 'inspect',
+                label: 'Inspect file',
+                onClick: () => onInspectFile?.(selected.id),
+              },
+            ]
+          : []),
+        ...(canEditBlueprint && onToggleBlueprintPointer
+          ? pointerMenuItem(
+              { kind: 'file', path: selected.id },
+              blueprintColorPointers,
+              openFilePointer,
+            )
+          : []),
+        ...(canEditBlueprint && onSetBlueprintNote
+          ? [
+              {
+                key: 'note',
+                label: selectedFileNote ? 'Edit file note' : 'Add file note',
+                active:
+                  noteEditor?.kind === 'file' && noteEditor.file === selected.id,
+                onClick: openFileNote,
+              },
+            ]
+          : []),
+      ]
+      : []
+  const selectedFolderMenuItems: InfoMenuItem[] =
+    !selected && (selectedFolderNode || selectedBlueprintFolder)
+      ? [
+          ...(canPlace && onToggleBlueprintPointer && folderPath
+            ? pointerMenuItem(
+                { kind: 'folder', path: folderPath },
+                blueprintColorPointers,
+                openFolderPointer,
+                naming || folderPath.startsWith('draft:'),
+              )
+            : []),
+          ...(canPlace && mapping && onMapAddFile && onMapAddFolder && selectedFolder
+            ? [
+                {
+                  key: 'add-file',
+                  label: 'Add file',
+                  disabled: naming,
+                  onClick: () =>
+                    onMapAddFile(
+                      selectedFolderNode?.path ?? selectedFolder,
+                      selectedFolderLayer ?? undefined,
+                    ),
+                },
+                {
+                  key: 'add-folder',
+                  label: 'Add folder',
+                  disabled: naming,
+                  onClick: () =>
+                    onMapAddFolder(
+                      selectedFolderNode?.path ?? selectedFolder,
+                      selectedFolderLayer ?? undefined,
+                    ),
+                },
+              ]
+            : []),
+        ]
+      : []
 
   useEffect(() => {
     infoPanelRef.current?.scrollTo({ top: 0 })
+  }, [selectedId, selectedFolder, selectedFolderLayer])
+
+  useEffect(() => {
+    setPointPicker(null)
   }, [selectedId, selectedFolder, selectedFolderLayer])
 
   useEffect(() => {
@@ -2810,6 +3175,7 @@ export function HUD({
     setActionsMenuOpen(false)
     setInstructionsOpen(false)
     setNoteEditor(null)
+    setPointPicker(null)
     setBlueprintFileDialog(null)
   }, [explainMode])
 
@@ -2926,7 +3292,6 @@ export function HUD({
           )}
         </div>
         <div className="hud-top-end">
-          {selected && <div className="hud-chip">{selected.path}</div>}
           {devTargets?.enabled &&
             onSelectDevTarget &&
             devTargets.targets.length > 0 && (
@@ -3073,7 +3438,15 @@ export function HUD({
         >
           <PanelChrome
             title={
-              <InfoKindTitle kind="file">
+              <InfoKindTitle
+                kind="file"
+                openLabel={selected.name}
+                onOpen={
+                  canInspectFile(selected.id, selected.userCreated)
+                    ? () => onInspectFile?.(selected.id)
+                    : undefined
+                }
+              >
                 {canRenameSelected ? (
                   <InfoNameField
                     name={selected.name}
@@ -3084,60 +3457,41 @@ export function HUD({
                 )}
               </InfoKindTitle>
             }
+            subtitle={
+              selected.binary
+                ? `${selected.path} (binary)`
+                : `${selected.path} (${selected.lines} ${
+                    selected.lines === 1 ? 'line' : 'lines'
+                  })`
+            }
             minimized={infoMinimized}
             onMinimize={() => setInfoMinimized((current) => !current)}
-            onClose={() => {
-              setInfoVisible(false)
-              setInfoMinimized(false)
-            }}
+            menu={
+              <InfoActionsMenu
+                key={selected.id}
+                items={selectedFileMenuItems}
+              />
+            }
           />
           {!infoMinimized && (
             <div ref={infoPanelRef} className="hud-panel-body">
-          <p className="path">{selected.path}</p>
-          <p>{fileInfoMeta(selected)}</p>
-          {canInspectFile(selected.id, selected.userCreated) && (
-            <div className="hud-file-actions">
-              <button
-                className="hud-button hud-inspect"
-                type="button"
-                onClick={() => onInspectFile?.(selected.id)}
-              >
-                Inspect file
-              </button>
-            </div>
-          )}
-          {canEditBlueprint && onToggleBlueprintPointer && (
-            <PointColorControl
-              target={{ kind: 'file', path: selected.id }}
-              colorPointers={blueprintColorPointers}
-              currentColorId={blueprintColor}
-              idleLabel="Point to file"
-              pointedLabel="Stop pointing"
-              onToggle={(color) =>
-                onToggleBlueprintPointer({
-                  kind: 'file',
-                  path: selected.id,
-                  color,
-                })
-              }
-            />
-          )}
-          {canEditBlueprint && onSetBlueprintNote && (
-            <button
-              className="hud-button hud-inspect"
-              type="button"
-              data-has-note={selectedFileNote ? 'true' : 'false'}
-              data-open={
-                noteEditor?.kind === 'file' && noteEditor.file === selected.id
-                  ? 'true'
-                  : 'false'
-              }
-              onClick={openFileNote}
-            >
-              {selectedFileNote ? 'Edit file note' : 'Add file note'}
-            </button>
-          )}
           {previewing &&
+          selectedFileChangeKind &&
+          selectedFileLlmNote &&
+          !showBranchChanges ? (
+            <>
+              <div className="hud-section-title">
+                LLM changes
+              </div>
+              <LlmChangeNote
+                colorName={llmChangeColor}
+                colorHex={intent.colorHex}
+                note={selectedFileLlmNote}
+              />
+            </>
+          ) : null}
+          {previewing &&
+            showBranchChanges &&
             (selectedChangedFunctions.length > 0 ||
               selectedAddedFunctions.length > 0 ||
               selectedChangedVariables.length > 0 ||
@@ -3145,7 +3499,7 @@ export function HUD({
               selectedAddedImports.length > 0) && (
               <>
                 <div className="hud-section-title hud-section-title-edit">
-                  {showBranchChanges ? 'Branch changes' : 'LLM changes'}
+                  Branch changes
                 </div>
                 <PatchSymbolChanges
                   title="Functions"
@@ -3178,21 +3532,6 @@ export function HUD({
                     >
                       {symbol.name}
                     </span>
-                    {onExplainTarget ? (
-                      <div className="hud-item-actions">
-                        <ExplainButton
-                          compact
-                          label={`Explain ${symbol.name}`}
-                          onClick={() =>
-                            onExplainTarget({
-                              kind: 'class',
-                              path: selected.id,
-                              name: symbol.name,
-                            })
-                          }
-                        />
-                      </div>
-                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -3241,16 +3580,6 @@ export function HUD({
                     onRemoveBlueprintFunction?.(selected.id, symbol.name)
                   }
                   onOpenNote={() => openSymbolNote('function', symbol.name)}
-                  onExplain={
-                    onExplainTarget
-                      ? () =>
-                          onExplainTarget({
-                            kind: 'function',
-                            path: selected.id,
-                            name: symbol.name,
-                          })
-                      : undefined
-                  }
                   onTogglePoint={
                     onToggleBlueprintPointer
                       ? (color) =>
@@ -3291,16 +3620,6 @@ export function HUD({
                   colorPointers={blueprintColorPointers}
                   currentColorId={blueprintColor}
                   onOpenNote={() => openSymbolNote('function', item.name)}
-                  onExplain={
-                    onExplainTarget
-                      ? () =>
-                          onExplainTarget({
-                            kind: 'function',
-                            path: selected.id,
-                            name: item.name,
-                          })
-                      : undefined
-                  }
                   onTogglePoint={
                     onToggleBlueprintPointer
                       ? (color) =>
@@ -3363,16 +3682,6 @@ export function HUD({
                     onRemoveBlueprintVariable?.(selected.id, symbol.name)
                   }
                   onOpenNote={() => openSymbolNote('variable', symbol.name)}
-                  onExplain={
-                    onExplainTarget
-                      ? () =>
-                          onExplainTarget({
-                            kind: 'variable',
-                            path: selected.id,
-                            name: symbol.name,
-                          })
-                      : undefined
-                  }
                   onTogglePoint={
                     onToggleBlueprintPointer
                       ? (color) =>
@@ -3413,16 +3722,6 @@ export function HUD({
                   colorPointers={blueprintColorPointers}
                   currentColorId={blueprintColor}
                   onOpenNote={() => openSymbolNote('variable', item.name)}
-                  onExplain={
-                    onExplainTarget
-                      ? () =>
-                          onExplainTarget({
-                            kind: 'variable',
-                            path: selected.id,
-                            name: item.name,
-                          })
-                      : undefined
-                  }
                   onTogglePoint={
                     onToggleBlueprintPointer
                       ? (color) =>
@@ -3572,46 +3871,43 @@ export function HUD({
               <InfoKindTitle kind="folder">{folderInfoName}</InfoKindTitle>
             }
             subtitle={
-              selectedBlueprintLayer
-                ? `${blueprintOptionName ?? 'Blueprint'} template`
-                : undefined
+              <>
+                {(selectedFolderNode?.path ?? selectedFolder) === '.'
+                  ? graph.targetName
+                  : (selectedFolderNode?.path ?? selectedFolder)}
+                {selectedBlueprintLayer
+                  ? ` · ${blueprintOptionName ?? 'Blueprint'} template`
+                  : ''}
+              </>
             }
             minimized={infoMinimized}
             onMinimize={() => setInfoMinimized((current) => !current)}
-            onClose={() => {
-              setInfoVisible(false)
-              setInfoMinimized(false)
-            }}
-            onExplain={
-              onExplainTarget && selectedFolderNode
-                ? () =>
-                    onExplainTarget({
-                      kind: 'folder',
-                      path: selectedFolderNode.path,
-                    })
-                : undefined
+            menu={
+              <InfoActionsMenu
+                key={folderPath || 'folder'}
+                items={selectedFolderMenuItems}
+              />
             }
-            explainLabel={`Explain ${folderInfoName}`}
           />
           {!infoMinimized && (
             <div ref={infoPanelRef} className="hud-panel-body">
-          <p className="path">
-            {(selectedFolderNode?.path ?? selectedFolder) === '.'
-              ? graph.targetName
-              : (selectedFolderNode?.path ?? selectedFolder)}
-          </p>
-          <p>
-            {folderFiles.length} {folderFiles.length === 1 ? 'file' : 'files'}
-            {selectedBlueprintLayer ? ' on this blueprint' : ''}
-            {folderChildren.length > 0
-              ? ` · ${folderChildren.length} ${
-                  folderChildren.length === 1 ? 'folder' : 'folders'
-                }`
-              : ''}
-          </p>
+          {selectedFolderChangeKind && selectedFolderLlmNote ? (
+            <>
+              <div className="hud-section-title">
+                LLM changes
+              </div>
+              <LlmChangeNote
+                colorName={llmChangeColor}
+                colorHex={intent.colorHex}
+                note={selectedFolderLlmNote}
+              />
+            </>
+          ) : null}
           {folderChildren.length > 0 && (
             <>
-              <div className="hud-section-title">Folders</div>
+              <div className="hud-section-title">
+                Folders ({folderChildren.length})
+              </div>
               <ul>
                 {folderChildren.map((folder) => (
                   <li key={folder.path}>
@@ -3637,7 +3933,9 @@ export function HUD({
               </ul>
             </>
           )}
-          <div className="hud-section-title">Files</div>
+          <div className="hud-section-title">
+            Files ({folderFiles.length})
+          </div>
           {folderFiles.length === 0 ? (
             <p>
               {selectedBlueprintLayer
@@ -3671,66 +3969,28 @@ export function HUD({
               ))}
             </ul>
           )}
-          {canPlace && onToggleBlueprintPointer && (selectedFolderNode || selectedFolder) && (
-            <PointColorControl
-              target={{
-                kind: 'folder',
-                path: selectedFolderNode?.path ?? selectedFolder ?? '',
-              }}
-              colorPointers={blueprintColorPointers}
-              currentColorId={blueprintColor}
-              idleLabel="Point to folder"
-              pointedLabel="Stop pointing"
-              disabled={
-                naming ||
-                (selectedFolderNode?.path ?? selectedFolder ?? '').startsWith(
-                  'draft:',
-                )
-              }
-              onToggle={(color) =>
-                onToggleBlueprintPointer({
-                  kind: 'folder',
-                  path: selectedFolderNode?.path ?? selectedFolder ?? '',
-                  color,
-                })
-              }
-            />
-          )}
-          {canPlace && mapping && onMapAddFile && onMapAddFolder && selectedFolder && (
-            <div className="hud-decide hud-map-blueprint">
-              <button
-                className="hud-button hud-button-approve"
-                type="button"
-                disabled={naming}
-                onClick={() =>
-                  onMapAddFile(
-                    selectedFolderNode?.path ?? selectedFolder,
-                    selectedFolderLayer ?? undefined,
-                  )
-                }
-              >
-                Add file
-              </button>
-              <button
-                className="hud-button"
-                type="button"
-                disabled={naming}
-                onClick={() =>
-                  onMapAddFolder(
-                    selectedFolderNode?.path ?? selectedFolder,
-                    selectedFolderLayer ?? undefined,
-                  )
-                }
-              >
-                Add folder
-              </button>
-            </div>
-          )}
             </div>
           )}
         </aside>
       )}
       </div>
+
+      {pointPicker && onToggleBlueprintPointer && (
+        <BlueprintPointModal
+          title={pointPicker.title}
+          subtitle={pointPicker.subtitle}
+          target={{ kind: pointPicker.kind, path: pointPicker.path }}
+          colorPointers={blueprintColorPointers}
+          onToggle={(color) =>
+            onToggleBlueprintPointer({
+              kind: pointPicker.kind,
+              path: pointPicker.path,
+              color,
+            })
+          }
+          onClose={() => setPointPicker(null)}
+        />
+      )}
 
       {noteEditor && onSetBlueprintNote && (
         <BlueprintNoteModal

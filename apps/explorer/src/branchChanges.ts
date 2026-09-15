@@ -19,6 +19,7 @@ export const emptyBranchChanges: BranchChanges = {
   addedImports: [],
   changedFunctions: [],
   changedVariables: [],
+  changeNotes: {},
 }
 
 function normalize(data: Partial<BranchChanges> | null | undefined): BranchChanges {
@@ -57,6 +58,10 @@ function normalize(data: Partial<BranchChanges> | null | undefined): BranchChang
     changedVariables: Array.isArray(data?.changedVariables)
       ? data.changedVariables
       : [],
+    changeNotes:
+      data?.changeNotes && typeof data.changeNotes === 'object'
+        ? data.changeNotes
+        : {},
   }
 }
 

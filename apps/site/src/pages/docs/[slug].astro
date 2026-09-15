@@ -1,0 +1,22 @@
+---
+import { createMarkdownProcessor } from "@astrojs/markdown-remark";
+import { DOC_PAGES, readDocSource } from "../../docPages";
+import DocsLayout from "../../layouts/DocsLayout.astro";
+
+export function getStaticPaths() {
+  return DOC_PAGES.slice(1).map((page) => ({ params: { slug: page.slug } }));
+}
+
+const slug = Astro.params.slug;
+const page = DOC_PAGES.find((item) => item.slug === slug);
+if (!page) {
+  throw new Error(`Unknown docs page: ${slug}`);
+}
+
+const processor = await createMarkdownProcessor();
+const { code } = await processor.render(readDocSource(page.file));
+---
+
+<DocsLayout currentSlug={page.slug} title={`${page.title} · Docs · Inbase`}>
+  <article class="docs" set:html={code} />
+</DocsLayout>

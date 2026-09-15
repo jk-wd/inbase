@@ -596,7 +596,7 @@ export function worldBounds(layout: WorldLayout) {
   }
 }
 
-export function regionBounds(
+export function itemRegionBounds(
   layout: WorldLayout,
   fileIds: Iterable<string> = [],
   folderPaths: Iterable<string> = [],
@@ -637,7 +637,7 @@ export function regionBounds(
     )
   }
 
-  if (!found) return worldBounds(layout)
+  if (!found) return null
 
   return {
     minX,
@@ -649,6 +649,14 @@ export function regionBounds(
     width: Math.max(maxX - minX, 8),
     depth: Math.max(maxZ - minZ, 8),
   }
+}
+
+export function regionBounds(
+  layout: WorldLayout,
+  fileIds: Iterable<string> = [],
+  folderPaths: Iterable<string> = [],
+) {
+  return itemRegionBounds(layout, fileIds, folderPaths) ?? worldBounds(layout)
 }
 
 export function fileChangeKind(

@@ -18,6 +18,7 @@ import {
   filterGraphAbsentFiles,
   mapPointOntoFolder,
   regionBounds,
+  itemRegionBounds,
 } from './layout'
 import { filterGraphHiddenFiles } from '../scripts/hidden-files.mjs'
 import { World } from './scene/World'
@@ -58,8 +59,10 @@ import {
   dropBlueprintFileNotes,
   dropBlueprintSymbolNote,
   dropBlueprintSymbolPointer,
+  findBlueprintNote,
   findBlueprintPointer,
   isBlueprintSymbolName,
+  blueprintNoteKey,
   namedCreatedBlocks,
   toBlueprintFile,
   toBlueprintFolder,
@@ -78,6 +81,7 @@ import {
   toggleBlueprintPointer,
   withBlueprintIntent,
   withUserCreatedGraph,
+  withUserCreatedLayout,
   layoutBlueprintLayers,
   mergeOverlayOnlyFolders,
 } from './userCreated'
@@ -469,6 +473,7 @@ function collectMapBlueprints(input: {
   selectedFunctions: PatchSymbolAddition[]
   selectedVariables: PatchSymbolAddition[]
   selectedImports: PatchImportAddition[]
+  selectedNotes: BlueprintNote[]
   selectedPointers: BlueprintPointer[]
   global: SharedBlueprint
   locals: LocalBlueprint[]
@@ -478,6 +483,7 @@ function collectMapBlueprints(input: {
   const functions: PatchSymbolAddition[] = []
   const variables: PatchSymbolAddition[] = []
   const imports: PatchImportAddition[] = []
+  const notesByKey = new Map<string, BlueprintNote>()
   const pointers: Array<BlueprintPointer & { colorHex: string }> = []
 
   const sources: Array<{
@@ -490,6 +496,7 @@ function collectMapBlueprints(input: {
     functions: PatchSymbolAddition[]
     variables: PatchSymbolAddition[]
     imports: PatchImportAddition[]
+    notes: BlueprintNote[]
     pointers: BlueprintPointer[]
   }> = [
     {
@@ -517,6 +524,10 @@ function collectMapBlueprints(input: {
         input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
           ? input.selectedImports
           : input.global.addedImports,
+      notes:
+        input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
+          ? input.selectedNotes
+          : input.global.notes,
       pointers:
         input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
           ? input.selectedPointers
@@ -547,6 +558,10 @@ function collectMapBlueprints(input: {
         input.selectedColor === local.color
           ? input.selectedImports
           : local.addedImports,
+      notes:
+        input.selectedColor === local.color
+          ? input.selectedNotes
+          : local.notes,
       pointers:
         input.selectedColor === local.color
           ? input.selectedPointers
@@ -589,6 +604,9 @@ function collectMapBlueprints(input: {
       functions.push(...source.functions)
       variables.push(...source.variables)
       imports.push(...source.imports)
+      for (const note of source.notes) {
+        notesByKey.set(blueprintNoteKey(note), note)
+      }
       for (const pointer of source.pointers) {
         pointers.push({ ...pointer, colorHex: source.hex })
       }
@@ -602,6 +620,7 @@ function collectMapBlueprints(input: {
     functions,
     variables,
     imports,
+    notes: [...notesByKey.values()],
     pointers,
   }
 }
@@ -924,6 +943,7 @@ function Explorer({
         selectedFunctions: blueprintFunctions,
         selectedVariables: blueprintVariables,
         selectedImports: blueprintImports,
+        selectedNotes: blueprintNotes,
         selectedPointers: blueprintPointers,
         global: globalBlueprint,
         locals: localBlueprints,
@@ -932,6 +952,7 @@ function Explorer({
       blueprintColor,
       blueprintFunctions,
       blueprintImports,
+      blueprintNotes,
       blueprintPointers,
       blueprintVariables,
       globalBlueprint,
@@ -982,6 +1003,11 @@ function Explorer({
       showHiddenFiles ? layoutGraph : filterGraphHiddenFiles(layoutGraph),
     [layoutGraph, showHiddenFiles],
   )
+  const scannedLayoutGraph = useMemo(
+    () =>
+      showHiddenFiles ? previewGraph : filterGraphHiddenFiles(previewGraph),
+    [previewGraph, showHiddenFiles],
+  )
   const displayGraph = useMemo(
     () =>
       withBlueprintIntent(
@@ -998,10 +1024,17 @@ function Explorer({
     ],
   )
   const layout = useMemo(() => {
-    const world = layoutWorld(visibleLayoutGraph)
-    if (previewing) markCreatedFolders(world, changeSet.createFolders ?? [])
-    return world
-  }, [changeSet.createFolders, previewing, visibleLayoutGraph])
+    const world = layoutWorld(scannedLayoutGraph)
+    const placed = withUserCreatedLayout(world, pendingBlocks, visibleIslands)
+    if (previewing) markCreatedFolders(placed, changeSet.createFolders ?? [])
+    return placed
+  }, [
+    changeSet.createFolders,
+    pendingBlocks,
+    previewing,
+    scannedLayoutGraph,
+    visibleIslands,
+  ])
   const changeFileIds = useMemo(() => {
     const ids = new Set<string>()
     for (const id of changeSet.files) ids.add(id)
@@ -1015,13 +1048,12 @@ function Explorer({
     for (const item of mapBlueprint.functions) ids.add(item.file)
     for (const item of mapBlueprint.variables) ids.add(item.file)
     for (const item of mapBlueprint.imports) ids.add(item.file)
-    for (const note of blueprintNotes) ids.add(note.file)
+    for (const note of mapBlueprint.notes) ids.add(note.file)
     for (const pointer of mapBlueprint.pointers) {
       if (pointer.kind !== 'folder') ids.add(pointer.path)
     }
     return [...ids]
   }, [
-    blueprintNotes,
     changeSet.creates,
     changeSet.deletes,
     changeSet.files,
@@ -1052,10 +1084,25 @@ function Explorer({
   }, [changeFileIds, changeFolderPaths, hasChangeSet, visibleLayoutGraph])
   const changePathLayout = useMemo(() => {
     if (!hasChangeSet) return layout
-    const world = layoutWorld(changePathGraph)
-    markCreatedFolders(world, changeSet.createFolders ?? [])
-    return world
-  }, [changePathGraph, changeSet.createFolders, hasChangeSet, layout])
+    const scannedChange = filterGraphToChangePaths(
+      scannedLayoutGraph,
+      changeFileIds,
+      changeFolderPaths,
+    )
+    const world = layoutWorld(scannedChange)
+    const placed = withUserCreatedLayout(world, pendingBlocks, visibleIslands)
+    markCreatedFolders(placed, changeSet.createFolders ?? [])
+    return placed
+  }, [
+    changeFileIds,
+    changeFolderPaths,
+    changeSet.createFolders,
+    hasChangeSet,
+    layout,
+    pendingBlocks,
+    scannedLayoutGraph,
+    visibleIslands,
+  ])
   const [mode, setMode] = useState<ViewMode>('map')
   const [explain, setExplain] = useState<ExplainSession>(emptyExplain)
   const [dismissedCardQuestion, setDismissedCardQuestion] = useState<
@@ -1085,6 +1132,11 @@ function Explorer({
     kind: 'file' | 'folder'
     parent: string
     lockedColor: string | null
+  } | null>(null)
+  const [mapReveal, setMapReveal] = useState<{
+    key: number
+    fileId?: string
+    folderPath?: string
   } | null>(null)
   const [importPickFrom, setImportPickFrom] = useState<string | null>(null)
   const importPickFromRef = useRef<string | null>(null)
@@ -1586,21 +1638,6 @@ function Explorer({
     }
   }, [intent.sessionId])
 
-  const applyBlueprintNote = useCallback(
-    (next: {
-      file: string
-      kind: BlueprintNoteKind
-      name?: string
-      note: string
-    }) => {
-      const notes = setBlueprintNote(blueprintNotesRef.current, next)
-      blueprintNotesRef.current = notes
-      setBlueprintNotes(notes)
-      persistBlueprintSoon()
-    },
-    [persistBlueprintSoon],
-  )
-
   const applyBlueprintPointer = useCallback(
     (next: {
       kind: BlueprintPointerKind
@@ -1744,6 +1781,54 @@ function Explorer({
       pointers: stored.pointers,
     }
   }, [])
+
+  const colorForBlueprintNote = useCallback(
+    (file: string, kind: BlueprintNoteKind, name?: string) => {
+      const current = blueprintColorRef.current
+      const visible = visibleBlueprintColorsRef.current
+      const order = [
+        current,
+        ...visible.filter((color) => color !== current),
+      ]
+      for (const color of order) {
+        if (findBlueprintNote(createdContentsForColor(color).notes, file, kind, name)) {
+          return color
+        }
+      }
+      return current
+    },
+    [createdContentsForColor],
+  )
+
+  const applyBlueprintNote = useCallback(
+    (next: {
+      file: string
+      kind: BlueprintNoteKind
+      name?: string
+      note: string
+    }) => {
+      const color = colorForBlueprintNote(next.file, next.kind, next.name)
+      const source = createdContentsForColor(color)
+      const notes = setBlueprintNote(source.notes, next)
+      if (color === blueprintColorRef.current) {
+        blueprintNotesRef.current = notes
+        setBlueprintNotes(notes)
+        persistBlueprintSoon()
+        return
+      }
+      persistBlueprint(
+        source.blocks,
+        source.islands,
+        source.functions,
+        source.variables,
+        source.imports,
+        notes,
+        source.pointers,
+        color,
+      )
+    },
+    [colorForBlueprintNote, createdContentsForColor, persistBlueprint, persistBlueprintSoon],
+  )
 
   const removeCreatedItems = useCallback(
     (
@@ -2633,6 +2718,24 @@ function Explorer({
     [mapLayoutForView, overlayLayers],
   )
   placementLayoutRef.current = placementLayout
+  const addRevealBounds = useMemo(() => {
+    if (explaining || !mapReveal) return null
+    const files = { ...placementLayout.files }
+    const folders = { ...placementLayout.folders }
+    for (const layer of overlayLayers) {
+      for (const [id, file] of Object.entries(layer.files)) {
+        if (!files[id]) files[id] = file
+      }
+      for (const [path, folder] of Object.entries(layer.folders)) {
+        if (!folders[path]) folders[path] = folder
+      }
+    }
+    return itemRegionBounds(
+      { ...placementLayout, files, folders },
+      mapReveal.fileId ? [mapReveal.fileId] : [],
+      mapReveal.folderPath ? [mapReveal.folderPath] : [],
+    )
+  }, [explaining, mapReveal, overlayLayers, placementLayout])
   const explainBounds = useMemo(() => {
     if (!explaining || !explainView) return null
     if (
@@ -2755,6 +2858,11 @@ function Explorer({
 
   const loadCurrentBlueprint = useCallback(
     async (input: LoadBlueprintInput) => {
+      if (notePersistTimer.current != null) {
+        window.clearTimeout(notePersistTimer.current)
+        notePersistTimer.current = null
+      }
+      notesDirty.current = true
       blueprintPersistGen.current += 1
       const loaded = await loadBlueprintFile(input)
       const next = {
@@ -2784,6 +2892,8 @@ function Explorer({
         path: loaded.path,
         relativePath: loaded.relativePath,
       })
+      notesDirty.current = false
+      blueprintPersistGen.current += 1
     },
     [applyBlueprintContents],
   )
@@ -2907,6 +3017,8 @@ function Explorer({
           ...stored,
           blocks: [...stored.blocks, { ...resolved, x: spot.x, z: spot.z }],
         })
+        selectFile(resolved.id)
+        setMapReveal({ key: Date.now(), fileId: resolved.id })
       } else {
         const resolved = resolveCreatedIsland(name, addingItem.parent)
         if (!resolved) return false
@@ -2922,6 +3034,8 @@ function Explorer({
           ...stored,
           islands: [...stored.islands, resolved],
         })
+        selectFolder(resolved.path, color)
+        setMapReveal({ key: Date.now(), folderPath: resolved.path })
       }
       if (!visibleBlueprintColorsRef.current.includes(color)) {
         applyHiddenToColors([color], false)
@@ -2935,6 +3049,8 @@ function Explorer({
       createdContentsForColor,
       displayGraph.files,
       layout,
+      selectFile,
+      selectFolder,
       writeCreatedContents,
     ],
   )
@@ -3129,6 +3245,8 @@ function Explorer({
             explainFocus={explainView}
             focusBounds={explainBounds}
             focusFlightKey={explaining ? explain.currentStep : 0}
+            revealBounds={explaining ? null : addRevealBounds}
+            revealFlightKey={mapReveal?.key ?? 0}
             landEnabled={!explaining}
             droppingWalk={Boolean(walkDrop)}
           />
@@ -3151,6 +3269,7 @@ function Explorer({
                 file={explainFile}
                 highlights={explainStep.highlights}
                 point={explainStep.point}
+                onOpenFile={inspectFile}
               />
               <ExplainPointer stepKey={explain.currentStep} />
             </>
@@ -3211,7 +3330,7 @@ function Explorer({
         blueprintFunctions={blueprintFunctions}
         blueprintVariables={blueprintVariables}
         blueprintImports={blueprintImports}
-        blueprintNotes={blueprintNotes}
+        blueprintNotes={mapBlueprint.notes}
         blueprintPointers={blueprintPointers}
         onAddBlueprintFunction={addBlueprintFunction}
         onAddBlueprintVariable={addBlueprintVariable}
@@ -3229,7 +3348,6 @@ function Explorer({
         onRenameCreatedFile={renameCreatedBlock}
         onInspectFile={inspectFile}
         onInspectBlock={inspectBlock}
-        onExplainTarget={canAskLlm ? startExplainTarget : undefined}
         blueprintOpacity={blueprintOpacity}
         onBlueprintOpacityChange={setBlueprintOpacity}
         blueprintHasContent={blueprintHasContent}

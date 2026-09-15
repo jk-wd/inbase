@@ -65,10 +65,12 @@ export function ExplainInfoPanel({
   file,
   highlights,
   point,
+  onOpenFile,
 }: {
   file: FileNode
   highlights: ExplainSymbolRef[]
   point: ExplainSymbolRef | null
+  onOpenFile?: (fileId: string) => void
 }) {
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const classes = file.symbols
@@ -110,10 +112,23 @@ export function ExplainInfoPanel({
                     highlightFile && !pointFile ? 'true' : undefined
                   }
                 >
-                  <span className="hud-info-kind-title">
-                    <FileIcon />
-                    {file.name}
-                  </span>
+                  {onOpenFile && !file.id.startsWith('draft:') ? (
+                    <button
+                      type="button"
+                      className="hud-info-kind-title hud-info-open-title"
+                      onClick={() => onOpenFile(file.id)}
+                      title={`Open ${file.name}`}
+                      aria-label={`Open ${file.name}`}
+                    >
+                      <FileIcon />
+                      {file.name}
+                    </button>
+                  ) : (
+                    <span className="hud-info-kind-title">
+                      <FileIcon />
+                      {file.name}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

@@ -138,6 +138,21 @@ function flightPose(flight: MapFlight, now: number) {
   return { t, pose }
 }
 
+function poseFromCamera(
+  camera: THREE.OrthographicCamera,
+  viewWidth: number,
+  viewHeight: number,
+  hudReserve: number,
+): MapPose {
+  const zoom = Math.max(camera.zoom, 0.001)
+  return {
+    cx: camera.position.x,
+    cz: camera.position.z - hudReserve / 2 / zoom,
+    width: Math.max((viewWidth * 0.92) / zoom - 36, 1),
+    depth: Math.max((viewHeight * 0.92) / zoom - 36, 1),
+  }
+}
+
 function applyMapPose(
   camera: THREE.OrthographicCamera,
   pose: MapPose,
@@ -179,6 +194,8 @@ type MapViewProps = {
   fileLabels?: MapFileLabel[]
   focusBounds?: MapFocusBounds | null
   focusFlightKey?: string | number
+  revealBounds?: MapFocusBounds | null
+  revealFlightKey?: string | number
   hudReserve?: number
   topReserve?: number
   landEnabled?: boolean
@@ -205,6 +222,8 @@ export function MapView({
   fileLabels = [],
   focusBounds = null,
   focusFlightKey = 0,
+  revealBounds = null,
+  revealFlightKey = 0,
   hudReserve = 88,
   topReserve = 28,
   landEnabled = true,
@@ -239,6 +258,8 @@ export function MapView({
   const poseRef = useRef<MapPose>(poseOf(bounds))
   const flightRef = useRef<MapFlight | null>(null)
   const flightKeyRef = useRef<number | string | null>(null)
+  const revealKeyRef = useRef<number | string | null>(null)
+  const worldFitRef = useRef({ cx: world.cx, cz: world.cz, width: world.width, depth: world.depth })
   const focusingRef = useRef(false)
   const preFocusPoseRef = useRef<MapPose | null>(null)
   const fittedRef = useRef(false)
@@ -264,6 +285,7 @@ export function MapView({
   useLayoutEffect(() => {
     if (!enabled) {
       fittedRef.current = false
+      revealKeyRef.current = null
       return
     }
     if (!(camera instanceof THREE.OrthographicCamera)) return
@@ -276,6 +298,18 @@ export function MapView({
     }
     focusingRef.current = focusing
     flightKeyRef.current = key
+
+    const worldMoved =
+      worldFitRef.current.cx !== world.cx ||
+      worldFitRef.current.cz !== world.cz ||
+      worldFitRef.current.width !== world.width ||
+      worldFitRef.current.depth !== world.depth
+    worldFitRef.current = {
+      cx: world.cx,
+      cz: world.cz,
+      width: world.width,
+      depth: world.depth,
+    }
 
     if (!sized) {
       if (!focusing && wasFocusing) {
@@ -334,6 +368,40 @@ export function MapView({
       return
     }
 
+    const current = poseFromCamera(camera, viewWidth, viewHeight, hudReserve)
+    poseRef.current = current
+
+    if (revealBounds && revealKeyRef.current !== revealFlightKey) {
+      revealKeyRef.current = revealFlightKey
+      flightRef.current = {
+        from: current,
+        via: current,
+        to: {
+          cx: revealBounds.cx,
+          cz: revealBounds.cz,
+          width: Math.max(current.width, revealBounds.width),
+          depth: Math.max(current.depth, revealBounds.depth),
+        },
+        start: performance.now(),
+        duration: FOCUS_FLY_IN_MS,
+        split: 0,
+      }
+      setFlying(true)
+      invalidate()
+      return
+    }
+
+    if (worldMoved) {
+      const stillInView =
+        current.cx + current.width / 2 > world.minX &&
+        current.cx - current.width / 2 < world.maxX &&
+        current.cz + current.depth / 2 > world.minZ &&
+        current.cz - current.depth / 2 < world.maxZ
+      if (stillInView) return
+      snapTo(poseOf(world))
+      return
+    }
+
     applyMapPose(
       camera,
       poseRef.current,
@@ -354,6 +422,11 @@ export function MapView({
     focusing,
     hudReserve,
     invalidate,
+    revealBounds?.cx,
+    revealBounds?.cz,
+    revealBounds?.depth,
+    revealBounds?.width,
+    revealFlightKey,
     sized,
     viewHeight,
     viewWidth,
@@ -365,29 +438,44 @@ export function MapView({
 
   useFrame(() => {
     const flight = flightRef.current
-    if (!flight || !enabled || !(camera instanceof THREE.OrthographicCamera)) return
-    const { t, pose } = flightPose(flight, performance.now())
-    poseRef.current = pose
-    applyMapPose(
-      camera,
-      pose,
-      viewWidth,
-      viewHeight,
-      hudReserve,
-      controlsRef.current,
-    )
-    if (t < 1) return
-    flightRef.current = null
-    poseRef.current = flight.to
-    applyMapPose(
-      camera,
-      flight.to,
-      viewWidth,
-      viewHeight,
-      hudReserve,
-      controlsRef.current,
-    )
-    setFlying(false)
+    if (flight && enabled && camera instanceof THREE.OrthographicCamera) {
+      const { t, pose } = flightPose(flight, performance.now())
+      poseRef.current = pose
+      applyMapPose(
+        camera,
+        pose,
+        viewWidth,
+        viewHeight,
+        hudReserve,
+        controlsRef.current,
+      )
+      if (t < 1) return
+      flightRef.current = null
+      poseRef.current = flight.to
+      applyMapPose(
+        camera,
+        flight.to,
+        viewWidth,
+        viewHeight,
+        hudReserve,
+        controlsRef.current,
+      )
+      setFlying(false)
+      return
+    }
+    if (
+      enabled &&
+      fittedRef.current &&
+      !focusing &&
+      camera instanceof THREE.OrthographicCamera
+    ) {
+      poseRef.current = poseFromCamera(
+        camera,
+        viewWidth,
+        viewHeight,
+        hudReserve,
+      )
+    }
   })
 
   useEffect(() => {
@@ -702,8 +790,15 @@ export function MapView({
           screenSpacePanning
           zoomToCursor
           zoomSpeed={1.15}
-          minZoom={Math.max(fitZoom * 0.35, 0.05)}
-          maxZoom={Math.max(fitZoom * 10, 20)}
+          minZoom={Math.min(
+            camera instanceof THREE.OrthographicCamera ? camera.zoom : fitZoom,
+            Math.max(fitZoom * 0.35, 0.05),
+          )}
+          maxZoom={Math.max(
+            fitZoom * 10,
+            20,
+            camera instanceof THREE.OrthographicCamera ? camera.zoom : 20,
+          )}
         />
       )}
       {enabled && (

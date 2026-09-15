@@ -186,6 +186,15 @@ export function explainIsPreparing(explain: ExplainSession) {
   return Boolean(explain.pendingQuestion) || explain.answering
 }
 
+export function explainBodyParagraphs(body: string) {
+  return body
+    .replace(/\\n/g, '\n')
+    .replace(/\r\n/g, '\n')
+    .split(/\n{2,}/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+}
+
 export function explainCardCopy(explain: ExplainSession) {
   const first =
     explain.steps.find((step) => !step.index.includes('.') && step.body.trim()) ??

@@ -1,0 +1,49 @@
+# Install and start
+
+The npm package is `@jkwd/inbase`.
+
+Local install:
+
+```bash
+npm install -D @jkwd/inbase     # add the package
+npx inbase init <editor>        # install editor skills + inbase.json
+npx inbase run                  # start the map
+
+# <editor> is optional: one editor only (cursor, claude, agents, copilot, cline)
+```
+
+Or global:
+
+```bash
+npm install -g @jkwd/inbase   # add the package
+inbase init <editor>          # install editor skills + inbase.json
+inbase run                    # start the map
+
+# <editor> is optional: one editor only (cursor, claude, agents, copilot, cline)
+```
+
+Open the printed URL (http://127.0.0.1:5173 by default). **Ctrl+click** the link in the terminal (Cmd+click on macOS) to open the InBase UI inside your editor.
+
+<img src="images/clickon-url-in-cursor.png" alt="Terminal showing the printed Inbase URL" width="480" />
+
+Or paste the URL into a separate browser — useful on a dual-screen or ultrawide setup.
+
+## Config
+
+Commit an `inbase.json` next to where you run `inbase`. CLI flags and env vars still win: **CLI > env > `inbase.json` > defaults**. `target` is resolved from the config file's directory.
+
+```json
+{
+  "target": ".",
+  "port": 5173,
+  "ignore": []
+}
+```
+
+| Setting | What it does |
+| --- | --- |
+| `target` | Folder the map scans. Use a subfolder in a monorepo, like `"apps/web"`. The skill only connects a color session for file changes inside this folder. |
+| `port` | Dev server port. Same as `--port`. |
+| `ignore` | Extra gitignore-style patterns on top of `.gitignore` and the built-in `node_modules` / `dist` skip list. |
+
+Runtime data stays in `.inbase/` (gitignored). Do not put session or camera state in `inbase.json`.

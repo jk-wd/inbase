@@ -76,6 +76,31 @@ test('parseExplainArgs groups flags under each --step', () => {
   assert.equal(parsed.steps[1].select, 'src/auth/login.ts')
 })
 
+test('parseExplainArgs joins repeated --body flags as paragraphs', () => {
+  const parsed = parseExplainArgs([
+    '--step',
+    'New change-notes helpers',
+    '--body',
+    'This is a new helper file for one-line change notes.',
+    '--body',
+    'parseNoteFlags reads --note path: summary.',
+  ])
+  assert.equal(
+    parsed.steps[0].body,
+    'This is a new helper file for one-line change notes.\n\nparseNoteFlags reads --note path: summary.',
+  )
+})
+
+test('parseExplainArgs unescapes newline sequences in --body', () => {
+  const parsed = parseExplainArgs([
+    '--step',
+    'Readable copy',
+    '--body',
+    'First paragraph.\\n\\nSecond paragraph.',
+  ])
+  assert.equal(parsed.steps[0].body, 'First paragraph.\n\nSecond paragraph.')
+})
+
 test('parseExplainArgs opens the info panel and points at a symbol', () => {
   const parsed = parseExplainArgs([
     '--step',
@@ -379,7 +404,7 @@ test('a new question on the same step replaces earlier sub-steps', () => {
   }
 })
 
-test('asking about a sub-step replaces the current sub-steps one level down', () => {
+test('asking about a sub-step nests another level under that step', () => {
   const env = fixture()
   try {
     startExplain(env.dataDir, 'Folders')
@@ -394,12 +419,12 @@ test('asking about a sub-step replaces the current sub-steps one level down', ()
     const asked = askExplainQuestion(env.dataDir, '2.2', 'Even closer')
     assert.deepEqual(
       asked.steps.map((step) => step.index),
-      ['1', '2', '3'],
+      ['1', '2', '2.1', '2.2', '3'],
     )
-    assert.equal(asked.currentStep, '2')
-    assert.equal(asked.pendingQuestion.parent, '2')
+    assert.equal(asked.currentStep, '2.2')
+    assert.equal(asked.pendingQuestion.parent, '2.2')
     assert.equal(asked.pendingQuestion.from, '2.2')
-    assert.equal(asked.steps[1].asked, '')
+    assert.equal(asked.steps.find((step) => step.index === '2.2').asked, '')
 
     const replaced = reportExplain(env.dataDir, {
       parent: '2.2',
@@ -408,16 +433,65 @@ test('asking about a sub-step replaces the current sub-steps one level down', ()
     })
     assert.deepEqual(
       replaced.steps.map((step) => `${step.index}:${step.title}`),
-      ['1:One', '2:Two', '2.1:Detail', '2.2:More detail', '3:Three'],
+      [
+        '1:One',
+        '2:Two',
+        '2.1:Two first',
+        '2.2:Two second',
+        '2.2.1:Detail',
+        '2.2.2:More detail',
+        '3:Three',
+      ],
     )
-    assert.equal(replaced.currentStep, '2.1')
-    assert.equal(replaced.steps[1].asked, 'Even closer')
+    assert.equal(replaced.currentStep, '2.2.1')
+    assert.equal(
+      replaced.steps.find((step) => step.index === '2.2').asked,
+      'Even closer',
+    )
   } finally {
     env.cleanup()
   }
 })
 
-test('a new sub-question on another step removes the previous sub-steps', () => {
+test('a follow-up can nest indefinitely under the current step', () => {
+  const env = fixture()
+  try {
+    startExplain(env.dataDir, 'Folders')
+    reportExplain(env.dataDir, {
+      steps: [{ title: 'One' }],
+    })
+    reportExplain(env.dataDir, {
+      parent: '1',
+      question: 'Closer',
+      steps: [{ title: 'First' }],
+    })
+    reportExplain(env.dataDir, {
+      parent: '1.1',
+      question: 'Closer still',
+      steps: [{ title: 'Second' }],
+    })
+    const deepest = reportExplain(env.dataDir, {
+      parent: '1.1.1',
+      question: 'Even closer',
+      steps: [{ title: 'Third' }, { title: 'Third sibling' }],
+    })
+    assert.deepEqual(
+      deepest.steps.map((step) => `${step.index}:${step.title}`),
+      [
+        '1:One',
+        '1.1:First',
+        '1.1.1:Second',
+        '1.1.1.1:Third',
+        '1.1.1.2:Third sibling',
+      ],
+    )
+    assert.equal(deepest.currentStep, '1.1.1.1')
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('a follow-up on another step keeps the previous nested steps', () => {
   const env = fixture()
   try {
     startExplain(env.dataDir, 'Folders')
@@ -436,10 +510,17 @@ test('a new sub-question on another step removes the previous sub-steps', () => 
     })
     assert.deepEqual(
       next.steps.map((step) => `${step.index}:${step.title}`),
-      ['1:One', '2:Two', '3:Three', '3.1:Three first'],
+      [
+        '1:One',
+        '2:Two',
+        '2.1:Two first',
+        '2.2:Two second',
+        '3:Three',
+        '3.1:Three first',
+      ],
     )
-    assert.equal(next.steps[1].asked, '')
-    assert.equal(next.steps[2].asked, 'About three')
+    assert.equal(next.steps.find((step) => step.index === '2').asked, 'About two')
+    assert.equal(next.steps.find((step) => step.index === '3').asked, 'About three')
   } finally {
     env.cleanup()
   }

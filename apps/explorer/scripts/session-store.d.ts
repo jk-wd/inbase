@@ -67,6 +67,7 @@ export type DiffManifest = {
 }
 
 export function assertSessionId(value: unknown): string
+export function userContextFile(dataDir: string): string
 export function readActiveSession(dataDir: string): string | null
 export function writeActiveSession(dataDir: string, sessionId: string | null): void
 export function focusSession(dataDir: string, sessionId: string): string
@@ -125,8 +126,6 @@ export function listSessionIntents(
   knownFileIds?: string[],
   targetRoot?: string | null,
 ): Array<Record<string, unknown>>
-export function readBlueprintSession(dataDir: string): string | null
-export function writeBlueprintSession(dataDir: string, sessionId: string | null): void
 export function readManifest(dataDir: string, sessionId: string): DiffManifest | null
 export function writeManifest(dataDir: string, manifest: DiffManifest): void
 export function readOverlay(
@@ -183,6 +182,9 @@ export function resolveSessionColor(
 export function parseSessionColorQuery(
   value: string | null | undefined,
 ): { id: string; name: string; hex: string } | null
+export function resolveSessionId(value: unknown): string
+export function readChats(dataDir: string): Record<string, { locked: boolean }>
+export function isChatLocked(dataDir: string, sessionId: string): boolean
 export function colorUnknownMessage(query?: string | null): string
 export function colorBusyMessage(colorName: string): string
 export function colorMissingMessage(colorName: string): string
@@ -191,10 +193,8 @@ export function findSessionIdByColor(
   dataDir: string,
   colorId: string | null | undefined,
 ): string | null
-export const CHAT_LIMIT_MESSAGE: string
+export const ALL_COLORS_LOCKED_MESSAGE: string
 export const NOT_RUNNING_MESSAGE: string
-export function enableSessionPool(dataDir: string, count?: number): void
-export function sessionPoolSize(dataDir: string): number
 export function ensureSessionPool(
   dataDir: string,
   options?: { count?: number; focus?: boolean },
@@ -396,6 +396,7 @@ export function appendDiff(
     sessionId: string
     overlay?: import('./change-overlay.d.ts').ChangeOverlay
     patchText?: string
+    changeNotes?: Record<string, string>
   },
 ): { manifest: DiffManifest; entry: DiffEntry }
 export function continueDiff(

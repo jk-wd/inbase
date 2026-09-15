@@ -95,6 +95,7 @@ export const emptyIntent: {
   addedImports: PatchImportAddition[]
   changedFunctions: PatchSymbolAddition[]
   changedVariables: PatchSymbolAddition[]
+  changeNotes: Record<string, string>
   reason: null
   sessionId: null
   diffId: null

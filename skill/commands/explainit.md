@@ -2,11 +2,25 @@
 description: Explain a codebase question on the Inbase map
 ---
 
-The user invoked `/explainit`. Do **not** edit project files. Do **not** run `inbase start-session`.
+The user invoked `/explainit`. Do **not** edit project files.
 
 The user's question is:
 
 $ARGUMENTS
+
+## Write each `--body`
+
+The map shows this text next to the step. Write it for a **mid-level developer** sitting next to you: easy to read, and still precise and technical. Prefer more text over a compressed one-liner.
+
+Keep the `--step` title short. Put the explanation in `--body`.
+
+- Open with what this file or step is, in one normal sentence.
+- Then how it works: name the functions, flags, types, or data, and what each one does.
+- Close with why it is here, or how it connects to the previous or next step.
+- Use short paragraphs (about 2–4 sentences). Repeat `--body` once per paragraph, or put `\n\n` between paragraphs.
+- Talk in complete sentences. "This file…" / "That function…" is easier to scan than fragments.
+
+Do not pack a list of jobs into one colon-separated sentence. Avoid telegraphic copy like "New file. Browser-safe helpers for X: parse A, decide B, synthesize C, and format D." Split that into sentences a teammate can actually read.
 
 ## Proposal or diff in progress
 
@@ -18,7 +32,7 @@ If it prints `VISUAL_CODER_DIFF`, the map is showing the current git branch diff
 
 If it prints `VISUAL_CODER_EXPLAIN` for a map `?` click, explain that file or folder instead (one `--step`).
 
-If it prints `VISUAL_CODER_EXPLAIN_FOLLOWUP`, the map is already in explain mode — report sub-steps with `--parent`. Do not replace the whole explanation.
+If it prints `VISUAL_CODER_EXPLAIN_FOLLOWUP`, the map is already in explain mode — report sub-steps with `--parent` from `VISUAL_CODER_PARENT`. Nested follow-ups are allowed: 1.1, 1.1.1, 1.1.1.1, and so on. Do not replace the whole explanation.
 
 Use the user's question when they provided one. If they did not, explain the current proposal, the current diff, or the pending `?` target.
 
@@ -38,7 +52,9 @@ If `$ARGUMENTS` is empty, omit `--question` unless start asks for one. If that f
 npx inbase explain report \
   --question "$ARGUMENTS" \
   --step "Short title" \
-  --body "What this step is showing." \
+  --body "What this file or step is, in one normal sentence." \
+  --body "How it works: name the functions, flags, or data, and what each one does." \
+  --body "Why it is here, or how it connects to the previous or next step." \
   --files path/to/file.ts \
   --folders path/to/folder \
   --select path/to/file.ts \
@@ -49,7 +65,7 @@ npx inbase explain report \
   --point function:currentExplainStep
 ```
 
-For a follow-up, add `--parent` from `VISUAL_CODER_PARENT`. For a `?` click, use a single `--step`. Repeat `--step` for every changed file or proposal step.
+For a follow-up, add `--parent` from `VISUAL_CODER_PARENT`. Repeat `--step` for that parent's children (`7.1`, `7.1.1`, `7.1.1.1`, …). For a `?` click, use a single `--step`. Repeat `--step` for every changed file or proposal step. Keep those map steps small. Prefer real paths from the repo.
 
 4. **Stop.** Do not run `explain wait`. The user navigates the map. They type `/explainit` again for a follow-up or another `?` click, or click **Done** in the session window to keep the files and free the color.
 
@@ -71,6 +87,6 @@ If that fails with `VISUAL_CODER_NOT_RUNNING`, reply with that message and stop.
 
 4. Report the explanation as ordered steps. Each step can highlight files and folders, select a block to show import relations, and zoom the map. Flags after a `--step` apply to that step.
 
-Keep steps small. Prefer real paths from the repo.
+Keep map steps small. Prefer real paths from the repo. Write each `--body` as in **Write each `--body`** above.
 
 5. **Stop.** Wait for `/explainit` in chat for a follow-up. Do not run `explain wait`.

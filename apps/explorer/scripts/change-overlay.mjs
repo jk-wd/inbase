@@ -5,6 +5,24 @@ import {
   foldersFromFileIds,
   parseUnifiedPatch,
 } from './patch-lib.mjs'
+import {
+  asChangeNotes,
+  changeNotePathRelevant,
+} from './change-notes.mjs'
+
+export {
+  asChangeNotes,
+  changeNotePathRelevant,
+  formatLlmChangeLine,
+  llmChangeNoteForPath,
+  overlayFileIds,
+  overlayPathChangeKind,
+  parseChangeNoteFlag,
+  parseChangeNoteFlags,
+  pathIsUnderFolder,
+  synthesizeFileNote,
+  synthesizeFolderNote,
+} from './change-notes.mjs'
 
 export function emptyChangeOverlay() {
   return {
@@ -20,6 +38,7 @@ export function emptyChangeOverlay() {
     addedImports: [],
     changedFunctions: [],
     changedVariables: [],
+    changeNotes: {},
   }
 }
 
@@ -30,16 +49,6 @@ export function overlayHasChanges(overlay) {
     (overlay?.deletes?.length ?? 0) > 0 ||
     (overlay?.absent?.length ?? 0) > 0
   )
-}
-
-export function overlayFileIds(overlay) {
-  return [
-    ...new Set([
-      ...(overlay?.files ?? []),
-      ...(overlay?.creates ?? []),
-      ...(overlay?.deletes ?? []),
-    ]),
-  ]
 }
 
 function asStringArray(value) {
@@ -82,6 +91,34 @@ function asImportAdditions(value) {
   )
 }
 
+function retainChangeNotes(overlay) {
+  return {
+    ...overlay,
+    changeNotes: Object.fromEntries(
+      Object.entries(overlay.changeNotes ?? {}).filter(([path]) =>
+        changeNotePathRelevant(overlay, path),
+      ),
+    ),
+  }
+}
+
+export function attachChangeNotes(overlay, notes) {
+  const normalized = normalizeChangeOverlay(overlay)
+  const incoming = asChangeNotes({
+    ...normalized.changeNotes,
+    ...asChangeNotes(notes),
+  })
+  const changeNotes = {}
+  for (const [path, note] of Object.entries(incoming)) {
+    if (changeNotePathRelevant(normalized, path)) changeNotes[path] = note
+  }
+  return { ...normalized, changeNotes }
+}
+
+export function mergeChangeNotes(live, stored) {
+  return attachChangeNotes(live, stored?.changeNotes)
+}
+
 export function normalizeChangeOverlay(value) {
   const overlay = value && typeof value === 'object' ? value : {}
   const createLines =
@@ -103,6 +140,7 @@ export function normalizeChangeOverlay(value) {
     addedImports: asImportAdditions(overlay.addedImports),
     changedFunctions: asSymbolList(overlay.changedFunctions),
     changedVariables: asSymbolList(overlay.changedVariables),
+    changeNotes: asChangeNotes(overlay.changeNotes),
   }
 }
 
@@ -118,7 +156,7 @@ export function dropMassKnownCreates(preview, knownFileIds = []) {
     Object.entries(overlay.createLines).filter(([id]) => !drop.has(id)),
   )
   const keepSymbol = (item) => !drop.has(item.file)
-  return {
+  return retainChangeNotes({
     ...overlay,
     creates,
     createLines,
@@ -134,7 +172,7 @@ export function dropMassKnownCreates(preview, knownFileIds = []) {
     addedImports: overlay.addedImports.filter(keepSymbol),
     changedFunctions: overlay.changedFunctions.filter(keepSymbol),
     changedVariables: overlay.changedVariables.filter(keepSymbol),
-  }
+  })
 }
 
 export function overlayFromPatchText(patchText, knownFileIds = []) {

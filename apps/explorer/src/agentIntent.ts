@@ -94,6 +94,20 @@ function normalizeContextFiles(value: unknown): NonNullable<AgentIntent['context
   })
 }
 
+function normalizeChangeNotes(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).flatMap(([path, note]) =>
+      typeof path === 'string' &&
+      path.trim() &&
+      typeof note === 'string' &&
+      note.trim()
+        ? [[path.trim(), note.trim()]]
+        : [],
+    ),
+  )
+}
+
 function overlayFromUnknown(value: unknown) {
   const data = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   return {
@@ -120,6 +134,7 @@ function overlayFromUnknown(value: unknown) {
     addedImports: normalizeImportAdditions(data.addedImports),
     changedFunctions: normalizeSymbolAdditions(data.changedFunctions),
     changedVariables: normalizeSymbolAdditions(data.changedVariables),
+    changeNotes: normalizeChangeNotes(data.changeNotes),
   }
 }
 
@@ -192,6 +207,7 @@ export function pinIntentToDiff(
     addedImports: entry.addedImports,
     changedFunctions: entry.changedFunctions,
     changedVariables: entry.changedVariables,
+    changeNotes: entry.changeNotes,
   }
 }
 
@@ -218,6 +234,7 @@ export const emptyIntent: AgentIntent = {
   addedImports: [],
   changedFunctions: [],
   changedVariables: [],
+  changeNotes: {},
   reason: null,
   sessionId: null,
   diffId: null,
@@ -280,6 +297,7 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     addedImports: normalizeImportAdditions(data?.addedImports),
     changedFunctions: normalizeSymbolAdditions(data?.changedFunctions),
     changedVariables: normalizeSymbolAdditions(data?.changedVariables),
+    changeNotes: normalizeChangeNotes(data?.changeNotes),
     reason: data?.reason ?? null,
     sessionId: data?.sessionId ?? null,
     diffId: data?.diffId ?? null,

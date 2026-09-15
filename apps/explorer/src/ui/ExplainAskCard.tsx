@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import type { ExplainSession } from '../types'
 import { explainCardCopy, explainTargetLabel } from '../explain'
 import { shouldIgnoreShortcut } from '../keyboard'
+import { ExplainBody } from './ExplainBody'
 
 export function ExplainAskCard({
   explain,
@@ -65,7 +66,7 @@ export function ExplainAskCard({
           </button>
         </div>
         {copy.ready ? (
-          <p className="explain-body explain-ask-card-body">{copy.body}</p>
+          <ExplainBody body={copy.body} className="explain-ask-card-body" />
         ) : (
           <p className="explain-preparing" role="status">
             Preparing an explanation… Type /explainit in the chat.

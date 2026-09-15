@@ -167,6 +167,94 @@ test('load restores global and session-colored layers', () => {
   }
 })
 
+test('load restores notes and pointers', () => {
+  const env = fixture()
+  try {
+    ensureSessionPool(env.dataDir)
+    const globalNotes = [
+      {
+        file: 'src/Global.tsx',
+        kind: 'file',
+        note: 'Keep this file presentational.',
+      },
+      {
+        file: 'src/Global.tsx',
+        kind: 'function',
+        name: 'Clock',
+        note: 'Render the current time.',
+      },
+    ]
+    const coralNotes = [
+      {
+        file: 'src/Coral.tsx',
+        kind: 'file',
+        note: 'Session-only widget.',
+      },
+    ]
+    const globalPointers = [{ kind: 'file', path: 'src/a.ts' }]
+    saveBlueprintDocument(env.targetRoot, {
+      name: 'noted',
+      global: {
+        files: [globalFile],
+        addedFunctions: [{ name: 'Clock', file: 'src/Global.tsx' }],
+        notes: globalNotes,
+        pointers: globalPointers,
+      },
+      locals: [
+        {
+          color: 'coral',
+          files: [coralFile],
+          notes: coralNotes,
+        },
+      ],
+    })
+    const loaded = loadBlueprintDocument(env.targetRoot, env.dataDir, {
+      name: 'noted',
+    })
+    assert.deepEqual(loaded.global.notes, globalNotes)
+    assert.deepEqual(loaded.global.pointers, globalPointers)
+    assert.deepEqual(loaded.global.addedFunctions, [
+      { name: 'Clock', file: 'src/Global.tsx' },
+    ])
+    assert.deepEqual(readBlueprintByColor(env.dataDir, 'coral').notes, coralNotes)
+    const document = JSON.parse(
+      fs.readFileSync(
+        path.join(env.targetRoot, BLUEPRINTS_DIR_NAME, 'noted.json'),
+        'utf8',
+      ),
+    )
+    assert.deepEqual(document.global.notes, globalNotes)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('load treats a note without kind as a file note', () => {
+  const env = fixture()
+  try {
+    ensureSessionPool(env.dataDir)
+    saveBlueprintDocument(env.targetRoot, {
+      name: 'legacy-note',
+      global: {
+        files: [globalFile],
+        notes: [{ file: 'src/Global.tsx', note: 'Presentational.' }],
+      },
+    })
+    const loaded = loadBlueprintDocument(env.targetRoot, env.dataDir, {
+      name: 'legacy-note',
+    })
+    assert.deepEqual(loaded.global.notes, [
+      {
+        file: 'src/Global.tsx',
+        kind: 'file',
+        note: 'Presentational.',
+      },
+    ])
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('reads legacy block and island keys', () => {
   const parsed = parseBlueprintDocument({
     kind: 'inbase-blueprint',

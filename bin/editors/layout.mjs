@@ -29,11 +29,51 @@ export function looksLikeInbaseFile(file) {
   }
 }
 
+const COMMAND_TEMPLATE_SUBDIRS = ['attach']
+
+function listCommandTemplates() {
+  const files = []
+  if (!fs.existsSync(commandTemplateDir)) return files
+  for (const name of fs.readdirSync(commandTemplateDir)) {
+    const full = path.join(commandTemplateDir, name)
+    if (isFile(full) && name.endsWith('.md')) {
+      files.push({ stem: name.slice(0, -3), src: full })
+    }
+  }
+  for (const sub of COMMAND_TEMPLATE_SUBDIRS) {
+    const dir = path.join(commandTemplateDir, sub)
+    if (!isDir(dir)) continue
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.endsWith('.md')) continue
+      files.push({ stem: name.slice(0, -3), src: path.join(dir, name) })
+    }
+  }
+  return files
+}
+
 function commandTemplateStems() {
-  if (!fs.existsSync(commandTemplateDir)) return []
-  return fs.readdirSync(commandTemplateDir)
-    .filter((name) => name.endsWith('.md'))
-    .map((name) => name.slice(0, -3))
+  return listCommandTemplates().map((file) => file.stem)
+}
+
+function copyCommandTemplates(commandDir) {
+  fs.mkdirSync(commandDir, { recursive: true })
+  for (const { stem, src } of listCommandTemplates()) {
+    fs.copyFileSync(src, path.join(commandDir, `${stem}.md`))
+  }
+  removeRetiredCommands(commandDir)
+  removeLeftoverAttachFolder(commandDir)
+}
+
+function removeLeftoverAttachFolder(commandDir) {
+  const leftoverAttach = path.join(commandDir, 'attach')
+  if (!isDir(leftoverAttach)) return
+  for (const { stem } of listCommandTemplates()) {
+    const nested = path.join(leftoverAttach, `${stem}.md`)
+    if (isFile(nested)) fs.unlinkSync(nested)
+  }
+  if (fs.existsSync(leftoverAttach) && fs.readdirSync(leftoverAttach).length === 0) {
+    fs.rmdirSync(leftoverAttach)
+  }
 }
 
 function installedCommandNames() {
@@ -136,10 +176,7 @@ export function copySkillAndCommands(projectRoot, { id, skillRel, commandRel }) 
   const skillDir = path.join(projectRoot, skillRel)
   copyDir(skillTemplateDir, skillDir)
   const commandDir = path.join(projectRoot, commandRel)
-  if (fs.existsSync(commandTemplateDir)) {
-    copyDir(commandTemplateDir, commandDir)
-  }
-  removeRetiredCommands(commandDir)
+  copyCommandTemplates(commandDir)
   return { id, skillDir, commandDir }
 }
 
@@ -172,18 +209,19 @@ export function copySkillTree(projectRoot, { id, skillsRel }) {
   copyDir(skillTemplateDir, skillDir)
   prependYamlFrontmatter(path.join(skillDir, 'SKILL.md'), SKILL_TOOL_FRONTMATTER)
   if (fs.existsSync(commandTemplateDir)) {
-    for (const name of fs.readdirSync(commandTemplateDir)) {
-      if (!name.endsWith('.md')) continue
-      const stem = name.slice(0, -3)
+    for (const { stem, src } of listCommandTemplates()) {
       // The always-on skill already lives at inbase/SKILL.md and is /inbase.
       if (stem === 'inbase') continue
       const dest = path.join(commandDir, stem, 'SKILL.md')
       fs.mkdirSync(path.dirname(dest), { recursive: true })
-      fs.copyFileSync(path.join(commandTemplateDir, name), dest)
+      fs.copyFileSync(src, dest)
       prependYamlFrontmatter(dest, COMMAND_SKILL_FRONTMATTER(stem))
     }
   }
   removeRetiredCommands(commandDir)
+  if (isDir(path.join(commandDir, 'attach'))) {
+    fs.rmSync(path.join(commandDir, 'attach'), { recursive: true, force: true })
+  }
   return { id, skillDir, commandDir }
 }
 
@@ -194,6 +232,14 @@ export function removeSkillAndCommands(projectRoot, { id, skillRel, commandRel }
   if (sweepInbaseSkills(path.dirname(skillDir))) removed = true
   for (const name of installedCommandNames()) {
     if (removeKnownCommandFile(path.join(commandDir, `${name}.md`), name)) removed = true
+    if (removeKnownCommandFile(path.join(commandDir, 'attach', `${name}.md`), name)) {
+      removed = true
+    }
+  }
+  const leftoverAttach = path.join(commandDir, 'attach')
+  if (isDir(leftoverAttach) && fs.readdirSync(leftoverAttach).length === 0) {
+    fs.rmdirSync(leftoverAttach)
+    removed = true
   }
   removeEmptyParents(path.dirname(skillDir), projectRoot)
   removeEmptyParents(commandDir, projectRoot)

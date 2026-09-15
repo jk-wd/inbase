@@ -45,26 +45,12 @@ const HELP = `inbase — a first-person 3D map of a codebase
 
 Usage:
   inbase init [editor]     Install skills for all editors, or only one
-                           (cursor, claude, agents, copilot, cline)
+                           (cursor, claude, agents, zed, copilot, cline)
   inbase cleanup [editor]  Remove skills for all editors, or only one
                            (also removes .inbase/ and inbase.json)
   inbase run               Scan this repo and start the local map
   inbase extract-blueprint <folder> <output-file>
   inbase help              Show this help
-
-Agent commands (used by the installed skill):
-  inbase start-session --session <id> --name "short name"
-  inbase attach [--session <id>] [--color <name>]
-  inbase read-blueprint --session <id>
-  inbase report-plan --session <id> --feature "name" --steps "one"
-  inbase accept [--session <id>]
-  inbase stop [--session <id>]
-  inbase propose-patch --session <id>
-  inbase propose-patch --session <id> --clear
-  inbase explain start [--question "How does this work?"]
-  inbase explain report --step "..." --body "..."
-  inbase explain stop
-  inbase extract-blueprint <folder> <output-file> [--write [layer.json|-]]
 
 Options for run:
   --target <dir>           Project to map (default: inbase.json target, else cwd)
@@ -214,7 +200,7 @@ async function runServer(args) {
   console.log(`Inbase is mapping ${targetRoot}`)
   console.log(`Open ${local}`)
   console.log(
-    'Leave this running. Open a Cursor, Claude Code, Codex, Copilot, or Cline chat to connect — 10 chats can be connected at once.',
+    'Leave this running. Open a Cursor, Claude Code, Codex, Copilot, or Cline chat to connect — one chat per color.',
   )
 }
 

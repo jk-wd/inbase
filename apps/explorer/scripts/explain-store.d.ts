@@ -69,6 +69,7 @@ export type ExplainSession = {
 }
 
 export function parseExplainSymbolRef(value: string): ExplainSymbolRef | null
+export function normalizeExplainBody(value: unknown): string
 export function emptyExplain(): ExplainSession
 export function normalizeExplainPresentation(value: unknown): ExplainPresentation
 export function isExplainStepId(value: unknown): value is string
@@ -77,6 +78,10 @@ export function isExplainDescendant(id: unknown, parent: unknown): boolean
 export function topLevelExplainStepId(id: unknown): string
 export function isExplainSubStep(id: unknown): boolean
 export function stripExplainSubSteps(steps: ExplainStep[]): ExplainStep[]
+export function stripExplainDescendants(
+  steps: ExplainStep[],
+  parent: unknown,
+): ExplainStep[]
 export function normalizeExplain(value: unknown): ExplainSession
 export function mergeExplainPoll(
   current: ExplainSession,

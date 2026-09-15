@@ -32,6 +32,7 @@ import {
   listOpenSessionIds,
   readActiveSession,
   recycleDisconnectedSessions,
+  userContextFile as userContextPath,
   notifySessionExplain,
   requestExplainProposal,
   sendBlueprint,
@@ -67,7 +68,7 @@ import {
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const isolation = isolatedViteConfig(dataDir)
-const userContextFile = path.join(dataDir, 'user-context.json')
+const userContextFile = userContextPath(dataDir)
 const codebaseFile = path.join(dataDir, 'codebase.json')
 const scanScript = path.resolve(here, 'scripts/scan-target.mjs')
 
@@ -676,12 +677,15 @@ function readUserContext() {
       showBranchChanges: Boolean(parsed.showBranchChanges),
       branchChangesBase: normalizeBranchChangesBase(parsed.branchChangesBase),
       showHiddenFiles: Boolean(parsed.showHiddenFiles),
+      focusedSessionId:
+        typeof parsed.focusedSessionId === 'string' ? parsed.focusedSessionId : null,
     }
   } catch {
     return {
       showBranchChanges: false,
       branchChangesBase: null,
       showHiddenFiles: false,
+      focusedSessionId: null,
     }
   }
 }
@@ -706,6 +710,7 @@ async function writeUserContext(req: IncomingMessage, res: ServerResponse) {
           ? incoming.showHiddenFiles
           : Boolean(existing.showHiddenFiles),
     }
+    next.focusedSessionId = existing.focusedSessionId ?? null
     delete next.followLook
     delete next.userCreatedBlocks
     delete next.userCreatedIslands

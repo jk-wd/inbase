@@ -93,6 +93,8 @@ type WorldProps = {
   explainFocus?: ExplainFocus | null
   focusBounds?: MapFocusBounds | null
   focusFlightKey?: string | number
+  revealBounds?: MapFocusBounds | null
+  revealFlightKey?: string | number
   landEnabled?: boolean
   droppingWalk?: boolean
 }
@@ -141,6 +143,8 @@ export function World({
   explainFocus = null,
   focusBounds = null,
   focusFlightKey = 0,
+  revealBounds = null,
+  revealFlightKey = 0,
   landEnabled = true,
   droppingWalk = false,
 }: WorldProps) {
@@ -198,9 +202,10 @@ export function World({
   const selectionFocus = Boolean(selectedId || folderFocusIds.length > 0)
   const hideRelations = relationMode === 'off'
   const showExistingRelations =
-    explainActive || relationMode === 'all' || relationMode === 'targeted'
+    relationMode === 'all' || (relationMode === 'targeted' && selectionFocus)
   const showAllPlanned =
-    explainActive || relationMode === 'all' || relationMode === 'changed'
+    relationMode === 'all' || relationMode === 'changed'
+  const explainEdges = hideRelations ? [] : (explainFocus?.relations ?? [])
   const fileImportedBy = Boolean(importedBy && selectedId)
   const related = new Set(
     hideRelations ||
@@ -548,6 +553,8 @@ export function World({
         fileLabels={mapFileLabels}
         focusBounds={focusBounds}
         focusFlightKey={focusFlightKey}
+        revealBounds={revealBounds}
+        revealFlightKey={revealFlightKey}
         hudReserve={88}
         topReserve={explainActive ? 24 : 28}
         landEnabled={landEnabled}
@@ -714,7 +721,7 @@ export function World({
           />
         )
       })}
-      {(explainActive ||
+      {(explainEdges.length > 0 ||
         relationMode === 'all' ||
         relationMode === 'changed' ||
         (relationMode === 'targeted' && selectionFocus)) && (
@@ -727,7 +734,7 @@ export function World({
           extras={ghosts}
           plannedIds={plannedIds}
           plannedEdges={plannedImports}
-          extraEdges={explainFocus?.relations ?? []}
+          extraEdges={explainEdges}
           fromAbove={mapping}
           importedBy={fileImportedBy}
           focusIds={folderFocusIds}

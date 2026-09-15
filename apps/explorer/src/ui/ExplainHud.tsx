@@ -8,6 +8,7 @@ import {
   explainStepPosition,
 } from '../explain'
 import { shouldIgnoreShortcut } from '../keyboard'
+import { ExplainBody } from './ExplainBody'
 
 export function ExplainHud({
   explain,
@@ -150,15 +151,14 @@ export function ExplainHud({
                   {item.asked ? (
                     <p className="explain-asked">Asked: {item.asked}</p>
                   ) : null}
-                  {active && item.body ? (
-                    <p className="explain-body">{item.body}</p>
-                  ) : null}
+                  {active && item.body ? <ExplainBody body={item.body} /> : null}
                   {waitingHere ? (
                     <p className="explain-preparing-step">Preparing sub-steps…</p>
                   ) : null}
                   {active && !preparingFollowUp ? (
                     <p className="explain-ask-hint">
-                      Type /explainit your question in the chat.
+                      Ask a follow-up in chat
+                      <code>/explainit [question]</code>
                     </p>
                   ) : null}
                 </li>

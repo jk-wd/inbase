@@ -127,6 +127,7 @@ export type BranchChanges = {
   addedImports: PatchImportAddition[]
   changedFunctions: PatchSymbolAddition[]
   changedVariables: PatchSymbolAddition[]
+  changeNotes?: Record<string, string>
 }
 
 export type UserContext = {
@@ -147,6 +148,7 @@ export type UserContext = {
   showBranchChanges?: boolean
   branchChangesBase?: string | null
   showHiddenFiles?: boolean
+  focusedSessionId?: string | null
   userCreatedBlocks?: UserCreatedBlock[]
   userCreatedIslands?: UserCreatedIsland[]
 }
@@ -267,6 +269,7 @@ export type DiffChainEntry = {
   addedImports: PatchImportAddition[]
   changedFunctions: PatchSymbolAddition[]
   changedVariables: PatchSymbolAddition[]
+  changeNotes?: Record<string, string>
 }
 
 export type WorkflowPhase =
@@ -504,6 +507,7 @@ export type AgentIntent = {
   addedImports: PatchImportAddition[]
   changedFunctions: PatchSymbolAddition[]
   changedVariables: PatchSymbolAddition[]
+  changeNotes?: Record<string, string>
   reason: string | null
   sessionId: string | null
   diffId: string | null

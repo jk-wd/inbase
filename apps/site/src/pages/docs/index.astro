@@ -1,0 +1,13 @@
+---
+import { createMarkdownProcessor } from "@astrojs/markdown-remark";
+import { DOC_PAGES, readDocSource } from "../../docPages";
+import DocsLayout from "../../layouts/DocsLayout.astro";
+
+const page = DOC_PAGES[0];
+const processor = await createMarkdownProcessor();
+const { code } = await processor.render(readDocSource(page.file));
+---
+
+<DocsLayout currentSlug={page.slug} title={`${page.title} · Docs · Inbase`}>
+  <article class="docs" set:html={code} />
+</DocsLayout>

@@ -261,6 +261,7 @@ export function copyDir(from, to) {
       copyDir(source, dest)
       continue
     }
+    if (entry.name.endsWith('.dep.md')) continue
     fs.copyFileSync(source, dest)
   }
 }

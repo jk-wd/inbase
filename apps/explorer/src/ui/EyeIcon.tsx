@@ -122,6 +122,22 @@ export function PersonIcon({
   )
 }
 
+export function MenuIcon({
+  size = 16,
+  title = 'Actions',
+}: {
+  size?: number
+  title?: string
+}) {
+  return (
+    <StrokeIcon size={size} title={title}>
+      <path d="M4 7h16" />
+      <path d="M4 12h16" />
+      <path d="M4 17h16" />
+    </StrokeIcon>
+  )
+}
+
 export function PanelToggleIcon({
   side,
   hidden,

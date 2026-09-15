@@ -21,7 +21,7 @@ import {
   readActiveSession,
   focusSession,
   readBlueprint,
-  readBlueprintSession,
+  userContextFile,
   readOverlay,
   readManifest,
   reportPlan as reportPlanStore,
@@ -35,12 +35,14 @@ import {
   listAttachQueue,
   nextAttachSessionId,
   parseSessionColorQuery,
+  resolveSessionId,
+  readChats,
+  isChatLocked,
   colorUnknownMessage,
   colorMissingMessage,
   SESSION_SLOT_COUNT,
   SESSION_COLORS,
   ensureSessionPool,
-  sessionPoolSize,
   setInitialInstruction,
   addContextFiles,
   removeContextFile,
@@ -157,9 +159,12 @@ test('setup session opens blueprint placement with no LLM attached', () => {
   const env = fixture()
   try {
     const started = setupSession(env.dataDir)
-    assert.match(started.sessionId, /^viz-[0-9a-f]+$/)
+    assert.equal(started.sessionId, 'coral')
+    assert.equal(started.color, 'coral')
     assert.equal(started.phase, 'blueprint')
     assert.equal(started.awaitingAttach, true)
+    assert.equal(isChatLocked(env.dataDir, 'coral'), false)
+    assert.equal(readChats(env.dataDir).coral.locked, false)
     assert.equal(readActiveSession(env.dataDir), started.sessionId)
 
     const intent = sessionIntent(env.dataDir, started.sessionId, ['src/a.ts'])
@@ -455,6 +460,9 @@ test('parseSessionColorQuery maps aliases and rejects blue', () => {
     () => parseSessionColorQuery('navy'),
     (error) => String(error.message) === colorUnknownMessage('navy'),
   )
+  assert.equal(resolveSessionId('red'), 'coral')
+  assert.equal(resolveSessionId('Coral'), 'coral')
+  assert.equal(resolveSessionId('prep-chat'), 'prep-chat')
 })
 
 test('attach --color takes that waiting session even if it is not first', () => {
@@ -573,16 +581,17 @@ test('attach --color starts clean when that color already has leftover LLM work'
       color: 'red',
       targetRoot: env.targetRoot,
     })
-    assert.notEqual(attached.sessionId, coral.sessionId)
+    assert.equal(attached.sessionId, coral.sessionId)
     assert.equal(attached.color, 'coral')
     assert.equal(attached.awaitingAttach, false)
     assert.equal(attached.phase, 'preparing')
     assert.deepEqual(attached.steps, [])
     assert.equal(attached.feature, '')
-    assert.equal(isSessionStopped(env.dataDir, coral.sessionId), true)
+    assert.equal(isSessionStopped(env.dataDir, coral.sessionId), false)
+    assert.equal(isChatLocked(env.dataDir, 'coral'), true)
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 1\n',
+      'export const value = 2\n',
     )
     assert.equal(attached.initialInstruction, 'Keep the coral request')
     assert.deepEqual(readLocalBlueprint(env.dataDir, attached.sessionId).files, [
@@ -676,11 +685,11 @@ test('a newly created session waits behind older sessions in the attach queue', 
 test('attach fails when no visualizer session is waiting', () => {
   const env = fixture()
   try {
-    assert.throws(() => attachSession(env.dataDir), /VISUAL_CODER_CHAT_LIMIT/)
+    assert.throws(() => attachSession(env.dataDir), /VISUAL_CODER_ALL_COLORS_LOCKED/)
     const started = setupSession(env.dataDir)
     attachSession(env.dataDir)
     focusSession(env.dataDir, started.sessionId)
-    assert.throws(() => attachSession(env.dataDir), /VISUAL_CODER_CHAT_LIMIT/)
+    assert.throws(() => attachSession(env.dataDir), /VISUAL_CODER_ALL_COLORS_LOCKED/)
   } finally {
     env.cleanup()
   }
@@ -700,51 +709,93 @@ test('startup opens an empty unconnected session per color', () => {
   try {
     const created = ensureSessionPool(env.dataDir)
     assert.equal(created.length, SESSION_SLOT_COUNT)
-    assert.equal(sessionPoolSize(env.dataDir), SESSION_SLOT_COUNT)
     const ids = listOpenSessionIds(env.dataDir)
     assert.equal(ids.length, SESSION_SLOT_COUNT)
     const colors = ids.map((sessionId) => readManifest(env.dataDir, sessionId).color)
     assert.deepEqual(colors.sort(), SESSION_COLORS.map((entry) => entry.id).sort())
     for (const sessionId of ids) {
       const manifest = readManifest(env.dataDir, sessionId)
-      assert.match(sessionId, /^viz-[0-9a-f]+$/)
+      assert.equal(sessionId, manifest.color)
       assert.equal(manifest.awaitingAttach, true)
       assert.equal(manifest.name, '')
       assert.equal(manifest.phase, 'blueprint')
       const intent = sessionIntent(env.dataDir, sessionId)
       assert.equal(intent.color, manifest.color)
+      assert.equal(intent.sessionId, manifest.color)
       assert.equal(typeof intent.colorName, 'string')
       assert.match(intent.colorHex, /^#[0-9a-f]{6}$/)
     }
+    assert.deepEqual(
+      SESSION_COLORS.map((entry) => readChats(env.dataDir)[entry.id].locked),
+      SESSION_COLORS.map(() => false),
+    )
     assert.equal(nextAttachSessionId(env.dataDir), listAttachQueue(env.dataDir)[0])
     assert.equal(readActiveSession(env.dataDir), nextAttachSessionId(env.dataDir))
     assert.equal(ensureSessionPool(env.dataDir).length, 0)
+    const context = JSON.parse(fs.readFileSync(userContextFile(env.dataDir), 'utf8'))
+    assert.equal(context.focusedSessionId, readActiveSession(env.dataDir))
+    assert.equal(fs.existsSync(path.join(env.dataDir, 'active-session.json')), false)
+    assert.equal(fs.existsSync(path.join(env.dataDir, 'session-pool.json')), false)
+    assert.equal(fs.existsSync(path.join(env.dataDir, 'blueprint-session.json')), false)
   } finally {
     env.cleanup()
   }
 })
 
-test('an extra chat is refused while every slot is connected', () => {
+test('focused session migrates from active-session.json into user-context.json', () => {
+  const env = fixture()
+  try {
+    ensureSessionPool(env.dataDir, { focus: false })
+    const amber = 'amber'
+    fs.writeFileSync(
+      path.join(env.dataDir, 'active-session.json'),
+      `${JSON.stringify({ sessionId: amber }, null, 2)}\n`,
+    )
+    fs.writeFileSync(
+      path.join(env.dataDir, 'session-pool.json'),
+      `${JSON.stringify({ count: 10 }, null, 2)}\n`,
+    )
+    fs.writeFileSync(
+      path.join(env.dataDir, 'blueprint-session.json'),
+      `${JSON.stringify({ sessionId: null }, null, 2)}\n`,
+    )
+    assert.equal(readActiveSession(env.dataDir), amber)
+    ensureSessionPool(env.dataDir)
+    assert.equal(readActiveSession(env.dataDir), amber)
+    const context = JSON.parse(fs.readFileSync(userContextFile(env.dataDir), 'utf8'))
+    assert.equal(context.focusedSessionId, amber)
+    assert.equal(fs.existsSync(path.join(env.dataDir, 'active-session.json')), false)
+    assert.equal(fs.existsSync(path.join(env.dataDir, 'session-pool.json')), false)
+    assert.equal(fs.existsSync(path.join(env.dataDir, 'blueprint-session.json')), false)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('attach is refused when every color is locked', () => {
   const env = fixture()
   try {
     const created = ensureSessionPool(env.dataDir)
     for (const session of created) attachSession(env.dataDir, session.sessionId)
-    assert.throws(() => attachSession(env.dataDir), /VISUAL_CODER_CHAT_LIMIT/)
-    assert.throws(() => setupSession(env.dataDir), /VISUAL_CODER_CHAT_LIMIT/)
+    assert.throws(() => attachSession(env.dataDir), /VISUAL_CODER_ALL_COLORS_LOCKED/)
+    assert.throws(() => setupSession(env.dataDir), /VISUAL_CODER_ALL_COLORS_LOCKED/)
   } finally {
     env.cleanup()
   }
 })
 
-test('stopping a connected chat opens a new empty slot', () => {
+test('stopping a connected chat unlocks that color slot', () => {
   const env = fixture()
   try {
     const created = ensureSessionPool(env.dataDir)
     attachSession(env.dataDir, created[0].sessionId)
+    assert.equal(isChatLocked(env.dataDir, created[0].sessionId), true)
     stopSession(env.dataDir, created[0].sessionId)
     const ids = listOpenSessionIds(env.dataDir)
     assert.equal(ids.length, SESSION_SLOT_COUNT)
-    assert.equal(ids.includes(created[0].sessionId), false)
+    assert.equal(ids.includes(created[0].sessionId), true)
+    assert.equal(readManifest(env.dataDir, created[0].sessionId).awaitingAttach, true)
+    assert.equal(isChatLocked(env.dataDir, created[0].sessionId), false)
     assert.equal(
       ids.filter((sessionId) => readManifest(env.dataDir, sessionId).awaitingAttach)
         .length,
@@ -764,7 +815,11 @@ test('completeSession while the LLM is preparing frees the color slot', () => {
     attachSession(env.dataDir, sessionId)
     assert.equal(readManifest(env.dataDir, sessionId).phase, 'preparing')
     completeSession(env.dataDir, sessionId, env.targetRoot)
-    assert.equal(readManifest(env.dataDir, sessionId), null)
+    const waitingSlot = readManifest(env.dataDir, sessionId)
+    assert.equal(waitingSlot.sessionId, sessionId)
+    assert.equal(waitingSlot.color, color)
+    assert.equal(waitingSlot.awaitingAttach, true)
+    assert.equal(isChatLocked(env.dataDir, sessionId), false)
     const waiting = listOpenSessionIds(env.dataDir).map((id) =>
       readManifest(env.dataDir, id),
     )
@@ -794,14 +849,18 @@ test('completeSession keeps files and frees the color slot', () => {
     fs.writeFileSync(path.join(env.targetRoot, 'src/a.ts'), 'export const value = 2\n')
     appendDiff(env.dataDir, env.targetRoot, { sessionId })
     completeSession(env.dataDir, sessionId, env.targetRoot)
-    assert.equal(readManifest(env.dataDir, sessionId), null)
+    const freed = readManifest(env.dataDir, sessionId)
+    assert.equal(freed.sessionId, sessionId)
+    assert.equal(freed.color, color)
+    assert.equal(freed.awaitingAttach, true)
+    assert.equal(isChatLocked(env.dataDir, sessionId), false)
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
       'export const value = 2\n',
     )
     const ids = listOpenSessionIds(env.dataDir)
     assert.equal(ids.length, SESSION_SLOT_COUNT)
-    assert.equal(ids.includes(sessionId), false)
+    assert.equal(ids.includes(sessionId), true)
     const waiting = ids.map((id) => readManifest(env.dataDir, id))
     assert.equal(waiting.some((manifest) => manifest.color === color), true)
     assert.equal(
@@ -820,22 +879,19 @@ test('completeSession drops the LLM connection without a stop signal', () => {
     const sessionId = created[0].sessionId
     const color = readManifest(env.dataDir, sessionId).color
     attachSession(env.dataDir, sessionId)
-    const leftover = readManifest(env.dataDir, sessionId)
     completeSession(env.dataDir, sessionId, env.targetRoot)
 
-    assert.equal(readManifest(env.dataDir, sessionId), null)
-    assert.equal(isSessionReleased(env.dataDir, sessionId), true)
+    assert.equal(readManifest(env.dataDir, sessionId).awaitingAttach, true)
+    assert.equal(isChatLocked(env.dataDir, sessionId), false)
+    assert.equal(isSessionReleased(env.dataDir, sessionId), false)
     assert.equal(isSessionStopped(env.dataDir, sessionId), false)
     assert.equal(isWorkflowStopped(env.dataDir, sessionId), false)
 
     touchSessionConnection(env.dataDir, sessionId)
+    assert.equal(isChatLocked(env.dataDir, sessionId), false)
     assert.equal(
       fs.existsSync(path.join(env.dataDir, 'diff-sessions', sessionId)),
-      false,
-    )
-    assert.throws(
-      () => writeManifest(env.dataDir, leftover),
-      (error) => String(error.message).includes('No workflow session found'),
+      true,
     )
     assert.throws(
       () =>
@@ -845,16 +901,15 @@ test('completeSession drops the LLM connection without a stop signal', () => {
           stepTitles: ['Build value'],
           targetRoot: env.targetRoot,
         }),
-      (error) => String(error.message).includes('No workflow session found'),
+      (error) => String(error.message).includes('VISUAL_CODER_STOPPED'),
     )
-    assert.equal(readManifest(env.dataDir, sessionId), null)
 
     const waiting = listOpenSessionIds(env.dataDir).map((id) =>
       readManifest(env.dataDir, id),
     )
     const next = waiting.find((manifest) => manifest.color === color)
     assert.equal(next.awaitingAttach, true)
-    assert.notEqual(next.sessionId, sessionId)
+    assert.equal(next.sessionId, sessionId)
   } finally {
     env.cleanup()
   }
@@ -870,18 +925,16 @@ test('session color order stays fixed after a slot is refilled', () => {
     )
     attachSession(env.dataDir, created[0].sessionId)
     stopSession(env.dataDir, created[0].sessionId)
-    const createdOrder = listOpenSessionIds(env.dataDir).map(
-      (sessionId) => readManifest(env.dataDir, sessionId).color,
-    )
-    assert.equal(createdOrder.at(-1), 'coral')
     assert.deepEqual(
       listSessionIntents(env.dataDir).map((intent) => intent.color),
       SESSION_COLORS.map((entry) => entry.id),
     )
     assert.equal(
       listOpenSessionIds(env.dataDir).includes(created[0].sessionId),
-      false,
+      true,
     )
+    assert.equal(readManifest(env.dataDir, created[0].sessionId).color, 'coral')
+    assert.equal(isChatLocked(env.dataDir, created[0].sessionId), false)
   } finally {
     env.cleanup()
   }
@@ -2001,7 +2054,7 @@ test('stop deletes the session plan, patches, and active pointer', () => {
     assert.equal(isWorkflowStopped(env.dataDir, 'stop-chat'), true)
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 1\n',
+      'export const value = 2\n',
     )
     touchSessionConnection(env.dataDir, 'stop-chat')
     assert.equal(
@@ -2100,11 +2153,10 @@ test('explicit clear still wipes the diff-sessions folder', () => {
       ['.gitkeep'],
     )
     assert.equal(readActiveSession(env.dataDir), null)
-    assert.equal(readBlueprintSession(env.dataDir), null)
     assert.equal(readManifest(env.dataDir, 'live-chat'), null)
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 1\n',
+      'export const value = 2\n',
     )
   } finally {
     env.cleanup()
@@ -2278,28 +2330,27 @@ test('visualizer startup discards leftover LLM sessions', () => {
       true,
     )
     assert.equal(readActiveSession(env.dataDir), nextAttachSessionId(env.dataDir))
-    assert.equal(readBlueprintSession(env.dataDir), null)
     assert.equal(
       fs.existsSync(path.join(env.dataDir, 'diff-sessions', 'boot-chat')),
       false,
     )
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 1\n',
+      'export const value = 2\n',
     )
   } finally {
     env.cleanup()
   }
 })
 
-test('stop reverts accepted diffs and the pending preview', () => {
+test('stop keeps live files and only discards session overlays', () => {
   const env = fixture()
   const addB =
     '--- /dev/null\n+++ b/src/b.ts\n@@ -0,0 +1,1 @@\n+export const extra = 1\n'
   try {
     reportPlan(env.dataDir, {
       sessionId: 'keep-chat',
-      feature: 'Revert accepted',
+      feature: 'Keep live files',
       stepTitles: ['Change value', 'Add extra'],
     })
     appendDiff(env.dataDir, env.targetRoot, {
@@ -2322,15 +2373,18 @@ test('stop reverts accepted diffs and the pending preview', () => {
     stopSession(env.dataDir, 'keep-chat', env.targetRoot)
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 1\n',
+      'export const value = 2\n',
     )
-    assert.equal(fs.existsSync(path.join(env.targetRoot, 'src/b.ts')), false)
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/b.ts'), 'utf8'),
+      'export const extra = 1\n',
+    )
   } finally {
     env.cleanup()
   }
 })
 
-test('stop unstages reverted files from git', () => {
+test('stop unstages session paths without reverting live files', () => {
   const env = fixture({ git: true })
   const addB =
     '--- /dev/null\n+++ b/src/b.ts\n@@ -0,0 +1,1 @@\n+export const extra = 1\n'
@@ -2358,9 +2412,12 @@ test('stop unstages reverted files from git', () => {
     stopSession(env.dataDir, 'stage-chat', env.targetRoot)
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 1\n',
+      'export const value = 2\n',
     )
-    assert.equal(fs.existsSync(path.join(env.targetRoot, 'src/b.ts')), false)
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/b.ts'), 'utf8'),
+      'export const extra = 1\n',
+    )
     assert.equal(runGit(env.root, ['diff', '--cached', '--name-only']).stdout.trim(), '')
   } finally {
     env.cleanup()
@@ -2414,12 +2471,12 @@ test('stop during working blocks further LLM writes until start-session', () => 
   }
 })
 
-test('stop during working restores live files including binaries', () => {
+test('stop during working keeps live files including binaries', () => {
   const env = fixture()
   try {
     reportPlan(env.dataDir, {
       sessionId: 'live-stop',
-      feature: 'Restore live files',
+      feature: 'Keep live files',
       stepTitles: ['Build value'],
       targetRoot: env.targetRoot,
     })
@@ -2440,10 +2497,16 @@ test('stop during working restores live files including binaries', () => {
     stopSession(env.dataDir, 'live-stop', env.targetRoot)
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
-      'export const value = 1\n',
+      'export const value = 9\n',
     )
-    assert.equal(fs.existsSync(path.join(env.targetRoot, 'src/balloon.ts')), false)
-    assert.equal(fs.existsSync(path.join(env.targetRoot, 'assets/park.png')), false)
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/balloon.ts'), 'utf8'),
+      'export const balloon = 1\n',
+    )
+    assert.equal(
+      fs.existsSync(path.join(env.targetRoot, 'assets/park.png')),
+      true,
+    )
   } finally {
     env.cleanup()
   }
@@ -2777,6 +2840,48 @@ test('refuses to record a live step with no file changes', () => {
     assert.throws(
       () => appendDiff(env.dataDir, env.targetRoot, { sessionId: 'empty-live' }),
       /No file changes/,
+    )
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('stores LLM change notes on the recorded overlay', () => {
+  const env = fixture()
+  try {
+    startSession(env.dataDir, { sessionId: 'note-chat', name: 'Notes' })
+    answerBlueprint(env.dataDir, 'note-chat', false)
+    reportPlan(env.dataDir, {
+      sessionId: 'note-chat',
+      feature: 'Notes',
+      stepTitles: ['Bump value'],
+      targetRoot: env.targetRoot,
+    })
+    fs.writeFileSync(path.join(env.targetRoot, 'src/a.ts'), 'export const value = 2\n')
+    const recorded = appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'note-chat',
+      changeNotes: {
+        'src/a.ts': 'edited value to 2 so the demo stays in sync',
+        src: 'bumped the demo value',
+      },
+    })
+    const overlay = readOverlay(env.dataDir, 'note-chat', recorded.entry)
+    assert.equal(
+      overlay.changeNotes['src/a.ts'],
+      'edited value to 2 so the demo stays in sync',
+    )
+    assert.equal(overlay.changeNotes.src, 'bumped the demo value')
+    const intent = sessionIntent(
+      env.dataDir,
+      'note-chat',
+      ['src/a.ts'],
+      undefined,
+      undefined,
+      env.targetRoot,
+    )
+    assert.equal(
+      intent.changeNotes['src/a.ts'],
+      'edited value to 2 so the demo stays in sync',
     )
   } finally {
     env.cleanup()

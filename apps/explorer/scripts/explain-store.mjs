@@ -22,6 +22,23 @@ function splitList(value) {
     .filter(Boolean)
 }
 
+export function normalizeExplainBody(value) {
+  if (typeof value !== 'string') return ''
+  return value
+    .replace(/\\n/g, '\n')
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function joinExplainBody(current, next) {
+  const left = normalizeExplainBody(current)
+  const right = normalizeExplainBody(next)
+  if (!left) return right
+  if (!right) return left
+  return `${left}\n\n${right}`
+}
+
 function parseRelation(value) {
   if (typeof value !== 'string') return null
   const index = value.lastIndexOf(':')
@@ -100,6 +117,15 @@ export function stripExplainSubSteps(steps) {
   return (Array.isArray(steps) ? steps : [])
     .filter((step) => !isExplainSubStep(step?.index))
     .map((step) => ({ ...step, asked: '' }))
+}
+
+export function stripExplainDescendants(steps, parent) {
+  const parentId = explainStepId(parent, '')
+  return (Array.isArray(steps) ? steps : [])
+    .filter((step) => !isExplainDescendant(step?.index, parentId))
+    .map((step) =>
+      step?.index === parentId ? { ...step, asked: '' } : step,
+    )
 }
 
 function parseSymbolKind(value) {
@@ -281,7 +307,7 @@ function normalizeStep(value, index) {
   return {
     index: assigned,
     title,
-    body: typeof value.body === 'string' ? value.body.trim() : '',
+    body: normalizeExplainBody(value.body),
     asked,
     files,
     folders: uniqueStrings(Array.isArray(value.folders) ? value.folders : []),
@@ -445,10 +471,8 @@ export function consumeExplainStart(dataDir) {
 
 function reportExplainChildren(dataDir, parent, input) {
   const current = readExplain(dataDir)
-  const parentId = topLevelExplainStepId(parent)
-  const roots = stripExplainSubSteps(current.steps)
-  const parentIndex = roots.findIndex((step) => step.index === parentId)
-  if (!current.active || parentIndex < 0) {
+  const parentId = explainStepId(parent, '')
+  if (!current.active || !current.steps.some((step) => step.index === parentId)) {
     throw new Error(`unknown parent step ${parentId || parent}`)
   }
   const raw = Array.isArray(input?.steps) ? input.steps : []
@@ -462,15 +486,17 @@ function reportExplainChildren(dataDir, parent, input) {
         ? current.pendingQuestion.question
         : ''
   const children = assignStepIndexes(raw, parentId)
+  const without = stripExplainDescendants(current.steps, parentId)
+  const parentIndex = without.findIndex((step) => step.index === parentId)
   const parentStep = {
-    ...roots[parentIndex],
+    ...without[parentIndex],
     asked,
   }
   const steps = [
-    ...roots.slice(0, parentIndex),
+    ...without.slice(0, parentIndex),
     parentStep,
     ...children,
-    ...roots.slice(parentIndex + 1),
+    ...without.slice(parentIndex + 1),
   ]
   return writeExplain(dataDir, {
     ...current,
@@ -535,16 +561,12 @@ export function askExplainQuestion(dataDir, step, question) {
   if (!clickedStep) {
     throw new Error(`unknown step ${clicked || step}`)
   }
-  const parent = topLevelExplainStepId(clicked)
-  if (!current.steps.some((item) => item.index === parent)) {
-    throw new Error(`unknown step ${parent || step}`)
-  }
   return writeExplain(dataDir, {
     ...current,
-    steps: stripExplainSubSteps(current.steps),
-    currentStep: parent,
+    steps: stripExplainDescendants(current.steps, clicked),
+    currentStep: clicked,
     pendingQuestion: {
-      parent,
+      parent: clicked,
       question: text,
       from: clicked,
       fromTitle: clickedStep.title,
@@ -620,7 +642,8 @@ export function parseExplainArgs(args) {
       continue
     }
     if (flag === '--body') {
-      requireCurrent().body = value.trim()
+      const step = requireCurrent()
+      step.body = joinExplainBody(step.body, value)
       index += 1
       continue
     }

@@ -4,8 +4,10 @@ import crypto from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { applyUnifiedPatch } from './patch-lib.mjs'
 import {
+  attachChangeNotes,
   dropMassKnownCreates,
   emptyChangeOverlay,
+  mergeChangeNotes,
   overlayFileIds,
   overlayFromPatchText,
   overlayHasChanges,
@@ -74,8 +76,8 @@ function sessionColorCommandHelp() {
   return `Connect with ${joinOrList(commands)} (aliases: ${joinOrList(aliases)}). Blue is the global blueprint, not a chat.`
 }
 
-export const CHAT_LIMIT_MESSAGE =
-  `VISUAL_CODER_CHAT_LIMIT Only ${SESSION_SLOT_COUNT} Inbase chats can be connected at once. Click Done in a session window or type /stop in a connected chat, then start a new chat.`
+export const ALL_COLORS_LOCKED_MESSAGE =
+  'VISUAL_CODER_ALL_COLORS_LOCKED Every color already has a chat connected. Click Done in a session window or type /stop in a connected chat, then try again.'
 export const NOT_RUNNING_MESSAGE =
   "VISUAL_CODER_NOT_RUNNING Inbase isn't running. Start it with `npx inbase run`, then send this request again."
 export function colorUnknownMessage(query) {
@@ -144,16 +146,38 @@ export function compareSessionColorOrder(left, right) {
   return sessionColorOrderIndex(left) - sessionColorOrderIndex(right)
 }
 
-export function parseSessionColorQuery(value) {
+function lookupSessionColor(value) {
   if (typeof value !== 'string' || value.trim() === '') return null
   const key = value.trim().toLowerCase()
-  if (GLOBAL_COLOR_QUERIES.has(key)) {
-    throw new Error(colorUnknownMessage(key === 'global' ? 'Global' : 'Blue'))
-  }
+  if (GLOBAL_COLOR_QUERIES.has(key)) return null
   const id = SESSION_COLOR_ALIASES[key] ?? resolveSessionColor(key)?.id ?? null
-  const color = resolveSessionColor(id)
-  if (!color) throw new Error(colorUnknownMessage(value.trim()))
+  return resolveSessionColor(id)
+}
+
+export function parseSessionColorQuery(value) {
+  if (typeof value !== 'string' || value.trim() === '') return null
+  const key = value.trim()
+  if (GLOBAL_COLOR_QUERIES.has(key.toLowerCase())) {
+    throw new Error(colorUnknownMessage(key.toLowerCase() === 'global' ? 'Global' : 'Blue'))
+  }
+  const color = lookupSessionColor(key)
+  if (!color) throw new Error(colorUnknownMessage(key))
   return color
+}
+
+export function resolveSessionId(value) {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error(
+      'sessionId must be 1-128 letters, numbers, dots, underscores, or hyphens',
+    )
+  }
+  const key = value.trim()
+  if (GLOBAL_COLOR_QUERIES.has(key.toLowerCase())) {
+    throw new Error(
+      colorUnknownMessage(key.toLowerCase() === 'global' ? 'Global' : 'Blue'),
+    )
+  }
+  return lookupSessionColor(key)?.id ?? assertSessionId(key)
 }
 
 function assignedSessionColors(dataDir) {
@@ -161,13 +185,14 @@ function assignedSessionColors(dataDir) {
   for (const sessionId of listOpenSessionIds(dataDir)) {
     const color = readManifest(dataDir, sessionId)?.color
     if (resolveSessionColor(color)) used.add(color)
+    if (resolveSessionColor(sessionId)) used.add(sessionId)
   }
   return used
 }
 
 function nextSessionColor(dataDir) {
   const used = assignedSessionColors(dataDir)
-  return SESSION_COLORS.find((entry) => !used.has(entry.id))?.id ?? SESSION_COLORS[0].id
+  return SESSION_COLORS.find((entry) => !used.has(entry.id))?.id ?? null
 }
 
 function ensureManifestColor(dataDir, manifest) {
@@ -179,7 +204,8 @@ function ensureManifestColor(dataDir, manifest) {
   ) {
     return manifest
   }
-  manifest.color = nextSessionColor(dataDir)
+  manifest.color =
+    resolveSessionColor(manifest.sessionId)?.id ?? nextSessionColor(dataDir) ?? SESSION_COLORS[0].id
   const { manifest: file } = sessionPaths(dataDir, manifest.sessionId)
   atomicWrite(file, `${JSON.stringify(manifest, null, 2)}\n`)
   return manifest
@@ -286,16 +312,63 @@ export function resolveTargetFile(targetRoot, fileId) {
   return { id: normalized, absolute }
 }
 
-export function readActiveSession(dataDir) {
+const LEGACY_STATE_FILES = [
+  'active-session.json',
+  'blueprint-session.json',
+  'session-pool.json',
+]
+
+export function userContextFile(dataDir) {
+  return path.join(dataDir, 'user-context.json')
+}
+
+function readUserContextDocument(dataDir) {
+  const value = readJson(userContextFile(dataDir), null)
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return value
+}
+
+function writeUserContextDocument(dataDir, next) {
+  atomicWrite(userContextFile(dataDir), `${JSON.stringify(next, null, 2)}\n`)
+}
+
+function parseStoredSessionId(value) {
+  if (typeof value !== 'string' || value.trim() === '') return null
+  try {
+    return assertSessionId(value)
+  } catch {
+    return null
+  }
+}
+
+function readLegacyActiveSession(dataDir) {
   const value = readJson(path.join(dataDir, 'active-session.json'), null)
-  return value?.sessionId ? assertSessionId(value.sessionId) : null
+  return parseStoredSessionId(value?.sessionId)
+}
+
+function removeLegacyStateFiles(dataDir) {
+  for (const name of LEGACY_STATE_FILES) {
+    const file = path.join(dataDir, name)
+    try {
+      if (fs.existsSync(file)) fs.unlinkSync(file)
+    } catch {
+      // Best-effort cleanup of superseded editor-state files.
+    }
+  }
+}
+
+export function readActiveSession(dataDir) {
+  return (
+    parseStoredSessionId(readUserContextDocument(dataDir).focusedSessionId) ??
+    readLegacyActiveSession(dataDir)
+  )
 }
 
 export function writeActiveSession(dataDir, sessionId) {
-  atomicWrite(
-    path.join(dataDir, 'active-session.json'),
-    `${JSON.stringify({ sessionId: sessionId ? assertSessionId(sessionId) : null }, null, 2)}\n`,
-  )
+  const next = { ...readUserContextDocument(dataDir) }
+  next.focusedSessionId = sessionId ? assertSessionId(sessionId) : null
+  writeUserContextDocument(dataDir, next)
+  removeLegacyStateFiles(dataDir)
 }
 
 function connectionFile(dataDir, sessionId) {
@@ -344,15 +417,11 @@ function isFreshTimestamp(value, now = Date.now()) {
 export function touchSessionConnection(dataDir, sessionId) {
   const safeId = assertSessionId(sessionId)
   if (isSessionStopped(dataDir, safeId) || isSessionReleased(dataDir, safeId)) return
+  if (!readManifest(dataDir, safeId)) return
   atomicWrite(
     connectionFile(dataDir, safeId),
     `${JSON.stringify({ sessionId: safeId, connectedAt: new Date().toISOString() }, null, 2)}\n`,
   )
-  const manifest = readManifest(dataDir, safeId)
-  if (manifest?.awaitingAttach) {
-    manifest.awaitingAttach = false
-    writeManifest(dataDir, manifest)
-  }
 }
 
 function waiterSessionIds() {
@@ -376,9 +445,10 @@ function isAcceptedSession(manifest) {
   )
 }
 
-function shouldRestoreDiscardedSession(manifest) {
-  if (!manifest || isAcceptedSession(manifest)) return false
-  return true
+function shouldRestoreDiscardedSession(_manifest) {
+  // Abandoned session overlays are UI-only. Never rewind the live working tree;
+  // the map shows latest git changes, and history walking stays visual.
+  return false
 }
 
 function isStalledWorking(manifest, waiterIds, sessionId, now = Date.now()) {
@@ -470,23 +540,6 @@ export function listSessionIntents(dataDir, knownFileIds = [], targetRoot = null
     .sort((left, right) => compareSessionColorOrder(left.color, right.color))
 }
 
-export function readBlueprintSession(dataDir) {
-  const value = readJson(path.join(dataDir, 'blueprint-session.json'), null)
-  return value?.sessionId ? assertSessionId(value.sessionId) : null
-}
-
-export function writeBlueprintSession(dataDir, sessionId) {
-  atomicWrite(
-    path.join(dataDir, 'blueprint-session.json'),
-    `${JSON.stringify({ sessionId: sessionId ? assertSessionId(sessionId) : null }, null, 2)}\n`,
-  )
-}
-
-function releaseBlueprintSession(dataDir, sessionId) {
-  const safeId = assertSessionId(sessionId)
-  if (readBlueprintSession(dataDir) === safeId) writeBlueprintSession(dataDir, null)
-}
-
 export function focusSession(dataDir, sessionId) {
   const safeId = assertSessionId(sessionId)
   requireManifest(dataDir, safeId)
@@ -494,34 +547,78 @@ export function focusSession(dataDir, sessionId) {
   return safeId
 }
 
-function sessionPoolFile(dataDir) {
-  return path.join(dataDir, 'session-pool.json')
+function chatsFile(dataDir) {
+  return path.join(dataDir, 'chats.json')
 }
 
-export function enableSessionPool(dataDir, count = SESSION_SLOT_COUNT) {
-  atomicWrite(
-    sessionPoolFile(dataDir),
-    `${JSON.stringify({ count }, null, 2)}\n`,
-  )
+function emptyChats() {
+  const chats = {}
+  for (const color of SESSION_COLORS) {
+    chats[color.id] = { locked: false }
+  }
+  return chats
 }
 
-export function sessionPoolSize(dataDir) {
-  const value = readJson(sessionPoolFile(dataDir), null)
-  const count = value?.count
-  return Number.isInteger(count) && count > 0 ? count : 0
+export function readChats(dataDir) {
+  const value = readJson(chatsFile(dataDir), null)
+  const chats = emptyChats()
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return chats
+  for (const color of SESSION_COLORS) {
+    const entry = value[color.id]
+    chats[color.id] = { locked: entry?.locked === true }
+  }
+  return chats
+}
+
+function writeChats(dataDir, chats) {
+  const next = emptyChats()
+  for (const color of SESSION_COLORS) {
+    next[color.id] = { locked: Boolean(chats?.[color.id]?.locked) }
+  }
+  atomicWrite(chatsFile(dataDir), `${JSON.stringify(next, null, 2)}\n`)
+}
+
+export function isChatLocked(dataDir, sessionId) {
+  const color = resolveSessionColor(sessionId)
+  if (color) return readChats(dataDir)[color.id].locked
+  const manifest = readManifest(dataDir, sessionId)
+  return Boolean(manifest) && manifest.awaitingAttach !== true
+}
+
+function setChatLocked(dataDir, sessionId, locked) {
+  const safeId = assertSessionId(sessionId)
+  const color = resolveSessionColor(safeId)
+  if (color) {
+    const chats = readChats(dataDir)
+    chats[color.id] = { locked: Boolean(locked) }
+    writeChats(dataDir, chats)
+  }
+  const manifest = readManifest(dataDir, safeId)
+  if (!manifest) return
+  manifest.awaitingAttach = !locked
+  writeManifest(dataDir, manifest)
+}
+
+function sessionPoolCount(options = {}) {
+  const count = options.count
+  return Number.isInteger(count) && count > 0 ? count : SESSION_SLOT_COUNT
+}
+
+function hasColorSlot(dataDir) {
+  return SESSION_COLORS.some((color) => readManifest(dataDir, color.id))
 }
 
 export function ensureSessionPool(dataDir, options = {}) {
-  const size = sessionPoolSize(dataDir)
-  if (options.count != null && options.count !== size) {
-    enableSessionPool(dataDir, options.count)
-  } else if (size <= 0) {
-    enableSessionPool(dataDir, SESSION_SLOT_COUNT)
-  }
-  const count = sessionPoolSize(dataDir)
+  const active = readActiveSession(dataDir)
+  if (active) writeActiveSession(dataDir, active)
+  else removeLegacyStateFiles(dataDir)
+  const count = sessionPoolCount(options)
   const created = []
-  while (listOpenSessionIds(dataDir).length < count) {
-    created.push(setupSession(dataDir, { focus: false }))
+  writeChats(dataDir, readChats(dataDir))
+  for (const color of SESSION_COLORS.slice(0, count)) {
+    const existing = readManifest(dataDir, color.id)
+    if (existing && !isTerminalSession(existing)) continue
+    created.push(setupSession(dataDir, { sessionId: color.id, focus: false }))
   }
   if (options.focus !== false && !readActiveSession(dataDir)) {
     const next = nextAttachSessionId(dataDir) ?? listOpenSessionIds(dataDir)[0]
@@ -531,37 +628,8 @@ export function ensureSessionPool(dataDir, options = {}) {
 }
 
 function refillSessionPool(dataDir) {
-  if (sessionPoolSize(dataDir) <= 0) return []
+  if (!hasColorSlot(dataDir)) return []
   return ensureSessionPool(dataDir, { focus: false })
-}
-
-function attachQueueFile(dataDir) {
-  return path.join(dataDir, 'attach-queue.json')
-}
-
-function readStoredAttachQueue(dataDir) {
-  const value = readJson(attachQueueFile(dataDir), null)
-  const ids = Array.isArray(value?.sessionIds) ? value.sessionIds : []
-  const result = []
-  const seen = new Set()
-  for (const id of ids) {
-    try {
-      const safeId = assertSessionId(id)
-      if (seen.has(safeId)) continue
-      seen.add(safeId)
-      result.push(safeId)
-    } catch {
-      // Skip invalid ids.
-    }
-  }
-  return result
-}
-
-function writeAttachQueue(dataDir, sessionIds) {
-  atomicWrite(
-    attachQueueFile(dataDir),
-    `${JSON.stringify({ sessionIds }, null, 2)}\n`,
-  )
 }
 
 function sessionIsWaitingToAttach(manifest) {
@@ -569,37 +637,24 @@ function sessionIsWaitingToAttach(manifest) {
 }
 
 export function listAttachQueue(dataDir) {
-  const recorded = readStoredAttachQueue(dataDir)
-  const waiting = new Set()
+  const waiting = []
   for (const sessionId of listOpenSessionIds(dataDir)) {
-    if (sessionIsWaitingToAttach(readManifest(dataDir, sessionId))) {
-      waiting.add(sessionId)
-    }
+    if (!sessionIsWaitingToAttach(readManifest(dataDir, sessionId))) continue
+    waiting.push(sessionId)
   }
-  const queued = recorded.filter((sessionId) => waiting.has(sessionId))
-  const queuedSet = new Set(queued)
-  const missing = []
-  for (const sessionId of listOpenSessionIds(dataDir)) {
-    if (waiting.has(sessionId) && !queuedSet.has(sessionId)) {
-      missing.push(sessionId)
-    }
-  }
-  const next = [...queued, ...missing]
-  const unchanged =
-    next.length === recorded.length &&
-    next.every((sessionId, index) => sessionId === recorded[index])
-  if (!unchanged) writeAttachQueue(dataDir, next)
-  return next
+  waiting.sort((left, right) => {
+    const order = compareSessionColorOrder(
+      readManifest(dataDir, left)?.color ?? left,
+      readManifest(dataDir, right)?.color ?? right,
+    )
+    if (order !== 0) return order
+    return left.localeCompare(right)
+  })
+  return waiting
 }
 
 export function nextAttachSessionId(dataDir) {
   return listAttachQueue(dataDir)[0] ?? null
-}
-
-function enqueueAttachSession(dataDir, sessionId) {
-  const safeId = assertSessionId(sessionId)
-  const rest = listAttachQueue(dataDir).filter((id) => id !== safeId)
-  writeAttachQueue(dataDir, [...rest, safeId])
 }
 
 function blueprintFile(dataDir) {
@@ -616,63 +671,23 @@ export function isGlobalBlueprintColor(colorId) {
 
 export function findSessionIdByColor(dataDir, colorId) {
   if (isGlobalBlueprintColor(colorId)) return null
+  const color = resolveSessionColor(colorId)
+  if (!color) return null
+  const direct = readManifest(dataDir, color.id)
+  if (direct && !isTerminalSession(direct)) return color.id
   for (const sessionId of listOpenSessionIds(dataDir)) {
-    const color = resolveSessionColor(readManifest(dataDir, sessionId)?.color)
-    if (color?.id === colorId) return sessionId
+    const assigned = resolveSessionColor(readManifest(dataDir, sessionId)?.color)
+    if (assigned?.id === color.id) return sessionId
   }
   return null
-}
-
-function snapshotUserAttachContext(dataDir, sessionId) {
-  const manifest = readManifest(dataDir, sessionId)
-  if (!manifest) return null
-  const dir = sessionPaths(dataDir, sessionId).context
-  const files = normalizeContextFiles(manifest.contextFiles).flatMap((item) => {
-    try {
-      const absolute = contextFileAbsolute(dir, item.storedName)
-      if (!fs.existsSync(absolute)) return []
-      return [
-        {
-          name: item.name,
-          mimeType: item.mimeType,
-          bytes: fs.readFileSync(absolute),
-        },
-      ]
-    } catch {
-      return []
-    }
-  })
-  return {
-    instruction: manifest.initialInstruction,
-    blueprint: readLocalBlueprint(dataDir, sessionId),
-    files,
-  }
-}
-
-function restoreUserAttachContext(dataDir, sessionId, snapshot) {
-  if (!snapshot) return
-  if (snapshot.blueprint) {
-    writeLocalBlueprint(dataDir, sessionId, snapshot.blueprint)
-  }
-  if (snapshot.instruction) {
-    setInitialInstruction(dataDir, sessionId, snapshot.instruction)
-  }
-  if (snapshot.files.length > 0) {
-    addContextFiles(dataDir, sessionId, snapshot.files)
-  }
 }
 
 function resetLlmSessionWork(dataDir, sessionId, targetRoot = null) {
   const safeId = assertSessionId(sessionId)
   const manifest = readManifest(dataDir, safeId)
   if (!manifest || isTerminalSession(manifest)) return manifest
-  if (targetRoot) {
-    try {
-      restoreSessionFiles(dataDir, safeId, targetRoot)
-    } catch {
-      // Incomplete session artifacts should still be cleared.
-    }
-  }
+  // Keep live project files. Only clear stored session overlays / plan state.
+  void targetRoot
   const paths = sessionPaths(dataDir, safeId)
   for (const dir of [paths.diffs, paths.preStep, paths.baselineFiles]) {
     if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true })
@@ -704,21 +719,8 @@ function resetLlmSessionWork(dataDir, sessionId, targetRoot = null) {
 function recycleColorSlotForAttach(dataDir, color, targetRoot = null) {
   const matchId = findSessionIdByColor(dataDir, color.id)
   if (!matchId) throw new Error(colorMissingMessage(color.name))
-  const existing = requireManifest(dataDir, matchId)
-  if (sessionIsWaitingToAttach(existing)) {
-    resetLlmSessionWork(dataDir, matchId, targetRoot)
-    return matchId
-  }
-  const snapshot = snapshotUserAttachContext(dataDir, matchId)
-  stopSession(dataDir, matchId, targetRoot)
-  let nextId = findSessionIdByColor(dataDir, color.id)
-  if (!nextId) {
-    setupSession(dataDir, { focus: false })
-    nextId = findSessionIdByColor(dataDir, color.id)
-  }
-  if (!nextId) throw new Error(colorMissingMessage(color.name))
-  restoreUserAttachContext(dataDir, nextId, snapshot)
-  return nextId
+  resetLlmSessionWork(dataDir, matchId, targetRoot)
+  return matchId
 }
 
 function blueprintHasContent(blueprint) {
@@ -977,11 +979,14 @@ function liveChangeOverlay(
   if (!targetRoot) return stored
   if (hasGitRepo(targetRoot)) {
     const git = readWorkingTreeChanges(targetRoot, knownFileIds)
-    if (overlayHasChanges(git)) return git
+    if (overlayHasChanges(git)) return mergeChangeNotes(git, stored)
     return stored
   }
   try {
-    return captureChangeOverlay(dataDir, sessionId, targetRoot, knownFileIds)
+    return mergeChangeNotes(
+      captureChangeOverlay(dataDir, sessionId, targetRoot, knownFileIds),
+      stored,
+    )
   } catch {
     return stored
   }
@@ -1009,7 +1014,7 @@ export function sessionIntent(
   )
   const preview = withAbsentMappedFiles(
     dropMassKnownCreates(
-      browsingHistory || manifest.awaitingAttach
+      browsingHistory || !isChatLocked(dataDir, sessionId)
         ? stored
         : liveChangeOverlay(dataDir, sessionId, targetRoot, knownFileIds, stored),
       knownFileIds,
@@ -1088,20 +1093,21 @@ export function sessionIntent(
         addedImports: overlay.addedImports,
         changedFunctions: overlay.changedFunctions,
         changedVariables: overlay.changedVariables,
+        changeNotes: overlay.changeNotes,
       }
     }),
     isActiveDiff: Boolean(selected && selected.id === manifest.activeDiffId),
     liveStep: manifest.currentStep,
     preview: previewVisible,
     working:
-      !manifest.awaitingAttach &&
+      isChatLocked(dataDir, sessionId) &&
       (manifest.phase === 'preparing' ||
         manifest.phase === 'working' ||
         manifest.phase === 'replanning'),
     stalledWait: isStalledWorking(manifest, waiterIds, sessionId),
     llmIdle: !isSessionConnected(dataDir, sessionId, waiterIds),
     awaitingAttach:
-      Boolean(manifest.awaitingAttach) &&
+      !isChatLocked(dataDir, sessionId) &&
       !isSessionConnected(dataDir, sessionId, waiterIds),
     listening: waiterIds.has(sessionId),
     lastAck: readSessionAck(dataDir, sessionId),
@@ -1320,16 +1326,17 @@ export function autoAdvance(dataDir, sessionId, targetRoot = null) {
 }
 
 export function startSession(dataDir, input) {
-  const sessionId = assertSessionId(input.sessionId)
+  const sessionId = resolveSessionId(input.sessionId)
   clearStoppedMarker(dataDir, sessionId)
   clearReleasedMarker(dataDir, sessionId)
   const existing = readManifest(dataDir, sessionId)
   const name = sessionName(input.name) || sessionName(input.feature)
-  if (existing) {
+  if (existing && !sessionIsWaitingToAttach(existing) && !isTerminalSession(existing)) {
     if (name && existing.name !== name) {
       existing.name = name
       writeManifest(dataDir, existing)
     }
+    setChatLocked(dataDir, sessionId, true)
     focusSession(dataDir, sessionId)
     return existing
   }
@@ -1339,10 +1346,12 @@ export function startSession(dataDir, input) {
     version: 2,
     sessionId,
     name,
+    color: resolveSessionColor(sessionId)?.id ?? existing?.color ?? nextSessionColor(dataDir) ?? SESSION_COLORS[0].id,
     feature: featureName(input.feature) || name,
     steps: [],
     status: 'active',
     phase: 'blueprint_ask',
+    awaitingAttach: false,
     currentStep: 1,
     activeDiffId: null,
     pendingInstruction: null,
@@ -1355,20 +1364,24 @@ export function startSession(dataDir, input) {
     diffs: [],
   }
   writeManifest(dataDir, manifest)
+  setChatLocked(dataDir, sessionId, true)
   focusSession(dataDir, sessionId)
-  return manifest
+  return readManifest(dataDir, sessionId) ?? manifest
 }
 
 export function setupSession(dataDir, input = {}) {
   const sessionId = input.sessionId
-    ? assertSessionId(input.sessionId)
-    : generateVisualizerSessionId(dataDir)
+    ? resolveSessionId(input.sessionId)
+    : nextSessionColor(dataDir)
+  if (!sessionId) {
+    throw new Error(ALL_COLORS_LOCKED_MESSAGE)
+  }
   const existing = readManifest(dataDir, sessionId)
   if (existing && !isTerminalSession(existing)) {
     throw new Error(`Session ${sessionId} already exists`)
   }
   if (!existing && listOpenSessionIds(dataDir).length >= SESSION_SLOT_COUNT) {
-    throw new Error(CHAT_LIMIT_MESSAGE)
+    throw new Error(ALL_COLORS_LOCKED_MESSAGE)
   }
   if (existing) {
     discardStoredSession(dataDir, sessionId, null, { restore: false })
@@ -1381,7 +1394,7 @@ export function setupSession(dataDir, input = {}) {
     version: 2,
     sessionId,
     name,
-    color: nextSessionColor(dataDir),
+    color: resolveSessionColor(sessionId)?.id ?? nextSessionColor(dataDir) ?? SESSION_COLORS[0].id,
     feature: featureName(input.feature) || name,
     steps: [],
     status: 'active',
@@ -1399,9 +1412,9 @@ export function setupSession(dataDir, input = {}) {
     diffs: [],
   }
   writeManifest(dataDir, manifest)
+  setChatLocked(dataDir, sessionId, false)
   if (input.focus !== false) focusSession(dataDir, sessionId)
-  enqueueAttachSession(dataDir, sessionId)
-  return manifest
+  return readManifest(dataDir, sessionId) ?? manifest
 }
 
 export function setInitialInstruction(dataDir, sessionId, instruction) {
@@ -1506,24 +1519,9 @@ export function removeContextFile(dataDir, sessionId, fileId) {
   return manifest
 }
 
-function generateVisualizerSessionId(dataDir) {
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const sessionId = `viz-${crypto.randomBytes(6).toString('hex')}`
-    if (
-      !readManifest(dataDir, sessionId) &&
-      !isSessionStopped(dataDir, sessionId) &&
-      !isSessionReleased(dataDir, sessionId)
-    ) {
-      return sessionId
-    }
-  }
-  throw new Error('Could not allocate a visualizer session id')
-}
-
 export function readAttachedSession(dataDir) {
   for (const sessionId of listOpenSessionIds(dataDir)) {
-    const manifest = readManifest(dataDir, sessionId)
-    if (manifest?.awaitingAttach === false) return sessionId
+    if (isChatLocked(dataDir, sessionId)) return sessionId
   }
   return null
 }
@@ -1531,7 +1529,7 @@ export function readAttachedSession(dataDir) {
 function resolveAttachSessionId(dataDir, sessionId, options = {}) {
   const targetRoot = options.targetRoot ?? null
   if (sessionId) {
-    const safeId = assertSessionId(sessionId)
+    const safeId = resolveSessionId(sessionId)
     const existing = readManifest(dataDir, safeId)
     if (existing && !isTerminalSession(existing) && sessionIsWaitingToAttach(existing)) {
       resetLlmSessionWork(dataDir, safeId, targetRoot)
@@ -1552,7 +1550,7 @@ export function attachSession(dataDir, sessionId, options = {}) {
   const explicitSession = Boolean(sessionId)
   const safeId = resolveAttachSessionId(dataDir, sessionId, options)
   if (!safeId) {
-    throw new Error(CHAT_LIMIT_MESSAGE)
+    throw new Error(ALL_COLORS_LOCKED_MESSAGE)
   }
   const manifest = requireManifest(
     dataDir,
@@ -1565,7 +1563,8 @@ export function attachSession(dataDir, sessionId, options = {}) {
   const alreadyAttached = explicitSession && !sessionIsWaitingToAttach(manifest)
   focusSession(dataDir, safeId)
   touchSessionConnection(dataDir, safeId)
-  const colored = ensureManifestColor(dataDir, manifest)
+  setChatLocked(dataDir, safeId, true)
+  const colored = ensureManifestColor(dataDir, readManifest(dataDir, safeId) ?? manifest)
   const colorName = resolveSessionColor(colored.color)?.name
   if (!alreadyAttached) {
     recordSessionAck(
@@ -1616,7 +1615,6 @@ export function sendBlueprint(dataDir, sessionId, _input = {}) {
   manifest.phase = 'preparing'
   manifest.workStartedAt = new Date().toISOString()
   writeManifest(dataDir, manifest)
-  releaseBlueprintSession(dataDir, safeId)
   return manifest
 }
 
@@ -1629,18 +1627,23 @@ export function maybeStartVisualizerHandshake(dataDir, sessionId) {
   manifest.phase = 'preparing'
   manifest.workStartedAt = new Date().toISOString()
   writeManifest(dataDir, manifest)
-  releaseBlueprintSession(dataDir, safeId)
   return manifest
 }
 
 export function reportPlan(dataDir, input) {
-  const sessionId = assertSessionId(input.sessionId)
+  const sessionId = resolveSessionId(input.sessionId)
   const existing = readManifest(dataDir, sessionId)
   if (!existing && isSessionStopped(dataDir, sessionId)) {
     throw sessionStoppedError(sessionId)
   }
   if (!existing && isSessionReleased(dataDir, sessionId)) {
     throw sessionMissingError(sessionId)
+  }
+  if (
+    (existing && sessionIsWaitingToAttach(existing)) ||
+    (resolveSessionColor(sessionId) && !isChatLocked(dataDir, sessionId))
+  ) {
+    throw sessionStoppedError(sessionId)
   }
   const now = new Date().toISOString()
 
@@ -1846,7 +1849,7 @@ export function appendDiff(dataDir, targetRoot, input) {
   } else {
     overlay = captureChangeOverlay(dataDir, sessionId, targetRoot, knownFileIds)
   }
-  overlay = normalizeChangeOverlay(overlay)
+  overlay = attachChangeNotes(overlay, input.changeNotes)
   if (!overlayHasChanges(overlay)) {
     throw new Error('No file changes to record for this step')
   }
@@ -2039,9 +2042,25 @@ function unstageDiffSessionArtifacts(dataDir, targetRoot, extraPaths = []) {
   unstagePaths(targetRoot, [
     ...extraPaths,
     diffSessionsRoot(dataDir),
-    path.join(dataDir, 'active-session.json'),
-    path.join(dataDir, 'blueprint-session.json'),
+    userContextFile(dataDir),
+    path.join(dataDir, 'chats.json'),
+    ...LEGACY_STATE_FILES.map((name) => path.join(dataDir, name)),
   ])
+}
+
+function resetColorSlot(dataDir, sessionId, targetRoot = null) {
+  const safeId = assertSessionId(sessionId)
+  resetLlmSessionWork(dataDir, safeId, targetRoot)
+  const manifest = readManifest(dataDir, safeId)
+  if (!manifest) return
+  const dir = sessionPaths(dataDir, safeId).context
+  if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true })
+  writeLocalBlueprint(dataDir, safeId, emptyBlueprint())
+  const next = readManifest(dataDir, safeId)
+  if (!next) return
+  next.initialInstruction = null
+  next.contextFiles = []
+  writeManifest(dataDir, next)
 }
 
 function discardStoredSession(
@@ -2073,7 +2092,6 @@ function discardStoredSession(
       }),
     )
   }
-  releaseBlueprintSession(dataDir, safeId)
   if (fs.existsSync(paths.root)) {
     fs.rmSync(paths.root, { recursive: true, force: true })
   }
@@ -2111,8 +2129,6 @@ export function discardInactiveDiffSessions(
   )
   const active = readActiveSession(dataDir)
   if (active && !liveIds.includes(active)) writeActiveSession(dataDir, null)
-  const locked = readBlueprintSession(dataDir)
-  if (locked && !liveIds.includes(locked)) writeBlueprintSession(dataDir, null)
   unstageDiffSessionArtifacts(dataDir, targetRoot)
   return liveIds
 }
@@ -2150,10 +2166,8 @@ export function clearDiffSessions(dataDir, targetRoot = null) {
     })
   }
   writeActiveSession(dataDir, null)
-  writeBlueprintSession(dataDir, null)
-  writeAttachQueue(dataDir, [])
-  const poolFile = sessionPoolFile(dataDir)
-  if (fs.existsSync(poolFile)) fs.unlinkSync(poolFile)
+  writeChats(dataDir, emptyChats())
+  removeLegacyStateFiles(dataDir)
 
   const root = diffSessionsRoot(dataDir)
   fs.mkdirSync(root, { recursive: true })
@@ -2172,7 +2186,14 @@ export function recoverOpenDiffSessions(dataDir, targetRoot = null) {
 
 export function stopSession(dataDir, sessionId, targetRoot = null) {
   const safeId = assertSessionId(sessionId)
-  if (targetRoot) restoreSessionFiles(dataDir, safeId, targetRoot)
+  if (resolveSessionColor(safeId) && readManifest(dataDir, safeId)) {
+    resetColorSlot(dataDir, safeId, targetRoot)
+    setChatLocked(dataDir, safeId, false)
+    if (readActiveSession(dataDir) === safeId) writeActiveSession(dataDir, null)
+    refillSessionPool(dataDir)
+    return null
+  }
+  // Abandon plan/patches only. Do not restore or delete live project files.
   writeStoppedMarker(dataDir, safeId)
   discardStoredSession(dataDir, safeId, targetRoot, {
     restore: false,
@@ -2199,13 +2220,19 @@ export function decideDiff(
 }
 
 export function closeSession(dataDir, sessionId) {
-  releaseBlueprintSession(dataDir, sessionId)
   const active = readActiveSession(dataDir)
   if (active === assertSessionId(sessionId)) writeActiveSession(dataDir, null)
 }
 
 export function finalizeFinishedSession(dataDir, sessionId, targetRoot = null) {
   const safeId = assertSessionId(sessionId)
+  if (resolveSessionColor(safeId) && readManifest(dataDir, safeId)) {
+    resetColorSlot(dataDir, safeId, targetRoot)
+    setChatLocked(dataDir, safeId, false)
+    if (readActiveSession(dataDir) === safeId) writeActiveSession(dataDir, null)
+    refillSessionPool(dataDir)
+    return
+  }
   writeReleasedMarker(dataDir, safeId)
   discardStoredSession(dataDir, safeId, targetRoot, { restore: false })
   refillSessionPool(dataDir)
@@ -2324,7 +2351,7 @@ function namedBlueprintNotes(value) {
     const note = typeof item.note === 'string' ? item.note : ''
     if (!file || !note.trim()) continue
     let stored = null
-    if (item.kind === 'file') {
+    if (item.kind == null || item.kind === 'file') {
       stored = { file, kind: 'file', note }
     } else if (
       (item.kind === 'function' || item.kind === 'variable') &&

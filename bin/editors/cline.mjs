@@ -33,24 +33,25 @@ commands as chat text. Do not explore the repo first. Use this XML:
 <requires_approval>false</requires_approval>
 </execute_command>
 
-Replace \`SESSION_ID\` with the \`VISUAL_CODER_SESSION\` value from this chat.
+COLOR is this chat's color from \`VISUAL_CODER_SESSION\` (\`coral\`, \`amber\`, …).
 
 On a new file-change request inside \`target\`, in this order:
 1. Run \`npx inbase attach\` (or \`npx inbase attach --color COLOR\` if the user
    named a color). Stop if the output is \`VISUAL_CODER_NOT_RUNNING\`. If the
    files are outside \`target\`, do not attach; edit them as a normal task.
 2. Reply: \`Connecting to the <color> session.\`
-3. Run \`npx inbase read-blueprint --session SESSION_ID\`
+3. Run \`npx inbase read-blueprint --session COLOR\`
 4. Reply: \`I see on the blueprint ...\` (name files, folders, symbols, notes)
-5. Run \`npx inbase report-plan --session SESSION_ID --feature "..." --steps "..."\`
+5. Run \`npx inbase report-plan --session COLOR --feature "..." --steps "..."\`
 6. Edit files only after \`VISUAL_CODER_EXECUTE\`. Then run
-   \`npx inbase propose-patch --session SESSION_ID\` with no patch file. If the
+   \`npx inbase propose-patch --session COLOR\` with \`--note "path: one-line goal"\`
+   for each changed file and folder. No patch file. If the
    next step is invoked, implement it now in the same turn. After the last
    recorded step, stop. The user clicks Done in the session window to keep
    the files and free the color.
 
 If this chat already printed \`VISUAL_CODER_SESSION\`, skip attach. Stay in
-that session. \`/stop\` runs \`npx inbase stop --session SESSION_ID\`.
+that session. \`/stop\` runs \`npx inbase stop --session COLOR\`.
 
 Follow the rest of this rule exactly.
 `
@@ -63,7 +64,9 @@ export function stripYamlFrontmatter(text) {
 }
 
 export function toClineExecuteCommand(markdown) {
-  const withSession = markdown.replaceAll('<session-id>', 'SESSION_ID')
+  const withSession = markdown
+    .replaceAll('<session-id>', 'COLOR')
+    .replaceAll('<color>', 'COLOR')
   return withSession.replace(/```bash\n([\s\S]*?)```/g, (_, body) => {
     const command = escapeXml(body.trim())
     return [

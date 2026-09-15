@@ -8,7 +8,12 @@ import {
   foldersFromFileIds,
   parseUnifiedPatch,
 } from './patch-lib.mjs'
-import { dropMassKnownCreates, emptyChangeOverlay, normalizeChangeOverlay } from './change-overlay.mjs'
+import {
+  attachChangeNotes,
+  dropMassKnownCreates,
+  emptyChangeOverlay,
+  normalizeChangeOverlay,
+} from './change-overlay.mjs'
 import { shouldIgnoreRelativePath, toPosix } from './scan-ignore.mjs'
 
 const BINARY_PROBE_BYTES = 8000
@@ -242,7 +247,7 @@ export function withAbsentMappedFiles(overlay, targetRoot, knownFileIds = []) {
   })
   const hide = new Set([...absent, ...goneCreates])
   const creates = normalized.creates.filter((id) => !hide.has(id))
-  return {
+  return attachChangeNotes({
     ...normalized,
     creates,
     createLines: Object.fromEntries(
@@ -253,7 +258,7 @@ export function withAbsentMappedFiles(overlay, targetRoot, knownFileIds = []) {
       foldersFromFileIds(knownFileIds.filter((id) => !creates.includes(id))),
     ),
     absent: unique([...normalized.absent, ...absent, ...goneCreates]),
-  }
+  })
 }
 
 function collectDiff(targetRoot, knownFileIds, diffArgs, includeUntracked) {

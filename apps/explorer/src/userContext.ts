@@ -70,6 +70,7 @@ function flushUserContext() {
     showHiddenFiles: _showHiddenFiles,
     userCreatedBlocks: _userCreatedBlocks,
     userCreatedIslands: _userCreatedIslands,
+    focusedSessionId: _focusedSessionId,
     ...gaze
   } = context
   const body = JSON.stringify(gaze, null, 2)

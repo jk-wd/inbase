@@ -367,24 +367,33 @@ function overlayIslands(
           CONFIG.siblingGap +
           width / 2
     const z = parent.z + parent.depth + CONFIG.bridgeLength
-    folders[id] = {
-      path: id,
-      name: island.naming && !island.name ? 'New folder' : island.name,
-      x,
-      z,
-      width,
-      depth,
-      added: true,
-      userCreated: true,
-      colorHex: island.colorHex,
-    }
+    const placed = shiftToEmptyMapSpace(
+      {
+        path: id,
+        name: island.naming && !island.name ? 'New folder' : island.name,
+        x,
+        z,
+        width,
+        depth,
+        added: true,
+        userCreated: true,
+        colorHex: island.colorHex,
+      },
+      mapOccupancy(
+        { ...layout, folders: { ...layout.folders, ...folders } },
+        {},
+        {},
+        id,
+      ),
+    )
+    folders[id] = placed
     bridges.push({
       id: `${parentPath}→${id}`,
-      label: folders[id].name,
+      label: placed.name,
       fromLabel: parent.name,
       points: [
-        [x, parent.z + parent.depth - CONFIG.bridgeOverlap],
-        [x, z + CONFIG.bridgeOverlap],
+        [placed.x, parent.z + parent.depth - CONFIG.bridgeOverlap],
+        [placed.x, placed.z + CONFIG.bridgeOverlap],
       ],
     })
   }
@@ -402,16 +411,39 @@ export function withUserCreatedLayout(
   if (blocks.length === 0) return withIslands
   const files = { ...withIslands.files }
   const height = fileHeight(12)
+  const nextIndex = new Map<string, number>()
   for (const block of blocks) {
+    if (files[block.id] && !block.naming) continue
     const folder = withIslands.folders[block.folder]
-    const x = block.x ?? 0
-    const z = block.z ?? 0
-    files[block.id] = {
+    const index =
+      nextIndex.get(block.folder) ??
+      baseFileCountInFolder(withIslands, block.folder)
+    nextIndex.set(block.folder, index + 1)
+    const spot =
+      block.x != null && block.z != null
+        ? { x: block.x, z: block.z }
+        : (defaultBlockSpot(withIslands, block.folder, index) ?? {
+            x: 0,
+            z: 0,
+          })
+    let x = spot.x
+    const z = spot.z
+    const candidate: PlacedFile = {
       id: block.id,
       position: [x, height / 2, z],
       size: [CONFIG.fileWidth, height, CONFIG.fileDepth],
       aisleFace: folder && x >= folder.x ? -1 : 1,
     }
+    const occupied = mapOccupancy(withIslands, {}, files, undefined, block.id)
+    for (let step = 0; step < 40; step += 1) {
+      const rect = fileOccupancy(candidate)
+      const hit = occupied.find((other) => occupancyOverlaps(rect, other))
+      if (!hit) break
+      x = hit.right + CONFIG.siblingGap + CONFIG.fileWidth / 2
+      candidate.position = [x, candidate.position[1], candidate.position[2]]
+      candidate.aisleFace = folder && x >= folder.x ? -1 : 1
+    }
+    files[block.id] = candidate
   }
   return { ...withIslands, files }
 }
@@ -896,7 +928,9 @@ function parseBlueprintNote(value: unknown): BlueprintNote | null {
   const file = typeof item.file === 'string' ? item.file.trim() : ''
   const note = typeof item.note === 'string' ? item.note : ''
   if (!file || !note.trim()) return null
-  if (item.kind === 'file') return { file, kind: 'file', note }
+  if (item.kind == null || item.kind === 'file') {
+    return { file, kind: 'file', note }
+  }
   if (item.kind !== 'function' && item.kind !== 'variable') return null
   const name = typeof item.name === 'string' ? item.name.trim() : ''
   if (!name) return null

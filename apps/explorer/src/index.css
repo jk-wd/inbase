@@ -4,7 +4,7 @@
   --vc-editor: #1e2127;
   --vc-surface: #272c36;
   --vc-border: #272c36;
-  --explain-sidebar-width: min(380px, 42vw);
+  --explain-sidebar-width: min(440px, 46vw);
   --explain-dim-opacity: 0.18;
 }
 
@@ -419,18 +419,6 @@ button {
   background: #7ec8e8;
   border: 1px solid #d7eef8;
   border-radius: 50%;
-}
-
-.hud-chip,
-.hud-panel {
-  background: rgba(25, 28, 34, 0.86);
-  border: 1px solid var(--vc-border);
-}
-
-.hud-chip {
-  padding: 8px 12px;
-  font-size: 13px;
-  letter-spacing: 0.02em;
 }
 
 .map-folder-label-layer {
@@ -967,6 +955,7 @@ button {
   overscroll-behavior: contain;
   padding: 16px 16px 20px;
   background: var(--vc-chrome);
+  border: 1px solid var(--vc-border);
 }
 
 .hud-panel-info {
@@ -984,6 +973,32 @@ button {
   gap: 8px;
   min-width: 0;
   flex: 1 1 auto;
+}
+
+.hud-info-open-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hud-info-open-title:hover,
+.hud-info-open-title:focus-visible {
+  color: #fff;
+}
+
+.hud-info-open-title:focus-visible {
+  outline: 1px solid #9ad8ff;
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 .hud-info-kind-title svg {
@@ -1126,15 +1141,17 @@ button {
 }
 
 .hud-left-stack .hud-panel-planned[data-focused='true'] {
-  box-shadow: 0 0 0 1px #9ad8ff;
+  box-shadow: 0 0 0 1px var(--session-color, #9ad8ff);
 }
 
 .hud-left-stack .hud-panel-planned[data-attached='true'] {
-  box-shadow: 0 0 0 1px #6ee7b7;
+  box-shadow: 0 0 0 1px var(--session-color, #6ee7b7);
 }
 
 .hud-left-stack .hud-panel-planned[data-attached='true'][data-focused='true'] {
-  box-shadow: 0 0 0 1px #6ee7b7, 0 0 0 3px rgba(110, 231, 183, 0.22);
+  box-shadow:
+    0 0 0 1px var(--session-color, #6ee7b7),
+    0 0 0 3px color-mix(in srgb, var(--session-color, #6ee7b7) 22%, transparent);
 }
 
 .hud-panel-body {
@@ -1165,34 +1182,6 @@ button {
 .hud-panel-chrome-heading {
   min-width: 0;
   flex: 1 1 auto;
-}
-
-.hud-explain-button {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  flex: none;
-  color: #6d7582;
-  background: transparent;
-  border: 1px solid transparent;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.hud-explain-button:hover,
-.hud-explain-button:focus-visible {
-  color: #b7c0ce;
-  border-color: #3a4250;
-}
-
-.hud-explain-inline {
-  width: 20px;
-  height: 20px;
-  font-size: 11px;
 }
 
 .hud-file-actions {
@@ -1324,12 +1313,27 @@ button {
   color: inherit;
 }
 
+.hud-panel-info .hud-panel-chrome {
+  gap: 2px;
+  margin: -4px 0 2px;
+}
+
 .hud-panel-info .hud-panel-chrome-title {
   overflow: visible;
   color: #e7ebf2;
   font-size: 16px;
   letter-spacing: 0.02em;
   text-transform: none;
+}
+
+.hud-panel-info .hud-panel-chrome-subtitle {
+  color: #8b95a5;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: normal;
+  word-break: break-all;
 }
 
 .hud-info-name {
@@ -1357,6 +1361,14 @@ button {
 .hud-info-name:focus {
   border-bottom-color: #9ad8ff;
   text-overflow: clip;
+}
+
+.hud-info-menu {
+  flex: none;
+}
+
+.hud-info-menu-list {
+  visibility: hidden;
 }
 
 .hud-panel-controls {
@@ -1432,12 +1444,12 @@ button {
   left: 20px;
   right: auto;
   width: min(360px, calc(100% - 40px));
-  border-color: #9ad8ff;
+  border-color: var(--session-color, #9ad8ff);
   pointer-events: auto;
 }
 
 .hud-panel-done {
-  border-color: #22ff66;
+  border-color: var(--session-color, #22ff66);
 }
 
 .hud-feature {
@@ -1584,7 +1596,7 @@ button {
 
 .hud-steps li[data-done='true'],
 .hud-steps li[data-done='true'] .hud-step-title {
-  color: #3dff78;
+  color: var(--session-color, #3dff78);
   font-weight: 600;
 }
 
@@ -1635,6 +1647,8 @@ button {
 
 .hud-panel-planned .hud-section-title {
   margin-top: 0;
+  padding: 0;
+  background: transparent;
   color: #9ad8ff;
 }
 
@@ -2016,17 +2030,17 @@ button {
 .hud-item-point:hover,
 .hud-item-point:focus-visible {
   border-color: #9ad8ff;
-  color: #d7eef8;
+  color: #fff;
 }
 
 .hud-item-point[data-pointed='true'] {
-  border-color: var(--session-color, #5d9ec4);
-  color: var(--session-color, #d7eef8);
+  border-color: #5a6472;
+  color: #fff;
 }
 
 .hud-item-point svg {
   display: block;
-  color: var(--session-color, currentColor);
+  color: #fff;
 }
 
 .hud-item-note {
@@ -2126,6 +2140,37 @@ button {
   padding: 24px 24px 20px;
   background: var(--vc-editor);
   border: 1px solid var(--vc-border);
+}
+
+.hud-point-picker-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: min(60dvh, 420px);
+  overflow: auto;
+}
+
+.hud-point-picker-list li {
+  display: block;
+  margin: 0;
+}
+
+.hud-point-picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+}
+
+.hud-point-picker-item svg {
+  display: block;
+  flex: none;
+  color: var(--session-color, #e7ebf2);
 }
 
 .hud-blueprint-file-field {
@@ -2242,28 +2287,50 @@ button {
   font-size: 12px;
 }
 
+.hud-llm-note {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 0 0;
+  color: #e7ebf2;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.hud-llm-note-session {
+  font-weight: 650;
+}
+
+.hud-llm-note-body {
+  color: #d5dce8;
+}
+
 .hud-section-title {
-  margin: 12px 0 0;
-  color: #b7c0ce;
+  margin: 16px 0 8px;
+  padding: 6px 10px;
+  background: #101217;
+  color: #fff;
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.hud-file-add,
-.hud-section-title.hud-section-title-add {
+.hud-panel-info ul,
+.hud-panel-info .hud-section-title + p {
+  font-size: 12px;
+}
+
+.hud-file-add {
   color: #3dff78;
   font-weight: 600;
 }
 
-.hud-file-edit,
-.hud-section-title.hud-section-title-edit {
+.hud-file-edit {
   color: #5cb8ff;
   font-weight: 600;
 }
 
-.hud-file-remove,
-.hud-section-title.hud-section-title-remove {
+.hud-file-remove {
   color: #ff5a72;
   font-weight: 600;
 }
@@ -2390,11 +2457,17 @@ button {
   font-size: 12px;
 }
 
+.explain-bodies {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .explain-body {
   margin: 0;
   color: #d5dbe6;
   font-size: 14px;
-  line-height: 1.55;
+  line-height: 1.7;
   white-space: pre-wrap;
 }
 
@@ -2434,9 +2507,10 @@ button {
 
 .explain-steps li {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 8px;
+  row-gap: 8px;
   padding-left: calc(var(--explain-depth, 0) * 14px);
 }
 
@@ -2445,12 +2519,14 @@ button {
 }
 
 .explain-steps li[data-active='true'] {
-  padding-bottom: 8px;
+  padding: 8px 12px 12px;
+  padding-left: calc(12px + var(--explain-depth, 0) * 14px);
   background: rgba(25, 28, 34, 0.96);
   border: 1px solid #9ad8ff;
 }
 
 .explain-step {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2459,13 +2535,21 @@ button {
 }
 
 .explain-steps li[data-active='true'] .explain-step {
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+  padding: 0;
   border-color: transparent;
   background: transparent;
   color: #e7ebf2;
 }
 
-.explain-steps li[data-active='true'] .explain-body {
-  padding: 0 12px 4px 36px;
+.explain-steps li[data-active='true'] .explain-bodies,
+.explain-steps li[data-active='true'] .explain-asked,
+.explain-steps li[data-active='true'] .explain-ask-hint,
+.explain-steps li[data-active='true'] .explain-preparing-step {
+  grid-column: 2;
+  padding: 0;
 }
 
 .explain-step[data-active='true'] {
@@ -2498,12 +2582,24 @@ button {
 }
 
 .explain-asked {
-  padding: 0 12px 0 36px;
   color: #b7c0ce;
 }
 
-.explain-preparing-step {
-  padding: 0 12px 4px 36px;
+.explain-ask-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin: 0;
+  color: #8b95a5;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.explain-ask-hint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: #c5ccd8;
 }
 
 .explain-ask {
@@ -2575,7 +2671,7 @@ button {
 }
 
 .explain-ask-card {
-  width: min(560px, 100%);
+  width: min(640px, 100%);
   max-height: min(72dvh, 100%);
   display: flex;
   flex-direction: column;
