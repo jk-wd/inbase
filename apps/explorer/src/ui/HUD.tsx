@@ -212,10 +212,104 @@ function pagedBlueprintOptions(options: BlueprintOption[], page: number) {
   return [...global, ...sessions.filter((option) => visibleIds.has(option.id))]
 }
 
+function BlueprintLayerSwatches({
+  options,
+  selectedId,
+  page,
+  pageCount,
+  onSelect,
+  onPageChange,
+  locked = false,
+}: {
+  options: BlueprintOption[]
+  selectedId: string | null
+  page: number
+  pageCount: number
+  onSelect: (color: string) => void
+  onPageChange: (page: number) => void
+  locked?: boolean
+}) {
+  const visibleOptions = locked
+    ? options
+    : pagedBlueprintOptions(options, page)
+  const showPager = !locked && pageCount > 1
+  if (options.length === 0) return null
+  return (
+    <div
+      className="hud-add-modal-layers"
+      role="radiogroup"
+      aria-label="Layer"
+    >
+      {visibleOptions.map((option) => {
+        const selected = option.id === selectedId
+        return (
+          <button
+            key={option.id}
+            className={
+              option.kind === 'global'
+                ? 'hud-button hud-blueprint-option'
+                : 'hud-button hud-blueprint-option hud-blueprint-option-swatch'
+            }
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            data-active={selected ? 'true' : undefined}
+            disabled={locked}
+            aria-label={
+              option.kind === 'global'
+                ? locked
+                  ? 'Adding on the global layer'
+                  : 'Put on the global layer'
+                : locked
+                  ? `Adding on the ${option.name} layer`
+                  : `Put on the ${option.name} layer`
+            }
+            title={
+              option.kind === 'global'
+                ? locked
+                  ? 'This blueprint folder is on the global layer'
+                  : 'Global layer'
+                : locked
+                  ? `This blueprint folder is on the ${option.name} layer`
+                  : `${option.name} layer`
+            }
+            style={
+              {
+                '--session-color': option.hex,
+              } as CSSProperties
+            }
+            onClick={() => {
+              if (locked) return
+              onSelect(option.id)
+            }}
+          >
+            <SessionSwatch
+              colorHex={option.hex}
+              className="hud-session-swatch hud-blueprint-swatch"
+            />
+            {option.kind === 'global' ? (
+              <span className="hud-blueprint-select-label">Global</span>
+            ) : null}
+          </button>
+        )
+      })}
+      {showPager ? (
+        <ColorPager
+          page={page}
+          pageCount={pageCount}
+          onPageChange={onPageChange}
+        />
+      ) : null}
+    </div>
+  )
+}
+
 function defaultAddLayerColor(
   visible: string[],
   current: string | null,
+  preferred?: string | null,
 ) {
+  if (preferred) return preferred
   if (visible.length === 1) return visible[0]!
   if (current && visible.includes(current)) return current
   return visible[0] ?? current ?? GLOBAL_BLUEPRINT_COLOR.id
@@ -228,6 +322,7 @@ function AddItemModal({
   visibleColors,
   currentColor,
   lockedColor = null,
+  initialColor = null,
   onCommit,
   onCancel,
 }: {
@@ -237,14 +332,20 @@ function AddItemModal({
   visibleColors: string[]
   currentColor: string | null
   lockedColor?: string | null
+  initialColor?: string | null
   onCommit: (name: string, color: string) => boolean
   onCancel: () => void
 }) {
   const layerOptions = lockedColor
     ? options.filter((option) => option.id === lockedColor)
     : options
+  const preferredColor =
+    lockedColor ??
+    (initialColor && options.some((option) => option.id === initialColor)
+      ? initialColor
+      : null)
   const [color, setColor] = useState(() =>
-    lockedColor ?? defaultAddLayerColor(visibleColors, currentColor),
+    defaultAddLayerColor(visibleColors, currentColor, preferredColor),
   )
   const [colorPage, setColorPage] = useState(() =>
     sessionColorPageIndex(lockedColor ?? color),
@@ -252,10 +353,6 @@ function AddItemModal({
   const colorRef = useRef(color)
   colorRef.current = lockedColor ?? color
   const pageCount = sessionColorPageCount()
-  const visibleLayerOptions = lockedColor
-    ? layerOptions
-    : pagedBlueprintOptions(layerOptions, colorPage)
-  const showPager = !lockedColor && pageCount > 1
 
   return (
     <div
@@ -279,74 +376,15 @@ function AddItemModal({
           onCancel={onCancel}
         />
         <p className="hud-add-modal-parent">in {parentLabel}</p>
-        {layerOptions.length > 0 && (
-          <div
-            className="hud-add-modal-layers"
-            role="radiogroup"
-            aria-label="Layer"
-          >
-            {visibleLayerOptions.map((option) => {
-              const selected = option.id === (lockedColor ?? color)
-              return (
-                <button
-                  key={option.id}
-                  className={
-                    option.kind === 'global'
-                      ? 'hud-button hud-blueprint-option'
-                      : 'hud-button hud-blueprint-option hud-blueprint-option-swatch'
-                  }
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  data-active={selected ? 'true' : undefined}
-                  disabled={Boolean(lockedColor)}
-                  aria-label={
-                    option.kind === 'global'
-                      ? lockedColor
-                        ? 'Adding on the global layer'
-                        : 'Put on the global layer'
-                      : lockedColor
-                        ? `Adding on the ${option.name} layer`
-                        : `Put on the ${option.name} layer`
-                  }
-                  title={
-                    option.kind === 'global'
-                      ? lockedColor
-                        ? 'This blueprint folder is on the global layer'
-                        : 'Global layer'
-                      : lockedColor
-                        ? `This blueprint folder is on the ${option.name} layer`
-                        : `${option.name} layer`
-                  }
-                  style={
-                    {
-                      '--session-color': option.hex,
-                    } as CSSProperties
-                  }
-                  onClick={() => {
-                    if (lockedColor) return
-                    setColor(option.id)
-                  }}
-                >
-                  <SessionSwatch
-                    colorHex={option.hex}
-                    className="hud-session-swatch hud-blueprint-swatch"
-                  />
-                  {option.kind === 'global' ? (
-                    <span className="hud-blueprint-select-label">Global</span>
-                  ) : null}
-                </button>
-              )
-            })}
-            {showPager ? (
-              <ColorPager
-                page={colorPage}
-                pageCount={pageCount}
-                onPageChange={setColorPage}
-              />
-            ) : null}
-          </div>
-        )}
+        <BlueprintLayerSwatches
+          options={layerOptions}
+          selectedId={lockedColor ?? color}
+          page={colorPage}
+          pageCount={pageCount}
+          locked={Boolean(lockedColor)}
+          onSelect={setColor}
+          onPageChange={setColorPage}
+        />
       </div>
     </div>
   )
@@ -1229,6 +1267,77 @@ function BlueprintPointModal({
             )
           })}
         </ul>
+      </div>
+    </div>
+  )
+}
+
+function BlueprintColorModal({
+  title,
+  subtitle,
+  options,
+  currentColor,
+  onSelect,
+  onClose,
+}: {
+  title: string
+  subtitle: string
+  options: BlueprintOption[]
+  currentColor?: string | null
+  onSelect: (color: string) => void
+  onClose: () => void
+}) {
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  const [colorPage, setColorPage] = useState(() =>
+    sessionColorPageIndex(currentColor),
+  )
+
+  useEffect(() => {
+    const release = beginKeyboardIsolation()
+    document.exitPointerLock()
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== 'Escape') return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      onCloseRef.current()
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+      release()
+    }
+  }, [])
+
+  return (
+    <div className="hud-note-overlay" onClick={onClose}>
+      <div
+        className="hud-blueprint-file-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="hud-color-picker-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="hud-note-header">
+          <div className="hud-note-heading">
+            <h1 id="hud-color-picker-title">{title}</h1>
+            <p className="hud-note-subtitle">{subtitle}</p>
+          </div>
+          <button className="hud-button" type="button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <BlueprintLayerSwatches
+          options={options}
+          selectedId={currentColor ?? null}
+          page={colorPage}
+          pageCount={sessionColorPageCount()}
+          onSelect={(color) => {
+            if (color !== currentColor) onSelect(color)
+            onClose()
+          }}
+          onPageChange={setColorPage}
+        />
       </div>
     </div>
   )
@@ -2165,12 +2274,12 @@ function explorerInstructions({
               {
                 id: 'right-click-file',
                 keys: ['Right-click'],
-                label: 'A file to open or explain',
+                label: 'A file to open, explain, or change blueprint color',
               },
               {
                 id: 'add-file-folder',
                 keys: ['Right-click'],
-                label: 'Create a file or folder, or point to a folder',
+                label: 'Create a file or folder, point to a folder, or change a folder color',
               },
             ]
           : []),
@@ -2281,6 +2390,8 @@ type HUDProps = {
   inspectTick?: number
   fileNoteTick?: number
   folderNoteTick?: number
+  fileColorTick?: number
+  folderColorTick?: number
   selectedFolder?: string | null
   selectedFolderLayer?: string | null
   overlayLayers?: BlueprintOverlayLayer[]
@@ -2327,6 +2438,7 @@ type HUDProps = {
   addingKind?: 'file' | 'folder' | null
   addingParent?: string | null
   addingLockedColor?: string | null
+  addingInitialColor?: string | null
   onCommitAdd?: (name: string, color: string) => boolean
   onCancelAdd?: () => void
   blueprintFunctions?: PatchSymbolAddition[]
@@ -2358,6 +2470,11 @@ type HUDProps = {
     path: string
     name?: string
     color?: string
+  }) => void
+  onChangeCreatedColor?: (next: {
+    kind: 'file' | 'folder'
+    path: string
+    color: string
   }) => void
   onMapAddFile?: (folderPath: string, color?: string) => void
   onMapAddFolder?: (folderPath: string, color?: string) => void
@@ -2394,6 +2511,8 @@ export function HUD({
   inspectTick = 0,
   fileNoteTick = 0,
   folderNoteTick = 0,
+  fileColorTick = 0,
+  folderColorTick = 0,
   selectedFolder = null,
   selectedFolderLayer = null,
   overlayLayers = [],
@@ -2436,6 +2555,7 @@ export function HUD({
   addingKind = null,
   addingParent = null,
   addingLockedColor = null,
+  addingInitialColor = null,
   onCommitAdd,
   onCancelAdd,
   blueprintFunctions = [],
@@ -2453,6 +2573,7 @@ export function HUD({
   onRemoveBlueprintImport,
   onSetBlueprintNote,
   onToggleBlueprintPointer,
+  onChangeCreatedColor,
   onMapAddFile,
   onMapAddFolder,
   onRenameCreatedFile,
@@ -2539,6 +2660,13 @@ export function HUD({
       .reverse()
       .find((layer) => selected && layer.files[selected.id])?.colorHex ??
     null
+  const selectedFileBlueprintColor =
+    selected
+      ? [...overlayLayers]
+          .reverse()
+          .find((layer) => layer.files[selected.id])?.id ??
+        (selected.userCreated ? blueprintColor : null)
+      : null
   const selectedFolderBlueprintHex = selectedBlueprintLayer?.colorHex ?? null
   const blueprintOptionName = selectedFolderLayer
     ? blueprintOptions.find((option) => option.id === selectedFolderLayer)
@@ -2608,6 +2736,13 @@ export function HUD({
     path: string
     title: string
     subtitle: string
+  } | null>(null)
+  const [colorPicker, setColorPicker] = useState<{
+    kind: 'file' | 'folder'
+    path: string
+    title: string
+    subtitle: string
+    currentColor?: string | null
   } | null>(null)
   const [blueprintFileDialog, setBlueprintFileDialog] = useState<
     null | 'save' | 'save-as' | 'load'
@@ -2833,6 +2968,7 @@ export function HUD({
     const path = file?.path ?? fileId
     setInstructionsOpen(false)
     setPointPicker(null)
+    setColorPicker(null)
     setNoteEditor({
       file: fileId,
       kind: 'file',
@@ -2851,6 +2987,7 @@ export function HUD({
       path === '.' ? graph.targetName : path.split('/').pop() ?? path
     setInstructionsOpen(false)
     setPointPicker(null)
+    setColorPicker(null)
     setNoteEditor({
       file: path,
       kind: 'folder',
@@ -2867,6 +3004,7 @@ export function HUD({
     if (!selected || !onToggleBlueprintPointer) return
     setInstructionsOpen(false)
     setNoteEditor(null)
+    setColorPicker(null)
     setPointPicker({
       kind: 'file',
       path: selected.id,
@@ -2878,11 +3016,44 @@ export function HUD({
     if (!folderPath || !onToggleBlueprintPointer) return
     setInstructionsOpen(false)
     setNoteEditor(null)
+    setColorPicker(null)
     setPointPicker({
       kind: 'folder',
       path: folderPath,
       title: 'Point to folder',
       subtitle: folderPath,
+    })
+  }
+  const openFileColor = () => {
+    if (!selected || !onChangeCreatedColor || selected.id.startsWith('draft:')) {
+      return
+    }
+    setInstructionsOpen(false)
+    setNoteEditor(null)
+    setPointPicker(null)
+    setColorPicker({
+      kind: 'file',
+      path: selected.id,
+      title: 'Change blueprint color',
+      subtitle: selected.path,
+      currentColor: selectedFileBlueprintColor,
+    })
+  }
+  const openFolderColor = () => {
+    if (!folderPath || !onChangeCreatedColor || folderPath.startsWith('draft:')) {
+      return
+    }
+    setInstructionsOpen(false)
+    setNoteEditor(null)
+    setPointPicker(null)
+    setColorPicker({
+      kind: 'folder',
+      path: folderPath,
+      title: 'Change blueprint color',
+      subtitle: folderPath,
+      currentColor:
+        selectedFolderLayer ??
+        overlayLayers.find((layer) => layer.folders[folderPath])?.id,
     })
   }
   const openSymbolNote = (
@@ -2892,6 +3063,7 @@ export function HUD({
     if (!selected || !onSetBlueprintNote) return
     setInstructionsOpen(false)
     setPointPicker(null)
+    setColorPicker(null)
     setNoteEditor({
       file: selected.id,
       kind,
@@ -2935,6 +3107,20 @@ export function HUD({
               },
             ]
           : []),
+        ...(canPlace &&
+        onChangeCreatedColor &&
+        canDeleteSelected &&
+        !selected.id.startsWith('draft:')
+          ? [
+              {
+                key: 'color',
+                label: 'Change blueprint color',
+                active: colorPicker?.kind === 'file' && colorPicker.path === selected.id,
+                disabled: naming,
+                onClick: openFileColor,
+              },
+            ]
+          : []),
       ]
       : []
   const selectedFolderMenuItems: InfoMenuItem[] =
@@ -2963,6 +3149,23 @@ export function HUD({
                     noteEditor.file === folderPath,
                   disabled: naming,
                   onClick: openFolderNote,
+                },
+              ]
+            : []),
+          ...(canPlace &&
+          onChangeCreatedColor &&
+          canDeleteSelected &&
+          folderPath &&
+          !folderPath.startsWith('draft:')
+            ? [
+                {
+                  key: 'color',
+                  label: 'Change blueprint color',
+                  active:
+                    colorPicker?.kind === 'folder' &&
+                    colorPicker.path === folderPath,
+                  disabled: naming,
+                  onClick: openFolderColor,
                 },
               ]
             : []),
@@ -2999,6 +3202,7 @@ export function HUD({
 
   useEffect(() => {
     setPointPicker(null)
+    setColorPicker(null)
   }, [selectedId, selectedFolder, selectedFolderLayer])
 
   useEffect(() => {
@@ -3022,6 +3226,16 @@ export function HUD({
     if (folderNoteTick <= 0 || !selectedFolder) return
     openFolderNoteFor(selectedFolder)
   }, [folderNoteTick])
+
+  useEffect(() => {
+    if (fileColorTick <= 0 || !selectedId) return
+    openFileColor()
+  }, [fileColorTick])
+
+  useEffect(() => {
+    if (folderColorTick <= 0 || !selectedFolder) return
+    openFolderColor()
+  }, [folderColorTick])
 
   useEffect(() => {
     if (selectedFolder) setInfoVisible(true)
@@ -3267,6 +3481,7 @@ export function HUD({
     setInstructionsOpen(false)
     setNoteEditor(null)
     setPointPicker(null)
+    setColorPicker(null)
     setBlueprintFileDialog(null)
   }, [explainMode])
 
@@ -3329,7 +3544,7 @@ export function HUD({
     <div className="hud">
       {!explainMode && addingKind && addingParent && onCommitAdd && onCancelAdd && (
         <AddItemModal
-          key={`${addingKind}:${addingParent}:${addingLockedColor ?? ''}`}
+          key={`${addingKind}:${addingParent}:${addingLockedColor ?? addingInitialColor ?? ''}`}
           kind={addingKind}
           parentLabel={
             addingParent === '.' ? graph.targetName : addingParent
@@ -3338,6 +3553,7 @@ export function HUD({
           visibleColors={blueprintColors}
           currentColor={blueprintColor}
           lockedColor={addingLockedColor}
+          initialColor={addingInitialColor}
           onCommit={onCommitAdd}
           onCancel={onCancelAdd}
         />
@@ -4092,6 +4308,23 @@ export function HUD({
             })
           }
           onClose={() => setPointPicker(null)}
+        />
+      )}
+
+      {colorPicker && onChangeCreatedColor && (
+        <BlueprintColorModal
+          title={colorPicker.title}
+          subtitle={colorPicker.subtitle}
+          options={blueprintOptions}
+          currentColor={colorPicker.currentColor}
+          onSelect={(color) =>
+            onChangeCreatedColor({
+              kind: colorPicker.kind,
+              path: colorPicker.path,
+              color,
+            })
+          }
+          onClose={() => setColorPicker(null)}
         />
       )}
 

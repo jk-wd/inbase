@@ -25,7 +25,8 @@ export type MapPlaneItem = {
 }
 
 function mapFileInstanceColor(file: FileNode) {
-  if (file.colorHex || file.userCreated) return blueprintPalette(file.colorHex).color
+  if (file.colorHex) return blueprintPalette(file.colorHex).color
+  if (file.userCreated) return '#7ec8e8'
   return fileColor(file.language)
 }
 

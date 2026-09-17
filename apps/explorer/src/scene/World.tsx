@@ -313,17 +313,16 @@ export function World({
     const seen = new Set<string>()
     const items: MapFileLabel[] = []
     const overlayFileHex = new Map<string, string>()
-    const overlayFolderHex = new Map<string, string>()
     for (const layer of overlayLayers) {
-      for (const path of Object.keys(layer.folders)) {
-        overlayFolderHex.set(path, layer.colorHex)
-      }
       for (const id of Object.keys(layer.files)) {
         overlayFileHex.set(id, layer.colorHex)
       }
+      for (const id of layer.filledIds) {
+        overlayFileHex.set(id, layer.colorHex)
+      }
     }
-    const labelHex = (id: string, folder: string) =>
-      overlayFileHex.get(id) ?? overlayFolderHex.get(folder)
+    const labelHex = (id: string, fileHex?: string) =>
+      overlayFileHex.get(id) ?? fileHex
     const push = (
       id: string,
       name: string,
@@ -360,11 +359,11 @@ export function World({
     }
     for (const file of viewGraph.files) {
       const placed = viewLayout.files[file.id]
-      const hex = labelHex(file.id, file.folder)
+      const hex = labelHex(file.id, file.colorHex)
       if (placed) push(file.id, file.name, placed, hex ? { blueprintHex: hex } : undefined)
     }
     for (const placed of Object.values(ghosts)) {
-      const hex = labelHex(placed.id, folderOfFile(placed.id))
+      const hex = labelHex(placed.id)
       push(
         placed.id,
         placed.id.split('/').pop() ?? placed.id,

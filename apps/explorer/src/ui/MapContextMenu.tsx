@@ -22,6 +22,8 @@ type MapContextMenuProps = {
   onExplainFile?: (fileId: string) => void
   onExplainFolder?: (folder: string) => void
   onPointToFolder?: (folder: string) => void
+  onChangeFileColor?: (fileId: string) => void
+  onChangeFolderColor?: (folder: string, color?: string) => void
   onClose: () => void
 }
 
@@ -37,6 +39,8 @@ export function MapContextMenu({
   onExplainFile,
   onExplainFolder,
   onPointToFolder,
+  onChangeFileColor,
+  onChangeFolderColor,
   onClose,
 }: MapContextMenuProps) {
   useEffect(() => {
@@ -67,18 +71,20 @@ export function MapContextMenu({
   const fileId = menu.file
   const folder = menu.folder
   const pad = 8
-  const width = 176
+  const width = 210
   const itemHeight = 42
   const fileItemCount =
     1 +
     (onAddFileNote ? 1 : 0) +
     (onExplainFile ? 1 : 0) +
-    (onExplainFolder && folder ? 1 : 0)
+    (onExplainFolder && folder ? 1 : 0) +
+    (onChangeFileColor ? 1 : 0)
   const folderItemCount =
     2 +
     (onAddFolderNote ? 1 : 0) +
     (onPointToFolder ? 1 : 0) +
-    (onExplainFolder ? 1 : 0)
+    (onExplainFolder ? 1 : 0) +
+    (onChangeFolderColor ? 1 : 0)
   const height = (fileId ? fileItemCount : folderItemCount) * itemHeight
   const left = Math.min(
     Math.max(pad, menu.x),
@@ -144,6 +150,18 @@ export function MapContextMenu({
               Explain folder
             </button>
           ) : null}
+          {onChangeFileColor ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onChangeFileColor(fileId)
+                onClose()
+              }}
+            >
+              Change blueprint color
+            </button>
+          ) : null}
         </>
       ) : folder ? (
         <>
@@ -202,6 +220,18 @@ export function MapContextMenu({
               }}
             >
               Explain folder
+            </button>
+          ) : null}
+          {onChangeFolderColor ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onChangeFolderColor(folder, menu.color)
+                onClose()
+              }}
+            >
+              Change blueprint color
             </button>
           ) : null}
         </>

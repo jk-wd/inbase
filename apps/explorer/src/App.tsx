@@ -67,6 +67,7 @@ import {
   toBlueprintFile,
   toBlueprintFolder,
   namedCreatedIslands,
+  moveCreatedItems,
   omitCreatedItems,
   pathIsInside,
   blueprintImportRawFromFile,
@@ -1156,6 +1157,7 @@ function Explorer({
     kind: 'file' | 'folder'
     parent: string
     lockedColor: string | null
+    initialColor: string | null
   } | null>(null)
   const [mapReveal, setMapReveal] = useState<{
     key: number
@@ -1171,6 +1173,8 @@ function Explorer({
   const [inspectTick, setInspectTick] = useState(0)
   const [fileNoteTick, setFileNoteTick] = useState(0)
   const [folderNoteTick, setFolderNoteTick] = useState(0)
+  const [fileColorTick, setFileColorTick] = useState(0)
+  const [folderColorTick, setFolderColorTick] = useState(0)
   const [locked, setLocked] = useState(false)
   const [walkDrop, setWalkDrop] = useState<{ x: number; y: number } | null>(null)
   const [importedBy, setImportedBy] = useState(false)
@@ -1704,29 +1708,31 @@ function Explorer({
   }, [])
 
   const beginAddFile = useCallback(
-    (folderPath: string) => {
+    (folderPath: string, color?: string) => {
       if (!canPlace) return
       setAddingItem({
         kind: 'file',
         parent: folderPath,
         lockedColor: null,
+        initialColor: color ?? ownerColorForCreatedFolder(folderPath),
       })
       document.exitPointerLock()
     },
-    [canPlace],
+    [canPlace, ownerColorForCreatedFolder],
   )
 
   const beginAddFolder = useCallback(
-    (parent: string) => {
+    (parent: string, color?: string) => {
       if (!canPlace) return
       setAddingItem({
         kind: 'folder',
         parent,
         lockedColor: null,
+        initialColor: color ?? ownerColorForCreatedFolder(parent),
       })
       document.exitPointerLock()
     },
-    [canPlace],
+    [canPlace, ownerColorForCreatedFolder],
   )
 
   const createdContentsForColor = useCallback((color: string) => {
@@ -1960,6 +1966,27 @@ function Explorer({
       setFolderNoteTick((tick) => tick + 1)
     },
     [selectFolder],
+  )
+
+  const openMapFileColor = useCallback(
+    (fileId: string) => {
+      if (fileId.startsWith('draft:')) return
+      if (!ownerColorForCreatedFile(fileId)) return
+      selectFile(fileId)
+      setFileColorTick((tick) => tick + 1)
+    },
+    [ownerColorForCreatedFile, selectFile],
+  )
+
+  const openMapFolderColor = useCallback(
+    (folderPath: string, layer?: string) => {
+      if (folderPath.startsWith('draft:')) return
+      const color = layer ?? ownerColorForCreatedFolder(folderPath)
+      if (!color || !ownerColorForCreatedFolder(folderPath)) return
+      selectFolder(folderPath, color)
+      setFolderColorTick((tick) => tick + 1)
+    },
+    [ownerColorForCreatedFolder, selectFolder],
   )
 
   useEffect(() => {
@@ -2993,6 +3020,66 @@ function Explorer({
     [persistBlueprint],
   )
 
+  const changeCreatedColor = useCallback(
+    (next: { kind: 'file' | 'folder'; path: string; color: string }) => {
+      if (!canPlace || next.path.startsWith('draft:')) return
+      const fromColor =
+        next.kind === 'file'
+          ? ownerColorForCreatedFile(next.path)
+          : selectedFolder === next.path
+            ? selectedFolderLayer ?? ownerColorForCreatedFolder(next.path)
+            : ownerColorForCreatedFolder(next.path)
+      if (!fromColor || fromColor === next.color) return
+      const source = createdContentsForColor(fromColor)
+      const dest = createdContentsForColor(next.color)
+      let fileIds: string[] = []
+      let folderPaths: string[] = []
+      if (next.kind === 'file') {
+        const block = source.blocks.find(
+          (item) => item.id === next.path && !item.naming,
+        )
+        if (!block) return
+        fileIds = [next.path]
+      } else {
+        const island = source.islands.find(
+          (item) => !item.naming && createdIslandKey(item) === next.path,
+        )
+        if (!island) return
+        const inside = createdItemsInsideFolder(
+          next.path,
+          source.blocks,
+          source.islands,
+        )
+        fileIds = inside.removedBlocks
+          .filter((block) => !block.naming)
+          .map((block) => block.id)
+        folderPaths = inside.removedIslands
+          .filter((item) => !item.naming)
+          .map((item) => createdIslandKey(item))
+      }
+      const moved = moveCreatedItems(source, dest, fileIds, folderPaths)
+      writeCreatedContents(fromColor, moved.source)
+      writeCreatedContents(next.color, moved.dest)
+      if (!visibleBlueprintColorsRef.current.includes(next.color)) {
+        applyHiddenToColors([next.color], false)
+      }
+      if (next.kind === 'folder') {
+        setSelectedFolder(next.path)
+        setSelectedFolderLayer(next.color)
+      }
+    },
+    [
+      applyHiddenToColors,
+      canPlace,
+      createdContentsForColor,
+      ownerColorForCreatedFile,
+      ownerColorForCreatedFolder,
+      selectedFolder,
+      selectedFolderLayer,
+      writeCreatedContents,
+    ],
+  )
+
   const renameCreatedBlock = useCallback(
     (id: string, rawName: string) => {
       const color = ownerColorForCreatedFile(id)
@@ -3390,6 +3477,8 @@ function Explorer({
         inspectTick={inspectTick}
         fileNoteTick={fileNoteTick}
         folderNoteTick={folderNoteTick}
+        fileColorTick={fileColorTick}
+        folderColorTick={folderColorTick}
         selectedFolder={selectedFolder}
         selectedFolderLayer={selectedFolderLayer}
         overlayLayers={overlayLayers}
@@ -3432,6 +3521,7 @@ function Explorer({
         addingKind={addingItem?.kind ?? null}
         addingParent={addingItem?.parent ?? null}
         addingLockedColor={addingItem?.lockedColor ?? null}
+        addingInitialColor={addingItem?.initialColor ?? null}
         onCommitAdd={commitAddItem}
         onCancelAdd={() => setAddingItem(null)}
         blueprintFunctions={blueprintFunctions}
@@ -3450,6 +3540,7 @@ function Explorer({
         onRemoveBlueprintImport={removeBlueprintImport}
         onSetBlueprintNote={applyBlueprintNote}
         onToggleBlueprintPointer={applyBlueprintPointer}
+        onChangeCreatedColor={changeCreatedColor}
         onMapAddFile={beginAddFile}
         onMapAddFolder={beginAddFolder}
         onRenameCreatedFile={renameCreatedBlock}
@@ -3522,6 +3613,22 @@ function Explorer({
           explaining
             ? undefined
             : (folder) => applyBlueprintPointer({ kind: 'folder', path: folder })
+        }
+        onChangeFileColor={
+          explaining ||
+          !canPlace ||
+          !mapMenu?.file ||
+          !ownerColorForCreatedFile(mapMenu.file)
+            ? undefined
+            : openMapFileColor
+        }
+        onChangeFolderColor={
+          explaining ||
+          !canPlace ||
+          !mapMenu?.folder ||
+          !ownerColorForCreatedFolder(mapMenu.folder)
+            ? undefined
+            : openMapFolderColor
         }
         onClose={() => setMapMenu(null)}
       />

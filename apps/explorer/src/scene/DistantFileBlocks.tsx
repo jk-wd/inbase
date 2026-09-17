@@ -28,9 +28,11 @@ export function DistantFileBlocks({
       <boxGeometry args={[1, 1, 1]} />
       <meshLambertMaterial />
       {items.map(({ file, placed, dimmed }) => {
-        const color = file.userCreated || file.colorHex
+        const color = file.colorHex
           ? blueprintPalette(file.colorHex).block
-          : fileColor(file.language)
+          : file.userCreated
+            ? '#7ec8e8'
+            : fileColor(file.language)
         return (
           <Instance
             key={file.id}

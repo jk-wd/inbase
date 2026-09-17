@@ -125,7 +125,8 @@ export const FileBlock = memo(function FileBlock({
   const width = placed.size[0] * emphasis
   const height = placed.size[1]
   const depth = placed.size[2] * emphasis
-  const tint = overlay || file.colorHex || file.userCreated ? blueprintPalette(file.colorHex) : null
+  const tint =
+    overlay || file.colorHex ? blueprintPalette(file.colorHex) : null
   const color = tint
     ? overlay
       ? tint.block

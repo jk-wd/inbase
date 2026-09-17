@@ -614,10 +614,24 @@ button {
 .map-file-label-blueprint {
   color: #ffffff;
   background: var(--blueprint-label-bg, #0c2a37);
+  box-shadow: inset 0 0 0 1px var(--blueprint-color, #7ec8e8);
 }
 
 .map-file-label-blueprint.map-file-label-selected {
   background: var(--blueprint-label-bg, #0c2a37);
+  box-shadow: inset 0 0 0 1px #ffffff;
+}
+
+.map-file-label-blueprint.map-file-label-pointed,
+.map-file-label-blueprint.map-file-label-noted,
+.map-file-label-blueprint.map-file-label-focused {
+  box-shadow: inset 0 0 0 1px var(--session-color, #9ad8ff);
+}
+
+.map-file-label-blueprint.map-file-label-pointed.map-file-label-selected,
+.map-file-label-blueprint.map-file-label-noted.map-file-label-selected,
+.map-file-label-blueprint.map-file-label-focused.map-file-label-selected {
+  box-shadow: inset 0 0 0 1px #ffffff;
 }
 
 .map-change-mark {

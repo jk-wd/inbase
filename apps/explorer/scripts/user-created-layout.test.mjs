@@ -16,6 +16,7 @@ if (!canLoadTs) {
 
   const {
     layoutBlueprintLayers,
+    moveCreatedItems,
     sortCreatedIslandsParentFirst,
     withUserCreatedGraph,
     withUserCreatedLayout,
@@ -97,6 +98,80 @@ if (!canLoadTs) {
         (bridge) => bridge.id === 'src→src/lambda' || bridge.label === 'lambda',
       ),
     )
+  })
+
+  test('moveCreatedItems moves a file and its notes onto another color', () => {
+    const source = {
+      blocks: [
+        {
+          id: 'src/New.tsx',
+          name: 'New.tsx',
+          path: 'src/New.tsx',
+          folder: 'src',
+        },
+      ],
+      islands: [],
+      functions: [{ file: 'src/New.tsx', name: 'render' }],
+      variables: [],
+      imports: [],
+      notes: [{ file: 'src/New.tsx', kind: 'file', note: 'build this' }],
+      pointers: [{ kind: 'file', path: 'src/New.tsx' }],
+    }
+    const dest = {
+      blocks: [],
+      islands: [],
+      functions: [],
+      variables: [],
+      imports: [],
+      notes: [],
+      pointers: [],
+    }
+    const moved = moveCreatedItems(source, dest, ['src/New.tsx'])
+    assert.deepEqual(moved.source.blocks, [])
+    assert.deepEqual(moved.source.notes, [])
+    assert.equal(moved.dest.blocks[0]?.id, 'src/New.tsx')
+    assert.equal(moved.dest.functions[0]?.name, 'render')
+    assert.equal(moved.dest.notes[0]?.note, 'build this')
+    assert.equal(moved.dest.pointers[0]?.path, 'src/New.tsx')
+  })
+
+  test('moveCreatedItems moves a folder and nested files together', () => {
+    const source = {
+      blocks: [
+        {
+          id: 'src/lambda/handler.ts',
+          name: 'handler.ts',
+          path: 'src/lambda/handler.ts',
+          folder: 'src/lambda',
+        },
+      ],
+      islands: [src, lambda],
+      functions: [],
+      variables: [],
+      imports: [],
+      notes: [{ file: 'src/lambda', kind: 'folder', note: 'new service' }],
+      pointers: [],
+    }
+    const dest = {
+      blocks: [],
+      islands: [],
+      functions: [],
+      variables: [],
+      imports: [],
+      notes: [],
+      pointers: [],
+    }
+    const moved = moveCreatedItems(
+      source,
+      dest,
+      ['src/lambda/handler.ts'],
+      ['src', 'src/lambda'],
+    )
+    assert.deepEqual(moved.source.blocks, [])
+    assert.deepEqual(moved.source.islands, [])
+    assert.equal(moved.dest.islands.length, 2)
+    assert.equal(moved.dest.blocks[0]?.id, 'src/lambda/handler.ts')
+    assert.equal(moved.dest.notes[0]?.file, 'src/lambda')
   })
 
   test('layoutBlueprintLayers nests a folder from another blueprint inside a later parent layer', () => {

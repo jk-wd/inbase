@@ -1173,17 +1173,25 @@ export function dropBlueprintFilePointers(
   )
 }
 
-export function omitCreatedItems<
-  T extends {
-    blocks: UserCreatedBlock[]
-    islands: UserCreatedIsland[]
-    functions: PatchSymbolAddition[]
-    variables: PatchSymbolAddition[]
-    imports: PatchImportAddition[]
-    notes: BlueprintNote[]
-    pointers: BlueprintPointer[]
-  },
->(
+export type CreatedContents = {
+  blocks: UserCreatedBlock[]
+  islands: UserCreatedIsland[]
+  functions: PatchSymbolAddition[]
+  variables: PatchSymbolAddition[]
+  imports: PatchImportAddition[]
+  notes: BlueprintNote[]
+  pointers: BlueprintPointer[]
+}
+
+function symbolAdditionKey(item: PatchSymbolAddition) {
+  return `${item.file}:${item.name}`
+}
+
+function importAdditionKey(item: PatchImportAddition) {
+  return `${item.file}:${item.from}:${item.name}`
+}
+
+export function omitCreatedItems<T extends CreatedContents>(
   current: T,
   removedBlockIds: Iterable<string>,
   removedFolderPaths: Iterable<string> = [],
@@ -1201,6 +1209,101 @@ export function omitCreatedItems<
     imports: current.imports.filter((item) => !files.has(item.file)),
     notes: dropBlueprintFileNotes(current.notes, files, folders),
     pointers: dropBlueprintFilePointers(current.pointers, files, folders),
+  }
+}
+
+export function takeCreatedItems<T extends CreatedContents>(
+  current: T,
+  removedBlockIds: Iterable<string>,
+  removedFolderPaths: Iterable<string> = [],
+): { taken: CreatedContents; remaining: T } {
+  const files = new Set(removedBlockIds)
+  const folders = new Set(removedFolderPaths)
+  const remaining = omitCreatedItems(current, files, folders)
+  return {
+    remaining,
+    taken: {
+      blocks: current.blocks.filter((block) => files.has(block.id)),
+      islands: current.islands.filter((island) =>
+        folders.has(createdIslandKey(island)),
+      ),
+      functions: current.functions.filter((item) => files.has(item.file)),
+      variables: current.variables.filter((item) => files.has(item.file)),
+      imports: current.imports.filter((item) => files.has(item.file)),
+      notes: current.notes.filter((item) =>
+        item.kind === 'folder' ? folders.has(item.file) : files.has(item.file),
+      ),
+      pointers: current.pointers.filter((item) =>
+        item.kind === 'folder' ? folders.has(item.path) : files.has(item.path),
+      ),
+    },
+  }
+}
+
+export function mergeCreatedItems<T extends CreatedContents>(
+  current: T,
+  extra: CreatedContents,
+): T {
+  const fileIds = new Set(current.blocks.map((block) => block.id))
+  const folderKeys = new Set(current.islands.map((island) => createdIslandKey(island)))
+  const functionKeys = new Set(current.functions.map(symbolAdditionKey))
+  const variableKeys = new Set(current.variables.map(symbolAdditionKey))
+  const importKeys = new Set(current.imports.map(importAdditionKey))
+  const noteKeys = new Set(current.notes.map((item) => blueprintNoteKey(item)))
+  const pointerKeys = new Set(
+    current.pointers.map((item) => blueprintPointerKey(item)),
+  )
+  return {
+    ...current,
+    blocks: [
+      ...current.blocks,
+      ...extra.blocks.filter((block) => !fileIds.has(block.id)),
+    ],
+    islands: [
+      ...current.islands,
+      ...extra.islands.filter(
+        (island) => !folderKeys.has(createdIslandKey(island)),
+      ),
+    ],
+    functions: [
+      ...current.functions,
+      ...extra.functions.filter((item) => !functionKeys.has(symbolAdditionKey(item))),
+    ],
+    variables: [
+      ...current.variables,
+      ...extra.variables.filter((item) => !variableKeys.has(symbolAdditionKey(item))),
+    ],
+    imports: [
+      ...current.imports,
+      ...extra.imports.filter((item) => !importKeys.has(importAdditionKey(item))),
+    ],
+    notes: [
+      ...current.notes,
+      ...extra.notes.filter((item) => !noteKeys.has(blueprintNoteKey(item))),
+    ],
+    pointers: [
+      ...current.pointers,
+      ...extra.pointers.filter(
+        (item) => !pointerKeys.has(blueprintPointerKey(item)),
+      ),
+    ],
+  }
+}
+
+export function moveCreatedItems<T extends CreatedContents>(
+  source: T,
+  dest: T,
+  removedBlockIds: Iterable<string>,
+  removedFolderPaths: Iterable<string> = [],
+): { source: T; dest: T } {
+  const { taken, remaining } = takeCreatedItems(
+    source,
+    removedBlockIds,
+    removedFolderPaths,
+  )
+  return {
+    source: remaining,
+    dest: mergeCreatedItems(dest, taken),
   }
 }
 
@@ -1260,16 +1363,6 @@ export function remapPathPrefix(path: string, from: string, to: string) {
     return `${to}${path.slice(from.length)}`
   }
   return path
-}
-
-type CreatedContents = {
-  blocks: UserCreatedBlock[]
-  islands: UserCreatedIsland[]
-  functions: PatchSymbolAddition[]
-  variables: PatchSymbolAddition[]
-  imports: PatchImportAddition[]
-  notes: BlueprintNote[]
-  pointers: BlueprintPointer[]
 }
 
 export function remapCreatedFolderPath<T extends CreatedContents>(
