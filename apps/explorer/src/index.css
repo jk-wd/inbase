@@ -436,7 +436,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
   min-width: max-content;
   padding: 4px 7px;
   color: #f1f5fa;
@@ -510,6 +510,10 @@ button {
   line-height: 0;
 }
 
+.map-folder-note {
+  opacity: 0.85;
+}
+
 .map-folder-eye svg,
 .map-folder-note svg {
   display: block;
@@ -541,6 +545,9 @@ button {
   position: absolute;
   top: 0;
   left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   max-width: 220px;
   padding: 1px 5px;
   color: #e8edf4;
@@ -549,16 +556,30 @@ button {
   text-align: left;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
   visibility: hidden;
   will-change: transform;
 }
 
 .map-file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 10px;
   font-weight: 600;
   line-height: 1.25;
   letter-spacing: 0.01em;
+}
+
+.map-file-note {
+  display: grid;
+  place-items: center;
+  flex: none;
+  line-height: 0;
+  opacity: 0.8;
+}
+
+.map-file-note svg {
+  display: block;
 }
 
 .map-file-label-selected {
@@ -1449,6 +1470,18 @@ button {
 }
 
 .blueprint-eye svg {
+  display: block;
+}
+
+.blueprint-note-mark {
+  display: grid;
+  place-items: center;
+  color: #f4f7fb;
+  line-height: 0;
+  opacity: 0.85;
+}
+
+.blueprint-note-mark svg {
   display: block;
 }
 

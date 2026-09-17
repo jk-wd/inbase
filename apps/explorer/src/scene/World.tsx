@@ -349,6 +349,7 @@ export function World({
         pointedColor: colors?.[colors.length - 1],
         noted: noted.has(id),
         notedColor: noteColors?.[noteColors.length - 1],
+        notedColors: noteColors,
         dimmed:
           explainActive &&
           !explainFileFocused(explainFocus, id, folderOfFile(id)),

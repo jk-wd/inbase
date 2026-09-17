@@ -276,7 +276,7 @@ export const FileBlock = memo(function FileBlock({
           opacity={opacity}
         />
       )}
-      {(eyeColors.length > 0 || noteColors.length > 0) && !naming && (
+      {(eyeColors.length > 0 || (!mapMode && noteColors.length > 0)) && !naming && (
         <Html
           position={
             mapMode
@@ -300,7 +300,7 @@ export const FileBlock = memo(function FileBlock({
           zIndexRange={[40, 0]}
         >
           <div className="blueprint-mark-row">
-            <BlueprintNotes colors={noteColors} mapMode={mapMode} />
+            {!mapMode && <BlueprintNotes colors={noteColors} mapMode={mapMode} />}
             <BlueprintEyes colors={eyeColors} mapMode={mapMode} />
           </div>
         </Html>

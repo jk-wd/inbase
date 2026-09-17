@@ -204,12 +204,14 @@ function BlueprintMarkRow({
   size,
   label,
   icon: Icon,
+  markClass = 'blueprint-eye',
 }: {
   colors: string[]
   mapMode?: boolean
   size: number
   label: string
   icon: typeof EyeIcon
+  markClass?: string
 }) {
   if (colors.length === 0) return null
   return (
@@ -220,7 +222,7 @@ function BlueprintMarkRow({
     >
       {colors.map((hex, index) => (
         <div
-          className="blueprint-eye"
+          className={markClass}
           data-map={mapMode ? 'true' : 'false'}
           key={`${hex}-${index}`}
           style={{ color: hex }}
@@ -255,7 +257,7 @@ export function BlueprintEyes({
 export function BlueprintNotes({
   colors,
   mapMode,
-  size = 18,
+  size = 12,
   label = 'File note',
 }: {
   colors: string[]
@@ -270,6 +272,7 @@ export function BlueprintNotes({
       size={size}
       label={label}
       icon={NoteIcon}
+      markClass="blueprint-note-mark"
     />
   )
 }

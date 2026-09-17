@@ -29,6 +29,7 @@ export type MapFileLabel = {
   pointedColor?: string
   noted?: boolean
   notedColor?: string
+  notedColors?: string[]
   dimmed?: boolean
   focused?: boolean
   blueprintHex?: string
@@ -838,9 +839,11 @@ const FILE_LABEL_GAP = 4
 const MAX_FILE_LABELS = 28
 const FILE_LABEL_CHAR_W = 7.2
 const FILE_LABEL_PAD_X = 12
+const FILE_LABEL_NOTE_W = 12
 const FILE_LABEL_MIN_W = 108
 const FILE_LABEL_MAX_W = 220
 const FILE_LABEL_BLOCK_SCALE = 5.2
+const FILE_NOTE_ICON_SIZE = 10
 
 function projectToScreen(
   x: number,
@@ -948,7 +951,7 @@ function paintFolderLabel(
       const note = document.createElement('span')
       note.className = 'map-folder-note'
       note.style.color = color
-      note.innerHTML = noteIconMarkup(13)
+      note.innerHTML = noteIconMarkup(11)
       el.appendChild(note)
     }
   }
@@ -1202,6 +1205,29 @@ function fileLabelClass(file: MapFileLabel) {
     .join(' ')
 }
 
+function fileNoteColors(file: MapFileLabel) {
+  if (file.notedColors && file.notedColors.length > 0) return file.notedColors
+  if (file.notedColor) return [file.notedColor]
+  return ['#9ad8ff']
+}
+
+function paintFileLabel(el: HTMLElement, file: MapFileLabel) {
+  el.replaceChildren()
+  if (file.noted) {
+    for (const color of fileNoteColors(file)) {
+      const note = document.createElement('span')
+      note.className = 'map-file-note'
+      note.style.color = color
+      note.innerHTML = noteIconMarkup(FILE_NOTE_ICON_SIZE)
+      el.appendChild(note)
+    }
+  }
+  const name = document.createElement('span')
+  name.className = 'map-file-name'
+  name.textContent = file.name
+  el.appendChild(name)
+}
+
 function labelsOverlap(
   left: number,
   top: number,
@@ -1302,7 +1328,9 @@ function MapFileLabels({
       )
       const width = Math.min(
         maxWidth,
-        file.name.length * FILE_LABEL_CHAR_W + FILE_LABEL_PAD_X,
+        file.name.length * FILE_LABEL_CHAR_W +
+          FILE_LABEL_PAD_X +
+          (file.noted ? FILE_LABEL_NOTE_W * fileNoteColors(file).length : 0),
       )
       const onBlock = block >= 48 && width <= block * 0.9
       const edgeX = onBlock
@@ -1343,9 +1371,6 @@ function MapFileLabels({
       el.style.top = '0'
       el.style.left = '0'
       el.style.visibility = 'hidden'
-      const name = document.createElement('span')
-      name.className = 'map-file-name'
-      el.appendChild(name)
       layer.appendChild(el)
     }
 
@@ -1357,7 +1382,6 @@ function MapFileLabels({
         if (el.style.visibility !== 'hidden') el.style.visibility = 'hidden'
         continue
       }
-      const name = el.firstElementChild as HTMLElement | null
       const className = fileLabelClass(next.file)
       if (el.className !== className) el.className = className
       if (el.dataset.id !== next.file.id) {
@@ -1378,8 +1402,19 @@ function MapFileLabels({
         el.style.removeProperty('--blueprint-color')
         el.style.removeProperty('--blueprint-label-bg')
       }
-      if (name && name.textContent !== next.file.name) name.textContent = next.file.name
+      const content = [
+        next.file.id,
+        next.file.name,
+        next.file.noted ? '1' : '0',
+        next.file.noted ? fileNoteColors(next.file).join(',') : '',
+      ].join('|')
+      if (el.dataset.content !== content) {
+        el.dataset.content = content
+        paintFileLabel(el, next.file)
+      }
       el.style.maxWidth = `${Math.round(next.w)}px`
+      el.style.justifyContent =
+        next.outer === 1 ? 'flex-start' : next.outer === -1 ? 'flex-end' : 'center'
       el.style.textAlign =
         next.outer === 1 ? 'left' : next.outer === -1 ? 'right' : 'center'
       const tx = Math.round(next.x)

@@ -189,11 +189,7 @@ export function FolderArea({
           zIndexRange={[40, 0]}
         >
           <div className="blueprint-mark-row">
-            <BlueprintNotes
-              colors={noteColors}
-              label="Folder note"
-              size={20}
-            />
+            <BlueprintNotes colors={noteColors} label="Folder note" />
             <BlueprintEyes colors={eyeColors} size={20} />
           </div>
         </Html>
