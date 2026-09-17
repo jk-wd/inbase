@@ -16,7 +16,7 @@ import {
 import { isBlueprintFolder } from '../layout'
 import type { PlacedFolder } from '../types'
 import { MapSelectBorder } from './MapSelectBorder'
-import { BlueprintEyes } from '../ui/EyeIcon'
+import { BlueprintEyes, BlueprintNotes } from '../ui/EyeIcon'
 
 type FolderAreaProps = {
   folder: PlacedFolder
@@ -27,6 +27,8 @@ type FolderAreaProps = {
   labelVisible?: boolean
   pointed?: boolean
   pointedColors?: string[]
+  noted?: boolean
+  notedColors?: string[]
   opacity?: number
   overlay?: boolean
   overlayY?: number
@@ -43,6 +45,8 @@ export function FolderArea({
   labelVisible = true,
   pointed = false,
   pointedColors,
+  noted = false,
+  notedColors,
   opacity = 1,
   overlay = false,
   overlayY = BLUEPRINT_OVERLAY.folderY,
@@ -80,7 +84,15 @@ export function FolderArea({
       : pointed
         ? [MAP_SELECTION.pointed]
         : []
+  const noteColors =
+    notedColors && notedColors.length > 0
+      ? notedColors
+      : noted
+        ? [MAP_SELECTION.pointed]
+        : []
   const pointedColor = eyeColors[eyeColors.length - 1]
+  const notedColor = noteColors[noteColors.length - 1]
+  const markColor = pointedColor ?? notedColor
   const label =
     gitKind === 'remove'
       ? `- ${folder.name}`
@@ -144,13 +156,13 @@ export function FolderArea({
           color={MAP_SELECTION.island}
         />
       )}
-      {eyeColors.length > 0 && !naming && !overlay && (
+      {(eyeColors.length > 0 || noteColors.length > 0) && !naming && !overlay && (
         <MapSelectBorder
           width={folder.width}
           depth={folder.depth}
           y={selected && mapMode ? 0.09 : 0.05}
           stroke={MAP_SELECTION.pointedPad}
-          color={pointedColor ?? MAP_SELECTION.pointed}
+          color={markColor ?? MAP_SELECTION.pointed}
         />
       )}
       {!overlay && (
@@ -168,7 +180,7 @@ export function FolderArea({
           <meshBasicMaterial color={aisle} {...floorMaterial} />
         </mesh>
       )}
-      {eyeColors.length > 0 && !naming && !mapMode && (
+      {(eyeColors.length > 0 || noteColors.length > 0) && !naming && !mapMode && (
         <Html
           position={[1.45, 1.75, -folder.depth / 2 + 1.6]}
           center
@@ -176,7 +188,14 @@ export function FolderArea({
           style={{ pointerEvents: 'none' }}
           zIndexRange={[40, 0]}
         >
-          <BlueprintEyes colors={eyeColors} size={20} />
+          <div className="blueprint-mark-row">
+            <BlueprintNotes
+              colors={noteColors}
+              label="Folder note"
+              size={20}
+            />
+            <BlueprintEyes colors={eyeColors} size={20} />
+          </div>
         </Html>
       )}
       <Suspense fallback={null}>
@@ -186,8 +205,8 @@ export function FolderArea({
             rotation={[-Math.PI / 2, 0, 0]}
             fontSize={0.55}
             color={
-              pointedColor
-                ? pointedColor
+              markColor
+                ? markColor
                 : highlight
                   ? faded
                     ? dimColor(highlight.color, EXPLAIN_FOCUS.dimColorAmount)

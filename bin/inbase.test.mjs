@@ -12,6 +12,11 @@ import { prependYamlFrontmatter, copySkillTree } from './editors/layout.mjs'
 import { stripYamlFrontmatter, toClineExecuteCommand } from './editors/cline.mjs'
 import { ZED_INBASE_SKILL_PATTERN, ZED_INBASE_TERMINAL_PATTERN } from './editors/zed.mjs'
 import {
+  OPENCODE_INBASE_BASH_PATTERN,
+  OPENCODE_INBASE_SKILL,
+  OPENCODE_INSTRUCTION_REL,
+} from './editors/opencode.mjs'
+import {
   applyHostEnv,
   copyDir,
   ensureDataDir,
@@ -44,10 +49,10 @@ function restoreEnv(snapshot) {
   }
 }
 
-test('registers Cursor, Claude Code, Agent Skills, Zed, Copilot, and Cline adapters', () => {
+test('registers Cursor, Claude Code, Agent Skills, Zed, Copilot, Cline, and OpenCode adapters', () => {
   assert.deepEqual(
     editors.map((editor) => editor.id),
-    ['cursor', 'claude', 'agents', 'zed', 'copilot', 'cline'],
+    ['cursor', 'claude', 'agents', 'zed', 'copilot', 'cline', 'opencode'],
   )
 })
 
@@ -117,6 +122,7 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /`\.cline`/)
     assert.match(skillText, /`\.clinerules`/)
     assert.match(skillText, /`\.github\/skills`/)
+    assert.match(skillText, /`\.opencode`/)
     assert.match(skillText, /\/extract-blueprint/)
     assert.match(skillText, /\/stop/)
     assert.match(skillText, /Do not prefix it with/)
@@ -149,7 +155,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.equal(result.skillDir, path.join(root, '.cursor/skills/inbase'))
     assert.deepEqual(
       result.editors.map((editor) => editor.id),
-      ['cursor', 'claude', 'agents', 'zed', 'copilot', 'cline'],
+      ['cursor', 'claude', 'agents', 'zed', 'copilot', 'cline', 'opencode'],
     )
     assert.equal(fs.existsSync(skill), true)
     const skillText = fs.readFileSync(skill, 'utf8')
@@ -189,6 +195,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(skillText, /`\.cline`/)
     assert.match(skillText, /`\.clinerules`/)
     assert.match(skillText, /`\.github\/skills`/)
+    assert.match(skillText, /`\.opencode`/)
     assert.match(skillText, /\/extract-blueprint/)
     assert.match(skillText, /--note "path: one-line goal"/)
     assert.doesNotMatch(skillText, /npx inbase wait-for-approval/)
@@ -446,6 +453,33 @@ test('init copies editor skills and gitignores .inbase', () => {
       fs.readFileSync(path.join(root, '.clinerules'), 'utf8'),
       /<execute_command>/,
     )
+    const opencode = result.editors.find((editor) => editor.id === 'opencode')
+    assert.equal(opencode?.label, 'OpenCode')
+    assert.equal(opencode?.skillDir, path.join(root, '.opencode/skills/inbase'))
+    assert.equal(opencode?.commandDir, path.join(root, '.opencode/commands'))
+    assert.equal(fs.existsSync(path.join(root, '.opencode/skills/inbase/SKILL.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.opencode/commands/coral.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.opencode/commands/accept.md')), false)
+    const opencodeCoral = fs.readFileSync(
+      path.join(root, '.opencode/commands/coral.md'),
+      'utf8',
+    )
+    assert.match(opencodeCoral, /npx inbase attach --color coral/)
+    assert.match(opencodeCoral, /\$ARGUMENTS/)
+    const opencodeRule = fs.readFileSync(
+      path.join(root, OPENCODE_INSTRUCTION_REL),
+      'utf8',
+    )
+    assert.match(opencodeRule, /Inbase visual edits \(OpenCode\)/)
+    assert.match(opencodeRule, /npx inbase attach/)
+    assert.match(opencodeRule, /I see on the blueprint/)
+    assert.doesNotMatch(opencodeRule, /<execute_command>/)
+    const opencodeConfig = JSON.parse(
+      fs.readFileSync(path.join(root, 'opencode.json'), 'utf8'),
+    )
+    assert.equal(opencodeConfig.permission.bash[OPENCODE_INBASE_BASH_PATTERN], 'allow')
+    assert.equal(opencodeConfig.permission.skill[OPENCODE_INBASE_SKILL], 'allow')
+    assert.deepEqual(opencodeConfig.instructions, [OPENCODE_INSTRUCTION_REL])
     fs.rmSync(path.join(root, '.clinerules'))
     fs.mkdirSync(path.join(root, '.clinerules/workflows'), { recursive: true })
     fs.writeFileSync(path.join(root, '.clinerules/inbase.md'), 'legacy folder rule\n')
@@ -483,6 +517,7 @@ test('init cline installs only Cline files', () => {
     assert.equal(fs.existsSync(path.join(root, '.rules')), false)
     assert.equal(fs.existsSync(path.join(root, '.zed/settings.json')), false)
     assert.equal(fs.existsSync(path.join(root, '.github/skills/inbase/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.opencode/skills/inbase/SKILL.md')), false)
     assert.throws(() => initProject(root, 'vim'), /Unknown editor 'vim'/)
     const codex = initProject(root, 'codex')
     assert.deepEqual(
@@ -514,6 +549,7 @@ test('init zed installs only Zed files', () => {
     assert.equal(fs.existsSync(path.join(root, '.cursor/skills/inbase/SKILL.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.claude/skills/inbase/SKILL.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.cline/skills/inbase/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.opencode/skills/inbase/SKILL.md')), false)
     const coral = fs.readFileSync(path.join(root, '.agents/skills/coral/SKILL.md'), 'utf8')
     assert.match(coral, /npx inbase attach --color coral/)
     assert.match(coral, /disable-model-invocation: true/)
@@ -581,6 +617,122 @@ test('Zed init auto-allows Inbase CLI and preserves other settings', () => {
     })
     assert.equal(fs.existsSync(path.join(root, '.rules')), false)
     assert.equal(fs.existsSync(path.join(root, '.agents/skills/inbase/SKILL.md')), false)
+  } finally {
+    restoreEnv(env)
+    cleanup()
+  }
+})
+
+test('init opencode installs only OpenCode files', () => {
+  const { root, cleanup } = tempProject()
+  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
+  try {
+    const result = initProject(root, 'opencode')
+    assert.deepEqual(
+      result.editors.map((editor) => editor.id),
+      ['opencode'],
+    )
+    assert.equal(result.editors[0]?.label, 'OpenCode')
+    assert.equal(fs.existsSync(path.join(root, '.opencode/skills/inbase/SKILL.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.opencode/commands/coral.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.opencode/commands/extract-blueprint.md')), true)
+    assert.equal(fs.existsSync(path.join(root, OPENCODE_INSTRUCTION_REL)), true)
+    assert.equal(fs.existsSync(path.join(root, 'opencode.json')), true)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/skills/inbase/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.claude/skills/inbase/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.agents/skills/inbase/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cline/skills/inbase/SKILL.md')), false)
+    const coral = fs.readFileSync(path.join(root, '.opencode/commands/coral.md'), 'utf8')
+    assert.match(coral, /npx inbase attach --color coral/)
+    assert.match(coral, /\$ARGUMENTS/)
+    const alias = initProject(root, 'open-code')
+    assert.deepEqual(
+      alias.editors.map((editor) => editor.id),
+      ['opencode'],
+    )
+  } finally {
+    restoreEnv(env)
+    cleanup()
+  }
+})
+
+test('OpenCode init auto-allows Inbase CLI and preserves other settings', () => {
+  const { root, cleanup } = tempProject()
+  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
+  try {
+    fs.writeFileSync(
+      path.join(root, 'opencode.json'),
+      `${JSON.stringify(
+        {
+          $schema: 'https://opencode.ai/config.json',
+          model: 'anthropic/claude-sonnet-4-5',
+          permission: {
+            bash: {
+              '*': 'ask',
+              'git *': 'allow',
+            },
+          },
+          instructions: ['AGENTS.md'],
+        },
+        null,
+        2,
+      )}\n`,
+    )
+    initProject(root, 'opencode')
+    initProject(root, 'opencode')
+    const config = JSON.parse(fs.readFileSync(path.join(root, 'opencode.json'), 'utf8'))
+    assert.equal(config.model, 'anthropic/claude-sonnet-4-5')
+    assert.equal(config.permission.bash['*'], 'ask')
+    assert.equal(config.permission.bash['git *'], 'allow')
+    assert.equal(config.permission.bash[OPENCODE_INBASE_BASH_PATTERN], 'allow')
+    assert.equal(config.permission.skill[OPENCODE_INBASE_SKILL], 'allow')
+    assert.deepEqual(config.instructions, ['AGENTS.md', OPENCODE_INSTRUCTION_REL])
+    const instruction = fs.readFileSync(path.join(root, OPENCODE_INSTRUCTION_REL), 'utf8')
+    assert.equal(instruction.split('Inbase visual edits (OpenCode)').length - 1, 1)
+    cleanupProject(root, 'opencode')
+    const leftover = JSON.parse(fs.readFileSync(path.join(root, 'opencode.json'), 'utf8'))
+    assert.deepEqual(leftover, {
+      $schema: 'https://opencode.ai/config.json',
+      model: 'anthropic/claude-sonnet-4-5',
+      permission: {
+        bash: {
+          '*': 'ask',
+          'git *': 'allow',
+        },
+      },
+      instructions: ['AGENTS.md'],
+    })
+    assert.equal(fs.existsSync(path.join(root, '.opencode')), false)
+    assert.equal(fs.existsSync(path.join(root, OPENCODE_INSTRUCTION_REL)), false)
+  } finally {
+    restoreEnv(env)
+    cleanup()
+  }
+})
+
+test('OpenCode init updates opencode.jsonc and restores a global ask permission', () => {
+  const { root, cleanup } = tempProject()
+  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
+  try {
+    fs.writeFileSync(
+      path.join(root, 'opencode.jsonc'),
+      `{
+  // project OpenCode config
+  "permission": "ask"
+}
+`,
+    )
+    initProject(root, 'opencode')
+    assert.equal(fs.existsSync(path.join(root, 'opencode.json')), false)
+    const config = JSON.parse(fs.readFileSync(path.join(root, 'opencode.jsonc'), 'utf8'))
+    assert.equal(config.permission['*'], 'ask')
+    assert.equal(config.permission.bash[OPENCODE_INBASE_BASH_PATTERN], 'allow')
+    assert.equal(config.permission.skill[OPENCODE_INBASE_SKILL], 'allow')
+    cleanupProject(root, 'opencode')
+    assert.deepEqual(
+      JSON.parse(fs.readFileSync(path.join(root, 'opencode.jsonc'), 'utf8')),
+      { permission: 'ask' },
+    )
   } finally {
     restoreEnv(env)
     cleanup()
@@ -757,6 +909,8 @@ test('cleanup reverses init and keeps unrelated editor files', () => {
     assert.equal(fs.existsSync(path.join(root, '.cline')), false)
     assert.equal(fs.existsSync(path.join(root, '.clinerules')), false)
     assert.equal(fs.existsSync(path.join(root, '.github/skills')), false)
+    assert.equal(fs.existsSync(path.join(root, '.opencode')), false)
+    assert.equal(fs.existsSync(path.join(root, 'opencode.json')), false)
     assert.equal(fs.existsSync(path.join(root, '.inbase')), false)
     assert.equal(fs.existsSync(path.join(root, 'inbase.json')), false)
     assert.equal(fs.existsSync(path.join(root, '.cursor/permissions.json')), false)
@@ -831,6 +985,8 @@ test('cleanup removes leftover skills and rules', () => {
     assert.equal(fs.existsSync(path.join(root, '.clinerules')), false)
     assert.equal(fs.existsSync(path.join(root, '.rules')), false)
     assert.equal(fs.existsSync(path.join(root, '.zed')), false)
+    assert.equal(fs.existsSync(path.join(root, '.opencode')), false)
+    assert.equal(fs.existsSync(path.join(root, 'opencode.json')), false)
   } finally {
     restoreEnv(env)
     cleanup()
@@ -857,6 +1013,8 @@ test('cleanup cline removes only Cline files', () => {
     assert.equal(fs.existsSync(path.join(root, '.claude/skills/inbase/SKILL.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.rules')), true)
     assert.equal(fs.existsSync(path.join(root, '.zed/settings.json')), true)
+    assert.equal(fs.existsSync(path.join(root, '.opencode/skills/inbase/SKILL.md')), true)
+    assert.equal(fs.existsSync(path.join(root, 'opencode.json')), true)
     assert.equal(fs.existsSync(path.join(root, 'inbase.json')), true)
     assert.equal(fs.existsSync(path.join(root, '.inbase')), true)
     assert.throws(() => cleanupProject(root, 'vim'), /Unknown editor 'vim'/)
@@ -939,7 +1097,7 @@ test('help prints usage', async () => {
     assert.match(output, /inbase run/)
     assert.match(output, /inbase extract-blueprint <folder> <output-file>/)
     assert.match(output, /inbase help/)
-    assert.match(output, /cursor, claude, agents, zed, copilot, cline/)
+    assert.match(output, /cursor, claude, agents, zed, copilot, cline, opencode/)
     assert.doesNotMatch(output, /Agent commands/)
     assert.doesNotMatch(output, /inbase attach/)
     assert.doesNotMatch(output, /inbase report-plan/)

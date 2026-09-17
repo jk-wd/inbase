@@ -346,7 +346,7 @@ test('/inbase starts without waiting for a blueprint', () => {
   const env = fixture()
   try {
     const started = setupSession(env.dataDir)
-    const begun = maybeStartVisualizerHandshake(env.dataDir, started.sessionId)
+    const begun = attachSession(env.dataDir, started.sessionId)
     assert.equal(begun.phase, 'preparing')
     const empty = readBlueprint(env.dataDir, started.sessionId)
     assert.equal(empty.sent, true)
@@ -368,7 +368,7 @@ test('/inbase starts without waiting for a blueprint', () => {
         },
       ],
     })
-    maybeStartVisualizerHandshake(env.dataDir, withFiles.sessionId)
+    attachSession(env.dataDir, withFiles.sessionId)
     assert.equal(readBlueprint(env.dataDir, withFiles.sessionId).enabled, true)
   } finally {
     env.cleanup()
@@ -888,11 +888,16 @@ test('completeSession drops the LLM connection without a stop signal', () => {
     assert.equal(isWorkflowStopped(env.dataDir, sessionId), false)
 
     touchSessionConnection(env.dataDir, sessionId)
+    maybeStartVisualizerHandshake(env.dataDir, sessionId)
     assert.equal(isChatLocked(env.dataDir, sessionId), false)
+    assert.equal(readManifest(env.dataDir, sessionId).phase, 'blueprint')
     assert.equal(
       fs.existsSync(path.join(env.dataDir, 'diff-sessions', sessionId)),
       true,
     )
+    const intent = sessionIntent(env.dataDir, sessionId)
+    assert.equal(intent.awaitingAttach, true)
+    assert.equal(intent.llmIdle, true)
     assert.throws(
       () =>
         reportPlan(env.dataDir, {
@@ -903,6 +908,10 @@ test('completeSession drops the LLM connection without a stop signal', () => {
         }),
       (error) => String(error.message).includes('VISUAL_CODER_STOPPED'),
     )
+    assert.throws(
+      () => startSession(env.dataDir, { sessionId, name: 'Steal coral' }),
+      (error) => String(error.message).includes('VISUAL_CODER_STOPPED'),
+    )
 
     const waiting = listOpenSessionIds(env.dataDir).map((id) =>
       readManifest(env.dataDir, id),
@@ -910,6 +919,7 @@ test('completeSession drops the LLM connection without a stop signal', () => {
     const next = waiting.find((manifest) => manifest.color === color)
     assert.equal(next.awaitingAttach, true)
     assert.equal(next.sessionId, sessionId)
+    assert.equal(sessionIntent(env.dataDir, next.sessionId).awaitingAttach, true)
   } finally {
     env.cleanup()
   }

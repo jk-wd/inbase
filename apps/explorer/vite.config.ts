@@ -10,7 +10,7 @@ import {
   normalizeBranchChangesBase,
   readBranchChanges,
 } from './scripts/branch-changes.mjs'
-import { globalInbaseDir, writeRunningInstance, isolatedViteConfig, packageDirFromPackage } from '../../bin/project.mjs'
+import { globalInbaseDir, writeRunningInstance, isolatedViteConfig, packageDirFromPackage, resetDataDir } from '../../bin/project.mjs'
 import {
   dataDir,
   isWorkspaceDevSwitcherEnabled,
@@ -67,6 +67,7 @@ import {
 } from './scripts/explain-store.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
+resetDataDir(dataDir)
 const isolation = isolatedViteConfig(dataDir)
 const userContextFile = userContextPath(dataDir)
 const codebaseFile = path.join(dataDir, 'codebase.json')
@@ -175,10 +176,10 @@ function jsonFilePlugin(): Plugin {
         port: serverPort,
         extraDirs: [globalInbaseDir()],
       })
-      // Discard leftover LLM sessions, then open an empty chat slot per color.
+      // Runtime data was emptied at boot. Open an empty chat slot per color.
       clearDiffSessions(dataDir, targetRoot)
       ensureSessionPool(dataDir, { count: SESSION_SLOT_COUNT })
-      rescanTarget('after discarding leftover LLM sessions')
+      rescanTarget('after starting with a clean data dir')
       let lastLiveSessionKey = listOpenSessionIds(dataDir).join('\0')
       function syncDisconnectedSessions() {
         const recycled = recycleDisconnectedSessions(dataDir, targetRoot)
@@ -632,7 +633,11 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       stopSession(dataDir, body.sessionId, targetRoot)
       rescanTarget('after stopping session')
     }
-    const next = intentResponse(body.sessionId)
+    // Blueprint writes are discarded by the client. Building a live git overlay
+    // here blocks Save on the same Node thread.
+    const next = blueprintActions.has(action ?? '')
+      ? { ...emptyIntent, ...blueprintIntentFields() }
+      : intentResponse(body.sessionId)
     sendJson(res, 200, next ?? { ...emptyIntent, ...blueprintIntentFields() })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'invalid request'

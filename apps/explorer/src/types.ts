@@ -228,7 +228,7 @@ export type PatchImportAddition = {
   file: string
 }
 
-export type BlueprintNoteKind = 'file' | 'function' | 'variable'
+export type BlueprintNoteKind = 'file' | 'folder' | 'function' | 'variable'
 
 export type BlueprintNote = {
   file: string

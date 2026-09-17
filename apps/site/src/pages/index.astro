@@ -29,7 +29,7 @@
       body {
         display: grid;
         place-items: center;
-        background: linear-gradient(180deg, #d4d4d4 0%, #f0f0f0 100%);
+        background: linear-gradient(180deg, #f4f4f4 0%, #ffffff 100%);
         transition: background 200ms ease;
       }
 
@@ -64,34 +64,6 @@
 
       .sponsor:hover {
         color: rgba(0, 0, 0, 0.78);
-      }
-
-      .portrait-wrap {
-        display: block;
-        margin-bottom: 0.45rem;
-      }
-
-      .portrait {
-        display: block;
-        width: 7.25rem;
-        height: auto;
-        mix-blend-mode: multiply;
-      }
-
-      html[data-theme="dark"] .portrait-wrap {
-        display: grid;
-        place-items: center;
-        width: 8.35rem;
-        height: 8.35rem;
-        overflow: hidden;
-        border-radius: 50%;
-        background: #fff;
-      }
-
-      html[data-theme="dark"] .portrait {
-        width: 7.25rem;
-        height: auto;
-        mix-blend-mode: normal;
       }
 
       .sponsor-copy {
@@ -293,13 +265,6 @@
         href="https://github.com/sponsors/jk-wd"
         rel="noopener noreferrer"
       >
-        <span class="portrait-wrap">
-          <img
-            class="portrait"
-            src="/images/me-aquarel.png"
-            alt="Joris Kuijper"
-          />
-        </span>
         <span class="sponsor-copy">Sponsor this open source project on</span>
         <span class="sponsor-brand">
           GithubSponsors

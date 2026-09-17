@@ -97,6 +97,7 @@ export function readBlueprintDocument(
 export function applyBlueprintDocument(
   dataDir: string,
   document: unknown,
+  options?: { targetRoot?: string | null; existingFileIds?: string[] },
 ): {
   name: string
   global: SessionBlueprint

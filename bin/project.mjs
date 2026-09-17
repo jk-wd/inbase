@@ -229,6 +229,16 @@ export function ensureDataDir(dataDir) {
   return dataDir
 }
 
+/** Wipe runtime data so each visualizer start has an empty `.inbase` (or equivalent). */
+export function resetDataDir(dataDir) {
+  if (typeof dataDir !== 'string' || !dataDir.trim()) {
+    throw new Error('dataDir is required')
+  }
+  const resolved = path.resolve(dataDir)
+  fs.rmSync(resolved, { recursive: true, force: true })
+  return ensureDataDir(resolved)
+}
+
 export function takeFlagValue(args, flag) {
   const index = args.indexOf(flag)
   return index >= 0 ? args[index + 1] : null

@@ -86,9 +86,11 @@ export function NameInput({
 
 export function InfoNameField({
   name,
+  kind = 'file',
   onRename,
 }: {
   name: string
+  kind?: 'file' | 'folder'
   onRename: (name: string) => boolean
 }) {
   const [value, setValue] = useState(name)
@@ -120,8 +122,8 @@ export function InfoNameField({
     <input
       className="hud-info-name"
       value={value}
-      aria-label="File name"
-      title="Rename file"
+      aria-label={kind === 'folder' ? 'Folder name' : 'File name'}
+      title={kind === 'folder' ? 'Rename folder' : 'Rename file'}
       autoComplete="off"
       spellCheck={false}
       onChange={(event) => setValue(event.target.value)}

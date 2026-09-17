@@ -180,6 +180,21 @@ function islandKey(island: UserCreatedIsland) {
   return createdIslandKey(island)
 }
 
+function createdPathDepth(path: string) {
+  if (!path || path === '.') return 0
+  return path.split('/').filter(Boolean).length
+}
+
+export function sortCreatedIslandsParentFirst(islands: UserCreatedIsland[]) {
+  return [...islands].sort((left, right) => {
+    const delta =
+      createdPathDepth(createdIslandKey(left)) -
+      createdPathDepth(createdIslandKey(right))
+    if (delta !== 0) return delta
+    return createdIslandKey(left).localeCompare(createdIslandKey(right))
+  })
+}
+
 export function pathIsInside(path: string, parent: string) {
   if (!path || !parent) return false
   if (path === parent) return true
@@ -227,7 +242,7 @@ export function withUserCreatedGraph(
     ]),
   )
 
-  for (const island of islands) {
+  for (const island of sortCreatedIslandsParentFirst(islands)) {
     const path = islandKey(island)
     if (folders.has(path)) continue
     const parent = island.parent || folderParent(path)
@@ -339,7 +354,7 @@ function overlayIslands(
   const width = islandWidth()
   const depth = islandDepth()
 
-  for (const island of islands) {
+  for (const island of sortCreatedIslandsParentFirst(islands)) {
     const id = islandKey(island)
     if (layout.folders[id]) {
       folders[id] = {
@@ -712,7 +727,7 @@ function placeOverlayIslands(
   const depth = islandDepth()
   const lookup = (path: string) => folders[path] ?? base.folders[path]
 
-  for (const island of islands) {
+  for (const island of sortCreatedIslandsParentFirst(islands)) {
     const id = islandKey(island)
     const name = overlayNameOf(island)
     const existingByPath = base.folders[id]
@@ -892,17 +907,21 @@ export function layoutBlueprintLayers(
   base: WorldLayout,
   sources: BlueprintLayerSource[],
 ): BlueprintOverlayLayer[] {
+  const combinedIslands = sources.flatMap((source) =>
+    islandsForOverlay(source.blocks, source.islands, base),
+  )
+  const placed = overlayIslands(base, combinedIslands)
   return sources.map((source, index) => {
     const { folders, bridges } = placeOverlayIslands(
-      base,
-      islandsForOverlay(source.blocks, source.islands, base),
+      placed,
+      islandsForOverlay(source.blocks, source.islands, placed),
       source.hex,
     )
     const folderY =
       BLUEPRINT_OVERLAY.folderY + index * BLUEPRINT_OVERLAY.layerStep
     const fileLift = folderY + BLUEPRINT_OVERLAY.fileLift
     const { files, filledIds } = placeOverlayBlocks(
-      base,
+      placed,
       folders,
       source.blocks,
       fileLift,
@@ -967,8 +986,8 @@ export function isBlueprintSymbolName(value: string) {
 export function blueprintNoteKey(
   note: Pick<BlueprintNote, 'file' | 'kind' | 'name'>,
 ) {
-  return note.kind === 'file'
-    ? `file:${note.file}`
+  return note.kind === 'file' || note.kind === 'folder'
+    ? `${note.kind}:${note.file}`
     : `${note.kind}:${note.file}:${note.name ?? ''}`
 }
 
@@ -980,6 +999,9 @@ function parseBlueprintNote(value: unknown): BlueprintNote | null {
   if (!file || !note.trim()) return null
   if (item.kind == null || item.kind === 'file') {
     return { file, kind: 'file', note }
+  }
+  if (item.kind === 'folder') {
+    return { file, kind: 'folder', note }
   }
   if (item.kind !== 'function' && item.kind !== 'variable') return null
   const name = typeof item.name === 'string' ? item.name.trim() : ''
@@ -1010,8 +1032,8 @@ export function findBlueprintNote(
 ) {
   return (
     notes.find((item) =>
-      kind === 'file'
-        ? item.kind === 'file' && item.file === file
+      kind === 'file' || kind === 'folder'
+        ? item.kind === kind && item.file === file
         : item.kind === kind && item.file === file && item.name === name,
     )?.note ?? ''
   )
@@ -1030,24 +1052,30 @@ export function setBlueprintNote(
   const without = notes.filter((item) => blueprintNoteKey(item) !== key)
   if (next.note === '') return without
   const stored: BlueprintNote =
-    next.kind === 'file'
-      ? { file: next.file, kind: 'file', note: next.note }
+    next.kind === 'file' || next.kind === 'folder'
+      ? { file: next.file, kind: next.kind, note: next.note }
       : {
           file: next.file,
           kind: next.kind,
           name: (next.name ?? '').trim(),
           note: next.note,
         }
-  if (stored.kind !== 'file' && !stored.name) return without
+  if (stored.kind !== 'file' && stored.kind !== 'folder' && !stored.name) {
+    return without
+  }
   return [...without, stored]
 }
 
 export function dropBlueprintFileNotes(
   notes: BlueprintNote[],
   fileIds: Iterable<string>,
+  folderPaths: Iterable<string> = [],
 ) {
-  const removed = new Set(fileIds)
-  return notes.filter((item) => !removed.has(item.file))
+  const files = new Set(fileIds)
+  const folders = new Set(folderPaths)
+  return notes.filter((item) =>
+    item.kind === 'folder' ? !folders.has(item.file) : !files.has(item.file),
+  )
 }
 
 export function dropBlueprintSymbolNote(
@@ -1171,7 +1199,7 @@ export function omitCreatedItems<
     functions: current.functions.filter((item) => !files.has(item.file)),
     variables: current.variables.filter((item) => !files.has(item.file)),
     imports: current.imports.filter((item) => !files.has(item.file)),
-    notes: dropBlueprintFileNotes(current.notes, files),
+    notes: dropBlueprintFileNotes(current.notes, files, folders),
     pointers: dropBlueprintFilePointers(current.pointers, files, folders),
   }
 }
@@ -1213,7 +1241,9 @@ export function remapBlueprintFileId(
       from: item.from === fromId ? toId : item.from,
     })),
     notes: data.notes.map((item) =>
-      item.file === fromId ? { ...item, file: toId } : item,
+      item.kind !== 'folder' && item.file === fromId
+        ? { ...item, file: toId }
+        : item,
     ),
     pointers: data.pointers.map((item) =>
       item.kind !== 'folder' && item.path === fromId
@@ -1221,6 +1251,98 @@ export function remapBlueprintFileId(
         : item,
     ),
   }
+}
+
+export function remapPathPrefix(path: string, from: string, to: string) {
+  if (!from || !path || from === to) return path
+  if (path === from) return to
+  if (from !== '.' && path.startsWith(`${from}/`)) {
+    return `${to}${path.slice(from.length)}`
+  }
+  return path
+}
+
+type CreatedContents = {
+  blocks: UserCreatedBlock[]
+  islands: UserCreatedIsland[]
+  functions: PatchSymbolAddition[]
+  variables: PatchSymbolAddition[]
+  imports: PatchImportAddition[]
+  notes: BlueprintNote[]
+  pointers: BlueprintPointer[]
+}
+
+export function remapCreatedFolderPath<T extends CreatedContents>(
+  fromPath: string,
+  toPath: string,
+  data: T,
+): T {
+  if (!fromPath || fromPath === toPath) return data
+  const mapPath = (path: string) => remapPathPrefix(path, fromPath, toPath)
+  return {
+    ...data,
+    blocks: data.blocks.map((block) => {
+      const id = mapPath(block.id)
+      const path = mapPath(block.path || block.id)
+      if (id === block.id && path === (block.path || block.id)) return block
+      return {
+        ...block,
+        id,
+        path,
+        name: path.split('/').pop() ?? block.name,
+        folder: folderOfFile(path),
+      }
+    }),
+    islands: data.islands.map((island) => {
+      const path = mapPath(createdIslandKey(island))
+      if (path === createdIslandKey(island)) return island
+      return {
+        ...island,
+        id: path,
+        path,
+        name: path.split('/').pop() ?? island.name,
+        parent: folderParent(path) ?? '.',
+      }
+    }),
+    functions: data.functions.map((item) => {
+      const file = mapPath(item.file)
+      return file === item.file ? item : { ...item, file }
+    }),
+    variables: data.variables.map((item) => {
+      const file = mapPath(item.file)
+      return file === item.file ? item : { ...item, file }
+    }),
+    imports: data.imports.map((item) => ({
+      ...item,
+      file: mapPath(item.file),
+      from: mapPath(item.from),
+    })),
+    notes: data.notes.map((item) => {
+      const file = mapPath(item.file)
+      return file === item.file ? item : { ...item, file }
+    }),
+    pointers: data.pointers.map((item) => {
+      const path = mapPath(item.path)
+      return path === item.path ? item : { ...item, path }
+    }),
+  }
+}
+
+export function createdContentsHaveUniquePaths(data: {
+  blocks: UserCreatedBlock[]
+  islands: UserCreatedIsland[]
+}) {
+  const used = new Set<string>()
+  for (const block of data.blocks) {
+    if (used.has(block.id)) return false
+    used.add(block.id)
+  }
+  for (const island of data.islands) {
+    const key = createdIslandKey(island)
+    if (used.has(key)) return false
+    used.add(key)
+  }
+  return true
 }
 
 export function blueprintImportRawFromFile(file: {

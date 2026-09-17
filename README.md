@@ -26,7 +26,7 @@ Inbase puts that map in front of you. You draw the intended change as a **bluepr
 | Colors | JS/JSX/MJS/CJS, TS/TSX, CSS, SCSS, JSON, HTML/HTM | Dark grey | `apps/explorer/src/file-colors.ts` |
 | Relations | ESM `import`, `require()`, HTML `<script src>` | Packages and remote URLs | `apps/explorer/scripts/relations/` |
 | Structure | Functions, classes, vars in JS/TS (info panel) | No symbols listed | `apps/explorer/scripts/structure/` |
-| Editors | Cursor, Claude Code, Codex, Copilot, Cline (`inbase init`) | Map still runs in the browser | `bin/editors/` |
+| Editors | Cursor, Claude Code, Codex, Zed, Copilot, Cline, OpenCode (`inbase init`) | Map still runs in the browser | `bin/editors/` |
 
 ---
 

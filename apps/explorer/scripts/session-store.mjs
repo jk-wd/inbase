@@ -417,7 +417,9 @@ function isFreshTimestamp(value, now = Date.now()) {
 export function touchSessionConnection(dataDir, sessionId) {
   const safeId = assertSessionId(sessionId)
   if (isSessionStopped(dataDir, safeId) || isSessionReleased(dataDir, safeId)) return
-  if (!readManifest(dataDir, safeId)) return
+  const manifest = readManifest(dataDir, safeId)
+  if (!manifest) return
+  if (sessionIsWaitingToAttach(manifest) || !isChatLocked(dataDir, safeId)) return
   atomicWrite(
     connectionFile(dataDir, safeId),
     `${JSON.stringify({ sessionId: safeId, connectedAt: new Date().toISOString() }, null, 2)}\n`,
@@ -461,14 +463,13 @@ function isStalledWorking(manifest, waiterIds, sessionId, now = Date.now()) {
 export function isSessionConnected(
   dataDir,
   sessionId,
-  waiterIds = waiterSessionIds(),
+  _waiterIds = waiterSessionIds(),
 ) {
   const safeId = assertSessionId(sessionId)
   const manifest = readManifest(dataDir, safeId)
   if (isTerminalSession(manifest)) return false
-  if (manifest.awaitingAttach) {
-    const connected = readJson(connectionFile(dataDir, safeId), null)
-    return waiterIds.has(safeId) || isFreshTimestamp(connected?.connectedAt)
+  if (sessionIsWaitingToAttach(manifest) || !isChatLocked(dataDir, safeId)) {
+    return false
   }
   return true
 }
@@ -706,6 +707,7 @@ function resetLlmSessionWork(dataDir, sessionId, targetRoot = null) {
     steps: [],
     status: 'active',
     phase: 'blueprint',
+    awaitingAttach: true,
     currentStep: 1,
     activeDiffId: null,
     pendingInstruction: null,
@@ -969,6 +971,18 @@ function captureChangeOverlay(dataDir, sessionId, targetRoot, knownFileIds) {
   return overlayFromPatchText(patch, knownFileIds)
 }
 
+function overlayWithAbsentFiles(overlay, targetRoot, knownFileIds) {
+  if (
+    !targetRoot ||
+    ((overlay?.files?.length ?? 0) === 0 &&
+      (overlay?.creates?.length ?? 0) === 0 &&
+      (overlay?.deletes?.length ?? 0) === 0)
+  ) {
+    return overlay
+  }
+  return withAbsentMappedFiles(overlay, targetRoot, knownFileIds)
+}
+
 function liveChangeOverlay(
   dataDir,
   sessionId,
@@ -1012,7 +1026,7 @@ export function sessionIntent(
   const browsingHistory = Boolean(
     selectedDiffId && selected && selected.id !== manifest.activeDiffId,
   )
-  const preview = withAbsentMappedFiles(
+  const preview = overlayWithAbsentFiles(
     dropMassKnownCreates(
       browsingHistory || !isChatLocked(dataDir, sessionId)
         ? stored
@@ -1070,7 +1084,7 @@ export function sessionIntent(
     parentDiffId: selected?.parentId ?? null,
     chainIndex: selectedIndex,
     chain: manifest.diffs.map((entry, index) => {
-      const overlay = withAbsentMappedFiles(
+      const overlay = overlayWithAbsentFiles(
         readOverlay(dataDir, sessionId, entry),
         targetRoot,
         knownFileIds,
@@ -1106,9 +1120,7 @@ export function sessionIntent(
         manifest.phase === 'replanning'),
     stalledWait: isStalledWorking(manifest, waiterIds, sessionId),
     llmIdle: !isSessionConnected(dataDir, sessionId, waiterIds),
-    awaitingAttach:
-      !isChatLocked(dataDir, sessionId) &&
-      !isSessionConnected(dataDir, sessionId, waiterIds),
+    awaitingAttach: !isChatLocked(dataDir, sessionId),
     listening: waiterIds.has(sessionId),
     lastAck: readSessionAck(dataDir, sessionId),
     pendingExplain: Boolean(manifest.pendingExplain),
@@ -1331,6 +1343,9 @@ export function startSession(dataDir, input) {
   clearReleasedMarker(dataDir, sessionId)
   const existing = readManifest(dataDir, sessionId)
   const name = sessionName(input.name) || sessionName(input.feature)
+  if (existing && sessionIsWaitingToAttach(existing) && resolveSessionColor(sessionId)) {
+    throw sessionStoppedError(sessionId)
+  }
   if (existing && !sessionIsWaitingToAttach(existing) && !isTerminalSession(existing)) {
     if (name && existing.name !== name) {
       existing.name = name
@@ -1562,8 +1577,8 @@ export function attachSession(dataDir, sessionId, options = {}) {
   }
   const alreadyAttached = explicitSession && !sessionIsWaitingToAttach(manifest)
   focusSession(dataDir, safeId)
-  touchSessionConnection(dataDir, safeId)
   setChatLocked(dataDir, safeId, true)
+  touchSessionConnection(dataDir, safeId)
   const colored = ensureManifestColor(dataDir, readManifest(dataDir, safeId) ?? manifest)
   const colorName = resolveSessionColor(colored.color)?.name
   if (!alreadyAttached) {
@@ -1621,6 +1636,9 @@ export function sendBlueprint(dataDir, sessionId, _input = {}) {
 export function maybeStartVisualizerHandshake(dataDir, sessionId) {
   const safeId = assertSessionId(sessionId)
   const manifest = requireManifest(dataDir, safeId)
+  if (sessionIsWaitingToAttach(manifest) || !isChatLocked(dataDir, safeId)) {
+    return manifest
+  }
   if (manifest.phase !== 'blueprint_ask' && manifest.phase !== 'blueprint') {
     return manifest
   }
@@ -2187,10 +2205,13 @@ export function recoverOpenDiffSessions(dataDir, targetRoot = null) {
 export function stopSession(dataDir, sessionId, targetRoot = null) {
   const safeId = assertSessionId(sessionId)
   if (resolveSessionColor(safeId) && readManifest(dataDir, safeId)) {
-    resetColorSlot(dataDir, safeId, targetRoot)
-    setChatLocked(dataDir, safeId, false)
-    if (readActiveSession(dataDir) === safeId) writeActiveSession(dataDir, null)
-    refillSessionPool(dataDir)
+    try {
+      resetColorSlot(dataDir, safeId, targetRoot)
+    } finally {
+      setChatLocked(dataDir, safeId, false)
+      if (readActiveSession(dataDir) === safeId) writeActiveSession(dataDir, null)
+      refillSessionPool(dataDir)
+    }
     return null
   }
   // Abandon plan/patches only. Do not restore or delete live project files.
@@ -2227,10 +2248,13 @@ export function closeSession(dataDir, sessionId) {
 export function finalizeFinishedSession(dataDir, sessionId, targetRoot = null) {
   const safeId = assertSessionId(sessionId)
   if (resolveSessionColor(safeId) && readManifest(dataDir, safeId)) {
-    resetColorSlot(dataDir, safeId, targetRoot)
-    setChatLocked(dataDir, safeId, false)
-    if (readActiveSession(dataDir) === safeId) writeActiveSession(dataDir, null)
-    refillSessionPool(dataDir)
+    try {
+      resetColorSlot(dataDir, safeId, targetRoot)
+    } finally {
+      setChatLocked(dataDir, safeId, false)
+      if (readActiveSession(dataDir) === safeId) writeActiveSession(dataDir, null)
+      refillSessionPool(dataDir)
+    }
     return
   }
   writeReleasedMarker(dataDir, safeId)
@@ -2353,6 +2377,8 @@ function namedBlueprintNotes(value) {
     let stored = null
     if (item.kind == null || item.kind === 'file') {
       stored = { file, kind: 'file', note }
+    } else if (item.kind === 'folder') {
+      stored = { file, kind: 'folder', note }
     } else if (
       (item.kind === 'function' || item.kind === 'variable') &&
       typeof item.name === 'string' &&
@@ -2362,8 +2388,8 @@ function namedBlueprintNotes(value) {
     }
     if (!stored) continue
     const key =
-      stored.kind === 'file'
-        ? `file:${stored.file}`
+      stored.kind === 'file' || stored.kind === 'folder'
+        ? `${stored.kind}:${stored.file}`
         : `${stored.kind}:${stored.file}:${stored.name}`
     if (seen.has(key)) continue
     seen.add(key)
@@ -2474,6 +2500,15 @@ function persistBlueprintFile(file, incoming, current) {
   }
   next.enabled = blueprintHasContent(next)
   next.sent = true
+  if (
+    current.hidden === next.hidden &&
+    current.revision === next.revision &&
+    current.enabled === next.enabled &&
+    current.sent === next.sent &&
+    blueprintContentEqual(current, next)
+  ) {
+    return current
+  }
   atomicWrite(
     file,
     `${JSON.stringify(
@@ -2494,7 +2529,7 @@ function persistBlueprintFile(file, incoming, current) {
       2,
     )}\n`,
   )
-  return normalizeBlueprint(readJson(file, emptyBlueprint()))
+  return next
 }
 
 export function readBlueprint(dataDir, _sessionId) {
@@ -2595,6 +2630,11 @@ export function cleanupBlueprint(
   const removedFiles = new Set(
     current.files.filter((file) => knownFiles.has(file.id)).map((file) => file.id),
   )
+  const removedFolders = new Set(
+    current.folders
+      .filter((folder) => knownFolders.has(folder.path))
+      .map((folder) => folder.path),
+  )
   const next = {
     ...current,
     files: current.files.filter((file) => !knownFiles.has(file.id)),
@@ -2602,7 +2642,11 @@ export function cleanupBlueprint(
     addedFunctions: current.addedFunctions.filter((item) => !removedFiles.has(item.file)),
     addedVariables: current.addedVariables.filter((item) => !removedFiles.has(item.file)),
     addedImports: current.addedImports.filter((item) => !removedFiles.has(item.file)),
-    notes: current.notes.filter((item) => !removedFiles.has(item.file)),
+    notes: current.notes.filter((item) =>
+      item.kind === 'folder'
+        ? !removedFolders.has(item.file)
+        : !removedFiles.has(item.file),
+    ),
     pointers: current.pointers,
   }
   return writeBlueprintByColor(dataDir, colorId, next)

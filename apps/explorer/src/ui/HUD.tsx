@@ -1823,30 +1823,30 @@ function SessionPanel({
               )}
             </>
           )}
-          {intent.awaitingAttach === false && (
-            <div className="hud-session-actions">
-              <div className="hud-decide">
-                <button
-                  className="hud-button hud-button-approve"
-                  type="button"
-                  aria-label={
-                    llmRunning
-                      ? 'Cancel — drop this LLM connection and free this color'
-                      : 'Done — keep changes and free this color'
-                  }
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={(event) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    act('done')
-                  }}
-                >
-                  {closeLabel}
-                </button>
-              </div>
-            </div>
-          )}
         </>
+      )}
+      {intent.awaitingAttach === false && (
+        <div className="hud-session-actions hud-session-close">
+          <div className="hud-decide">
+            <button
+              className="hud-button hud-button-approve"
+              type="button"
+              aria-label={
+                llmRunning
+                  ? 'Cancel — drop this LLM connection and free this color'
+                  : 'Done — keep changes and free this color'
+              }
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                act('done')
+              }}
+            >
+              {closeLabel}
+            </button>
+          </div>
+        </div>
       )}
     </aside>
   )
@@ -2279,6 +2279,8 @@ type HUDProps = {
   selectedId: string | null
   selectedTick?: number
   inspectTick?: number
+  fileNoteTick?: number
+  folderNoteTick?: number
   selectedFolder?: string | null
   selectedFolderLayer?: string | null
   overlayLayers?: BlueprintOverlayLayer[]
@@ -2360,6 +2362,7 @@ type HUDProps = {
   onMapAddFile?: (folderPath: string, color?: string) => void
   onMapAddFolder?: (folderPath: string, color?: string) => void
   onRenameCreatedFile?: (fileId: string, name: string) => string | null
+  onRenameCreatedFolder?: (folderPath: string, name: string) => string | null
   onInspectFile?: (fileId: string) => void
   onInspectBlock?: (fileId: string) => void
   blueprintOpacity?: number
@@ -2389,6 +2392,8 @@ export function HUD({
   selectedId,
   selectedTick = 0,
   inspectTick = 0,
+  fileNoteTick = 0,
+  folderNoteTick = 0,
   selectedFolder = null,
   selectedFolderLayer = null,
   overlayLayers = [],
@@ -2451,6 +2456,7 @@ export function HUD({
   onMapAddFile,
   onMapAddFolder,
   onRenameCreatedFile,
+  onRenameCreatedFolder,
   onInspectFile,
   onInspectBlock,
   blueprintOpacity = 0.55,
@@ -2770,9 +2776,10 @@ export function HUD({
   )
   const canEditBlueprint =
     canPlace && Boolean(selected) && !selected?.id.startsWith('draft:')
-  const canRenameSelected =
+  const canRenameSelectedFile =
     Boolean(onRenameCreatedFile) &&
-    Boolean(selected?.userCreated) &&
+    canDeleteSelected &&
+    Boolean(selected) &&
     !selected?.id.startsWith('draft:')
   const renameSelectedFile = (nextName: string) => {
     if (!selected || !onRenameCreatedFile) return false
@@ -2788,17 +2795,73 @@ export function HUD({
     ? findBlueprintNote(blueprintNotes, selected.id, 'file')
     : ''
   const folderPath = selectedFolderNode?.path ?? selectedFolder ?? ''
-  const openFileNote = () => {
-    if (!selected || !onSetBlueprintNote) return
+  const canRenameSelectedFolder =
+    Boolean(onRenameCreatedFolder) &&
+    canDeleteSelected &&
+    !selected &&
+    Boolean(folderPath) &&
+    folderPath !== '.' &&
+    !folderPath.startsWith('draft:')
+  const renameSelectedFolder = (nextName: string) => {
+    if (!folderPath || !onRenameCreatedFolder) return false
+    const previous = folderPath
+    const nextPath = onRenameCreatedFolder(previous, nextName)
+    if (!nextPath) return false
+    setNoteEditor((current) => {
+      if (!current) return current
+      if (
+        current.file !== previous &&
+        !current.file.startsWith(`${previous}/`)
+      ) {
+        return current
+      }
+      const file =
+        current.file === previous
+          ? nextPath
+          : `${nextPath}${current.file.slice(previous.length)}`
+      return { ...current, file }
+    })
+    return true
+  }
+  const selectedFolderNote = folderPath
+    ? findBlueprintNote(blueprintNotes, folderPath, 'folder')
+    : ''
+  const openFileNoteFor = (fileId: string) => {
+    if (!onSetBlueprintNote || fileId.startsWith('draft:')) return
+    const file = graph.files.find((item) => item.id === fileId)
+    const name = file?.name ?? fileId.split('/').pop() ?? fileId
+    const path = file?.path ?? fileId
     setInstructionsOpen(false)
     setPointPicker(null)
     setNoteEditor({
-      file: selected.id,
+      file: fileId,
       kind: 'file',
-      title: `Note · ${selected.name}`,
-      subtitle: selected.path,
+      title: `Note · ${name}`,
+      subtitle: path,
       placeholder: 'Extra instructions or pseudo code for this file',
     })
+  }
+  const openFileNote = () => {
+    if (!selected) return
+    openFileNoteFor(selected.id)
+  }
+  const openFolderNoteFor = (path: string) => {
+    if (!onSetBlueprintNote || !path || path.startsWith('draft:')) return
+    const name =
+      path === '.' ? graph.targetName : path.split('/').pop() ?? path
+    setInstructionsOpen(false)
+    setPointPicker(null)
+    setNoteEditor({
+      file: path,
+      kind: 'folder',
+      title: `Note · ${name}`,
+      subtitle: path,
+      placeholder: 'Extra instructions or pseudo code for this folder',
+    })
+  }
+  const openFolderNote = () => {
+    if (!folderPath) return
+    openFolderNoteFor(folderPath)
   }
   const openFilePointer = () => {
     if (!selected || !onToggleBlueprintPointer) return
@@ -2885,6 +2948,24 @@ export function HUD({
                 naming || folderPath.startsWith('draft:'),
               )
             : []),
+          ...(canPlace &&
+          onSetBlueprintNote &&
+          folderPath &&
+          !folderPath.startsWith('draft:')
+            ? [
+                {
+                  key: 'note',
+                  label: selectedFolderNote
+                    ? 'Edit folder note'
+                    : 'Add folder note',
+                  active:
+                    noteEditor?.kind === 'folder' &&
+                    noteEditor.file === folderPath,
+                  disabled: naming,
+                  onClick: openFolderNote,
+                },
+              ]
+            : []),
           ...(canPlace && mapping && onMapAddFile && onMapAddFolder && selectedFolder
             ? [
                 {
@@ -2931,6 +3012,16 @@ export function HUD({
       setInfoMinimized(false)
     }
   }, [inspectTick])
+
+  useEffect(() => {
+    if (fileNoteTick <= 0 || !selectedId) return
+    openFileNoteFor(selectedId)
+  }, [fileNoteTick])
+
+  useEffect(() => {
+    if (folderNoteTick <= 0 || !selectedFolder) return
+    openFolderNoteFor(selectedFolder)
+  }, [folderNoteTick])
 
   useEffect(() => {
     if (selectedFolder) setInfoVisible(true)
@@ -3447,8 +3538,9 @@ export function HUD({
                     : undefined
                 }
               >
-                {canRenameSelected ? (
+                {canRenameSelectedFile ? (
                   <InfoNameField
+                    key={selected.id}
                     name={selected.name}
                     onRename={renameSelectedFile}
                   />
@@ -3868,7 +3960,18 @@ export function HUD({
         >
           <PanelChrome
             title={
-              <InfoKindTitle kind="folder">{folderInfoName}</InfoKindTitle>
+              <InfoKindTitle kind="folder">
+                {canRenameSelectedFolder ? (
+                  <InfoNameField
+                    key={folderPath}
+                    kind="folder"
+                    name={folderInfoName}
+                    onRename={renameSelectedFolder}
+                  />
+                ) : (
+                  folderInfoName
+                )}
+              </InfoKindTitle>
             }
             subtitle={
               <>

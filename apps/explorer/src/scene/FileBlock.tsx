@@ -1,7 +1,7 @@
 import { memo, Suspense } from 'react'
 import { Billboard, Edges, Html, Text } from '@react-three/drei'
 import { CHANGE_HIGHLIGHT, CONFIG, EXPLAIN_FOCUS, blueprintPalette, dimColor, fileColor, fileEmphasisScale, FILE_SELECTION, MAP_SELECTION, type ChangeKind } from '../theme'
-import { BlueprintEyes } from '../ui/EyeIcon'
+import { BlueprintEyes, BlueprintNotes } from '../ui/EyeIcon'
 import { MapSelectBorder } from './MapSelectBorder'
 import type { FileNode } from '../types'
 import type { PlacedFile } from '../types'
@@ -33,6 +33,8 @@ type FileBlockProps = {
   labelVisible?: boolean
   pointed?: boolean
   pointedColors?: string[]
+  noted?: boolean
+  notedColors?: string[]
   opacity?: number
   overlay?: boolean
   overlayFilled?: boolean
@@ -103,6 +105,8 @@ export const FileBlock = memo(function FileBlock({
   labelVisible = true,
   pointed = false,
   pointedColors,
+  noted = false,
+  notedColors,
   opacity = 1,
   overlay = false,
   overlayFilled = false,
@@ -136,6 +140,12 @@ export const FileBlock = memo(function FileBlock({
     pointedColors && pointedColors.length > 0
       ? pointedColors
       : pointed
+        ? ['#f4f7fb']
+        : []
+  const noteColors =
+    notedColors && notedColors.length > 0
+      ? notedColors
+      : noted
         ? ['#f4f7fb']
         : []
   const highlightColor = highlight
@@ -266,7 +276,7 @@ export const FileBlock = memo(function FileBlock({
           opacity={opacity}
         />
       )}
-      {eyeColors.length > 0 && !naming && (
+      {(eyeColors.length > 0 || noteColors.length > 0) && !naming && (
         <Html
           position={
             mapMode
@@ -289,7 +299,10 @@ export const FileBlock = memo(function FileBlock({
           style={{ pointerEvents: 'none' }}
           zIndexRange={[40, 0]}
         >
-          <BlueprintEyes colors={eyeColors} mapMode={mapMode} />
+          <div className="blueprint-mark-row">
+            <BlueprintNotes colors={noteColors} mapMode={mapMode} />
+            <BlueprintEyes colors={eyeColors} mapMode={mapMode} />
+          </div>
         </Html>
       )}
       {showLabels && (

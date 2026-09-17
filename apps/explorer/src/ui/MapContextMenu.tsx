@@ -13,9 +13,12 @@ export type MapContextMenuState = {
 type MapContextMenuProps = {
   menu: MapContextMenuState | null
   pointed?: boolean
+  noted?: boolean
   onAddFile: (folder: string, color?: string) => void
   onAddFolder: (folder: string, color?: string) => void
   onOpenFile?: (fileId: string) => void
+  onAddFileNote?: (fileId: string) => void
+  onAddFolderNote?: (folder: string, color?: string) => void
   onExplainFile?: (fileId: string) => void
   onExplainFolder?: (folder: string) => void
   onPointToFolder?: (folder: string) => void
@@ -25,9 +28,12 @@ type MapContextMenuProps = {
 export function MapContextMenu({
   menu,
   pointed = false,
+  noted = false,
   onAddFile,
   onAddFolder,
   onOpenFile,
+  onAddFileNote,
+  onAddFolderNote,
   onExplainFile,
   onExplainFolder,
   onPointToFolder,
@@ -64,9 +70,15 @@ export function MapContextMenu({
   const width = 176
   const itemHeight = 42
   const fileItemCount =
-    1 + (onExplainFile ? 1 : 0) + (onExplainFolder && folder ? 1 : 0)
+    1 +
+    (onAddFileNote ? 1 : 0) +
+    (onExplainFile ? 1 : 0) +
+    (onExplainFolder && folder ? 1 : 0)
   const folderItemCount =
-    2 + (onPointToFolder ? 1 : 0) + (onExplainFolder ? 1 : 0)
+    2 +
+    (onAddFolderNote ? 1 : 0) +
+    (onPointToFolder ? 1 : 0) +
+    (onExplainFolder ? 1 : 0)
   const height = (fileId ? fileItemCount : folderItemCount) * itemHeight
   const left = Math.min(
     Math.max(pad, menu.x),
@@ -96,6 +108,18 @@ export function MapContextMenu({
           >
             Open file
           </button>
+          {onAddFileNote ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onAddFileNote(fileId)
+                onClose()
+              }}
+            >
+              {noted ? 'Edit file note' : 'Add file note'}
+            </button>
+          ) : null}
           {onExplainFile ? (
             <button
               type="button"
@@ -143,6 +167,18 @@ export function MapContextMenu({
           >
             Add folder
           </button>
+          {onAddFolderNote ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onAddFolderNote(folder, menu.color)
+                onClose()
+              }}
+            >
+              {noted ? 'Edit folder note' : 'Add folder note'}
+            </button>
+          ) : null}
           {onPointToFolder && (
             <button
               type="button"

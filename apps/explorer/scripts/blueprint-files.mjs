@@ -3,8 +3,7 @@ import path from 'node:path'
 import { toPosix } from './scan-ignore.mjs'
 import {
   emptyBlueprint,
-  listLocalBlueprints,
-  readBlueprint,
+  findSessionIdByColor,
   SESSION_COLORS,
   writeBlueprint,
   writeBlueprintByColor,
@@ -108,6 +107,119 @@ function layerList(value, key, legacyKey, mapEntry) {
   return raw.map(mapEntry).filter(Boolean)
 }
 
+function blueprintNoteEntry(value) {
+  if (!value || typeof value !== 'object') return null
+  const file = typeof value.file === 'string' ? value.file.trim() : ''
+  const note = typeof value.note === 'string' ? value.note : ''
+  if (!file || !note.trim()) return null
+  if (value.kind == null || value.kind === 'file') {
+    return { file, kind: 'file', note }
+  }
+  if (value.kind === 'folder') {
+    return { file, kind: 'folder', note }
+  }
+  if (
+    (value.kind === 'function' || value.kind === 'variable') &&
+    typeof value.name === 'string' &&
+    value.name.trim() !== ''
+  ) {
+    return { file, kind: value.kind, name: value.name.trim(), note }
+  }
+  return null
+}
+
+function blueprintNotes(value) {
+  const raw = Array.isArray(value) ? value : []
+  const seen = new Set()
+  const notes = []
+  for (const item of raw) {
+    const stored = blueprintNoteEntry(item)
+    if (!stored) continue
+    const key =
+      stored.kind === 'file' || stored.kind === 'folder'
+        ? `${stored.kind}:${stored.file}`
+        : `${stored.kind}:${stored.file}:${stored.name}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    notes.push(stored)
+  }
+  return notes
+}
+
+function layerFileIds(files) {
+  const ids = new Set()
+  for (const file of Array.isArray(files) ? files : []) {
+    if (typeof file?.id === 'string' && file.id) ids.add(file.id)
+    if (typeof file?.path === 'string' && file.path) ids.add(file.path)
+  }
+  return ids
+}
+
+function codebaseFileIds(dataDir) {
+  try {
+    const parsed = JSON.parse(
+      fs.readFileSync(path.join(dataDir, 'codebase.json'), 'utf8'),
+    )
+    return Array.isArray(parsed?.files)
+      ? parsed.files
+          .map((file) => file?.id)
+          .filter((id) => typeof id === 'string' && id)
+      : []
+  } catch {
+    return []
+  }
+}
+
+function existsInTarget(targetRoot, relativePath, directory) {
+  if (!targetRoot || typeof relativePath !== 'string' || !relativePath.trim()) {
+    return false
+  }
+  const root = path.resolve(targetRoot)
+  const resolved = path.resolve(root, relativePath)
+  const relative = path.relative(root, resolved)
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return false
+  if (!relative && !directory) return false
+  try {
+    const stat = fs.statSync(resolved)
+    return directory ? stat.isDirectory() : stat.isFile()
+  } catch {
+    return false
+  }
+}
+
+function layerFolderPaths(folders) {
+  const paths = new Set()
+  for (const folder of Array.isArray(folders) ? folders : []) {
+    if (typeof folder?.path === 'string' && folder.path) paths.add(folder.path)
+    if (typeof folder?.id === 'string' && folder.id) paths.add(folder.id)
+  }
+  return paths
+}
+
+function applicableNotes(notes, files, folders, existingFileIds, targetRoot) {
+  const knownFiles = new Set(existingFileIds)
+  for (const id of layerFileIds(files)) knownFiles.add(id)
+  const knownFolders = layerFolderPaths(folders)
+  return notes.filter((note) =>
+    note.kind === 'folder'
+      ? knownFolders.has(note.file) || existsInTarget(targetRoot, note.file, true)
+      : knownFiles.has(note.file) || existsInTarget(targetRoot, note.file, false),
+  )
+}
+
+function withApplicableNotes(layer, existingFileIds, targetRoot) {
+  return {
+    ...layer,
+    notes: applicableNotes(
+      layer.notes,
+      layer.files,
+      layer.folders,
+      existingFileIds,
+      targetRoot,
+    ),
+  }
+}
+
 function layerFields(value) {
   return {
     hidden: Boolean(value?.hidden),
@@ -116,7 +228,7 @@ function layerFields(value) {
     addedFunctions: Array.isArray(value?.addedFunctions) ? value.addedFunctions : [],
     addedVariables: Array.isArray(value?.addedVariables) ? value.addedVariables : [],
     addedImports: Array.isArray(value?.addedImports) ? value.addedImports : [],
-    notes: Array.isArray(value?.notes) ? value.notes : [],
+    notes: blueprintNotes(value?.notes),
     pointers: Array.isArray(value?.pointers) ? value.pointers : [],
   }
 }
@@ -268,24 +380,49 @@ export function readBlueprintDocument(targetRoot, input = {}) {
   }
 }
 
-export function applyBlueprintDocument(dataDir, document) {
+export function applyBlueprintDocument(dataDir, document, options = {}) {
   const parsed = parseBlueprintDocument(document)
-  writeBlueprint(dataDir, {
-    ...emptyBlueprint(),
-    ...parsed.global,
-  })
+  const targetRoot =
+    typeof options.targetRoot === 'string' ? options.targetRoot : null
+  const existingFileIds = [
+    ...codebaseFileIds(dataDir),
+    ...(Array.isArray(options.existingFileIds) ? options.existingFileIds : []),
+  ]
+  const global = writeBlueprint(
+    dataDir,
+    withApplicableNotes(
+      { ...emptyBlueprint(), ...parsed.global },
+      existingFileIds,
+      targetRoot,
+    ),
+  )
   const byColor = new Map(parsed.locals.map((local) => [local.color, local]))
+  const localBlueprints = []
   for (const color of SESSION_COLORS) {
     const local = byColor.get(color.id)
-    writeBlueprintByColor(dataDir, color.id, {
-      ...emptyBlueprint(),
-      ...(local ?? {}),
+    const written = writeBlueprintByColor(
+      dataDir,
+      color.id,
+      withApplicableNotes(
+        { ...emptyBlueprint(), ...(local ?? {}) },
+        existingFileIds,
+        targetRoot,
+      ),
+    )
+    const sessionId = findSessionIdByColor(dataDir, color.id)
+    if (!sessionId) continue
+    localBlueprints.push({
+      color: color.id,
+      colorName: color.name,
+      colorHex: color.hex,
+      sessionId,
+      ...written,
     })
   }
   return {
     name: parsed.name,
-    global: readBlueprint(dataDir),
-    localBlueprints: listLocalBlueprints(dataDir),
+    global,
+    localBlueprints,
   }
 }
 
@@ -305,7 +442,9 @@ export function loadBlueprintDocument(targetRoot, dataDir, input = {}) {
             typeof input.filePath === 'string' ? input.filePath : null,
         }
       : readBlueprintDocument(targetRoot, input)
-  const applied = applyBlueprintDocument(dataDir, loaded.document)
+  const applied = applyBlueprintDocument(dataDir, loaded.document, {
+    targetRoot,
+  })
   return {
     ...applied,
     name: loaded.name,

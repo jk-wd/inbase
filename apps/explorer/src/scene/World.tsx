@@ -86,6 +86,10 @@ type WorldProps = {
   pointedFileColors?: Record<string, string[]>
   pointedFolderPaths?: string[]
   pointedFolderColors?: Record<string, string[]>
+  notedFileIds?: string[]
+  notedFileColors?: Record<string, string[]>
+  notedFolderPaths?: string[]
+  notedFolderColors?: Record<string, string[]>
   namingIslandId?: string | null
   mapGraph?: CodebaseGraph | null
   mapLayout?: WorldLayout | null
@@ -137,6 +141,10 @@ export function World({
   pointedFileColors = {},
   pointedFolderPaths = [],
   pointedFolderColors = {},
+  notedFileIds = [],
+  notedFileColors = {},
+  notedFolderPaths = [],
+  notedFolderColors = {},
   mapGraph = null,
   mapLayout = null,
   explainActive = false,
@@ -152,6 +160,8 @@ export function World({
   const deleted = new Set(deletedIds)
   const pointedFiles = new Set(pointedFileIds)
   const pointedFolders = new Set(pointedFolderPaths)
+  const notedFiles = new Set(notedFileIds)
+  const notedFolders = new Set(notedFolderPaths)
   const mapping = mode === 'map'
   const viewGraph = mapping && mapGraph ? mapGraph : graph
   const viewLayout = mapping && mapLayout ? mapLayout : layout
@@ -246,18 +256,20 @@ export function World({
     if (namingId) ids.add(namingId)
     if (aimedRelation?.flyTo) ids.add(aimedRelation.flyTo)
     for (const id of pointedFileIds) ids.add(id)
+    for (const id of notedFileIds) ids.add(id)
     if (ghostKey) {
       for (const id of ghostKey.split('|')) ids.add(id)
     }
     return ids
-  }, [aimedRelation?.flyTo, ghostKey, namingId, pointedFileIds, selectedId])
+  }, [aimedRelation?.flyTo, ghostKey, namingId, notedFileIds, pointedFileIds, selectedId])
   const keepFolderPaths = useMemo(() => {
     const paths = new Set<string>()
     if (selectedFolder) paths.add(selectedFolder)
     if (namingIslandId) paths.add(namingIslandId)
     for (const path of pointedFolderPaths) paths.add(path)
+    for (const path of notedFolderPaths) paths.add(path)
     return paths
-  }, [namingIslandId, pointedFolderPaths, selectedFolder])
+  }, [namingIslandId, notedFolderPaths, pointedFolderPaths, selectedFolder])
   const originLod = useMemo(() => {
     if (mapping) return null
     return computeWalkLod({
@@ -297,6 +309,7 @@ export function World({
   const mapFileLabels = useMemo(() => {
     if (!mapping) return []
     const pointed = new Set(pointedFileIds)
+    const noted = new Set(notedFileIds)
     const seen = new Set<string>()
     const items: MapFileLabel[] = []
     const overlayFileHex = new Map<string, string>()
@@ -320,6 +333,7 @@ export function World({
       if (!placed || seen.has(id)) return
       seen.add(id)
       const colors = pointedFileColors[id]
+      const noteColors = notedFileColors[id]
       const kind = fileChangeKind(id, planned, created, deleted)
       const scale = fileEmphasisScale(Boolean(extra?.overlay), kind)
       items.push({
@@ -333,6 +347,8 @@ export function World({
         selected: id === selectedId,
         pointed: pointed.has(id),
         pointedColor: colors?.[colors.length - 1],
+        noted: noted.has(id),
+        notedColor: noteColors?.[noteColors.length - 1],
         dimmed:
           explainActive &&
           !explainFileFocused(explainFocus, id, folderOfFile(id)),
@@ -380,6 +396,8 @@ export function World({
     plannedIds,
     pointedFileColors,
     pointedFileIds,
+    notedFileColors,
+    notedFileIds,
     selectedId,
     viewGraph.files,
     viewLayout.files,
@@ -420,6 +438,7 @@ export function World({
     if (namingId) ids.add(namingId)
     if (aimedRelation?.flyTo) ids.add(aimedRelation.flyTo)
     for (const id of pointedFileIds) ids.add(id)
+    for (const id of notedFileIds) ids.add(id)
     for (const id of related) ids.add(id)
     for (const id of plannedIds) ids.add(id)
     for (const id of createdIds) ids.add(id)
@@ -445,6 +464,7 @@ export function World({
     overlayFileIds,
     plannedIds,
     pointedFileIds,
+    notedFileIds,
     related,
     selectedId,
     viewGraph.files,
@@ -455,6 +475,7 @@ export function World({
     if (selectedFolder && !selectedFolderLayer) paths.add(selectedFolder)
     if (namingIslandId) paths.add(namingIslandId)
     for (const path of pointedFolderPaths) paths.add(path)
+    for (const path of notedFolderPaths) paths.add(path)
     for (const path of Object.keys(highlightedFolders)) paths.add(path)
     for (const folder of Object.values(viewLayout.folders)) {
       if (folder.added) paths.add(folder.path)
@@ -464,6 +485,7 @@ export function World({
     highlightedFolders,
     mapping,
     namingIslandId,
+    notedFolderPaths,
     pointedFolderPaths,
     selectedFolder,
     selectedFolderLayer,
@@ -550,6 +572,8 @@ export function World({
         namingFileId={namingId}
         pointedFolderPaths={pointedFolderPaths}
         pointedFolderColors={pointedFolderColors}
+        notedFolderPaths={notedFolderPaths}
+        notedFolderColors={notedFolderColors}
         fileLabels={mapFileLabels}
         focusBounds={focusBounds}
         focusFlightKey={focusFlightKey}
@@ -599,6 +623,8 @@ export function World({
             }
             pointed={pointedFolders.has(folder.path)}
             pointedColors={pointedFolderColors[folder.path]}
+            noted={notedFolders.has(folder.path)}
+            notedColors={notedFolderColors[folder.path]}
             opacity={explainItemOpacity(
               explainActive && !explainFolderFocused(explainFocus, folder.path),
             )}
@@ -624,6 +650,7 @@ export function World({
         const naming = file.id === namingId
         const aimed = file.id === aimedRelation?.flyTo
         const pointed = pointedFiles.has(file.id)
+        const noted = notedFiles.has(file.id)
         const focused = explainFileHighlighted(explainFocus, file.id, file.folder)
         const detailed =
           selected ||
@@ -632,6 +659,7 @@ export function World({
           naming ||
           aimed ||
           pointed ||
+          noted ||
           focused ||
           Boolean(changeKind)
         if (lod && !lod.files.has(file.id)) return null
@@ -656,6 +684,8 @@ export function World({
             aimed={aimed}
             pointed={pointed}
             pointedColors={pointedFileColors[file.id]}
+            noted={noted}
+            notedColors={notedFileColors[file.id]}
             dimmed={dimmed}
             focused={focused}
             opacity={opacity}
@@ -680,6 +710,8 @@ export function World({
             namingIslandId={namingIslandId}
             pointedFiles={pointedFiles}
             pointedFileColors={pointedFileColors}
+            notedFiles={notedFiles}
+            notedFileColors={notedFileColors}
             explainActive={explainActive}
             explainFocus={explainFocus}
             overlayOpacity={overlayOpacity}
@@ -717,6 +749,10 @@ export function World({
               explainActive &&
                 !explainFileFocused(explainFocus, file.id, file.folder),
             )}
+            pointed={pointedFiles.has(file.id)}
+            pointedColors={pointedFileColors[file.id]}
+            noted={notedFiles.has(file.id)}
+            notedColors={notedFileColors[file.id]}
             mapMode={mapping}
           />
         )
@@ -868,6 +904,8 @@ function BlueprintOverlay({
   namingIslandId,
   pointedFiles,
   pointedFileColors,
+  notedFiles,
+  notedFileColors,
   explainActive,
   explainFocus,
   overlayOpacity,
@@ -882,6 +920,8 @@ function BlueprintOverlay({
   namingIslandId: string | null
   pointedFiles: Set<string>
   pointedFileColors: Record<string, string[]>
+  notedFiles: Set<string>
+  notedFileColors: Record<string, string[]>
   explainActive: boolean
   explainFocus: ExplainFocus | null
   overlayOpacity: number
@@ -976,6 +1016,8 @@ function BlueprintOverlay({
             overlayFilled={isFilled}
             pointed={pointedFiles.has(id)}
             pointedColors={pointedFileColors[id]}
+            noted={notedFiles.has(id)}
+            notedColors={notedFileColors[id]}
             dimmed={dimmed}
             focused={explainFileHighlighted(explainFocus, id, file.folder)}
             opacity={explainItemOpacity(

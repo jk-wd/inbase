@@ -3,8 +3,17 @@ import type { ReactNode } from 'react'
 export const EYE_ICON_PATH =
   'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z'
 
+export const NOTE_ICON_PATHS = [
+  'M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z',
+  'M15 3v5h6',
+] as const
+
 export function eyeIconMarkup(size = 14) {
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${EYE_ICON_PATH}"/><circle cx="12" cy="12" r="3"/></svg>`
+}
+
+export function noteIconMarkup(size = 14) {
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${NOTE_ICON_PATHS[0]}"/><path d="${NOTE_ICON_PATHS[1]}"/></svg>`
 }
 
 function StrokeIcon({
@@ -46,6 +55,21 @@ export function EyeIcon({
     <StrokeIcon size={size} title={title}>
       <path d={EYE_ICON_PATH} />
       <circle cx="12" cy="12" r="3" />
+    </StrokeIcon>
+  )
+}
+
+export function NoteIcon({
+  size = 18,
+  title,
+}: {
+  size?: number
+  title?: string
+}) {
+  return (
+    <StrokeIcon size={size} title={title}>
+      <path d={NOTE_ICON_PATHS[0]} />
+      <path d={NOTE_ICON_PATHS[1]} />
     </StrokeIcon>
   )
 }
@@ -174,6 +198,40 @@ export function PanelToggleIcon({
   )
 }
 
+function BlueprintMarkRow({
+  colors,
+  mapMode,
+  size,
+  label,
+  icon: Icon,
+}: {
+  colors: string[]
+  mapMode?: boolean
+  size: number
+  label: string
+  icon: typeof EyeIcon
+}) {
+  if (colors.length === 0) return null
+  return (
+    <div
+      className={colors.length > 1 ? 'blueprint-eye-row' : undefined}
+      role="img"
+      aria-label={label}
+    >
+      {colors.map((hex, index) => (
+        <div
+          className="blueprint-eye"
+          data-map={mapMode ? 'true' : 'false'}
+          key={`${hex}-${index}`}
+          style={{ color: hex }}
+        >
+          <Icon size={size} title={index === 0 ? label : undefined} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function BlueprintEyes({
   colors,
   mapMode,
@@ -183,23 +241,35 @@ export function BlueprintEyes({
   mapMode?: boolean
   size?: number
 }) {
-  if (colors.length === 0) return null
   return (
-    <div
-      className={colors.length > 1 ? 'blueprint-eye-row' : undefined}
-      role="img"
-      aria-label="Keep in mind"
-    >
-      {colors.map((hex, index) => (
-        <div
-          className="blueprint-eye"
-          data-map={mapMode ? 'true' : 'false'}
-          key={`${hex}-${index}`}
-          style={{ color: hex }}
-        >
-          <EyeIcon size={size} title={index === 0 ? 'Keep in mind' : undefined} />
-        </div>
-      ))}
-    </div>
+    <BlueprintMarkRow
+      colors={colors}
+      mapMode={mapMode}
+      size={size}
+      label="Keep in mind"
+      icon={EyeIcon}
+    />
+  )
+}
+
+export function BlueprintNotes({
+  colors,
+  mapMode,
+  size = 18,
+  label = 'File note',
+}: {
+  colors: string[]
+  mapMode?: boolean
+  size?: number
+  label?: string
+}) {
+  return (
+    <BlueprintMarkRow
+      colors={colors}
+      mapMode={mapMode}
+      size={size}
+      label={label}
+      icon={NoteIcon}
+    />
   )
 }

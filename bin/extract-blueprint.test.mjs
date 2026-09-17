@@ -96,6 +96,22 @@ test('normalizeExtractLayer infers parent folders for kept files', () => {
   assert.equal(layer.notes[0].kind, 'file')
 })
 
+test('extract-blueprint keeps folder notes', () => {
+  const layer = normalizeExtractLayer({
+    folders: [{ path: 'src/widgets' }],
+    notes: [
+      {
+        file: 'src/widgets',
+        kind: 'folder',
+        note: 'Keep widgets presentational.',
+      },
+    ],
+  })
+  assert.equal(layer.notes[0].kind, 'folder')
+  assert.equal(layer.notes[0].file, 'src/widgets')
+  assert.equal(layer.notes[0].note, 'Keep widgets presentational.')
+})
+
 test('compact inventory skips binaries and marks tests', () => {
   const env = fixture()
   try {

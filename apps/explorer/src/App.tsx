@@ -68,13 +68,17 @@ import {
   toBlueprintFolder,
   namedCreatedIslands,
   omitCreatedItems,
+  pathIsInside,
   blueprintImportRawFromFile,
   parseBlueprintImport,
   parseBlueprintNotes,
   parseBlueprintPointers,
   parseUserCreatedBlocks,
   parseUserCreatedIslands,
+  createdContentsHaveUniquePaths,
   remapBlueprintFileId,
+  remapCreatedFolderPath,
+  remapPathPrefix,
   resolveCreatedFile,
   resolveCreatedIsland,
   setBlueprintNote,
@@ -428,7 +432,12 @@ function cleanedBlueprint<T extends SharedBlueprint>(
   const nextImports = current.addedImports.filter(
     (item) => !removed.has(item.file),
   )
-  const notes = dropBlueprintFileNotes(current.notes, removed)
+  const removedFolders = new Set(
+    current.folders
+      .filter((island) => !island.naming && folders.has(island.path))
+      .map((island) => island.path),
+  )
+  const notes = dropBlueprintFileNotes(current.notes, removed, removedFolders)
   return {
     ...current,
     enabled: blueprintLiveEnabled(
@@ -484,6 +493,8 @@ function collectMapBlueprints(input: {
   const variables: PatchSymbolAddition[] = []
   const imports: PatchImportAddition[] = []
   const notesByKey = new Map<string, BlueprintNote>()
+  const fileNoteColors: Record<string, string[]> = {}
+  const folderNoteColors: Record<string, string[]> = {}
   const pointers: Array<BlueprintPointer & { colorHex: string }> = []
 
   const sources: Array<{
@@ -606,6 +617,11 @@ function collectMapBlueprints(input: {
       imports.push(...source.imports)
       for (const note of source.notes) {
         notesByKey.set(blueprintNoteKey(note), note)
+        if (note.kind !== 'file' && note.kind !== 'folder') continue
+        const target = note.kind === 'folder' ? folderNoteColors : fileNoteColors
+        const list = target[note.file] ?? []
+        if (!list.includes(source.hex)) list.push(source.hex)
+        target[note.file] = list
       }
       for (const pointer of source.pointers) {
         pointers.push({ ...pointer, colorHex: source.hex })
@@ -621,6 +637,8 @@ function collectMapBlueprints(input: {
     variables,
     imports,
     notes: [...notesByKey.values()],
+    fileNoteColors,
+    folderNoteColors,
     pointers,
   }
 }
@@ -1048,7 +1066,10 @@ function Explorer({
     for (const item of mapBlueprint.functions) ids.add(item.file)
     for (const item of mapBlueprint.variables) ids.add(item.file)
     for (const item of mapBlueprint.imports) ids.add(item.file)
-    for (const note of mapBlueprint.notes) ids.add(note.file)
+    for (const note of mapBlueprint.notes) {
+      if (note.kind === 'folder') continue
+      ids.add(note.file)
+    }
     for (const pointer of mapBlueprint.pointers) {
       if (pointer.kind !== 'folder') ids.add(pointer.path)
     }
@@ -1069,6 +1090,9 @@ function Explorer({
     }
     for (const pointer of mapBlueprint.pointers) {
       if (pointer.kind === 'folder') paths.add(pointer.path)
+    }
+    for (const note of mapBlueprint.notes) {
+      if (note.kind === 'folder') paths.add(note.file)
     }
     return [...paths]
   }, [changeSet.createFolders, mapBlueprint])
@@ -1145,6 +1169,8 @@ function Explorer({
   const [mapMenu, setMapMenu] = useState<MapContextMenuState | null>(null)
   const [aimedRelation, setAimedRelation] = useState<AimedRelation | null>(null)
   const [inspectTick, setInspectTick] = useState(0)
+  const [fileNoteTick, setFileNoteTick] = useState(0)
+  const [folderNoteTick, setFolderNoteTick] = useState(0)
   const [locked, setLocked] = useState(false)
   const [walkDrop, setWalkDrop] = useState<{ x: number; y: number } | null>(null)
   const [importedBy, setImportedBy] = useState(false)
@@ -1678,80 +1704,29 @@ function Explorer({
   }, [])
 
   const beginAddFile = useCallback(
-    (folderPath: string, color?: string) => {
+    (folderPath: string) => {
       if (!canPlace) return
       setAddingItem({
         kind: 'file',
         parent: folderPath,
-        lockedColor: color ?? ownerColorForCreatedFolder(folderPath),
+        lockedColor: null,
       })
       document.exitPointerLock()
     },
-    [canPlace, ownerColorForCreatedFolder],
-  )
-
-  const renameCreatedBlock = useCallback(
-    (id: string, rawName: string) => {
-      const current = userBlocks.find((block) => block.id === id)
-      if (!current || current.naming) return null
-      const resolved = resolveCreatedFile(rawName, current.folder)
-      if (!resolved) return null
-      if (resolved.id === id) return id
-      const taken = userBlocks.some(
-        (block) => block.id === resolved.id && block.id !== id,
-      )
-      if (taken) return null
-      const nextBlocks = userBlocks.map((block) =>
-        block.id === id
-          ? {
-              ...resolved,
-              x: current.x,
-              z: current.z,
-              colorHex: current.colorHex,
-            }
-          : block,
-      )
-      const remapped = remapBlueprintFileId(id, resolved.id, {
-        functions: blueprintFunctionsRef.current,
-        variables: blueprintVariablesRef.current,
-        imports: blueprintImportsRef.current,
-        notes: blueprintNotesRef.current,
-        pointers: blueprintPointersRef.current,
-      })
-      blueprintNotesRef.current = remapped.notes
-      blueprintPointersRef.current = remapped.pointers
-      setUserBlocks(nextBlocks)
-      setBlueprintFunctions(remapped.functions)
-      setBlueprintVariables(remapped.variables)
-      setBlueprintImports(remapped.imports)
-      setBlueprintNotes(remapped.notes)
-      setBlueprintPointers(remapped.pointers)
-      persistBlueprint(
-        nextBlocks,
-        userIslands,
-        remapped.functions,
-        remapped.variables,
-        remapped.imports,
-        remapped.notes,
-        remapped.pointers,
-      )
-      if (selectedId === id) setSelectedId(resolved.id)
-      return resolved.id
-    },
-    [persistBlueprint, selectedId, userBlocks, userIslands],
+    [canPlace],
   )
 
   const beginAddFolder = useCallback(
-    (parent: string, color?: string) => {
+    (parent: string) => {
       if (!canPlace) return
       setAddingItem({
         kind: 'folder',
         parent,
-        lockedColor: color ?? ownerColorForCreatedFolder(parent),
+        lockedColor: null,
       })
       document.exitPointerLock()
     },
-    [canPlace, ownerColorForCreatedFolder],
+    [canPlace],
   )
 
   const createdContentsForColor = useCallback((color: string) => {
@@ -1959,6 +1934,15 @@ function Explorer({
     [selectFile],
   )
 
+  const openMapFileNote = useCallback(
+    (fileId: string) => {
+      if (fileId.startsWith('draft:')) return
+      selectFile(fileId)
+      setFileNoteTick((tick) => tick + 1)
+    },
+    [selectFile],
+  )
+
   const selectFolder = useCallback(
     (folderPath: string | null, layer?: string | null) => {
       if (importPickFromRef.current) return
@@ -1967,6 +1951,15 @@ function Explorer({
       if (folderPath) setSelectedId(null)
     },
     [],
+  )
+
+  const openMapFolderNote = useCallback(
+    (folderPath: string, layer?: string) => {
+      if (folderPath.startsWith('draft:')) return
+      selectFolder(folderPath, layer)
+      setFolderNoteTick((tick) => tick + 1)
+    },
+    [selectFolder],
   )
 
   useEffect(() => {
@@ -2846,12 +2839,13 @@ function Explorer({
 
   const saveCurrentBlueprint = useCallback(
     async (input: SaveBlueprintInput) => {
-      persistBlueprint()
+      const snapshot = snapshotBlueprints()
       const saved = await saveBlueprintFile({
         ...input,
-        ...snapshotBlueprints(),
+        ...snapshot,
       })
       setSavedBlueprint(saved)
+      persistBlueprint()
     },
     [persistBlueprint, snapshotBlueprints],
   )
@@ -2970,8 +2964,20 @@ function Explorer({
       },
     ) => {
       if (color === blueprintColorRef.current) {
+        userBlocksRef.current = next.blocks
+        userIslandsRef.current = next.islands
+        blueprintFunctionsRef.current = next.functions
+        blueprintVariablesRef.current = next.variables
+        blueprintImportsRef.current = next.imports
+        blueprintNotesRef.current = next.notes
+        blueprintPointersRef.current = next.pointers
         setUserBlocks(next.blocks)
         setUserIslands(next.islands)
+        setBlueprintFunctions(next.functions)
+        setBlueprintVariables(next.variables)
+        setBlueprintImports(next.imports)
+        setBlueprintNotes(next.notes)
+        setBlueprintPointers(next.pointers)
       }
       persistBlueprint(
         next.blocks,
@@ -2985,6 +2991,96 @@ function Explorer({
       )
     },
     [persistBlueprint],
+  )
+
+  const renameCreatedBlock = useCallback(
+    (id: string, rawName: string) => {
+      const color = ownerColorForCreatedFile(id)
+      if (!color) return null
+      const stored = createdContentsForColor(color)
+      const current = stored.blocks.find((block) => block.id === id)
+      if (!current || current.naming) return null
+      const resolved = resolveCreatedFile(rawName, current.folder)
+      if (!resolved) return null
+      if (resolved.id === id) return id
+      if (
+        stored.blocks.some(
+          (block) => block.id === resolved.id && block.id !== id,
+        )
+      ) {
+        return null
+      }
+      if (
+        stored.islands.some(
+          (island) => createdIslandKey(island) === resolved.id,
+        )
+      ) {
+        return null
+      }
+      const remapped = remapBlueprintFileId(id, resolved.id, stored)
+      writeCreatedContents(color, {
+        ...stored,
+        ...remapped,
+        blocks: stored.blocks.map((block) =>
+          block.id === id
+            ? {
+                ...resolved,
+                x: current.x,
+                z: current.z,
+                colorHex: current.colorHex,
+              }
+            : block,
+        ),
+      })
+      if (selectedId === id) setSelectedId(resolved.id)
+      return resolved.id
+    },
+    [
+      createdContentsForColor,
+      ownerColorForCreatedFile,
+      selectedId,
+      writeCreatedContents,
+    ],
+  )
+
+  const renameCreatedIsland = useCallback(
+    (folderPath: string, rawName: string) => {
+      const color =
+        selectedFolderLayer ?? ownerColorForCreatedFolder(folderPath)
+      if (!color) return null
+      const stored = createdContentsForColor(color)
+      const current = stored.islands.find(
+        (island) =>
+          !island.naming && createdIslandKey(island) === folderPath,
+      )
+      if (!current) return null
+      const resolved = resolveCreatedIsland(rawName, current.parent)
+      if (!resolved) return null
+      const fromPath = createdIslandKey(current)
+      if (resolved.path === fromPath) return fromPath
+      if (pathIsInside(resolved.path, fromPath) && resolved.path !== fromPath) {
+        return null
+      }
+      const remapped = remapCreatedFolderPath(fromPath, resolved.path, stored)
+      if (!createdContentsHaveUniquePaths(remapped)) return null
+      writeCreatedContents(color, remapped)
+      if (selectedFolder === fromPath) setSelectedFolder(resolved.path)
+      if (
+        selectedId &&
+        (selectedId === fromPath || selectedId.startsWith(`${fromPath}/`))
+      ) {
+        setSelectedId(remapPathPrefix(selectedId, fromPath, resolved.path))
+      }
+      return resolved.path
+    },
+    [
+      createdContentsForColor,
+      ownerColorForCreatedFolder,
+      selectedFolder,
+      selectedFolderLayer,
+      selectedId,
+      writeCreatedContents,
+    ],
   )
 
   const commitAddItem = useCallback(
@@ -3127,7 +3223,12 @@ function Explorer({
         const nextImports = source.imports.filter(
           (item) => !removed.has(item.file),
         )
-        const notes = dropBlueprintFileNotes(source.notes, removed)
+        const removedFolders = new Set(
+          source.islands
+            .filter((island) => !island.naming && folders.has(island.path))
+            .map((island) => island.path),
+        )
+        const notes = dropBlueprintFileNotes(source.notes, removed, removedFolders)
         blueprintNotesRef.current = notes
         setUserBlocks(nextBlocks)
         setUserIslands(nextIslands)
@@ -3227,6 +3328,10 @@ function Explorer({
             pointedFileColors={pointedColors.files}
             pointedFolderPaths={Object.keys(pointedColors.folders)}
             pointedFolderColors={pointedColors.folders}
+            notedFileIds={Object.keys(mapBlueprint.fileNoteColors)}
+            notedFileColors={mapBlueprint.fileNoteColors}
+            notedFolderPaths={Object.keys(mapBlueprint.folderNoteColors)}
+            notedFolderColors={mapBlueprint.folderNoteColors}
             mapGraph={
               explaining
                 ? null
@@ -3283,6 +3388,8 @@ function Explorer({
         selectedId={selectedId}
         selectedTick={selectedTick}
         inspectTick={inspectTick}
+        fileNoteTick={fileNoteTick}
+        folderNoteTick={folderNoteTick}
         selectedFolder={selectedFolder}
         selectedFolderLayer={selectedFolderLayer}
         overlayLayers={overlayLayers}
@@ -3346,6 +3453,7 @@ function Explorer({
         onMapAddFile={beginAddFile}
         onMapAddFolder={beginAddFolder}
         onRenameCreatedFile={renameCreatedBlock}
+        onRenameCreatedFolder={renameCreatedIsland}
         onInspectFile={inspectFile}
         onInspectBlock={inspectBlock}
         blueprintOpacity={blueprintOpacity}
@@ -3374,9 +3482,32 @@ function Explorer({
             ? findBlueprintPointer(blueprintPointers, 'folder', mapMenu.folder)
             : false
         }
+        noted={
+          mapMenu?.file
+            ? Boolean(findBlueprintNote(mapBlueprint.notes, mapMenu.file, 'file'))
+            : mapMenu?.folder
+              ? Boolean(
+                  findBlueprintNote(mapBlueprint.notes, mapMenu.folder, 'folder'),
+                )
+              : false
+        }
         onAddFile={beginAddFile}
         onAddFolder={beginAddFolder}
         onOpenFile={inspectFile}
+        onAddFileNote={
+          explaining ||
+          !canPlace ||
+          Boolean(mapMenu?.file?.startsWith('draft:'))
+            ? undefined
+            : openMapFileNote
+        }
+        onAddFolderNote={
+          explaining ||
+          !canPlace ||
+          Boolean(mapMenu?.folder?.startsWith('draft:'))
+            ? undefined
+            : openMapFolderNote
+        }
         onExplainFile={
           explaining
             ? undefined

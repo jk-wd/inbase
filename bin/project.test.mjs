@@ -6,16 +6,18 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import {
   applyHostEnv,
+  ensureDataDir,
   findLiveVisualizer,
   globalInbaseDir,
   isolatedViteConfig,
+  isPidAlive,
   packageDirFromPackage,
   probeVisualizer,
   readInstanceFile,
   readRunningInstance,
+  resetDataDir,
   resolveFromPackage,
   writeRunningInstance,
-  isPidAlive,
 } from './project.mjs'
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -38,6 +40,45 @@ function restoreEnv(snapshot) {
     else process.env[key] = value
   }
 }
+
+test('resetDataDir empties leftover runtime files', () => {
+  const { root, cleanup } = tempProject()
+  try {
+    const dataDir = path.join(root, '.inbase')
+    fs.mkdirSync(path.join(dataDir, 'diff-sessions/coral'), { recursive: true })
+    fs.mkdirSync(path.join(dataDir, 'vite'), { recursive: true })
+    fs.writeFileSync(path.join(dataDir, 'blueprint.json'), '{"enabled":true}\n')
+    fs.writeFileSync(path.join(dataDir, 'chats.json'), '{"coral":{"locked":true}}\n')
+    fs.writeFileSync(
+      path.join(dataDir, 'user-context.json'),
+      `${JSON.stringify({ showBranchChanges: true, hiddenFileIds: ['src/a.ts'] }, null, 2)}\n`,
+    )
+    fs.writeFileSync(path.join(dataDir, 'diff-sessions/coral/manifest.json'), '{}\n')
+    fs.writeFileSync(path.join(dataDir, 'vite/cache.json'), '{}\n')
+
+    resetDataDir(dataDir)
+
+    assert.deepEqual(fs.readdirSync(dataDir), ['user-context.json'])
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dataDir, 'user-context.json'), 'utf8')), {
+      showBranchChanges: false,
+    })
+  } finally {
+    cleanup()
+  }
+})
+
+test('ensureDataDir keeps existing runtime files', () => {
+  const { root, cleanup } = tempProject()
+  try {
+    const dataDir = path.join(root, '.inbase')
+    fs.mkdirSync(dataDir, { recursive: true })
+    fs.writeFileSync(path.join(dataDir, 'blueprint.json'), '{"enabled":true}\n')
+    ensureDataDir(dataDir)
+    assert.equal(fs.existsSync(path.join(dataDir, 'blueprint.json')), true)
+  } finally {
+    cleanup()
+  }
+})
 
 test('writeRunningInstance records a live visualizer', () => {
   const { root, cleanup } = tempProject()

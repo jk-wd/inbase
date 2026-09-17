@@ -3,10 +3,11 @@ import * as claude from './claude.mjs'
 import * as cline from './cline.mjs'
 import * as copilot from './copilot.mjs'
 import * as cursor from './cursor.mjs'
+import * as opencode from './opencode.mjs'
 import * as zed from './zed.mjs'
 
 /** Ordered editor adapters. Add a module here to install skills for another editor. */
-export const editors = [cursor, claude, agents, zed, copilot, cline]
+export const editors = [cursor, claude, agents, zed, copilot, cline, opencode]
 
 const EDITOR_ALIASES = {
   cursor: 'cursor',
@@ -20,6 +21,8 @@ const EDITOR_ALIASES = {
   github: 'copilot',
   'github-copilot': 'copilot',
   cline: 'cline',
+  opencode: 'opencode',
+  'open-code': 'opencode',
 }
 
 export function editorIds() {

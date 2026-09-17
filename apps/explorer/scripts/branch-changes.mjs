@@ -30,13 +30,23 @@ function runGit(cwd, args) {
   })
 }
 
+const gitTopLevelByDir = new Map()
+
 function gitTopLevel(fromDir) {
+  const key = path.resolve(fromDir)
+  if (gitTopLevelByDir.has(key)) return gitTopLevelByDir.get(key)
   try {
     const result = runGit(fromDir, ['rev-parse', '--show-toplevel'])
-    if (result.status !== 0) return null
+    if (result.status !== 0) {
+      gitTopLevelByDir.set(key, null)
+      return null
+    }
     const root = result.stdout.trim()
-    return root ? path.resolve(root) : null
+    const resolved = root ? path.resolve(root) : null
+    gitTopLevelByDir.set(key, resolved)
+    return resolved
   } catch {
+    gitTopLevelByDir.set(key, null)
     return null
   }
 }
@@ -147,7 +157,13 @@ function fileAsAddPatch(fileId, contents) {
 }
 
 function collectUntracked(targetRoot) {
-  const result = runGit(targetRoot, ['ls-files', '--others', '--exclude-standard'])
+  const result = runGit(targetRoot, [
+    'ls-files',
+    '--others',
+    '--exclude-standard',
+    '--',
+    '.',
+  ])
   const creates = []
   const patches = []
   const createLines = {}
@@ -262,8 +278,9 @@ export function withAbsentMappedFiles(overlay, targetRoot, knownFileIds = []) {
 }
 
 function collectDiff(targetRoot, knownFileIds, diffArgs, includeUntracked) {
-  const statusResult = runGit(targetRoot, ['diff', '--name-status', ...diffArgs])
-  const patchResult = runGit(targetRoot, ['diff', ...diffArgs])
+  const scopedArgs = [...diffArgs, '--', '.']
+  const statusResult = runGit(targetRoot, ['diff', '--name-status', ...scopedArgs])
+  const patchResult = runGit(targetRoot, ['diff', ...scopedArgs])
   const named = parseNameStatus(
     statusResult.status === 0 ? statusResult.stdout : '',
   )

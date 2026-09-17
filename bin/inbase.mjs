@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
   applyHostEnv,
   ensureDataDir,
+  resetDataDir,
   ensureGitignoreEntry,
   explorerRoot,
   isolatedViteConfig,
@@ -45,10 +46,10 @@ const HELP = `inbase — a first-person 3D map of a codebase
 
 Usage:
   inbase init [editor]     Install skills for all editors, or only one
-                           (cursor, claude, agents, zed, copilot, cline)
+                           (cursor, claude, agents, zed, copilot, cline, opencode)
   inbase cleanup [editor]  Remove skills for all editors, or only one
                            (also removes .inbase/ and inbase.json)
-  inbase run               Scan this repo and start the local map
+  inbase run               Empty .inbase/, scan this repo, and start the map
   inbase extract-blueprint <folder> <output-file>
   inbase help              Show this help
 
@@ -173,7 +174,7 @@ async function runServer(args) {
   }
 
   const { targetRoot, dataDir } = applyHostEnv({ target: intendedTarget })
-  ensureDataDir(dataDir)
+  resetDataDir(dataDir)
 
   const { scanTarget } = await import(explorerHref('scripts/scan-target.mjs'))
   const { targetName } = await import(explorerHref('scripts/target-config.mjs'))
@@ -200,7 +201,7 @@ async function runServer(args) {
   console.log(`Inbase is mapping ${targetRoot}`)
   console.log(`Open ${local}`)
   console.log(
-    'Leave this running. Open a Cursor, Claude Code, Codex, Copilot, or Cline chat to connect — one chat per color.',
+    'Leave this running. Open a Cursor, Claude Code, Codex, Zed, Copilot, Cline, or OpenCode chat to connect — one chat per color.',
   )
 }
 

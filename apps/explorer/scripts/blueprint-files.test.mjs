@@ -229,6 +229,148 @@ test('load restores notes and pointers', () => {
   }
 })
 
+test('save keeps notes even when those files are not on disk', () => {
+  const env = fixture()
+  try {
+    const notes = [
+      {
+        file: 'src/Missing.tsx',
+        kind: 'file',
+        note: 'Only apply this if the file is there later.',
+      },
+    ]
+    const saved = saveBlueprintDocument(env.targetRoot, {
+      name: 'saved-notes',
+      global: { notes },
+    })
+    const document = JSON.parse(fs.readFileSync(saved.path, 'utf8'))
+    assert.deepEqual(document.global.notes, notes)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('apply keeps notes for blueprint files and existing files', () => {
+  const env = fixture()
+  try {
+    ensureSessionPool(env.dataDir)
+    fs.mkdirSync(path.join(env.targetRoot, 'src'), { recursive: true })
+    fs.writeFileSync(path.join(env.targetRoot, 'src', 'Live.tsx'), 'export {}\n')
+    saveBlueprintDocument(env.targetRoot, {
+      name: 'best-effort-notes',
+      global: {
+        files: [globalFile],
+        notes: [
+          {
+            file: 'src/Global.tsx',
+            kind: 'file',
+            note: 'Planned file note.',
+          },
+          {
+            file: 'src/Live.tsx',
+            kind: 'file',
+            note: 'Existing file note.',
+          },
+          {
+            file: 'src/Missing.tsx',
+            kind: 'file',
+            note: 'Gone.',
+          },
+        ],
+      },
+      locals: [
+        {
+          color: 'coral',
+          notes: [
+            {
+              file: 'src/Live.tsx',
+              kind: 'file',
+              note: 'Session note on a live file.',
+            },
+            {
+              file: 'src/Absent.tsx',
+              kind: 'file',
+              note: 'Skip this.',
+            },
+          ],
+        },
+      ],
+    })
+    const loaded = loadBlueprintDocument(env.targetRoot, env.dataDir, {
+      name: 'best-effort-notes',
+    })
+    assert.deepEqual(loaded.global.notes, [
+      {
+        file: 'src/Global.tsx',
+        kind: 'file',
+        note: 'Planned file note.',
+      },
+      {
+        file: 'src/Live.tsx',
+        kind: 'file',
+        note: 'Existing file note.',
+      },
+    ])
+    assert.deepEqual(readBlueprintByColor(env.dataDir, 'coral').notes, [
+      {
+        file: 'src/Live.tsx',
+        kind: 'file',
+        note: 'Session note on a live file.',
+      },
+    ])
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('apply keeps folder notes for blueprint folders and existing folders', () => {
+  const env = fixture()
+  try {
+    ensureSessionPool(env.dataDir)
+    fs.mkdirSync(path.join(env.targetRoot, 'src'), { recursive: true })
+    saveBlueprintDocument(env.targetRoot, {
+      name: 'folder-notes',
+      global: {
+        folders: [globalFolder],
+        notes: [
+          {
+            file: 'src/widgets',
+            kind: 'folder',
+            note: 'Planned folder note.',
+          },
+          {
+            file: 'src',
+            kind: 'folder',
+            note: 'Existing folder note.',
+          },
+          {
+            file: 'src/missing',
+            kind: 'folder',
+            note: 'Gone.',
+          },
+        ],
+      },
+    })
+    const loaded = loadBlueprintDocument(env.targetRoot, env.dataDir, {
+      name: 'folder-notes',
+    })
+    assert.deepEqual(loaded.global.notes, [
+      {
+        file: 'src/widgets',
+        kind: 'folder',
+        note: 'Planned folder note.',
+      },
+      {
+        file: 'src',
+        kind: 'folder',
+        note: 'Existing folder note.',
+      },
+    ])
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('load treats a note without kind as a file note', () => {
   const env = fixture()
   try {

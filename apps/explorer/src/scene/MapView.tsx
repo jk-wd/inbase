@@ -6,7 +6,7 @@ import { folderAt, folderOfFile, isBlueprintFolder, worldBounds } from '../layou
 import type { ChangeKind } from '../theme'
 import { blueprintPalette } from '../theme'
 import type { PlacedFolder, WorldLayout } from '../types'
-import { eyeIconMarkup } from '../ui/EyeIcon'
+import { eyeIconMarkup, noteIconMarkup } from '../ui/EyeIcon'
 
 export type MapBlueprintMenu = {
   x: number
@@ -27,6 +27,8 @@ export type MapFileLabel = {
   selected: boolean
   pointed: boolean
   pointedColor?: string
+  noted?: boolean
+  notedColor?: string
   dimmed?: boolean
   focused?: boolean
   blueprintHex?: string
@@ -191,6 +193,8 @@ type MapViewProps = {
   namingFileId?: string | null
   pointedFolderPaths?: string[]
   pointedFolderColors?: Record<string, string[]>
+  notedFolderPaths?: string[]
+  notedFolderColors?: Record<string, string[]>
   fileLabels?: MapFileLabel[]
   focusBounds?: MapFocusBounds | null
   focusFlightKey?: string | number
@@ -219,6 +223,8 @@ export function MapView({
   namingFileId = null,
   pointedFolderPaths = [],
   pointedFolderColors = {},
+  notedFolderPaths = [],
+  notedFolderColors = {},
   fileLabels = [],
   focusBounds = null,
   focusFlightKey = 0,
@@ -809,6 +815,8 @@ export function MapView({
           namingFolderPath={namingFolderPath}
           pointedFolderPaths={pointedFolderPaths}
           pointedFolderColors={pointedFolderColors}
+          notedFolderPaths={notedFolderPaths}
+          notedFolderColors={notedFolderColors}
           dimmedFolderPaths={dimmedFolderPaths}
         />
       )}
@@ -864,6 +872,7 @@ function folderLabelClass(
   highlightedFolders: Partial<Record<string, ChangeKind>> | undefined,
   selectedFolder: string | null,
   pointed: boolean,
+  noted: boolean,
   dimmed: boolean,
 ) {
   const gitKind = folderGitKind(folder, highlightedFolders)
@@ -878,6 +887,7 @@ function folderLabelClass(
           : '',
     selectedFolder === folder.path ? 'map-folder-label-selected' : '',
     pointed ? 'map-folder-label-pointed' : '',
+    noted && !pointed ? 'map-folder-label-noted' : '',
     dimmed ? 'map-folder-label-dimmed' : '',
   ]
     .filter(Boolean)
@@ -913,6 +923,8 @@ function paintFolderLabel(
   selectedFolder: string | null,
   pointed: boolean,
   pointedColors: string[],
+  noted: boolean,
+  notedColors: string[],
   dimmed: boolean,
 ) {
   el.className = folderLabelClass(
@@ -920,13 +932,27 @@ function paintFolderLabel(
     highlightedFolders,
     selectedFolder,
     pointed,
+    noted,
     dimmed,
   )
   el.replaceChildren()
+  const sessionColor = pointed
+    ? pointedColors[pointedColors.length - 1]
+    : noted
+      ? notedColors[notedColors.length - 1]
+      : undefined
+  if (sessionColor) el.style.setProperty('--session-color', sessionColor)
+  else el.style.removeProperty('--session-color')
+  if (noted) {
+    for (const color of notedColors.length > 0 ? notedColors : ['#9ad8ff']) {
+      const note = document.createElement('span')
+      note.className = 'map-folder-note'
+      note.style.color = color
+      note.innerHTML = noteIconMarkup(13)
+      el.appendChild(note)
+    }
+  }
   if (pointed) {
-    const hex = pointedColors[pointedColors.length - 1]
-    if (hex) el.style.setProperty('--session-color', hex)
-    else el.style.removeProperty('--session-color')
     for (const color of pointedColors.length > 0 ? pointedColors : ['#9ad8ff']) {
       const eye = document.createElement('span')
       eye.className = 'map-folder-eye'
@@ -934,8 +960,6 @@ function paintFolderLabel(
       eye.innerHTML = eyeIconMarkup(13)
       el.appendChild(eye)
     }
-  } else {
-    el.style.removeProperty('--session-color')
   }
   const gitKind = folderGitKind(folder, highlightedFolders)
   const name = document.createElement('span')
@@ -959,6 +983,8 @@ function MapFolderLabels({
   namingFolderPath,
   pointedFolderPaths,
   pointedFolderColors,
+  notedFolderPaths,
+  notedFolderColors,
   dimmedFolderPaths,
 }: {
   folders: Record<string, PlacedFolder>
@@ -967,6 +993,8 @@ function MapFolderLabels({
   namingFolderPath: string | null
   pointedFolderPaths: string[]
   pointedFolderColors: Record<string, string[]>
+  notedFolderPaths: string[]
+  notedFolderColors: Record<string, string[]>
   dimmedFolderPaths: string[]
 }) {
   const camera = useThree((state) => state.camera)
@@ -979,6 +1007,8 @@ function MapFolderLabels({
   const namingRef = useRef(namingFolderPath)
   const pointedRef = useRef(pointedFolderPaths)
   const pointedColorsRef = useRef(pointedFolderColors)
+  const notedRef = useRef(notedFolderPaths)
+  const notedColorsRef = useRef(notedFolderColors)
   const dimmedRef = useRef(dimmedFolderPaths)
   foldersRef.current = folders
   highlightedRef.current = highlightedFolders
@@ -986,6 +1016,8 @@ function MapFolderLabels({
   namingRef.current = namingFolderPath
   pointedRef.current = pointedFolderPaths
   pointedColorsRef.current = pointedFolderColors
+  notedRef.current = notedFolderPaths
+  notedColorsRef.current = notedFolderColors
   dimmedRef.current = dimmedFolderPaths
 
   useLayoutEffect(() => {
@@ -1012,6 +1044,8 @@ function MapFolderLabels({
     const namingFolderPath = namingRef.current
     const pointedFolders = new Set(pointedRef.current)
     const pointedFolderColors = pointedColorsRef.current
+    const notedFolders = new Set(notedRef.current)
+    const notedFolderColors = notedColorsRef.current
     const dimmedFolders = new Set(dimmedRef.current)
     const view = orthoViewPad(camera, size.width, size.height, 120)
     const candidates: {
@@ -1020,6 +1054,7 @@ function MapFolderLabels({
       y: number
       span: number
       pointed: boolean
+      noted: boolean
       dimmed: boolean
       rank: number
     }[] = []
@@ -1028,11 +1063,13 @@ function MapFolderLabels({
       const folder = items[i]
       if (folder.path === namingFolderPath) continue
       const pointed = pointedFolders.has(folder.path)
+      const noted = notedFolders.has(folder.path)
       const dimmed = dimmedFolders.has(folder.path)
       const gitKind = folderGitKind(folder, highlightedFolders)
       const force =
         selectedFolder === folder.path ||
         pointed ||
+        noted ||
         Boolean(gitKind || folder.added) ||
         (dimmedFolders.size > 0 && !dimmed)
       const span = Math.max(folder.width, folder.depth) * view.zoom
@@ -1068,8 +1105,16 @@ function MapFolderLabels({
         y,
         span,
         pointed,
+        noted,
         dimmed,
-        rank: selectedFolder === folder.path ? 0 : pointed ? 1 : force ? 2 : 3,
+        rank:
+          selectedFolder === folder.path
+            ? 0
+            : pointed || noted
+              ? 1
+              : force
+                ? 2
+                : 3,
       })
     }
 
@@ -1098,10 +1143,12 @@ function MapFolderLabels({
         next.folder.path,
         selectedFolder === next.folder.path ? '1' : '0',
         next.pointed ? '1' : '0',
+        next.noted ? '1' : '0',
         next.dimmed ? '1' : '0',
         folderGitKind(next.folder, highlightedFolders) ?? '',
         next.folder.added ? '1' : '0',
         (pointedFolderColors[next.folder.path] ?? []).join(','),
+        (notedFolderColors[next.folder.path] ?? []).join(','),
       ].join('|')
       if (el.dataset.sig !== signature) {
         el.dataset.sig = signature
@@ -1112,6 +1159,8 @@ function MapFolderLabels({
           selectedFolder,
           next.pointed,
           pointedFolderColors[next.folder.path] ?? [],
+          next.noted,
+          notedFolderColors[next.folder.path] ?? [],
           next.dimmed,
         )
       }
@@ -1144,6 +1193,7 @@ function fileLabelClass(file: MapFileLabel) {
     'map-file-label',
     file.selected ? 'map-file-label-selected' : '',
     file.pointed ? 'map-file-label-pointed' : '',
+    file.noted && !file.pointed ? 'map-file-label-noted' : '',
     file.focused ? 'map-file-label-focused' : '',
     file.dimmed ? 'map-file-label-dimmed' : '',
     file.blueprintHex ? 'map-file-label-blueprint' : '',
@@ -1219,7 +1269,7 @@ function MapFileLabels({
       const file = items[i]
       if (file.id === namingRef.current) continue
       const block = Math.min(file.width, file.depth) * zoom
-      const force = file.selected || file.pointed || file.focused || Boolean(file.overlay)
+      const force = file.selected || file.pointed || file.noted || file.focused || Boolean(file.overlay)
       if (!force && block < MIN_FILE_LABEL_PX) continue
       if (
         file.x < view.minX ||
@@ -1264,7 +1314,7 @@ function MapFileLabels({
         y: screen.y,
         w: width,
         outer: onBlock ? 0 : file.outer,
-        rank: file.selected ? 0 : file.pointed || file.focused ? 1 : 2,
+        rank: file.selected ? 0 : file.pointed || file.noted || file.focused ? 1 : 2,
         dist: Math.hypot(screen.x - cx, screen.y - cy),
       })
     }
@@ -1315,6 +1365,8 @@ function MapFileLabels({
       }
       if (next.file.pointed && next.file.pointedColor) {
         el.style.setProperty('--session-color', next.file.pointedColor)
+      } else if (next.file.noted && next.file.notedColor) {
+        el.style.setProperty('--session-color', next.file.notedColor)
       } else {
         el.style.removeProperty('--session-color')
       }

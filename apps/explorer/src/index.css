@@ -486,12 +486,14 @@ button {
   opacity: 1;
 }
 
-.map-folder-label-pointed {
+.map-folder-label-pointed,
+.map-folder-label-noted {
   border-color: var(--session-color, #9ad8ff);
   color: #d7eef8;
 }
 
 .map-folder-label-pointed.map-folder-label-selected,
+.map-folder-label-noted.map-folder-label-selected,
 .map-folder-label-added.map-folder-label-selected,
 .map-folder-label-blueprint.map-folder-label-selected,
 .map-folder-label-add.map-folder-label-selected,
@@ -500,14 +502,16 @@ button {
   border-color: #ffffff;
 }
 
-.map-folder-eye {
+.map-folder-eye,
+.map-folder-note {
   display: grid;
   place-items: center;
   flex: none;
   line-height: 0;
 }
 
-.map-folder-eye svg {
+.map-folder-eye svg,
+.map-folder-note svg {
   display: block;
 }
 
@@ -564,12 +568,14 @@ button {
 }
 
 .map-file-label-pointed,
+.map-file-label-noted,
 .map-file-label-focused {
   color: #d7eef8;
   box-shadow: inset 0 0 0 1px var(--session-color, #9ad8ff);
 }
 
 .map-file-label-pointed.map-file-label-selected,
+.map-file-label-noted.map-file-label-selected,
 .map-file-label-focused.map-file-label-selected {
   box-shadow: inset 0 0 0 1px #ffffff;
 }
@@ -1339,11 +1345,11 @@ button {
 .hud-info-name {
   flex: 1 1 auto;
   width: 100%;
-  min-width: 0;
+  min-width: 4ch;
   margin: 0;
   padding: 0 0 1px;
   border: none;
-  border-bottom: 1px solid transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 0;
   background: transparent;
   color: inherit;
@@ -1352,6 +1358,7 @@ button {
   text-overflow: ellipsis;
   outline: none;
   cursor: text;
+  pointer-events: auto;
 }
 
 .hud-info-name:hover {
@@ -1430,10 +1437,15 @@ button {
   line-height: 0;
 }
 
-.blueprint-eye-row {
+.blueprint-eye-row,
+.blueprint-mark-row {
   display: flex;
   align-items: center;
   gap: 2px;
+}
+
+.blueprint-mark-row {
+  gap: 4px;
 }
 
 .blueprint-eye svg {
@@ -1506,6 +1518,15 @@ button {
   gap: 8px;
   margin-top: 16px;
   pointer-events: auto;
+}
+
+.hud-session-close,
+.hud-session-close .hud-button {
+  pointer-events: auto;
+}
+
+.hud-panel-planned[data-minimized='true'] .hud-session-close {
+  margin-top: 8px;
 }
 
 .hud-session-actions .hud-decide {
