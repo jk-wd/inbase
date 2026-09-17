@@ -46,8 +46,10 @@ On a new file-change request inside \`target\`, in this order:
 2. Reply: \`Connecting to the <color> session.\`
 3. Run \`npx inbase read-blueprint --session COLOR\`
 4. Reply: \`I see on the blueprint ...\` (name files, folders, symbols, notes)
-5. Run \`npx inbase report-plan --session COLOR --feature "..." --steps "..."\`
-6. Edit files only after \`VISUAL_CODER_EXECUTE\`. Then run
+5. MUST run \`npx inbase report-plan --session COLOR --feature "..." --steps "..."\`
+   before any file edit. Listing steps in chat is not the plan.
+6. Edit files only after \`VISUAL_CODER_EXECUTE\`. Never edit before
+   \`report-plan\`. Then run
    \`npx inbase propose-patch --session COLOR\` with \`--note "path: one-line goal"\`
    for each changed file and folder. No patch file. If the
    next step is invoked, implement it now in the same turn. After the last

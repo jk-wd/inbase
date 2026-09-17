@@ -836,6 +836,8 @@ const FOLDER_ENTRANCE_Z = 1.35
 const MIN_FILE_LABEL_PX = 16
 const FILE_LABEL_HEIGHT = 15
 const FILE_LABEL_GAP = 4
+const FILE_LABEL_STACK_MAX = 3
+const FILE_LABEL_STACK_GAP = 2
 const MAX_FILE_LABELS = 28
 const FILE_LABEL_CHAR_W = 7.2
 const FILE_LABEL_PAD_X = 12
@@ -1228,18 +1230,131 @@ function paintFileLabel(el: HTMLElement, file: MapFileLabel) {
   el.appendChild(name)
 }
 
+type FileLabelCandidate = {
+  file: MapFileLabel
+  x: number
+  y: number
+  w: number
+  outer: 1 | -1 | 0
+  rank: number
+  dist: number
+}
+
+type FileLabelBox = { l: number; t: number; r: number; b: number }
+
+function fileLabelBounds(
+  x: number,
+  y: number,
+  w: number,
+  outer: 1 | -1 | 0,
+): FileLabelBox {
+  const left = outer === 1 ? x : outer === -1 ? x - w : x - w / 2
+  const right = outer === 1 ? x + w : outer === -1 ? x : x + w / 2
+  return {
+    l: left,
+    t: y - FILE_LABEL_HEIGHT / 2,
+    r: right,
+    b: y + FILE_LABEL_HEIGHT / 2,
+  }
+}
+
 function labelsOverlap(
   left: number,
   top: number,
   right: number,
   bottom: number,
-  placed: { l: number; t: number; r: number; b: number }[],
+  placed: FileLabelBox[],
 ) {
   for (let i = 0; i < placed.length; i += 1) {
     const box = placed[i]
     if (left < box.r && right > box.l && top < box.b && bottom > box.t) return true
   }
   return false
+}
+
+function boxesOverlap(a: FileLabelBox, b: FileLabelBox, pad: number) {
+  return (
+    a.l < b.r + pad && a.r > b.l - pad && a.t < b.b + pad && a.b > b.t - pad
+  )
+}
+
+function pickStackedFileLabels(candidates: FileLabelCandidate[], limit: number) {
+  const n = candidates.length
+  if (n === 0 || limit <= 0) return [] as FileLabelCandidate[]
+
+  const boxes = candidates.map((item) =>
+    fileLabelBounds(item.x, item.y, item.w, item.outer),
+  )
+  const parent = Array.from({ length: n }, (_, i) => i)
+  const find = (i: number) => {
+    let root = i
+    while (parent[root] !== root) root = parent[root]
+    let current = i
+    while (parent[current] !== root) {
+      const next = parent[current]
+      parent[current] = root
+      current = next
+    }
+    return root
+  }
+  const unite = (a: number, b: number) => {
+    const ra = find(a)
+    const rb = find(b)
+    if (ra !== rb) parent[rb] = ra
+  }
+
+  for (let i = 0; i < n; i += 1) {
+    for (let j = i + 1; j < n; j += 1) {
+      if (boxesOverlap(boxes[i], boxes[j], 2)) unite(i, j)
+    }
+  }
+
+  const groups = new Map<number, number[]>()
+  for (let i = 0; i < n; i += 1) {
+    const root = find(i)
+    const list = groups.get(root)
+    if (list) list.push(i)
+    else groups.set(root, [i])
+  }
+
+  const clusters = [...groups.values()].map((idxs) => {
+    const items = idxs.map((i) => candidates[i])
+    items.sort((a, b) => a.rank - b.rank || a.dist - b.dist)
+    return items
+  })
+  clusters.sort((a, b) => a[0].rank - b[0].rank || a[0].dist - b[0].dist)
+
+  const placed: FileLabelBox[] = []
+  const visible: FileLabelCandidate[] = []
+  const pitch = FILE_LABEL_HEIGHT + FILE_LABEL_STACK_GAP
+
+  for (let c = 0; c < clusters.length && visible.length < limit; c += 1) {
+    const cluster = clusters[c]
+    let take = Math.min(FILE_LABEL_STACK_MAX, cluster.length, limit - visible.length)
+    while (take > 0) {
+      const chosen = cluster.slice(0, take).sort((a, b) => a.y - b.y || a.dist - b.dist)
+      const centerY = chosen.reduce((sum, item) => sum + item.y, 0) / chosen.length
+      const startY = centerY - ((chosen.length - 1) * pitch) / 2
+      const stacked = chosen.map((item, i) => ({
+        ...item,
+        y: startY + i * pitch,
+      }))
+      const stackBoxes = stacked.map((item) =>
+        fileLabelBounds(item.x, item.y, item.w, item.outer),
+      )
+      const collides = stackBoxes.some((box) =>
+        labelsOverlap(box.l, box.t - 2, box.r, box.b + 2, placed),
+      )
+      if (!collides) {
+        placed.push(...stackBoxes)
+        visible.push(...stacked)
+        break
+      }
+      take -= 1
+    }
+  }
+
+  return visible
 }
 
 function MapFileLabels({
@@ -1281,15 +1396,7 @@ function MapFileLabels({
     const view = orthoViewPad(camera, size.width, size.height, 80)
     const cx = size.width * 0.5
     const cy = size.height * 0.5
-    const candidates: {
-      file: MapFileLabel
-      x: number
-      y: number
-      w: number
-      outer: 1 | -1 | 0
-      rank: number
-      dist: number
-    }[] = []
+    const candidates: FileLabelCandidate[] = []
 
     for (let i = 0; i < items.length; i += 1) {
       const file = items[i]
@@ -1347,22 +1454,7 @@ function MapFileLabels({
       })
     }
 
-    candidates.sort((a, b) => a.rank - b.rank || a.dist - b.dist)
-
-    const placed: { l: number; t: number; r: number; b: number }[] = []
-    const visible: typeof candidates = []
-    for (let i = 0; i < candidates.length && visible.length < MAX_FILE_LABELS; i += 1) {
-      const next = candidates[i]
-      const left =
-        next.outer === 1 ? next.x : next.outer === -1 ? next.x - next.w : next.x - next.w / 2
-      const right =
-        next.outer === 1 ? next.x + next.w : next.outer === -1 ? next.x : next.x + next.w / 2
-      const top = next.y - FILE_LABEL_HEIGHT / 2
-      const bottom = next.y + FILE_LABEL_HEIGHT / 2
-      if (labelsOverlap(left, top - 2, right, bottom + 2, placed)) continue
-      placed.push({ l: left, t: top, r: right, b: bottom })
-      visible.push(next)
-    }
+    const visible = pickStackedFileLabels(candidates, MAX_FILE_LABELS)
 
     while (layer.children.length < visible.length) {
       const el = document.createElement('div')

@@ -4,7 +4,7 @@ description: Attach this chat to the Lime Inbase session
 
 The user invoked `/lime`. Attach to **Lime**. Use `--session lime` for every later `inbase` command.
 
-If this chat already attached, stay. Do not attach. Treat a later request as a change request: `report-plan` from the last proposal, then implement.
+If this chat already attached, stay. Do not attach. Treat a later request as a change request: MUST `report-plan` from the last proposal first, then implement. Never edit before `report-plan`.
 
 ```bash
 npx inbase attach --color lime
@@ -12,10 +12,10 @@ npx inbase attach --color lime
 
 If attach fails, reply with that output and stop.
 
-Continue the Inbase visual edits skill from `read-blueprint` with `--session lime`. After it returns, reply `I see on the blueprint ...` then continue.
+Continue the Inbase visual edits skill from `read-blueprint` with `--session lime`. After it returns, reply `I see on the blueprint ...`. Then MUST `report-plan`. Only after that command invokes the first step, implement. Never edit before `report-plan`.
 
 The user's request is:
 
 $ARGUMENTS
 
-If `$ARGUMENTS` is empty, there is no chat instruction. After `read-blueprint`, if the global or this session's local blueprint is enabled, that is the request: create those files, folders, and symbols. Ask in chat if you need more information. Do not invent extra work. If both blueprints are empty, stop and wait for a request, `/explainit`, or `/stop`.
+If `$ARGUMENTS` is empty, there is no chat instruction. After `read-blueprint`, if the global or this session's local blueprint is enabled, that is the request: MUST `report-plan` for those files, folders, and symbols first, then implement. Ask in chat if you need more information. Do not invent extra work. Do not edit before `report-plan`. If both blueprints are empty, stop and wait for a request, `/explainit`, or `/stop`.

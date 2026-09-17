@@ -1,0 +1,403 @@
+{
+  "version": 1,
+  "kind": "inbase-blueprint",
+  "name": "balloon-shooter.json",
+  "savedAt": "2026-09-17T12:23:57.030Z",
+  "global": {
+    "hidden": false,
+    "files": [
+      {
+        "id": "src/game-objects/balloon.ts",
+        "name": "balloon.ts",
+        "path": "src/game-objects/balloon.ts",
+        "folder": "src/game-objects"
+      },
+      {
+        "id": "src/components/score.tsx",
+        "name": "score.tsx",
+        "path": "src/components/score.tsx",
+        "folder": "src/components"
+      },
+      {
+        "id": "src/utils/mouse.ts",
+        "name": "mouse.ts",
+        "path": "src/utils/mouse.ts",
+        "folder": "src/utils"
+      },
+      {
+        "id": "src/game-state.ts",
+        "name": "game-state.ts",
+        "path": "src/game-state.ts",
+        "folder": "src"
+      },
+      {
+        "id": "src/stores/score.ts",
+        "name": "score.ts",
+        "path": "src/stores/score.ts",
+        "folder": "src/stores"
+      },
+      {
+        "id": "src/types/balloon.ts",
+        "name": "balloon.ts",
+        "path": "src/types/balloon.ts",
+        "folder": "src/types"
+      },
+      {
+        "id": "src/assets/balloon-red.png",
+        "name": "balloon-red.png",
+        "path": "src/assets/balloon-red.png",
+        "folder": "src/assets"
+      },
+      {
+        "id": "src/assets/balloon-green.png",
+        "name": "balloon-green.png",
+        "path": "src/assets/balloon-green.png",
+        "folder": "src/assets"
+      },
+      {
+        "id": "src/assets/balloon-blue.png",
+        "name": "balloon-blue.png",
+        "path": "src/assets/balloon-blue.png",
+        "folder": "src/assets"
+      },
+      {
+        "id": "src/assets/park.png",
+        "name": "park.png",
+        "path": "src/assets/park.png",
+        "folder": "src/assets"
+      },
+      {
+        "id": "src/game-objects/background.ts",
+        "name": "background.ts",
+        "path": "src/game-objects/background.ts",
+        "folder": "src/game-objects"
+      },
+      {
+        "id": "src/socket/server.ts",
+        "name": "server.ts",
+        "path": "src/socket/server.ts",
+        "folder": "src/socket"
+      },
+      {
+        "id": "src/components/username.tsx",
+        "name": "username.tsx",
+        "path": "src/components/username.tsx",
+        "folder": "src/components"
+      },
+      {
+        "id": "src/components/modal.tsx",
+        "name": "modal.tsx",
+        "path": "src/components/modal.tsx",
+        "folder": "src/components"
+      },
+      {
+        "id": "src/components/Start.tsx",
+        "name": "Start.tsx",
+        "path": "src/components/Start.tsx",
+        "folder": "src/components"
+      },
+      {
+        "id": "src/utils/socket.ts",
+        "name": "socket.ts",
+        "path": "src/utils/socket.ts",
+        "folder": "src/utils"
+      }
+    ],
+    "folders": [
+      {
+        "id": "src",
+        "name": "src",
+        "path": "src",
+        "parent": "."
+      },
+      {
+        "id": "src/assets",
+        "name": "assets",
+        "path": "src/assets",
+        "parent": "src"
+      },
+      {
+        "id": "src/components",
+        "name": "components",
+        "path": "src/components",
+        "parent": "src"
+      },
+      {
+        "id": "src/game-objects",
+        "name": "game-objects",
+        "path": "src/game-objects",
+        "parent": "src"
+      },
+      {
+        "id": "src/utils",
+        "name": "utils",
+        "path": "src/utils",
+        "parent": "src"
+      },
+      {
+        "id": "src/stores",
+        "name": "stores",
+        "path": "src/stores",
+        "parent": "src"
+      },
+      {
+        "id": "src/types",
+        "name": "types",
+        "path": "src/types",
+        "parent": "src"
+      },
+      {
+        "id": "src/socket",
+        "name": "socket",
+        "path": "src/socket",
+        "parent": "src"
+      }
+    ],
+    "addedFunctions": [
+      {
+        "name": "hitDetection",
+        "file": "src/utils/mouse.ts"
+      },
+      {
+        "name": "connect",
+        "file": "src/utils/socket.ts"
+      },
+      {
+        "name": "disconnect",
+        "file": "src/utils/socket.ts"
+      },
+      {
+        "name": "sendEvent",
+        "file": "src/utils/socket.ts"
+      }
+    ],
+    "addedVariables": [],
+    "addedImports": [
+      {
+        "name": "score",
+        "from": "src/stores/score.ts",
+        "file": "src/components/score.tsx"
+      },
+      {
+        "name": "score",
+        "from": "src/stores/score.ts",
+        "file": "src/game-state.ts"
+      },
+      {
+        "name": "balloon-red",
+        "from": "src/assets/balloon-red.png",
+        "file": "src/game-objects/balloon.ts"
+      },
+      {
+        "name": "balloon-blue",
+        "from": "src/assets/balloon-blue.png",
+        "file": "src/game-objects/balloon.ts"
+      },
+      {
+        "name": "balloon-green",
+        "from": "src/assets/balloon-green.png",
+        "file": "src/game-objects/balloon.ts"
+      },
+      {
+        "name": "park",
+        "from": "src/assets/park.png",
+        "file": "src/game-objects/background.ts"
+      },
+      {
+        "name": "modal",
+        "from": "src/components/modal.tsx",
+        "file": "src/components/Start.tsx"
+      },
+      {
+        "name": "username",
+        "from": "src/components/username.tsx",
+        "file": "src/components/Start.tsx"
+      },
+      {
+        "name": "Start",
+        "from": "src/components/Start.tsx",
+        "file": "main.tsx"
+      },
+      {
+        "name": "socket",
+        "from": "src/utils/socket.ts",
+        "file": "src/components/Start.tsx"
+      }
+    ],
+    "notes": [
+      {
+        "file": "src/components/score.tsx",
+        "kind": "file",
+        "note": "Make a react component here that displays the number of balloons we have hit."
+      },
+      {
+        "file": "index.html",
+        "kind": "file",
+        "note": "<Canvas> element can be rendered directly in the HTML \n<div id=\"ui-overlay\" /> Wrap the canvast element with a div where we will mount the react UI overlay to"
+      },
+      {
+        "file": "src/socket/server.ts",
+        "kind": "file",
+        "note": "- Use socket.io\n- Handle on connection event\n- User must conect with username\n- add hit event used to notify all players to updtae there scores\n- keep a in-memory score map object that is the source of truth for the hits"
+      },
+      {
+        "file": "src/components",
+        "kind": "folder",
+        "note": "Components folder is for react components"
+      },
+      {
+        "file": "src/components/username.tsx",
+        "kind": "file",
+        "note": "Input field with submit button for entering username"
+      },
+      {
+        "file": "src/components/modal.tsx",
+        "kind": "file",
+        "note": "React component with children that renders the children in modal, always has close button"
+      },
+      {
+        "file": "src/components/Start.tsx",
+        "kind": "file",
+        "note": "Start overlay fo the game showing the username modal game doesnt start until username is entered and we have seat in the socket server"
+      },
+      {
+        "file": "src/utils/socket.ts",
+        "kind": "file",
+        "note": "All socket connection helpers go here used by the FE to communicate with the socket server"
+      }
+    ],
+    "pointers": []
+  },
+  "locals": [
+    {
+      "color": "coral",
+      "colorName": "Coral",
+      "colorHex": "#f87171",
+      "hidden": false,
+      "files": [],
+      "folders": [],
+      "addedFunctions": [],
+      "addedVariables": [],
+      "addedImports": [],
+      "notes": [],
+      "pointers": []
+    },
+    {
+      "color": "amber",
+      "colorName": "Amber",
+      "colorHex": "#fbbf24",
+      "hidden": false,
+      "files": [],
+      "folders": [],
+      "addedFunctions": [],
+      "addedVariables": [],
+      "addedImports": [],
+      "notes": [],
+      "pointers": []
+    },
+    {
+      "color": "lime",
+      "colorName": "Lime",
+      "colorHex": "#a3e635",
+      "hidden": false,
+      "files": [],
+      "folders": [],
+      "addedFunctions": [],
+      "addedVariables": [],
+      "addedImports": [],
+      "notes": [],
+      "pointers": []
+    },
+    {
+      "color": "orange",
+      "colorName": "Orange",
+      "colorHex": "#fb923c",
+      "hidden": false,
+      "files": [],
+      "folders": [],
+      "addedFunctions": [],
+      "addedVariables": [],
+      "addedImports": [],
+      "notes": [],
+      "pointers": []
+    },
+    {
+      "color": "violet",
+      "colorName": "Violet",
+      "colorHex": "#c084fc",
+      "hidden": false,
+      "files": [],
+      "folders": [],
+      "addedFunctions": [],
+      "addedVariables": [],
+      "addedImports": [],
+      "notes": [],
+      "pointers": []
+    },
+    {
+      "color": "teal",
+      "colorName": "Teal",
+      "colorHex": "#2dd4bf",
+      "hidden": false,
+      "files": [],
+      "folders": [],
+      "addedFunctions": [],
+      "addedVariables": [],
+      "addedImports": [],
+      "notes": [],
+      "pointers": []
+    },
+    {
+      "color": "crimson",
+      "colorName": "Crimson",
+      "colorHex": "#dc2626",
+      "hidden": false,
+      "files": [],
+      "folders": [],
+      "addedFunctions": [],
+      "addedVariables": [],
+      "addedImports": [],
+      "notes": [],
+      "pointers": []
+    },
+    {
+      "color": "forest",
+      "colorName": "Forest",
+      "colorHex": "#15803d",
+      "hidden": false,
+      "files": [],
+      "folders": [],
+      "addedFunctions": [],
+      "addedVariables": [],
+      "addedImports": [],
+      "notes": [],
+      "pointers": []
+    },
+    {
+      "color": "grey",
+      "colorName": "Grey",
+      "colorHex": "#4b5563",
+      "hidden": false,
+      "files": [],
+      "folders": [],
+      "addedFunctions": [],
+      "addedVariables": [],
+      "addedImports": [],
+      "notes": [],
+      "pointers": []
+    },
+    {
+      "color": "white",
+      "colorName": "White",
+      "colorHex": "#f4f4f5",
+      "hidden": false,
+      "files": [],
+      "folders": [],
+      "addedFunctions": [],
+      "addedVariables": [],
+      "addedImports": [],
+      "notes": [],
+      "pointers": []
+    }
+  ]
+}

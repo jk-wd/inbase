@@ -318,8 +318,8 @@ export async function attachSession(args) {
     ' If this conversation already printed VISUAL_CODER_SESSION, this is the wrong slot: stop, stay on the original color, and use that --session. Do not report a new plan here.'
   console.log(
     colorName
-      ? `VISUAL_CODER_ATTACHED Attached to the ${colorName} session (${manifest.phase}). Tell the user you connected to the ${colorName} chat. Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then report a plan if you can. After report-plan, implement every invoked step in this same turn. After the last recorded step, wait for /explainit, /stop, or a change request in chat.${wrongSlot}`
-      : `VISUAL_CODER_ATTACHED Attached to the next waiting visualizer session ${manifest.name || manifest.sessionId} (${manifest.phase}). Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then report a plan if you can. After report-plan, implement every invoked step in this same turn. After the last recorded step, wait for /explainit, /stop, or a change request in chat.${wrongSlot}`,
+      ? `VISUAL_CODER_ATTACHED Attached to the ${colorName} session (${manifest.phase}). Tell the user you connected to the ${colorName} chat. Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then you MUST run report-plan. Do not edit any files before report-plan. After report-plan, implement every invoked step in this same turn. After the last recorded step, wait for /explainit, /stop, or a change request in chat.${wrongSlot}`
+      : `VISUAL_CODER_ATTACHED Attached to the next waiting visualizer session ${manifest.name || manifest.sessionId} (${manifest.phase}). Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then you MUST run report-plan. Do not edit any files before report-plan. After report-plan, implement every invoked step in this same turn. After the last recorded step, wait for /explainit, /stop, or a change request in chat.${wrongSlot}`,
   )
 }
 
@@ -376,7 +376,7 @@ function printSessionBlueprints(store, dataDir, sessionId) {
   printBlueprintDump(global)
   printBlueprintDump(local, { local: true, colorName })
   console.log(
-    'VISUAL_CODER_SAY_BLUEPRINT Reply in chat now. Start with "I see on the blueprint" and name every file, folder, function, variable, import, note, and pointer from the dumps. Say which items are global and which are this session\'s color. This confirms you interpreted the blueprint correctly. Then continue. If both dumps are empty, say "I see nothing on the blueprint yet."',
+    'VISUAL_CODER_SAY_BLUEPRINT Reply in chat now. Start with "I see on the blueprint" and name every file, folder, function, variable, import, note, and pointer from the dumps. Say which items are global and which are this session\'s color. This confirms you interpreted the blueprint correctly. Then, unless you were told to stop and wait, you MUST run report-plan. Do not edit files yet. If both dumps are empty, say "I see nothing on the blueprint yet."',
   )
   store.markBlueprintSeen(dataDir, sessionId, global.revision, local.revision)
   return {
@@ -430,7 +430,7 @@ export async function readBlueprint(args) {
     console.log('VISUAL_CODER_INSTRUCTION_END')
   } else if (dumped.global.enabled || dumped.local.enabled) {
     console.log(
-      'VISUAL_CODER_BLUEPRINT_ONLY No chat instruction. An enabled blueprint is the request: create those files, folders, and symbols. Ask the user if you need more information before reporting the plan. Do not invent extra work.',
+      'VISUAL_CODER_BLUEPRINT_ONLY No chat instruction. An enabled blueprint is the request: MUST run report-plan for those files, folders, and symbols first, then implement. Ask the user if you need more information before reporting the plan. Do not invent extra work. Do not edit before report-plan.',
     )
   } else {
     console.log(
