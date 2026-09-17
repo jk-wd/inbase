@@ -8,11 +8,12 @@ description: >-
   Inbase session, or to a color with /coral /red /amber and the other session
   colors. Later turns stay in that session: never attach again. MUST run
   `npx inbase report-plan` before any file edit or propose-patch — first the
-  plan, then implement, always. Chat steps are not the plan. A later change
-  request must report-plan from the last proposal before editing, including
-  after the last recorded step. Do not use for files outside that target
-  (sibling apps, CLI, map tooling), git, docs-only, lockfiles, questions, or
-  `/extract-blueprint`.
+  plan, then implement, always. Chat steps are not the plan. After each
+  invoked step, MUST propose-patch before the next step. Never implement the
+  whole plan first. A later change request must report-plan from the last
+  proposal before editing, including after the last recorded step. Do not
+  use for files outside that target (sibling apps, CLI, map tooling), git,
+  docs-only, lockfiles, questions, or `/extract-blueprint`.
 ---
 
 # Inbase visual edits
@@ -87,13 +88,17 @@ npx inbase report-plan \
   --steps "Follow-up D"
 ```
 
+**One step, then `propose-patch`. Always. Never implement the whole plan first.**
+
 `report-plan` and each recorded non-last step invoke the next step
-(`VISUAL_CODER_EXECUTE`). Never implement before that execute line. Implement
-the invoked step in the **same turn**. Do not stop. Do not ask the user to review a mid-plan step.
+(`VISUAL_CODER_EXECUTE`). Never implement before that execute line. After
+`VISUAL_CODER_EXECUTE` for step N, edit files for step N only. Then MUST
+`propose-patch` before any file for step N+1. Chat "done" is not the record.
+Do not batch all plan steps into one edit pass. A non-last `propose-patch`
+invokes the next step — implement that next step only, then `propose-patch`
+again, in the **same turn**. Do not stop. Do not ask the user to review a mid-plan step.
 After the last recorded step, stop for `/explainit`, `/stop`, or a change
 request.
-
-After `VISUAL_CODER_EXECUTE`, edit live files for that step only. Then:
 
 ```bash
 npx inbase propose-patch --session <color> \
@@ -102,8 +107,7 @@ npx inbase propose-patch --session <color> \
 
 Pass `--note "path: one-line goal"` for every updated, added, or deleted file
 and each changed folder. Do not pass a patch file. Do not write a unified
-diff. Then implement the next invoked step. After the last recorded step,
-**stop**.
+diff. After the last recorded step, **stop**.
 
 Prefer `npx inbase`. Run it from the project working directory.
 Do not prefix it with `cd /absolute/path`. Do not request extra Shell
@@ -203,18 +207,20 @@ npx inbase read-blueprint --session <color>
 6. **MUST run `report-plan` now** (same shape as above). Do not edit. Do not
    `propose-patch`. Wait for `VISUAL_CODER_EXECUTE` from that command.
 
-7. **Only then** implement the invoked step. `VISUAL_CODER_EXECUTE` exists
-   only after `report-plan`. Do **not** run `wait-for-approval`. Do **not**
-   edit until that execute line.
+7. **Only then** implement the **invoked step only**. Then MUST
+   `propose-patch` before touching any later step. Repeat: one step, one
+   `propose-patch`. Do **not** implement the whole plan then record once.
+   `VISUAL_CODER_EXECUTE` exists only after `report-plan`. Do **not** run
+   `wait-for-approval`. Do **not** edit until that execute line.
 
 8. **Change request** while a plan or proposal is waiting (not `/explainit` or
    `/stop`), including after the last recorded step: stay in this session.
    **Do not attach. Do not edit files yet.** MUST `report-plan` first. Replace
    the waiting step with remaining steps for the new goal. `report-plan` with
    those remaining `--steps` only — that replaces the waiting proposal. If
-   `VISUAL_CODER_EXECUTE`, implement now. Never tell the user to finish or
-   close the session. Never `propose-patch` until `report-plan` has replaced
-   the waiting step.
+   `VISUAL_CODER_EXECUTE`, implement the invoked step only, then
+   `propose-patch`. Never tell the user to finish or close the session. Never
+   `propose-patch` until `report-plan` has replaced the waiting step.
 
 9. **`/explainit`**: do not edit. `npx inbase explain start` (with `--question`
    when given). `VISUAL_CODER_EXPLAIN` → one `--step` for that path.
@@ -243,6 +249,8 @@ npx inbase read-blueprint --session <color>
 - Invent extra files when an enabled blueprint is leading; ask before differing
 - Read global `user-context.json` for placed files; follow another session's local blueprint; use camera viewpoint to choose files
 - Edit before `VISUAL_CODER_EXECUTE` on a first plan or a change request
+- Implement two or more plan steps before `propose-patch`, or skip
+  `propose-patch` after a finished step
 - Stop after a non-last `propose-patch`
 - Prefix `npx inbase` with `cd /absolute/path`, request extra Shell permissions, pass a patch file, skip `--note`, or wait for the user to approve `propose-patch`
 - Explore after the last recorded step; keep editing after `/stop`

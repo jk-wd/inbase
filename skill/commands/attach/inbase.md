@@ -14,6 +14,6 @@ If that fails with `VISUAL_CODER_NOT_RUNNING`, `VISUAL_CODER_ALL_COLORS_LOCKED`,
 
 `VISUAL_CODER_SESSION` is the color. Use `--session` with that color for every later command.
 
-Continue the Inbase visual edits skill from `read-blueprint`. After it returns, reply `I see on the blueprint ...`. Then MUST `report-plan`. Only after that command invokes the first step, implement. Never edit before `report-plan`.
+Continue the Inbase visual edits skill from `read-blueprint`. After it returns, reply `I see on the blueprint ...`. Then MUST `report-plan`. Only after that command invokes the first step, implement that step only. After each step's edits, MUST `propose-patch` before the next step. Never implement the whole plan first. Never edit before `report-plan`.
 
 If this chat has no request text, after `read-blueprint`, if the global or this session's local blueprint is enabled, that is the request: MUST `report-plan` for those files, folders, and symbols first, then implement. Ask in chat if you need more information. Do not invent extra work. Do not edit before `report-plan`. If both blueprints are empty, stop and wait for a request, `/explainit`, or `/stop`.

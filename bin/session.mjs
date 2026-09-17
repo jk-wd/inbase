@@ -28,7 +28,11 @@ function printAck(kind, detail) {
 }
 
 function proposePatchHint(sessionId) {
-  return `then inbase propose-patch --session ${sessionId} with --note "path: one-line goal" for each changed file and folder. No patch file.`
+  return `then MUST inbase propose-patch --session ${sessionId} with --note "path: one-line goal" for each changed file and folder. No patch file.`
+}
+
+function executeStepHint(sessionId) {
+  return `Edit live files for THIS invoked step only, ${proposePatchHint(sessionId)} Do not implement later steps first. After propose-patch, if the next step is invoked, repeat for that step only.`
 }
 
 const EXPLAIN_BODY_HINT =
@@ -263,8 +267,8 @@ function emitApprovalHandshake(store, dataDir, sessionId, manifest) {
     const continuing = (manifest.diffs?.length ?? 0) > 0
     console.log(
       continuing
-        ? `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Continue immediately: edit live files for this step only, ${proposePatchHint(sessionId)} Do not stop. Implement the next invoked step in this same turn.`
-        : `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Re-read the global blueprint.json and this session's local blueprint before implementing; the user can place files and folders at any time. Edit the live project files for this step only (Write, StrReplace, Delete). Then record the step with inbase propose-patch --session ${sessionId} — pass --note "path: one-line goal" for each changed file and folder, no patch file. After propose-patch, implement the next invoked step in this same turn. Do not stop until after the last recorded step.`,
+        ? `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Continue immediately. ${executeStepHint(sessionId)} Do not stop.`
+        : `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Re-read the global blueprint.json and this session's local blueprint before implementing; the user can place files and folders at any time. ${executeStepHint(sessionId)} Do not stop until after the last recorded step.`,
     )
     process.exit(0)
   }
@@ -318,8 +322,8 @@ export async function attachSession(args) {
     ' If this conversation already printed VISUAL_CODER_SESSION, this is the wrong slot: stop, stay on the original color, and use that --session. Do not report a new plan here.'
   console.log(
     colorName
-      ? `VISUAL_CODER_ATTACHED Attached to the ${colorName} session (${manifest.phase}). Tell the user you connected to the ${colorName} chat. Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then you MUST run report-plan. Do not edit any files before report-plan. After report-plan, implement every invoked step in this same turn. After the last recorded step, wait for /explainit, /stop, or a change request in chat.${wrongSlot}`
-      : `VISUAL_CODER_ATTACHED Attached to the next waiting visualizer session ${manifest.name || manifest.sessionId} (${manifest.phase}). Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then you MUST run report-plan. Do not edit any files before report-plan. After report-plan, implement every invoked step in this same turn. After the last recorded step, wait for /explainit, /stop, or a change request in chat.${wrongSlot}`,
+      ? `VISUAL_CODER_ATTACHED Attached to the ${colorName} session (${manifest.phase}). Tell the user you connected to the ${colorName} chat. Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then you MUST run report-plan. Do not edit any files before report-plan. After report-plan, implement the first invoked step only, then MUST propose-patch. Repeat that loop for each later invoked step. Never implement the whole plan before propose-patch. After the last recorded step, wait for /explainit, /stop, or a change request in chat.${wrongSlot}`
+      : `VISUAL_CODER_ATTACHED Attached to the next waiting visualizer session ${manifest.name || manifest.sessionId} (${manifest.phase}). Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then you MUST run report-plan. Do not edit any files before report-plan. After report-plan, implement the first invoked step only, then MUST propose-patch. Repeat that loop for each later invoked step. Never implement the whole plan before propose-patch. After the last recorded step, wait for /explainit, /stop, or a change request in chat.${wrongSlot}`,
   )
 }
 
@@ -497,7 +501,7 @@ export async function reportPlan(args) {
       `VISUAL_CODER_PLAN_READY Revised the plan for session ${sessionId} from step ${startAt}. ${keptLabel}New remaining steps: ${remainingList}. Replaced the waiting proposal with the new remaining steps. Do not ask the user to close the session. Do not edit files before this report-plan.`,
     )
     console.log(
-      `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Edit the live files for that step, ${proposePatchHint(sessionId)} After propose-patch, implement the next invoked step in this same turn. Do not stop until after the last recorded step.`,
+      `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. ${executeStepHint(sessionId)} Do not stop until after the last recorded step.`,
     )
     return
   }
@@ -508,7 +512,7 @@ export async function reportPlan(args) {
     const title = manifest.steps.find((item) => item.index === manifest.currentStep)
       ?.title
     console.log(
-      `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Edit the live files for that step, ${proposePatchHint(sessionId)} After propose-patch, implement the next invoked step in this same turn. Do not stop until after the last recorded step.`,
+      `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. ${executeStepHint(sessionId)} Do not stop until after the last recorded step.`,
     )
   }
 }
@@ -638,10 +642,10 @@ export async function proposePatch(args) {
         : `step ${manifest.currentStep}`,
     )
     console.log(
-      `VISUAL_CODER_STEP_READY Recorded the current map overlay as ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${overlay.files.length} changed, ${overlay.creates.length} added. The next step is already invoked. Implement that original next plan step now in this same turn, then propose-patch again. Do not stop. Do not ask the user to review this step.`,
+      `VISUAL_CODER_STEP_READY Recorded the current map overlay as ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${overlay.files.length} changed, ${overlay.creates.length} added. The next step is already invoked. Implement that next plan step only, then MUST propose-patch again before any later step. Do not stop. Do not ask the user to review this step.`,
     )
     console.log(
-      `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Continue immediately: edit live files for this step only, ${proposePatchHint(sessionId)} Do not stop. Implement the next invoked step in this same turn.`,
+      `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Continue immediately. ${executeStepHint(sessionId)} Do not stop.`,
     )
     return
   }

@@ -12,7 +12,7 @@ npx inbase attach --color white
 
 If attach fails, reply with that output and stop.
 
-Continue the Inbase visual edits skill from `read-blueprint` with `--session white`. After it returns, reply `I see on the blueprint ...`. Then MUST `report-plan`. Only after that command invokes the first step, implement. Never edit before `report-plan`.
+Continue the Inbase visual edits skill from `read-blueprint` with `--session white`. After it returns, reply `I see on the blueprint ...`. Then MUST `report-plan`. Only after that command invokes the first step, implement that step only. After each step's edits, MUST `propose-patch` before the next step. Never implement the whole plan first. Never edit before `report-plan`.
 
 The user's request is:
 
