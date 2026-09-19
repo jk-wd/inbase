@@ -1592,6 +1592,56 @@ button {
   pointer-events: auto;
 }
 
+.hud-deliveries {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  color: #b7c0ce;
+  pointer-events: auto;
+}
+
+.hud-deliveries > li {
+  margin: 0 0 12px;
+}
+
+.hud-delivery-head {
+  display: grid;
+  grid-template-columns: 1.6em minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  color: #e7ebf2;
+  font-weight: 600;
+}
+
+.hud-delivery-index {
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+
+.hud-delivery-title {
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.hud-deliveries > li[data-active='true']:not([data-done='true']) .hud-delivery-title {
+  color: #ffffff;
+}
+
+.hud-deliveries > li[data-done='true'] .hud-delivery-head {
+  color: var(--session-color, #3dff78);
+}
+
+.hud-delivery-planning {
+  margin: 6px 0 0 calc(1.6em + 8px) !important;
+  color: #8b95a5;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.hud-deliveries .hud-steps {
+  margin: 6px 0 0 8px;
+}
+
 .hud-steps li {
   margin: 0 0 8px;
 }

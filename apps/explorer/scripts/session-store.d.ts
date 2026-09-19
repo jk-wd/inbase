@@ -38,7 +38,9 @@ export type DiffManifest = {
   sessionId: string
   name: string
   feature: string
-  steps: Array<{ index: number; title: string }>
+  steps: Array<{ index: number; title: string; delivery?: number }>
+  deliveries?: Array<{ index: number; title: string }>
+  currentDelivery?: number
   status: 'active' | 'finished' | 'rejected'
   phase:
     | 'blueprint_ask'
@@ -319,6 +321,15 @@ export function sendBlueprint(
 export function maybeStartVisualizerHandshake(
   dataDir: string,
   sessionId: string,
+): DiffManifest
+export function reportDeliveries(
+  dataDir: string,
+  input: {
+    sessionId: string
+    name?: string
+    feature: string
+    deliveryTitles: string[]
+  },
 ): DiffManifest
 export function reportPlan(
   dataDir: string,

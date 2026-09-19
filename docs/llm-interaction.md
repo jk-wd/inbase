@@ -29,7 +29,7 @@ If you skip the command and only send the request, Inbase attaches the **first a
 
 ![Request without a color command](images/color-chat-example-no-color.png)
 
-When a chat is attached, the map opens that color’s **LLM session window**. Look for **ATTACHED** / **LLM CONNECTED** and the current status (for example “LLM is drafting the plan”):
+When a chat is attached, the map opens that color’s **LLM session window**. Look for **ATTACHED** / **LLM CONNECTED** and the current status (for example “LLM is defining deliveries”):
 
 ![LLM session window attached](images/llm-attached.png)
 

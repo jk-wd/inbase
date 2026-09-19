@@ -705,6 +705,8 @@ function resetLlmSessionWork(dataDir, sessionId, targetRoot = null) {
     name: '',
     feature: '',
     steps: [],
+    deliveries: [],
+    currentDelivery: 0,
     status: 'active',
     phase: 'blueprint',
     awaitingAttach: true,
@@ -883,6 +885,10 @@ export function readManifest(dataDir, sessionId) {
     value.workStartedAt ??= null
   }
   if (typeof value.pendingExplain !== 'boolean') value.pendingExplain = false
+  value.deliveries = Array.isArray(value.deliveries) ? value.deliveries : []
+  if (!Number.isInteger(value.currentDelivery) || value.currentDelivery < 0) {
+    value.currentDelivery = value.deliveries.length > 0 ? 1 : 0
+  }
   delete value.stepByStep
   value.initialInstruction =
     typeof value.initialInstruction === 'string' ? value.initialInstruction : null
@@ -1076,6 +1082,8 @@ export function sessionIntent(
         ? manifest.initialInstruction
         : null,
     contextFiles: listContextFiles(dataDir, sessionId).map(publicContextFile),
+    deliveries: manifest.deliveries ?? [],
+    currentDelivery: manifest.currentDelivery ?? 0,
     steps: manifest.steps,
     step: activeView ? manifest.currentStep : selected?.step ?? manifest.currentStep,
     reason: activeView ? currentPlanStep?.title ?? null : selected?.title ?? null,
@@ -1292,15 +1300,49 @@ export function inspectTargetFile(
   return absolute
 }
 
-function planSteps(titles, startAt = 1) {
+function planNamedItems(titles, emptyMessage, emptyTitleMessage, startAt = 1) {
   if (!Array.isArray(titles) || titles.length === 0) {
-    throw new Error('A plan needs at least one step')
+    throw new Error(emptyMessage)
   }
   return titles.map((title, offset) => {
     const trimmed = typeof title === 'string' ? title.trim() : ''
-    if (!trimmed) throw new Error('Plan step titles cannot be empty')
+    if (!trimmed) throw new Error(emptyTitleMessage)
     return { index: startAt + offset, title: trimmed }
   })
+}
+
+function planSteps(titles, startAt = 1, delivery = null) {
+  const steps = planNamedItems(
+    titles,
+    'A plan needs at least one step',
+    'Plan step titles cannot be empty',
+    startAt,
+  )
+  if (!delivery) return steps
+  return steps.map((step) => ({ ...step, delivery }))
+}
+
+function planDeliveries(titles) {
+  return planNamedItems(
+    titles,
+    'At least one delivery is required',
+    'Delivery titles cannot be empty',
+  )
+}
+
+function hasDeliveries(manifest) {
+  return Array.isArray(manifest?.deliveries) && manifest.deliveries.length > 0
+}
+
+function currentDeliveryIndex(manifest) {
+  if (!hasDeliveries(manifest)) return 0
+  return Number.isInteger(manifest.currentDelivery) && manifest.currentDelivery > 0
+    ? manifest.currentDelivery
+    : 1
+}
+
+function hasLaterDelivery(manifest) {
+  return hasDeliveries(manifest) && currentDeliveryIndex(manifest) < manifest.deliveries.length
 }
 
 function pendingReviewDiff(manifest) {
@@ -1364,6 +1406,8 @@ export function startSession(dataDir, input) {
     color: resolveSessionColor(sessionId)?.id ?? existing?.color ?? nextSessionColor(dataDir) ?? SESSION_COLORS[0].id,
     feature: featureName(input.feature) || name,
     steps: [],
+    deliveries: [],
+    currentDelivery: 0,
     status: 'active',
     phase: 'blueprint_ask',
     awaitingAttach: false,
@@ -1412,6 +1456,8 @@ export function setupSession(dataDir, input = {}) {
     color: resolveSessionColor(sessionId)?.id ?? nextSessionColor(dataDir) ?? SESSION_COLORS[0].id,
     feature: featureName(input.feature) || name,
     steps: [],
+    deliveries: [],
+    currentDelivery: 0,
     status: 'active',
     phase: 'blueprint',
     awaitingAttach: true,
@@ -1648,8 +1694,7 @@ export function maybeStartVisualizerHandshake(dataDir, sessionId) {
   return manifest
 }
 
-export function reportPlan(dataDir, input) {
-  const sessionId = resolveSessionId(input.sessionId)
+function requireWritableSession(dataDir, sessionId) {
   const existing = readManifest(dataDir, sessionId)
   if (!existing && isSessionStopped(dataDir, sessionId)) {
     throw sessionStoppedError(sessionId)
@@ -1663,13 +1708,89 @@ export function reportPlan(dataDir, input) {
   ) {
     throw sessionStoppedError(sessionId)
   }
-  const now = new Date().toISOString()
-
   if (existing?.phase === 'blueprint_ask' || existing?.phase === 'blueprint') {
     throw new Error(
       `Session ${sessionId} is waiting for the user to finish the blueprint handshake`,
     )
   }
+  return existing
+}
+
+function assignPlanSteps(manifest, stepTitles, startAt = 1) {
+  const delivery = currentDeliveryIndex(manifest) || null
+  const kept = delivery
+    ? (manifest.steps ?? []).filter((step) => (step.delivery ?? 0) < delivery)
+    : []
+  const from = kept.length ? kept.at(-1).index + 1 : startAt
+  manifest.steps = [...kept, ...planSteps(stepTitles, from, delivery)]
+  if (delivery && from !== manifest.currentStep) {
+    manifest.currentStep = from
+  }
+  return manifest.steps.filter((step) => step.index >= from)
+}
+
+export function reportDeliveries(dataDir, input) {
+  const sessionId = resolveSessionId(input.sessionId)
+  const existing = requireWritableSession(dataDir, sessionId)
+  const now = new Date().toISOString()
+
+  if (existing && existing.phase !== 'preparing') {
+    throw new Error(
+      `Session ${sessionId} is not waiting for deliveries. Report-plan for the invoked delivery.`,
+    )
+  }
+  if (existing?.steps?.length) {
+    throw new Error(
+      `Deliveries already recorded for session ${sessionId}. Report-plan for delivery ${currentDeliveryIndex(existing)}.`,
+    )
+  }
+
+  const manifest = existing ?? {
+    version: 2,
+    sessionId,
+    name: sessionName(input.name) || sessionName(input.feature),
+    feature: input.feature,
+    steps: [],
+    deliveries: [],
+    currentDelivery: 0,
+    status: 'active',
+    phase: 'preparing',
+    currentStep: 1,
+    activeDiffId: null,
+    pendingInstruction: null,
+    initialInstruction: null,
+    contextFiles: [],
+    workStartedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    diffs: [],
+  }
+  if (!sessionName(manifest.name)) {
+    manifest.name = sessionName(input.feature)
+  }
+  if (input.feature) manifest.feature = input.feature
+  manifest.deliveries = planDeliveries(input.deliveryTitles)
+  manifest.currentDelivery = 1
+  manifest.status = 'active'
+  manifest.phase = 'preparing'
+  manifest.pendingInstruction = null
+  manifest.workStartedAt = now
+  writeManifest(dataDir, manifest)
+  focusSession(dataDir, sessionId)
+  const first = manifest.deliveries[0]
+  recordSessionAck(
+    dataDir,
+    sessionId,
+    'deliveries',
+    first ? `delivery ${first.index} — ${first.title}` : `${manifest.deliveries.length} delivery(s)`,
+  )
+  return readManifest(dataDir, sessionId) ?? manifest
+}
+
+export function reportPlan(dataDir, input) {
+  const sessionId = resolveSessionId(input.sessionId)
+  const existing = requireWritableSession(dataDir, sessionId)
+  const now = new Date().toISOString()
 
   if (!existing || existing.phase === 'preparing') {
     const manifest = existing ?? {
@@ -1678,6 +1799,8 @@ export function reportPlan(dataDir, input) {
       name: sessionName(input.name) || sessionName(input.feature),
       feature: input.feature,
       steps: [],
+      deliveries: [],
+      currentDelivery: 0,
       status: 'active',
       phase: 'preparing',
       currentStep: 1,
@@ -1693,8 +1816,8 @@ export function reportPlan(dataDir, input) {
     if (!sessionName(manifest.name)) {
       manifest.name = sessionName(input.feature)
     }
-    manifest.feature = input.feature
-    manifest.steps = planSteps(input.stepTitles)
+    if (input.feature) manifest.feature = input.feature
+    const planned = assignPlanSteps(manifest, input.stepTitles)
     manifest.status = 'active'
     manifest.phase = 'plan_ready'
     manifest.pendingInstruction = null
@@ -1705,7 +1828,7 @@ export function reportPlan(dataDir, input) {
       dataDir,
       sessionId,
       'plan',
-      `${manifest.steps.length} step(s)`,
+      `${planned.length} step(s)`,
     )
     return autoAdvance(dataDir, sessionId, input.targetRoot)
   }
@@ -1723,9 +1846,10 @@ export function reportPlan(dataDir, input) {
     existing.activeDiffId = pending.id
   }
   if (input.feature) existing.feature = input.feature
+  const delivery = currentDeliveryIndex(existing) || null
   existing.steps = [
     ...existing.steps.filter((step) => step.index < startAt),
-    ...planSteps(input.stepTitles, startAt),
+    ...planSteps(input.stepTitles, startAt, delivery),
   ]
   existing.status = 'active'
   existing.pendingInstruction = null
@@ -1878,17 +2002,18 @@ export function appendDiff(dataDir, targetRoot, input) {
 
   const id = String(manifest.diffs.length + 1).padStart(4, '0')
   const file = `diffs/${id}.json`
-  const isLast = step >= manifest.steps.length
+  const isLastPlanned = step >= manifest.steps.length
+  const finishSession = isLastPlanned && !hasLaterDelivery(manifest)
   const entry = {
     id,
     file,
     parentId: parent?.id ?? null,
     step,
     title,
-    status: isLast ? 'pending' : 'applied',
+    status: finishSession ? 'pending' : 'applied',
     instruction: null,
     createdAt: now,
-    decidedAt: isLast ? null : now,
+    decidedAt: finishSession ? null : now,
   }
   const paths = sessionPaths(dataDir, sessionId)
   fs.mkdirSync(paths.diffs, { recursive: true })
@@ -1896,9 +2021,14 @@ export function appendDiff(dataDir, targetRoot, input) {
   manifest.activeDiffId = id
   manifest.pendingInstruction = null
   manifest.diffs.push(entry)
-  if (isLast) {
+  if (finishSession) {
     manifest.phase = 'review'
     manifest.workStartedAt = null
+  } else if (isLastPlanned) {
+    manifest.currentDelivery = currentDeliveryIndex(manifest) + 1
+    manifest.currentStep = step + 1
+    manifest.phase = 'preparing'
+    manifest.workStartedAt = new Date().toISOString()
   } else {
     manifest.currentStep = step + 1
     manifest.phase = 'working'
@@ -1906,7 +2036,7 @@ export function appendDiff(dataDir, targetRoot, input) {
   }
   writeManifest(dataDir, manifest)
   focusSession(dataDir, sessionId)
-  if (!isLast) {
+  if (!isLastPlanned) {
     const nextTitle = manifest.steps.find(
       (item) => item.index === manifest.currentStep,
     )?.title
@@ -1917,6 +2047,18 @@ export function appendDiff(dataDir, targetRoot, input) {
       nextTitle
         ? `step ${manifest.currentStep} — ${nextTitle}`
         : `step ${manifest.currentStep}`,
+    )
+  } else if (!finishSession) {
+    const next =
+      manifest.deliveries.find((item) => item.index === manifest.currentDelivery) ??
+      null
+    recordSessionAck(
+      dataDir,
+      sessionId,
+      'deliveries',
+      next
+        ? `delivery ${next.index} — ${next.title}`
+        : `delivery ${manifest.currentDelivery}`,
     )
   }
   const latest = readManifest(dataDir, sessionId)

@@ -4,7 +4,9 @@ When you start an LLM session — for example `/coral build a random color gener
 
 ![LLM session working through a plan](images/llm-working.png)
 
-The LLM lists the steps it will take to reach the goal. Each step is visualized on the map so you can see what changed.
+The LLM first lists **deliveries** (shippable chunks), then plans steps for
+only the current delivery. Each step is visualized on the map so you can see
+what changed.
 
 You can keep chatting in the same thread to steer the work in a different direction whenever you want.
 

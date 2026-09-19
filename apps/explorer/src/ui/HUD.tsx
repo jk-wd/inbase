@@ -56,12 +56,17 @@ function relationModesForView(mapping: boolean, current: RelationMode) {
 }
 
 function isLastPlanStep(intent: AgentIntent) {
-  return (
-    typeof intent.step === 'number' &&
-    Array.isArray(intent.steps) &&
-    intent.steps.length > 0 &&
-    intent.step >= intent.steps.length
-  )
+  if (typeof intent.step !== 'number' || !intent.steps?.length) return false
+  const deliveries = intent.deliveries ?? []
+  const current = intent.currentDelivery ?? 0
+  if (deliveries.length > 0) {
+    if (current < deliveries.length) return false
+    const currentSteps = intent.steps.filter(
+      (step) => (step.delivery ?? 0) === current,
+    )
+    if (currentSteps.length === 0) return false
+  }
+  return intent.step >= intent.steps.length
 }
 
 function reviewTitle(status: AgentIntentStatus) {
@@ -1529,8 +1534,11 @@ function sessionLiveStatus(intent: AgentIntent) {
   if (intent.status === 'replanning') {
     return { text: 'LLM is revising the plan', busy: true }
   }
+  if (kind === 'deliveries' || (intent.deliveries?.length && intent.status === 'preparing')) {
+    return { text: 'LLM is planning steps', busy: true }
+  }
   if (intent.status === 'preparing' || kind === 'blueprint') {
-    return { text: 'LLM is drafting the plan', busy: true }
+    return { text: 'LLM is defining deliveries', busy: true }
   }
   if (kind === 'plan' || intent.status === 'planned') {
     return { text: 'LLM is starting…', busy: true }
@@ -1595,6 +1603,86 @@ function latestDiffForStep(chain: AgentIntent['chain'], stepIndex: number) {
   return chain[stepIndex - 1] ?? null
 }
 
+function PlanStepList({
+  steps,
+  intent,
+  proposalStep,
+  processingStep,
+  acceptedSteps,
+  canAcceptProposal,
+  onNavigateDiff,
+}: {
+  steps: AgentIntent['steps']
+  intent: AgentIntent
+  proposalStep: number | null
+  processingStep: number | null
+  acceptedSteps: Set<number>
+  canAcceptProposal: boolean
+  onNavigateDiff: (sessionId: string, diffId: string | null) => void
+}) {
+  const sessionId = intent.sessionId
+  if (!sessionId || steps.length === 0) return null
+  return (
+    <ol className="hud-steps">
+      {steps.map((step) => {
+        const proposed = proposalStep === step.index
+        const processing = processingStep === step.index
+        const accepted = acceptedSteps.has(step.index) && !proposed
+        const stepDiff = latestDiffForStep(intent.chain, step.index)
+        const canResumeLive = processing && !intent.isActiveDiff && !stepDiff
+        const canOpenDiff = Boolean(stepDiff) || canResumeLive
+        const viewing = Boolean(stepDiff) && intent.step === step.index
+        const lastStepDone =
+          canAcceptProposal && proposed && step.index === intent.steps.length
+        const stepDone = accepted || lastStepDone
+        const stepBody = (
+          <>
+            <span className="hud-step-index">{step.index}.</span>
+            <span className="hud-step-main">
+              <span className="hud-step-title">{step.title}</span>
+            </span>
+          </>
+        )
+        return (
+          <li
+            key={step.index}
+            data-done={stepDone}
+            data-active={processing || proposed || viewing}
+          >
+            {canOpenDiff ? (
+              <button
+                className="hud-step-link hud-step-row"
+                type="button"
+                aria-current={viewing ? 'step' : undefined}
+                aria-label={
+                  canResumeLive
+                    ? `Show live map for step ${step.index}`
+                    : `Show diff for step ${step.index}`
+                }
+                title={
+                  canResumeLive
+                    ? 'Show the live map'
+                    : "Show this step's diff"
+                }
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  onNavigateDiff(sessionId, stepDiff ? stepDiff.id : null)
+                }}
+              >
+                {stepBody}
+              </button>
+            ) : (
+              <div className="hud-step-row">{stepBody}</div>
+            )}
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
 function SessionPanel({
   intent,
   focused,
@@ -1626,10 +1714,20 @@ function SessionPanel({
   const resumeLiveNext =
     !intent.isActiveDiff && Boolean(intent.working) && !nextDiff
   const liveStep = intent.liveStep ?? (intent.working ? intent.step : null)
-  const stepLabel =
-    intent.step && intent.steps?.length > 0
-      ? `Step ${intent.step} of ${intent.steps.length}`
-      : 'Patch'
+  const deliveries = intent.deliveries ?? []
+  const currentDelivery = intent.currentDelivery ?? 0
+  const currentDeliverySteps = intent.steps.filter(
+    (step) => (step.delivery ?? 0) === currentDelivery,
+  )
+  const planningDelivery =
+    deliveries.length > 0 && currentDelivery > 0 && currentDeliverySteps.length === 0
+  const stepLabel = planningDelivery
+    ? `Delivery ${currentDelivery} of ${deliveries.length}`
+    : deliveries.length > 0 && intent.step && intent.steps.length > 0
+      ? `Delivery ${currentDelivery} of ${deliveries.length} · Step ${intent.step} of ${intent.steps.length}`
+      : intent.step && intent.steps?.length > 0
+        ? `Step ${intent.step} of ${intent.steps.length}`
+        : 'Patch'
   const acceptedSteps = new Set(
     intent.status === 'finished'
       ? intent.steps.map((step) => step.index)
@@ -1742,11 +1840,11 @@ function SessionPanel({
               <LiveStatus intent={intent} />
             </>
           )}
-          {!llmDisconnected && intent.steps?.length > 0 && (
+          {!llmDisconnected && (intent.steps?.length > 0 || deliveries.length > 0) && (
             <p className="hud-mode-hint">
-              The LLM implements the full plan. Walk the diffs, then Done
-              to keep the changes and free this color. Type /stop in chat
-              to revert and end the session.
+              {deliveries.length > 0
+                ? 'The LLM implements one delivery at a time. Walk the diffs, then Done to keep the changes and free this color. Type /stop in chat to revert and end the session.'
+                : 'The LLM implements the full plan. Walk the diffs, then Done to keep the changes and free this color. Type /stop in chat to revert and end the session.'}
             </p>
           )}
           {handshakeSetup ? (
@@ -1814,79 +1912,70 @@ function SessionPanel({
             </>
           ) : handshakeSetup ? null : intent.status === 'finished' ? (
             <p>All plan steps were applied.</p>
-          ) : showConnectedProgress || preparing ? null : (
+          ) : (showConnectedProgress || preparing) && deliveries.length === 0 ? null : (
             <p className="hud-step-label">
               {stepLabel}
-              {intent.reason ? ` · ${intent.reason}` : ''}
+              {!planningDelivery && intent.reason ? ` · ${intent.reason}` : ''}
             </p>
           )}
           {!askingBlueprint && !sendingBlueprint && (
             <>
-              {intent.steps?.length > 0 && (
-                <ol className="hud-steps">
-                  {intent.steps.map((step) => {
-                    const proposed = proposalStep === step.index
-                    const processing = processingStep === step.index
-                    const accepted = acceptedSteps.has(step.index) && !proposed
-                    const stepDiff = latestDiffForStep(intent.chain, step.index)
-                    const canResumeLive =
-                      processing && !intent.isActiveDiff && !stepDiff
-                    const canOpenDiff = Boolean(stepDiff) || canResumeLive
-                    const viewing =
-                      Boolean(stepDiff) && intent.step === step.index
-                    const lastStepDone =
-                      canAcceptProposal &&
-                      proposed &&
-                      step.index === intent.steps.length
-                    const stepDone = accepted || lastStepDone
-                    const stepBody = (
-                      <>
-                        <span className="hud-step-index">{step.index}.</span>
-                        <span className="hud-step-main">
-                          <span className="hud-step-title">{step.title}</span>
-                        </span>
-                      </>
+              {deliveries.length > 0 ? (
+                <ol className="hud-deliveries">
+                  {deliveries.map((delivery) => {
+                    const deliverySteps = intent.steps.filter(
+                      (step) => (step.delivery ?? 0) === delivery.index,
                     )
+                    const isPlanning =
+                      currentDelivery === delivery.index &&
+                      deliverySteps.length === 0 &&
+                      intent.status !== 'finished' &&
+                      intent.status !== 'rejected'
+                    const deliveryDone =
+                      deliverySteps.length > 0 &&
+                      deliverySteps.every((step) => acceptedSteps.has(step.index))
                     return (
                       <li
-                        key={step.index}
-                        data-done={stepDone}
-                        data-active={processing || proposed || viewing}
+                        key={delivery.index}
+                        data-planning={isPlanning}
+                        data-done={deliveryDone}
+                        data-active={currentDelivery === delivery.index}
                       >
-                        {canOpenDiff ? (
-                          <button
-                            className="hud-step-link hud-step-row"
-                            type="button"
-                            aria-current={viewing ? 'step' : undefined}
-                            aria-label={
-                              canResumeLive
-                                ? `Show live map for step ${step.index}`
-                                : `Show diff for step ${step.index}`
-                            }
-                            title={
-                              canResumeLive
-                                ? 'Show the live map'
-                                : "Show this step's diff"
-                            }
-                            onPointerDown={(event) => event.stopPropagation()}
-                            onClick={(event) => {
-                              event.preventDefault()
-                              event.stopPropagation()
-                              onNavigateDiff(
-                                sessionId,
-                                stepDiff ? stepDiff.id : null,
-                              )
-                            }}
-                          >
-                            {stepBody}
-                          </button>
+                        <div className="hud-delivery-head">
+                          <span className="hud-delivery-index">
+                            {delivery.index}.
+                          </span>
+                          <span className="hud-delivery-title">
+                            {delivery.title}
+                          </span>
+                        </div>
+                        {isPlanning ? (
+                          <p className="hud-delivery-planning">planning steps</p>
                         ) : (
-                          <div className="hud-step-row">{stepBody}</div>
+                          <PlanStepList
+                            steps={deliverySteps}
+                            intent={intent}
+                            proposalStep={proposalStep}
+                            processingStep={processingStep}
+                            acceptedSteps={acceptedSteps}
+                            canAcceptProposal={canAcceptProposal}
+                            onNavigateDiff={onNavigateDiff}
+                          />
                         )}
                       </li>
                     )
                   })}
                 </ol>
+              ) : (
+                <PlanStepList
+                  steps={intent.steps}
+                  intent={intent}
+                  proposalStep={proposalStep}
+                  processingStep={processingStep}
+                  acceptedSteps={acceptedSteps}
+                  canAcceptProposal={canAcceptProposal}
+                  onNavigateDiff={onNavigateDiff}
+                />
               )}
               {intent.chain.length > 0 && (
                 <div className="hud-chain">

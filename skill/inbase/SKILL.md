@@ -7,10 +7,12 @@ description: >-
   without /inbase. On the first turn, connects this chat to the next empty
   Inbase session, or to a color with /coral /red /amber and the other session
   colors. Later turns stay in that session: never attach again. MUST run
-  `npx inbase report-plan` before any file edit or propose-patch — first the
-  plan, then implement, always. Chat steps are not the plan. After each
-  invoked step, MUST propose-patch before the next step. Never implement the
-  whole plan first. A later change request must report-plan from the last
+  `npx inbase report-deliveries` with titles only — do not invent steps yet —
+  then `npx inbase report-plan` for the invoked delivery before any file edit
+  or propose-patch. Chat steps are not the plan. After each invoked step, MUST
+  propose-patch before the next step. Never implement the whole plan first.
+  After the last step of a delivery, if the next delivery is invoked, report-plan
+  for that delivery only. A later change request must report-plan from the last
   proposal before editing, including after the last recorded step. Do not
   use for files outside that target (sibling apps, CLI, map tooling), git,
   docs-only, lockfiles, questions, or `/extract-blueprint`.
@@ -39,9 +41,9 @@ Colors: `/coral` `/amber` `/lime` `/orange` `/violet` `/teal` `/crimson`
 `/forest` `/grey` `/white`. Aliases: `/red` (Coral), `/yellow` (Amber),
 `/green` (Lime), `/purple` (Violet), `/darkgreen` (Forest), `/gray` (Grey).
 Text after the command is the request. Empty text: attach and start from an
-enabled blueprint only — MUST `report-plan` first, then implement as closely
-as possible; ask if you need more. Extra files are allowed if the blueprint
-does not cover them. `/blue` is the global blueprint, not a chat — do not
+enabled blueprint only — MUST `report-deliveries` first (titles only, no steps),
+then `report-plan` for the invoked delivery, then implement as closely as
+possible; ask if you need more. Extra files are allowed if the blueprint does not cover them. `/blue` is the global blueprint, not a chat — do not
 attach.
 
 - **`/stop`**: discard the plan and patches, free the color, keep live project
@@ -68,14 +70,32 @@ so they can start over.
 
 ## Always work via the plan
 
-**First `report-plan`, then implement. Always. Never the reverse.**
+**First `report-deliveries` (titles only), then `report-plan` for the invoked
+delivery, then implement. Always. Never invent steps before deliveries.**
 
-You MUST run `npx inbase report-plan` before any Write, StrReplace, edit,
-delete, or `propose-patch`. Listing steps in chat is **not** the plan. Reading
-the blueprint is **not** the plan. The first step is **not** invoked until
-`report-plan` prints `VISUAL_CODER_EXECUTE`. Do not skip `report-plan` because
-the work is obvious, one file, already on the blueprint, or the same as last
-time. Do not freelance edits, skip steps, or patch a waiting proposal in place.
+You MUST run `npx inbase report-deliveries` after the blueprint and before
+any `report-plan`. Pass only short delivery titles. A delivery is a shippable
+chunk (a few related files or one coherent feature). Do **not** invent
+implementation steps yet. Do **not** list steps in chat. Do **not** think
+through how each file will be written. Titles only.
+
+Then MUST run `npx inbase report-plan` with `--steps` for the **invoked
+delivery only**, before any Write, StrReplace, edit, delete, or
+`propose-patch`. Listing steps in chat is **not** the plan. Reading the
+blueprint is **not** the plan. Do not invent steps for later deliveries.
+The first step is **not** invoked until `report-plan` prints
+`VISUAL_CODER_EXECUTE`. Do not skip `report-deliveries` or `report-plan`
+because the work is obvious, one file, already on the blueprint, or the
+same as last time. Do not freelance edits, skip steps, or patch a waiting
+proposal in place.
+
+```bash
+npx inbase report-deliveries \
+  --session <color> \
+  --feature "short feature name" \
+  --delivery "Score system" \
+  --delivery "Balloon physics"
+```
 
 Example: plan is `1. A`, `2. B`, `3. C`. User asks for a change. Keep A and B.
 Replace C with remaining steps. Pass **only those remaining `--steps`** to
@@ -99,7 +119,9 @@ npx inbase report-plan \
 Do not batch all plan steps into one edit pass. A non-last `propose-patch`
 invokes the next step — implement that next step only, then `propose-patch`
 again, in the **same turn**. Do not stop. Do not ask the user to review a mid-plan step.
-After the last recorded step, stop for `/explainit`, `/stop`, or a change
+If `propose-patch` prints `VISUAL_CODER_PLAN_DELIVERY`, MUST `report-plan`
+with `--steps` for **that delivery only**. Do not invent steps for later
+deliveries. After the last recorded step, stop for `/explainit`, `/stop`, or a change
 request.
 
 ```bash
@@ -157,9 +179,10 @@ with one short sentence. After the **first** `attach`, name the color from
 `VISUAL_CODER_COLOR`, for example: `Connecting to the Coral session.` Do not
 say that on a later turn. After `read-blueprint`, start with
 `I see on the blueprint` and name the files, folders, symbols, imports, notes,
-and pointers. Then MUST `report-plan` before any edit. For other acks, echo
-the signal, then continue the required tools in the same turn. Do not call
-tools before that sentence. Do not edit before `report-plan`.
+and pointers. Then MUST `report-deliveries` with titles only — do not invent
+steps yet. Then MUST `report-plan` for the invoked delivery before any edit.
+For other acks, echo the signal, then continue the required tools in the same
+turn. Do not call tools before that sentence. Do not edit before `report-plan`.
 
 ## Required sequence
 
@@ -176,9 +199,10 @@ npx inbase read-blueprint --session <color>
 
    No instruction (empty `$ARGUMENTS`, no `VISUAL_CODER_INSTRUCTION_*`):
    - `VISUAL_CODER_BLUEPRINT_ONLY`, or either dump `enabled` true: that is the
-     request. MUST `report-plan` from those files, folders, symbols, imports,
-     notes, and pointers, then implement as closely as possible. Ask if you
-     need more. Extra files are allowed if the blueprint does not cover them.
+     request. MUST `report-deliveries` first (titles only — do not invent
+     steps), then `report-plan` for the invoked delivery from those files,
+     folders, symbols, imports, notes, and pointers, then implement as closely
+     as possible. Ask if you need more. Extra files are allowed if the blueprint does not cover them.
    - `VISUAL_CODER_NO_REQUEST`, or both blueprints empty: **stop**. Wait for a
      request, `/explainit`, or `/stop`.
 
@@ -198,31 +222,38 @@ npx inbase read-blueprint --session <color>
    not in either blueprint are allowed when needed if the blueprint does not
    cover them. Do not use another session's local blueprint.
 
-4. **Say what you see on the blueprint** before `report-plan`. Start with
+4. **Say what you see on the blueprint** before `report-deliveries`. Start with
    `I see on the blueprint` and name every file, folder, function, variable,
    import, note, and pointer — which are global vs this session's color. If
-   both dumps are empty, say `I see nothing on the blueprint yet.`
+   both dumps are empty, say `I see nothing on the blueprint yet.` Do not list
+   implementation steps.
 
-5. List **all** steps as `--steps` on `report-plan`. One recorded step = one
-   landscape change. Chat is not a substitute.
+5. **MUST run `report-deliveries` now** with every delivery as `--delivery`.
+   Titles only. Do not invent implementation steps. Do not list steps in chat.
+   Split a large blueprint into a few shippable deliveries. Small work can be
+   one delivery.
 
-6. **MUST run `report-plan` now** (same shape as above). Do not edit. Do not
-   `propose-patch`. Wait for `VISUAL_CODER_EXECUTE` from that command.
+6. **MUST run `report-plan` now** with `--steps` for the **invoked delivery
+   only**. One recorded step = one landscape change. Chat is not a substitute.
+   Do not edit. Do not `propose-patch`. Do not plan later deliveries.
+   Wait for `VISUAL_CODER_EXECUTE` from that command.
 
 7. **Only then** implement the **invoked step only**. Then MUST
    `propose-patch` before touching any later step. Repeat: one step, one
    `propose-patch`. Do **not** implement the whole plan then record once.
    `VISUAL_CODER_EXECUTE` exists only after `report-plan`. Do **not** run
    `wait-for-approval`. Do **not** edit until that execute line.
+   If `VISUAL_CODER_PLAN_DELIVERY`, go back to step 6 for that delivery only.
 
-8. **Change request** while a plan or proposal is waiting (not `/explainit` or
-   `/stop`), including after the last recorded step: stay in this session.
-   **Do not attach. Do not edit files yet.** MUST `report-plan` first. Replace
-   the waiting step with remaining steps for the new goal. `report-plan` with
-   those remaining `--steps` only — that replaces the waiting proposal. If
-   `VISUAL_CODER_EXECUTE`, implement the invoked step only, then
-   `propose-patch`. Never tell the user to finish or close the session. Never
-   `propose-patch` until `report-plan` has replaced the waiting step.
+8. **Change request** while a plan or proposal
+   is waiting (not `/explainit` or `/stop`), including after the last recorded
+   step: stay in this session. **Do not attach. Do not edit files yet.** MUST
+   `report-plan` first. Replace the waiting step with remaining steps for the
+   new goal. `report-plan` with those remaining `--steps` only — that replaces
+   the waiting proposal. If `VISUAL_CODER_EXECUTE`, implement the invoked step
+   only, then `propose-patch`. Never tell the user to finish or close the
+   session. Never `propose-patch` until `report-plan` has replaced the waiting
+   step.
 
 9. **`/explainit`**: do not edit. `npx inbase explain start` (with `--question`
    when given). `VISUAL_CODER_EXPLAIN` → one `--step` for that path.
@@ -243,9 +274,11 @@ npx inbase read-blueprint --session <color>
 
 - Attach after `VISUAL_CODER_SESSION` — that locks a different color
 - Say `Connecting to the ... session` on a later turn
-- Skip `read-blueprint` or skip `I see on the blueprint` before `report-plan`
-- Skip `report-plan`, treat chat steps as the plan, or edit / `propose-patch`
-  before `report-plan` prints `VISUAL_CODER_EXECUTE`
+- Skip `read-blueprint` or skip `I see on the blueprint` before `report-deliveries`
+- Invent implementation steps before `report-deliveries`, or plan later
+  deliveries before they are invoked
+- Skip `report-deliveries`, skip `report-plan`, treat chat steps as the plan,
+  or edit / `propose-patch` before `report-plan` prints `VISUAL_CODER_EXECUTE`
 - Run `wait-for-approval` or `explain wait`
 - Wait for a typed request when a color command has no text and an enabled blueprint is the request
 - Omit, rename, relocate, or replace files, folders, or symbols from an enabled

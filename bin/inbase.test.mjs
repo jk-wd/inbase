@@ -107,7 +107,8 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /VISUAL_CODER_NO_REQUEST/)
     assert.match(skillText, /VISUAL_CODER_DIFF/)
     assert.match(skillText, /Always work via the plan/)
-    assert.match(skillText, /First `report-plan`, then implement/)
+    assert.match(skillText, /First `report-deliveries`/)
+    assert.match(skillText, /MUST run `npx inbase report-deliveries`/)
     assert.match(skillText, /MUST run `npx inbase report-plan`/)
     assert.match(skillText, /One step, then `propose-patch`/)
     assert.match(skillText, /Never implement the whole plan/)
@@ -187,7 +188,8 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(skillText, /VISUAL_CODER_NO_REQUEST/)
     assert.match(skillText, /VISUAL_CODER_DIFF/)
     assert.match(skillText, /Always work via the plan/)
-    assert.match(skillText, /First `report-plan`, then implement/)
+    assert.match(skillText, /First `report-deliveries`/)
+    assert.match(skillText, /MUST run `npx inbase report-deliveries`/)
     assert.match(skillText, /MUST run `npx inbase report-plan`/)
     assert.match(skillText, /One step, then `propose-patch`/)
     assert.match(skillText, /Never implement the whole plan/)
@@ -389,6 +391,7 @@ test('init copies editor skills and gitignores .inbase', () => {
       'utf8',
     )
     assert.match(claudeCoral, /npx inbase attach --color coral/)
+    assert.match(claudeCoral, /MUST `report-deliveries`/)
     assert.match(claudeCoral, /MUST `report-plan`/)
     assert.match(claudeCoral, /disable-model-invocation: true/)
     const agents = result.editors.find((editor) => editor.id === 'agents')
@@ -415,6 +418,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(zedRules, /Inbase visual edits \(Zed\)/)
     assert.match(zedRules, /npx inbase attach/)
     assert.match(zedRules, /I see on the blueprint/)
+    assert.match(zedRules, /MUST run `npx inbase report-deliveries/)
     assert.match(zedRules, /MUST run `npx inbase report-plan/)
     assert.match(zedRules, /Never edit before/)
     assert.match(zedRules, /Never implement the whole plan/)
@@ -467,6 +471,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(clineRule, /inbase\.json/)
     assert.match(clineRule, /COLOR/)
     assert.match(clineRule, /I see on the blueprint/)
+    assert.match(clineRule, /MUST run `npx inbase report-deliveries/)
     assert.match(clineRule, /MUST run `npx inbase report-plan/)
     assert.match(clineRule, /Never edit before/)
     assert.match(clineRule, /Never implement the whole plan/)
@@ -496,6 +501,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(opencodeRule, /Inbase visual edits \(OpenCode\)/)
     assert.match(opencodeRule, /npx inbase attach/)
     assert.match(opencodeRule, /I see on the blueprint/)
+    assert.match(opencodeRule, /MUST run `npx inbase report-deliveries/)
     assert.match(opencodeRule, /MUST run `npx inbase report-plan/)
     assert.match(opencodeRule, /Never edit before/)
     assert.match(opencodeRule, /Never implement the whole plan/)
@@ -883,6 +889,7 @@ test('copySkillTree writes command skills and keeps the inbase skill', () => {
     assert.equal(fs.existsSync(path.join(root, '.agents/skills/accept/SKILL.md')), false)
     const coral = fs.readFileSync(path.join(first.commandDir, 'coral/SKILL.md'), 'utf8')
     assert.match(coral, /npx inbase attach --color coral/)
+    assert.match(coral, /MUST `report-deliveries`/)
     assert.match(coral, /MUST `report-plan`/)
     assert.match(coral, /MUST `propose-patch`/)
     assert.match(coral, /Never implement the whole plan first/)
@@ -1416,6 +1423,7 @@ test('read-blueprint treats an enabled blueprint as the request when there is no
     )
     assert.equal(withBlueprint.status, 0, withBlueprint.stderr)
     assert.match(withBlueprint.stdout, /VISUAL_CODER_BLUEPRINT_ONLY/)
+    assert.match(withBlueprint.stdout, /MUST run report-deliveries/)
     assert.match(withBlueprint.stdout, /MUST run report-plan/)
     assert.match(withBlueprint.stdout, /follow it as closely as possible/)
     assert.match(withBlueprint.stdout, /allowed when needed if the blueprint does not cover them/)
@@ -1587,6 +1595,104 @@ test('report-plan invokes the first plan step', async () => {
     ])
     assert.equal(store.readManifest(dataDir, 'continue-chat').phase, 'working')
     assert.equal(store.readManifest(dataDir, 'continue-chat').currentStep, 1)
+  } finally {
+    cleanup()
+  }
+})
+
+test('report-deliveries invokes planning the first delivery', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    const started = runCli(
+      ['start-session', '--session', 'deliver-cli', '--name', 'Deliver cli'],
+      { cwd: path.dirname(dataDir), env },
+    )
+    assert.equal(started.status, 0, started.stderr)
+    store.answerBlueprint(dataDir, 'deliver-cli', false)
+    const result = runCli(
+      [
+        'report-deliveries',
+        '--session',
+        'deliver-cli',
+        '--feature',
+        'Deliver cli',
+        '--delivery',
+        'Score system',
+        '--delivery',
+        'Balloon physics',
+      ],
+      { cwd: root, env },
+    )
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /VISUAL_CODER_DELIVERIES_READY/)
+    assert.match(result.stdout, /VISUAL_CODER_PLAN_DELIVERY/)
+    assert.match(result.stdout, /Score system/)
+    assert.doesNotMatch(result.stdout, /VISUAL_CODER_EXECUTE/)
+    const manifest = store.readManifest(dataDir, 'deliver-cli')
+    assert.equal(manifest.phase, 'preparing')
+    assert.equal(manifest.currentDelivery, 1)
+    assert.equal(manifest.steps.length, 0)
+  } finally {
+    cleanup()
+  }
+})
+
+test('propose-patch CLI asks for the next delivery plan', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    const started = runCli(
+      ['start-session', '--session', 'next-delivery', '--name', 'Next delivery'],
+      { cwd: path.dirname(dataDir), env },
+    )
+    assert.equal(started.status, 0, started.stderr)
+    store.answerBlueprint(dataDir, 'next-delivery', false)
+    store.reportDeliveries(dataDir, {
+      sessionId: 'next-delivery',
+      feature: 'Next delivery',
+      deliveryTitles: ['Score system', 'Balloon physics'],
+    })
+    store.reportPlan(dataDir, {
+      sessionId: 'next-delivery',
+      feature: 'Next delivery',
+      stepTitles: ['Add score store'],
+      targetRoot: target,
+    })
+    fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 2\n')
+    const result = runCli(['propose-patch', '--session', 'next-delivery'], {
+      cwd: root,
+      env,
+    })
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /VISUAL_CODER_STEP_READY/)
+    assert.match(result.stdout, /VISUAL_CODER_PLAN_DELIVERY/)
+    assert.match(result.stdout, /Balloon physics/)
+    assert.doesNotMatch(result.stdout, /VISUAL_CODER_EXECUTE/)
+    assert.equal(store.readManifest(dataDir, 'next-delivery').phase, 'preparing')
+    assert.equal(store.readManifest(dataDir, 'next-delivery').currentDelivery, 2)
   } finally {
     cleanup()
   }
@@ -1955,6 +2061,7 @@ test('attach --session on an already attached chat stays in that session', async
     const first = runCli(['attach'], { cwd: root, env })
     assert.equal(first.status, 0, first.stderr)
     assert.match(first.stdout, /VISUAL_CODER_ATTACHED/)
+    assert.match(first.stdout, /MUST run report-deliveries/)
     assert.match(first.stdout, /MUST run report-plan/)
     assert.match(first.stdout, /MUST propose-patch/)
     assert.doesNotMatch(first.stdout, /report a plan if you can/)

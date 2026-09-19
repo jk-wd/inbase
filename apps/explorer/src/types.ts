@@ -210,6 +210,12 @@ export function llmIsMakingChanges(intent: {
 export type PlanStep = {
   index: number
   title: string
+  delivery?: number
+}
+
+export type PlanDelivery = {
+  index: number
+  title: string
 }
 
 export type PatchImport = {
@@ -493,6 +499,8 @@ export type AgentIntent = {
   colorName?: string | null
   colorHex?: string | null
   feature: string | null
+  deliveries?: PlanDelivery[]
+  currentDelivery?: number | null
   steps: PlanStep[]
   step: number | null
   files: string[]

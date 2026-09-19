@@ -26,7 +26,7 @@ folder, git, lockfiles, \`.inbase\`, editor skill folders, questions with no
 code changes, or \`/extract-blueprint\`.
 
 Cline (including Qwen) must **execute** tools. Do not paste \`npx inbase\`
-commands as chat text. Do not explore the repo first. Use this XML:
+commands as chat text. Use this XML:
 
 <execute_command>
 <command>npx inbase attach</command>
@@ -42,15 +42,18 @@ On a new file-change request inside \`target\`, in this order:
 2. Reply: \`Connecting to the <color> session.\`
 3. Run \`npx inbase read-blueprint --session COLOR\`
 4. Reply: \`I see on the blueprint ...\` (name files, folders, symbols, notes)
-5. MUST run \`npx inbase report-plan --session COLOR --feature "..." --steps "..."\`
-   before any file edit. Listing steps in chat is not the plan. Never edit before
-   \`report-plan\`.
-6. Edit files only after \`VISUAL_CODER_EXECUTE\`, for that invoked step only.
+5. MUST run \`npx inbase report-deliveries --session COLOR --feature "..." --delivery "..."\`
+   with titles only — do not invent implementation steps yet.
+6. MUST run \`npx inbase report-plan --session COLOR --feature "..." --steps "..."\`
+   for the invoked delivery only before any file edit. Listing steps in chat is
+   not the plan. Never edit before \`report-plan\`. Do not plan later deliveries.
+7. Edit files only after \`VISUAL_CODER_EXECUTE\`, for that invoked step only.
    MUST run \`npx inbase propose-patch --session COLOR\` with
    \`--note "path: one-line goal"\` for each changed file and folder before
    starting the next step. No patch file. Never implement the whole plan then
    record once. If the next step is invoked, implement that step only, then
-   propose-patch again. After the last recorded step, stop. The user clicks
+   propose-patch again. If \`VISUAL_CODER_PLAN_DELIVERY\`, report-plan for that
+   delivery only. After the last recorded step, stop. The user clicks
    Done in the session window to keep the files and free the color.
 
 If this chat already printed \`VISUAL_CODER_SESSION\`, skip attach. Stay in

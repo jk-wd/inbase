@@ -32,7 +32,20 @@ function proposePatchHint(sessionId) {
 }
 
 function executeStepHint(sessionId) {
-  return `Edit live files for THIS invoked step only, ${proposePatchHint(sessionId)} Do not implement later steps first. After propose-patch, if the next step is invoked, repeat for that step only.`
+  return `Edit live files for THIS invoked step only, ${proposePatchHint(sessionId)} Do not implement later steps first. After propose-patch, if the next step is invoked, repeat for that step only. If VISUAL_CODER_PLAN_DELIVERY, MUST report-plan with --steps for that delivery only. Do not invent steps for later deliveries.`
+}
+
+function currentDeliveryRecord(manifest) {
+  const index = manifest?.currentDelivery ?? 1
+  return (manifest?.deliveries ?? []).find((item) => item.index === index) ?? null
+}
+
+function planDeliveryHint(manifest) {
+  const delivery = currentDeliveryRecord(manifest)
+  const total = manifest?.deliveries?.length ?? 0
+  const title = delivery?.title
+  const index = delivery?.index ?? manifest?.currentDelivery ?? 1
+  return `VISUAL_CODER_PLAN_DELIVERY Delivery ${index} of ${total} is invoked${title ? `: ${title}` : ''}. MUST run report-plan with --steps for THIS delivery only. Do not invent steps for later deliveries. Do not edit files yet.`
 }
 
 const EXPLAIN_BODY_HINT =
@@ -289,7 +302,7 @@ export async function startSession(args) {
     feature,
   })
   console.log(
-    `VISUAL_CODER_BLUEPRINT_WAIT Session ${manifest.name || sessionId} is visible in the visualizer (${manifest.phase}). Run inbase read-blueprint before drafting the plan. A running visualizer does not skip this handshake.`,
+    `VISUAL_CODER_BLUEPRINT_WAIT Session ${manifest.name || sessionId} is visible in the visualizer (${manifest.phase}). Run inbase read-blueprint before reporting deliveries. A running visualizer does not skip this handshake.`,
   )
 }
 
@@ -322,8 +335,8 @@ export async function attachSession(args) {
     ' If this conversation already printed VISUAL_CODER_SESSION, this is the wrong slot: stop, stay on the original color, and use that --session. Do not report a new plan here.'
   console.log(
     colorName
-      ? `VISUAL_CODER_ATTACHED Attached to the ${colorName} session (${manifest.phase}). Tell the user you connected to the ${colorName} chat. Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then you MUST run report-plan. Do not edit any files before report-plan. After report-plan, implement the first invoked step only, then MUST propose-patch. Repeat that loop for each later invoked step. Never implement the whole plan before propose-patch. After the last recorded step, wait for /explainit, /stop, or a change request in chat.${wrongSlot}`
-      : `VISUAL_CODER_ATTACHED Attached to the next waiting visualizer session ${manifest.name || manifest.sessionId} (${manifest.phase}). Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then you MUST run report-plan. Do not edit any files before report-plan. After report-plan, implement the first invoked step only, then MUST propose-patch. Repeat that loop for each later invoked step. Never implement the whole plan before propose-patch. After the last recorded step, wait for /explainit, /stop, or a change request in chat.${wrongSlot}`,
+      ? `VISUAL_CODER_ATTACHED Attached to the ${colorName} session (${manifest.phase}). Tell the user you connected to the ${colorName} chat. Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then you MUST run report-deliveries with short titles only — do not invent implementation steps yet. Then MUST run report-plan for the invoked delivery only. Do not edit any files before report-plan. After report-plan, implement the first invoked step only, then MUST propose-patch. Repeat that loop for each later invoked step. After the last step of a delivery, if VISUAL_CODER_PLAN_DELIVERY, report-plan for that delivery only. Never implement the whole plan before propose-patch. After the last recorded step, wait for /explainit, /stop, or a change request in chat.${wrongSlot}`
+      : `VISUAL_CODER_ATTACHED Attached to the next waiting visualizer session ${manifest.name || manifest.sessionId} (${manifest.phase}). Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then you MUST run report-deliveries with short titles only — do not invent implementation steps yet. Then MUST run report-plan for the invoked delivery only. Do not edit any files before report-plan. After report-plan, implement the first invoked step only, then MUST propose-patch. Repeat that loop for each later invoked step. After the last step of a delivery, if VISUAL_CODER_PLAN_DELIVERY, report-plan for that delivery only. Never implement the whole plan before propose-patch. After the last recorded step, wait for /explainit, /stop, or a change request in chat.${wrongSlot}`,
   )
 }
 
@@ -380,7 +393,7 @@ function printSessionBlueprints(store, dataDir, sessionId) {
   printBlueprintDump(global)
   printBlueprintDump(local, { local: true, colorName })
   console.log(
-    'VISUAL_CODER_SAY_BLUEPRINT Reply in chat now. Start with "I see on the blueprint" and name every file, folder, function, variable, import, note, and pointer from the dumps. Say which items are global and which are this session\'s color. This confirms you interpreted the blueprint correctly. Then, unless you were told to stop and wait, you MUST run report-plan. Do not edit files yet. If both dumps are empty, say "I see nothing on the blueprint yet."',
+    'VISUAL_CODER_SAY_BLUEPRINT Reply in chat now. Start with "I see on the blueprint" and name every file, folder, function, variable, import, note, and pointer from the dumps. Say which items are global and which are this session\'s color. This confirms you interpreted the blueprint correctly. Then, unless you were told to stop and wait, you MUST run report-deliveries with short titles only. Do not invent implementation steps yet. Do not list steps in chat. Then MUST run report-plan for the invoked delivery only. Do not edit files yet. If both dumps are empty, say "I see nothing on the blueprint yet."',
   )
   store.markBlueprintSeen(dataDir, sessionId, global.revision, local.revision)
   return {
@@ -434,7 +447,7 @@ export async function readBlueprint(args) {
     console.log('VISUAL_CODER_INSTRUCTION_END')
   } else if (dumped.global.enabled || dumped.local.enabled) {
     console.log(
-      'VISUAL_CODER_BLUEPRINT_ONLY No chat instruction. An enabled blueprint is the request: MUST run report-plan for those files, folders, and symbols first, then implement as closely as possible. Ask the user if you need more information before reporting the plan. Extra files are allowed if the blueprint does not cover them. Do not edit before report-plan.',
+      'VISUAL_CODER_BLUEPRINT_ONLY No chat instruction. An enabled blueprint is the request: MUST run report-deliveries with short titles first — do not invent implementation steps yet. Then MUST run report-plan for the invoked delivery only, then implement as closely as possible. Ask the user if you need more information before reporting deliveries. Extra files are allowed if the blueprint does not cover them. Do not edit before report-plan.',
     )
   } else {
     console.log(
@@ -456,6 +469,38 @@ export async function readBlueprint(args) {
     }
   }
   process.exit(0)
+}
+
+export async function reportDeliveries(args) {
+  const { store, config } = await loadExplorer()
+  const sessionParsed = takeFlagValues(args, '--session')
+  const featureParsed = takeFlagValues(sessionParsed.rest, '--feature')
+  const deliveryParsed = takeFlagValues(featureParsed.rest, '--delivery')
+  const sessionId = sessionParsed.values[0]
+    ? resolveFlagSession(store, sessionParsed.values[0])
+    : null
+  const existing = sessionId ? store.readManifest(config.dataDir, sessionId) : null
+  const feature = featureParsed.values[0] ?? existing?.feature
+
+  if (!sessionId || !feature || deliveryParsed.values.length === 0) {
+    usage(
+      'report-deliveries',
+      '--session <color> --feature "name" --delivery "one" [--delivery "two"]',
+    )
+  }
+
+  const manifest = store.reportDeliveries(config.dataDir, {
+    sessionId,
+    feature,
+    deliveryTitles: deliveryParsed.values,
+  })
+  const list = (manifest.deliveries ?? [])
+    .map((item) => `${item.index}. ${item.title}`)
+    .join('; ')
+  console.log(
+    `VISUAL_CODER_DELIVERIES_READY Reported ${manifest.deliveries.length} delivery(s) for session ${sessionId}: ${list}. Do not invent implementation steps for later deliveries.`,
+  )
+  console.log(planDeliveryHint(manifest))
 }
 
 export async function reportPlan(args) {
@@ -647,6 +692,23 @@ export async function proposePatch(args) {
     console.log(
       `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Continue immediately. ${executeStepHint(sessionId)} Do not stop.`,
     )
+    return
+  }
+
+  if (
+    manifest.phase === 'preparing' &&
+    (manifest.deliveries?.length ?? 0) > 0
+  ) {
+    const doneDeliveryIndex =
+      manifest.steps.find((step) => step.index === entry.step)?.delivery ?? null
+    const done = (manifest.deliveries ?? []).find(
+      (item) => item.index === doneDeliveryIndex,
+    )
+    const doneLabel = done ? `delivery ${done.index}` : 'this delivery'
+    console.log(
+      `VISUAL_CODER_STEP_READY Recorded the current map overlay as ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${overlay.files.length} changed, ${overlay.creates.length} added. That was the last step of ${doneLabel}. Do not invent steps for later deliveries yet.`,
+    )
+    console.log(planDeliveryHint(manifest))
     return
   }
 

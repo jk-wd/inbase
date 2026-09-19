@@ -12,10 +12,10 @@ npx inbase attach --color gray
 
 If attach fails, reply with that output and stop.
 
-Continue the Inbase visual edits skill from `read-blueprint` with `--session gray`. After it returns, reply `I see on the blueprint ...`. Then MUST `report-plan`. Only after that command invokes the first step, implement that step only. After each step's edits, MUST `propose-patch` before the next step. Never implement the whole plan first. Never edit before `report-plan`.
+Continue the Inbase visual edits skill from `read-blueprint` with `--session gray`. After it returns, reply `I see on the blueprint ...`. Then MUST `report-deliveries` with titles only — do not invent steps yet. Then MUST `report-plan` for the invoked delivery only. Only after that command invokes the first step, implement that step only. After each step's edits, MUST `propose-patch` before the next step. Never implement the whole plan first. Never edit before `report-plan`.
 
 The user's request is:
 
 $ARGUMENTS
 
-If `$ARGUMENTS` is empty, there is no chat instruction. After `read-blueprint`, if the global or this session's local blueprint is enabled, that is the request: MUST `report-plan` for those files, folders, and symbols first, then implement. Follow the blueprint as closely as possible. Ask in chat if you need more information. Extra files are allowed if the blueprint does not cover them. Do not edit before `report-plan`. If both blueprints are empty, stop and wait for a request, `/explainit`, or `/stop`.
+If `$ARGUMENTS` is empty, there is no chat instruction. After `read-blueprint`, if the global or this session's local blueprint is enabled, that is the request: MUST `report-deliveries` first (titles only), then `report-plan` for the invoked delivery, then implement. Follow the blueprint as closely as possible. Ask in chat if you need more information. Extra files are allowed if the blueprint does not cover them. Do not edit before `report-plan`. If both blueprints are empty, stop and wait for a request, `/explainit`, or `/stop`.

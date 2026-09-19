@@ -220,6 +220,8 @@ export const emptyIntent: AgentIntent = {
   colorName: null,
   colorHex: null,
   feature: null,
+  deliveries: [],
+  currentDelivery: null,
   steps: [],
   step: null,
   files: [],
@@ -280,6 +282,17 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     colorName: typeof data?.colorName === 'string' ? data.colorName : null,
     colorHex: typeof data?.colorHex === 'string' ? data.colorHex : null,
     feature: data?.feature ?? null,
+    deliveries: Array.isArray(data?.deliveries)
+      ? data.deliveries.flatMap((item) => {
+          if (!item || typeof item !== 'object') return []
+          const index = (item as { index?: unknown }).index
+          const title = (item as { title?: unknown }).title
+          if (typeof index !== 'number' || typeof title !== 'string') return []
+          return [{ index, title }]
+        })
+      : [],
+    currentDelivery:
+      typeof data?.currentDelivery === 'number' ? data.currentDelivery : null,
     steps: Array.isArray(data?.steps) ? data.steps : [],
     step: typeof data?.step === 'number' ? data.step : null,
     files: Array.isArray(data?.files) ? data.files : [],

@@ -25,6 +25,7 @@ import {
   readOverlay,
   readManifest,
   reportPlan as reportPlanStore,
+  reportDeliveries,
   requestExplainProposal,
   clearPendingExplain,
   sendBlueprint,
@@ -1421,6 +1422,95 @@ test('reportPlan invokes the first step', () => {
     assert.equal(intent.diffId, null)
     assert.equal(intent.preview, false)
     assert.equal(sessionIntent(env.dataDir, 'plan-chat').lastAck.kind, 'invoke')
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('reportDeliveries records titles before any steps', () => {
+  const env = fixture()
+  try {
+    const manifest = reportDeliveries(env.dataDir, {
+      sessionId: 'delivery-chat',
+      feature: 'Balloon shooter',
+      deliveryTitles: ['Score system', 'Balloon physics'],
+    })
+    assert.equal(manifest.phase, 'preparing')
+    assert.equal(manifest.currentDelivery, 1)
+    assert.deepEqual(
+      manifest.deliveries.map((item) => item.title),
+      ['Score system', 'Balloon physics'],
+    )
+    assert.deepEqual(manifest.steps, [])
+    const intent = sessionIntent(env.dataDir, 'delivery-chat', ['src/a.ts'])
+    assert.equal(intent.status, 'preparing')
+    assert.equal(intent.currentDelivery, 1)
+    assert.equal(intent.deliveries.length, 2)
+    assert.equal(intent.lastAck.kind, 'deliveries')
+    assert.match(intent.lastAck.detail, /Score system/)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('plans one delivery at a time and then the next', () => {
+  const env = fixture()
+  try {
+    reportDeliveries(env.dataDir, {
+      sessionId: 'phased-chat',
+      feature: 'Balloon shooter',
+      deliveryTitles: ['Score system', 'Balloon physics'],
+    })
+    reportPlan(env.dataDir, {
+      sessionId: 'phased-chat',
+      feature: 'Balloon shooter',
+      stepTitles: ['Add score store', 'Wire HUD'],
+      targetRoot: env.targetRoot,
+    })
+    const firstPlan = readManifest(env.dataDir, 'phased-chat')
+    assert.equal(firstPlan.phase, 'working')
+    assert.equal(firstPlan.currentDelivery, 1)
+    assert.equal(firstPlan.steps.length, 2)
+    assert.equal(firstPlan.steps[0].delivery, 1)
+    assert.equal(firstPlan.steps[1].delivery, 1)
+
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'phased-chat',
+      patchText: oneToTwo,
+    })
+    const afterFirst = appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'phased-chat',
+      patchText: twoToThree,
+    })
+    assert.equal(afterFirst.entry.status, 'applied')
+    assert.equal(afterFirst.manifest.phase, 'preparing')
+    assert.equal(afterFirst.manifest.currentDelivery, 2)
+    assert.equal(afterFirst.manifest.currentStep, 3)
+    assert.equal(sessionIntent(env.dataDir, 'phased-chat').lastAck.kind, 'deliveries')
+    assert.match(sessionIntent(env.dataDir, 'phased-chat').lastAck.detail, /Balloon physics/)
+
+    reportPlan(env.dataDir, {
+      sessionId: 'phased-chat',
+      feature: 'Balloon shooter',
+      stepTitles: ['Spawn balloons'],
+      targetRoot: env.targetRoot,
+    })
+    const secondPlan = readManifest(env.dataDir, 'phased-chat')
+    assert.equal(secondPlan.phase, 'working')
+    assert.equal(secondPlan.currentDelivery, 2)
+    assert.equal(secondPlan.steps.length, 3)
+    assert.equal(secondPlan.steps[2].index, 3)
+    assert.equal(secondPlan.steps[2].delivery, 2)
+    assert.equal(secondPlan.currentStep, 3)
+
+    const last = appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'phased-chat',
+      patchText:
+        '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 3\n+export const value = 4\n',
+    })
+    assert.equal(last.entry.status, 'pending')
+    assert.equal(last.manifest.phase, 'review')
+    assert.equal(last.manifest.currentDelivery, 2)
   } finally {
     env.cleanup()
   }

@@ -31,6 +31,7 @@ import {
 import { installEditors, isAllEditors, uninstallEditors } from './editors/index.mjs'
 import {
   proposePatch,
+  reportDeliveries,
   reportPlan,
   runExplain,
   startSession,
@@ -311,7 +312,7 @@ export async function main(argv = process.argv.slice(2)) {
   ensureDataDir(process.env.INBASE_DATA_DIR)
   if (host.instance) {
     console.log(
-      `INBASE_ATTACHED Using the running visualizer (${host.instance.dataDir}). Run read-blueprint to load the optional blueprint. MUST report-plan before any file edit. After report-plan, implement one invoked step, then MUST propose-patch, then the next invoked step. Never implement the whole plan first.`,
+      `INBASE_ATTACHED Using the running visualizer (${host.instance.dataDir}). Run read-blueprint to load the optional blueprint. MUST report-deliveries with titles only before inventing steps. Then MUST report-plan for the invoked delivery before any file edit. After report-plan, implement one invoked step, then MUST propose-patch, then the next invoked step. Never implement the whole plan first.`,
     )
   }
 
@@ -325,6 +326,10 @@ export async function main(argv = process.argv.slice(2)) {
   }
   if (command === 'read-blueprint') {
     await readBlueprint(args)
+    return
+  }
+  if (command === 'report-deliveries') {
+    await reportDeliveries(args)
     return
   }
   if (command === 'report-plan') {
