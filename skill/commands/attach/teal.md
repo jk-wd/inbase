@@ -18,4 +18,4 @@ The user's request is:
 
 $ARGUMENTS
 
-If `$ARGUMENTS` is empty, there is no chat instruction. After `read-blueprint`, if the global or this session's local blueprint is enabled, that is the request: MUST `report-plan` for those files, folders, and symbols first, then implement. Ask in chat if you need more information. Do not invent extra work. Do not edit before `report-plan`. If both blueprints are empty, stop and wait for a request, `/explainit`, or `/stop`.
+If `$ARGUMENTS` is empty, there is no chat instruction. After `read-blueprint`, if the global or this session's local blueprint is enabled, that is the request: MUST `report-plan` for those files, folders, and symbols first, then implement. Follow the blueprint as closely as possible. Ask in chat if you need more information. Extra files are allowed if the blueprint does not cover them. Do not edit before `report-plan`. If both blueprints are empty, stop and wait for a request, `/explainit`, or `/stop`.

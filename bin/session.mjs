@@ -344,13 +344,13 @@ function printBlueprintDump(blueprint, options = {}) {
   if (local) {
     console.log(
       blueprint.enabled
-        ? `${readyTag} The ${colorName} session blueprint has ${files.length} file(s) and ${folders.length} folder(s). This local blueprint is only for this ${colorName} chat. It is leading together with the global blueprint: create those paths and honor addedFunctions, addedVariables, addedImports, and notes even if they are not on disk. Do not omit, rename, relocate, or replace them. Extra new files not in either blueprint are a deviation. If you would differ from this local blueprint, ask the user first.`
+        ? `${readyTag} The ${colorName} session blueprint has ${files.length} file(s) and ${folders.length} folder(s). This local blueprint is only for this ${colorName} chat. It is leading together with the global blueprint: follow it as closely as possible. Create those paths and honor addedFunctions, addedVariables, addedImports, and notes even if they are not on disk. Do not omit, rename, relocate, or replace them. Extra new files not in either blueprint are allowed when needed if the blueprint does not cover them.`
         : `${readyTag} The ${colorName} session blueprint is empty. Only this ${colorName} chat can see a local blueprint if the user places one later.`,
     )
   } else {
     console.log(
       blueprint.enabled
-        ? `${readyTag} The global blueprint has ${files.length} file(s) and ${folders.length} folder(s). The global blueprint is shared with every session and is leading: create those paths and honor addedFunctions, addedVariables, addedImports, and notes even if they are not on disk. Notes are extra instructions or pseudo code for a file, folder, function, or variable — follow them when implementing those items. Do not omit, rename, relocate, or replace them. Extra new files that are not in the global or this session's local blueprint are a deviation. If you would differ from the blueprint, ask the user first; do not silently deviate. The user can keep placing files and folders; re-read the global blueprint.json when it is printed again.`
+        ? `${readyTag} The global blueprint has ${files.length} file(s) and ${folders.length} folder(s). The global blueprint is shared with every session and is leading: follow it as closely as possible. Create those paths and honor addedFunctions, addedVariables, addedImports, and notes even if they are not on disk. Notes are extra instructions or pseudo code for a file, folder, function, or variable — follow them when implementing those items. Do not omit, rename, relocate, or replace them. Extra new files that are not in the global or this session's local blueprint are allowed when needed if the blueprint does not cover them. The user can keep placing files and folders; re-read the global blueprint.json when it is printed again.`
         : `${readyTag} The global blueprint is empty. The user can still place files and folders on the global or this session's color; re-read the global blueprint.json when it is printed again. Continue without user-placed files until that file has content.`,
     )
   }
@@ -434,7 +434,7 @@ export async function readBlueprint(args) {
     console.log('VISUAL_CODER_INSTRUCTION_END')
   } else if (dumped.global.enabled || dumped.local.enabled) {
     console.log(
-      'VISUAL_CODER_BLUEPRINT_ONLY No chat instruction. An enabled blueprint is the request: MUST run report-plan for those files, folders, and symbols first, then implement. Ask the user if you need more information before reporting the plan. Do not invent extra work. Do not edit before report-plan.',
+      'VISUAL_CODER_BLUEPRINT_ONLY No chat instruction. An enabled blueprint is the request: MUST run report-plan for those files, folders, and symbols first, then implement as closely as possible. Ask the user if you need more information before reporting the plan. Extra files are allowed if the blueprint does not cover them. Do not edit before report-plan.',
     )
   } else {
     console.log(

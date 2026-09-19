@@ -37,7 +37,7 @@ There is no `/blue` command: blue is not a chat slot. It is the **global bluepri
 
 ## Drawing a blueprint
 
-You draw a blueprint **on top of the map** — the spatial plan the LLM must follow. Place it before a chat connects, or keep adding after the chat has attached.
+You draw a blueprint **on top of the map** — the spatial plan the LLM follows as closely as possible. It may add files the drawing does not cover when they are needed. Place it before a chat connects, or keep adding after the chat has attached.
 
 Pick a session color in the row above the session window to draw on that color’s local blueprint. **Global blueprint** (next to the fold-in control) draws on the shared blue layer and hides the session window. Hide, Clear, and Cleanup apply to the active color.
 
