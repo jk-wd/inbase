@@ -6,8 +6,8 @@ The command name is `inbase` (via `npx inbase` or a global install). Run `inbase
 
 | Command | What it does |
 | --- | --- |
-| `inbase init` | Install Cursor, Claude Code, Codex, Zed, Copilot, Cline, and OpenCode skills; write `inbase.json` if missing; gitignore `.inbase/` |
-| `inbase init <editor>` | Install only that editor (`cursor`, `claude`, `agents`, `zed`, `copilot`, `cline`, `opencode`) |
+| `inbase init` | Install Cursor, Claude Code, Codex, Zed, Copilot, Cline, OpenCode, LM Studio, and Bionic skills; write `inbase.json` if missing; gitignore `.inbase/` |
+| `inbase init <editor>` | Install only that editor (`cursor`, `claude`, `agents`, `zed`, `copilot`, `cline`, `opencode`, `lmstudio`, `bionic`) |
 | `inbase cleanup` | Remove installed skills and rules, `.inbase/`, `inbase.json`, and the `.gitignore` entry |
 | `inbase cleanup <editor>` | Remove only that editor's skills |
 | `inbase run` | Scan the project and start the local map. Maps `target` from `inbase.json`, else the current directory. If a map is already running, prints the URL and exits |

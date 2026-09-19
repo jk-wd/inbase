@@ -1,7 +1,7 @@
 {
   "name": "@jkwd/inbase",
-  "version": "0.1.70",
-  "description": "A first-person 3D map of a codebase, with a visual coding workflow for Cursor, Claude Code, Codex, Zed, Copilot, Cline, and OpenCode.",
+  "version": "0.1.71",
+  "description": "A first-person 3D map of a codebase, with a visual coding workflow for Cursor, Claude Code, Codex, Zed, Copilot, Cline, OpenCode, LM Studio, and Bionic.",
   "license": "MIT",
   "author": "Joris Kuijper",
   "keywords": [
@@ -17,6 +17,8 @@
     "copilot",
     "cline",
     "opencode",
+    "lmstudio",
+    "bionic",
     "devtools",
     "llm"
   ],

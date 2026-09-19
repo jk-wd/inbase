@@ -46,7 +46,7 @@ const HELP = `inbase — a first-person 3D map of a codebase
 
 Usage:
   inbase init [editor]     Install skills for all editors, or only one
-                           (cursor, claude, agents, zed, copilot, cline, opencode)
+                           (cursor, claude, agents, zed, copilot, cline, opencode, lmstudio, bionic)
   inbase cleanup [editor]  Remove skills for all editors, or only one
                            (also removes .inbase/ and inbase.json)
   inbase run               Empty .inbase/, scan this repo, and start the map
@@ -201,7 +201,7 @@ async function runServer(args) {
   console.log(`Inbase is mapping ${targetRoot}`)
   console.log(`Open ${local}`)
   console.log(
-    'Leave this running. Open a Cursor, Claude Code, Codex, Zed, Copilot, Cline, or OpenCode chat to connect — one chat per color.',
+    'Leave this running. Open a Cursor, Claude Code, Codex, Zed, Copilot, Cline, OpenCode, LM Studio, or Bionic chat to connect — one chat per color.',
   )
 }
 

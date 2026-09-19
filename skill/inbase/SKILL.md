@@ -26,7 +26,7 @@ follow the visual plan loop. Continue as a normal coding task.
 
 Skip it for git, lockfiles, `.inbase`, `.cursor`, `.claude`, `.agents`,
 `.zed`, `.rules`, `.cline`, `.clinerules`, `.github/skills`, `.opencode`,
-questions with no code changes, or `/extract-blueprint`.
+`.lmstudio`, questions with no code changes, or `/extract-blueprint`.
 
 `npx inbase run` creates 10 empty chat slots. A regular chat connects to
 the next unconnected slot **only for work inside `target`**. You do not need

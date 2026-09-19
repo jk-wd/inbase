@@ -9,7 +9,7 @@ npm install -D @jkwd/inbase     # add the package
 npx inbase init <editor>        # install editor skills + inbase.json
 npx inbase run                  # start the map
 
-# <editor> is optional: one editor only (cursor, claude, agents, zed, copilot, cline, opencode)
+# <editor> is optional: one editor only (cursor, claude, agents, zed, copilot, cline, opencode, lmstudio, bionic)
 ```
 
 Or global:
@@ -19,7 +19,7 @@ npm install -g @jkwd/inbase   # add the package
 inbase init <editor>          # install editor skills + inbase.json
 inbase run                    # start the map
 
-# <editor> is optional: one editor only (cursor, claude, agents, zed, copilot, cline, opencode)
+# <editor> is optional: one editor only (cursor, claude, agents, zed, copilot, cline, opencode, lmstudio, bionic)
 ```
 
 Open the printed URL (http://127.0.0.1:5173 by default). **Ctrl+click** the link in the terminal (Cmd+click on macOS) to open the InBase UI inside your editor.

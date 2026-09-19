@@ -49,10 +49,10 @@ function restoreEnv(snapshot) {
   }
 }
 
-test('registers Cursor, Claude Code, Agent Skills, Zed, Copilot, Cline, and OpenCode adapters', () => {
+test('registers Cursor, Claude Code, Agent Skills, Zed, Copilot, Cline, OpenCode, LM Studio, and Bionic adapters', () => {
   assert.deepEqual(
     editors.map((editor) => editor.id),
-    ['cursor', 'claude', 'agents', 'zed', 'copilot', 'cline', 'opencode'],
+    ['cursor', 'claude', 'agents', 'zed', 'copilot', 'cline', 'opencode', 'lmstudio', 'bionic'],
   )
 })
 
@@ -129,6 +129,7 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /`\.clinerules`/)
     assert.match(skillText, /`\.github\/skills`/)
     assert.match(skillText, /`\.opencode`/)
+    assert.match(skillText, /`\.lmstudio`/)
     assert.match(skillText, /\/extract-blueprint/)
     assert.match(skillText, /\/stop/)
     assert.match(skillText, /Do not prefix it with/)
@@ -161,7 +162,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.equal(result.skillDir, path.join(root, '.cursor/skills/inbase'))
     assert.deepEqual(
       result.editors.map((editor) => editor.id),
-      ['cursor', 'claude', 'agents', 'zed', 'copilot', 'cline', 'opencode'],
+      ['cursor', 'claude', 'agents', 'zed', 'copilot', 'cline', 'opencode', 'lmstudio', 'bionic'],
     )
     assert.equal(fs.existsSync(skill), true)
     const skillText = fs.readFileSync(skill, 'utf8')
@@ -208,6 +209,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(skillText, /`\.clinerules`/)
     assert.match(skillText, /`\.github\/skills`/)
     assert.match(skillText, /`\.opencode`/)
+    assert.match(skillText, /`\.lmstudio`/)
     assert.match(skillText, /\/extract-blueprint/)
     assert.match(skillText, /--note "path: one-line goal"/)
     assert.doesNotMatch(skillText, /npx inbase wait-for-approval/)
@@ -502,6 +504,29 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.equal(opencodeConfig.permission.bash[OPENCODE_INBASE_BASH_PATTERN], 'allow')
     assert.equal(opencodeConfig.permission.skill[OPENCODE_INBASE_SKILL], 'allow')
     assert.deepEqual(opencodeConfig.instructions, [OPENCODE_INSTRUCTION_REL])
+    const lmstudio = result.editors.find((editor) => editor.id === 'lmstudio')
+    assert.equal(lmstudio?.label, 'LM Studio')
+    assert.equal(lmstudio?.skillDir, path.join(root, '.lmstudio/skills/inbase'))
+    assert.equal(fs.existsSync(path.join(root, '.lmstudio/skills/inbase/SKILL.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.lmstudio/skills/coral/SKILL.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.lmstudio/skills/accept/SKILL.md')), false)
+    const lmstudioSkill = fs.readFileSync(
+      path.join(root, '.lmstudio/skills/inbase/SKILL.md'),
+      'utf8',
+    )
+    assert.match(lmstudioSkill, /Always work via the plan/)
+    assert.match(lmstudioSkill, /allowed-tools: Bash\(npx inbase \*\)/)
+    const lmstudioCoral = fs.readFileSync(
+      path.join(root, '.lmstudio/skills/coral/SKILL.md'),
+      'utf8',
+    )
+    assert.match(lmstudioCoral, /npx inbase attach --color coral/)
+    assert.match(lmstudioCoral, /disable-model-invocation: true/)
+    const bionic = result.editors.find((editor) => editor.id === 'bionic')
+    assert.equal(bionic?.label, 'Bionic')
+    assert.equal(bionic?.skillDir, path.join(root, '.agents/skills/inbase'))
+    assert.equal(fs.existsSync(path.join(root, '.agents/skills/inbase/SKILL.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.agents/skills/coral/SKILL.md')), true)
     fs.rmSync(path.join(root, '.clinerules'))
     fs.mkdirSync(path.join(root, '.clinerules/workflows'), { recursive: true })
     fs.writeFileSync(path.join(root, '.clinerules/inbase.md'), 'legacy folder rule\n')
@@ -540,6 +565,7 @@ test('init cline installs only Cline files', () => {
     assert.equal(fs.existsSync(path.join(root, '.zed/settings.json')), false)
     assert.equal(fs.existsSync(path.join(root, '.github/skills/inbase/SKILL.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.opencode/skills/inbase/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.lmstudio/skills/inbase/SKILL.md')), false)
     assert.throws(() => initProject(root, 'vim'), /Unknown editor 'vim'/)
     const codex = initProject(root, 'codex')
     assert.deepEqual(
@@ -572,6 +598,7 @@ test('init zed installs only Zed files', () => {
     assert.equal(fs.existsSync(path.join(root, '.claude/skills/inbase/SKILL.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.cline/skills/inbase/SKILL.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.opencode/skills/inbase/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.lmstudio/skills/inbase/SKILL.md')), false)
     const coral = fs.readFileSync(path.join(root, '.agents/skills/coral/SKILL.md'), 'utf8')
     assert.match(coral, /npx inbase attach --color coral/)
     assert.match(coral, /disable-model-invocation: true/)
@@ -664,6 +691,7 @@ test('init opencode installs only OpenCode files', () => {
     assert.equal(fs.existsSync(path.join(root, '.claude/skills/inbase/SKILL.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.agents/skills/inbase/SKILL.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.cline/skills/inbase/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.lmstudio/skills/inbase/SKILL.md')), false)
     const coral = fs.readFileSync(path.join(root, '.opencode/commands/coral.md'), 'utf8')
     assert.match(coral, /npx inbase attach --color coral/)
     assert.match(coral, /\$ARGUMENTS/)
@@ -672,6 +700,56 @@ test('init opencode installs only OpenCode files', () => {
       alias.editors.map((editor) => editor.id),
       ['opencode'],
     )
+  } finally {
+    restoreEnv(env)
+    cleanup()
+  }
+})
+
+test('init lmstudio installs LM Studio and Bionic files', () => {
+  const { root, cleanup } = tempProject()
+  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
+  try {
+    const result = initProject(root, 'lmstudio')
+    assert.deepEqual(
+      result.editors.map((editor) => editor.id),
+      ['lmstudio', 'bionic'],
+    )
+    assert.equal(result.editors[0]?.label, 'LM Studio')
+    assert.equal(result.editors[1]?.label, 'Bionic')
+    assert.equal(fs.existsSync(path.join(root, '.lmstudio/skills/inbase/SKILL.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.lmstudio/skills/coral/SKILL.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.lmstudio/skills/extract-blueprint/SKILL.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.lmstudio/skills/accept/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.agents/skills/inbase/SKILL.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.agents/skills/coral/SKILL.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/skills/inbase/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.claude/skills/inbase/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cline/skills/inbase/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.opencode/skills/inbase/SKILL.md')), false)
+    const coral = fs.readFileSync(path.join(root, '.lmstudio/skills/coral/SKILL.md'), 'utf8')
+    assert.match(coral, /npx inbase attach --color coral/)
+    assert.match(coral, /disable-model-invocation: true/)
+    const agentsCoral = fs.readFileSync(path.join(root, '.agents/skills/coral/SKILL.md'), 'utf8')
+    assert.match(agentsCoral, /npx inbase attach --color coral/)
+    const alias = initProject(root, 'lms')
+    assert.deepEqual(
+      alias.editors.map((editor) => editor.id),
+      ['lmstudio', 'bionic'],
+    )
+    const bionic = initProject(root, 'bionic')
+    assert.deepEqual(
+      bionic.editors.map((editor) => editor.id),
+      ['lmstudio', 'bionic'],
+    )
+    const hyphen = initProject(root, 'lm-studio')
+    assert.deepEqual(
+      hyphen.editors.map((editor) => editor.id),
+      ['lmstudio', 'bionic'],
+    )
+    cleanupProject(root, 'bionic')
+    assert.equal(fs.existsSync(path.join(root, '.lmstudio')), false)
+    assert.equal(fs.existsSync(path.join(root, '.agents')), false)
   } finally {
     restoreEnv(env)
     cleanup()
@@ -937,6 +1015,7 @@ test('cleanup reverses init and keeps unrelated editor files', () => {
     assert.equal(fs.existsSync(path.join(root, '.github/skills')), false)
     assert.equal(fs.existsSync(path.join(root, '.opencode')), false)
     assert.equal(fs.existsSync(path.join(root, 'opencode.json')), false)
+    assert.equal(fs.existsSync(path.join(root, '.lmstudio')), false)
     assert.equal(fs.existsSync(path.join(root, '.inbase')), false)
     assert.equal(fs.existsSync(path.join(root, 'inbase.json')), false)
     assert.equal(fs.existsSync(path.join(root, '.cursor/permissions.json')), false)
@@ -1013,6 +1092,7 @@ test('cleanup removes leftover skills and rules', () => {
     assert.equal(fs.existsSync(path.join(root, '.zed')), false)
     assert.equal(fs.existsSync(path.join(root, '.opencode')), false)
     assert.equal(fs.existsSync(path.join(root, 'opencode.json')), false)
+    assert.equal(fs.existsSync(path.join(root, '.lmstudio')), false)
   } finally {
     restoreEnv(env)
     cleanup()
@@ -1041,6 +1121,7 @@ test('cleanup cline removes only Cline files', () => {
     assert.equal(fs.existsSync(path.join(root, '.zed/settings.json')), true)
     assert.equal(fs.existsSync(path.join(root, '.opencode/skills/inbase/SKILL.md')), true)
     assert.equal(fs.existsSync(path.join(root, 'opencode.json')), true)
+    assert.equal(fs.existsSync(path.join(root, '.lmstudio/skills/inbase/SKILL.md')), true)
     assert.equal(fs.existsSync(path.join(root, 'inbase.json')), true)
     assert.equal(fs.existsSync(path.join(root, '.inbase')), true)
     assert.throws(() => cleanupProject(root, 'vim'), /Unknown editor 'vim'/)
@@ -1123,7 +1204,7 @@ test('help prints usage', async () => {
     assert.match(output, /inbase run/)
     assert.match(output, /inbase extract-blueprint <folder> <output-file>/)
     assert.match(output, /inbase help/)
-    assert.match(output, /cursor, claude, agents, zed, copilot, cline, opencode/)
+    assert.match(output, /cursor, claude, agents, zed, copilot, cline, opencode, lmstudio, bionic/)
     assert.doesNotMatch(output, /Agent commands/)
     assert.doesNotMatch(output, /inbase attach/)
     assert.doesNotMatch(output, /inbase report-plan/)
