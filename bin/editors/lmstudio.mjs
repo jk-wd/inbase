@@ -5,7 +5,7 @@ import { copySkillTree, removeSkillTree } from './layout.mjs'
 export const id = 'lmstudio'
 export const label = 'LM Studio'
 
-const LAYOUT = { id, skillsRel: '.lmstudio/skills' }
+const LAYOUT = { id, skillsRel: '.lmstudio/skills', listCommandSkills: true }
 
 export function install(projectRoot) {
   return {

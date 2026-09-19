@@ -3,7 +3,7 @@ import { copySkillTree, removeSkillTree } from './layout.mjs'
 export const id = 'bionic'
 export const label = 'Bionic'
 
-const LAYOUT = { id, skillsRel: '.agents/skills' }
+const LAYOUT = { id, skillsRel: '.agents/skills', listCommandSkills: true }
 
 export function install(projectRoot) {
   return {

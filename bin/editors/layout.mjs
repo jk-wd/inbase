@@ -192,15 +192,19 @@ function removeRetiredCommands(commandDir) {
 
 const SKILL_TOOL_FRONTMATTER = ['allowed-tools: Bash(npx inbase *)']
 
-const COMMAND_SKILL_FRONTMATTER = (name) => [
-  `name: ${name}`,
-  'disable-model-invocation: true',
-  'allow_implicit_invocation: false',
-  'allowed-tools: Bash(npx inbase *)',
-]
+const COMMAND_SKILL_FRONTMATTER = (name, { listCommandSkills = false } = {}) => {
+  const lines = [`name: ${name}`]
+  // Codex/Zed/Copilot: hide slash skills from auto-routing. Bionic treats the
+  // same flag as "omit from the skill list", so LM Studio/Bionic skip it.
+  if (!listCommandSkills) {
+    lines.push('disable-model-invocation: true', 'allow_implicit_invocation: false')
+  }
+  lines.push('allowed-tools: Bash(npx inbase *)')
+  return lines
+}
 
 /** Skill folders for Codex, Copilot, Gemini CLI, and other SKILL.md agents. */
-export function copySkillTree(projectRoot, { id, skillsRel }) {
+export function copySkillTree(projectRoot, { id, skillsRel, listCommandSkills = false }) {
   if (!fs.existsSync(skillTemplateDir)) {
     throw new Error(`Inbase skill template missing at ${skillTemplateDir}`)
   }
@@ -215,7 +219,7 @@ export function copySkillTree(projectRoot, { id, skillsRel }) {
       const dest = path.join(commandDir, stem, 'SKILL.md')
       fs.mkdirSync(path.dirname(dest), { recursive: true })
       fs.copyFileSync(src, dest)
-      prependYamlFrontmatter(dest, COMMAND_SKILL_FRONTMATTER(stem))
+      prependYamlFrontmatter(dest, COMMAND_SKILL_FRONTMATTER(stem, { listCommandSkills }))
     }
   }
   removeRetiredCommands(commandDir)

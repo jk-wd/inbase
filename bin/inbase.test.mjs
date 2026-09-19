@@ -521,12 +521,20 @@ test('init copies editor skills and gitignores .inbase', () => {
       'utf8',
     )
     assert.match(lmstudioCoral, /npx inbase attach --color coral/)
-    assert.match(lmstudioCoral, /disable-model-invocation: true/)
+    assert.doesNotMatch(lmstudioCoral, /disable-model-invocation:/)
+    assert.doesNotMatch(lmstudioCoral, /allow_implicit_invocation:/)
     const bionic = result.editors.find((editor) => editor.id === 'bionic')
     assert.equal(bionic?.label, 'Bionic')
     assert.equal(bionic?.skillDir, path.join(root, '.agents/skills/inbase'))
     assert.equal(fs.existsSync(path.join(root, '.agents/skills/inbase/SKILL.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.agents/skills/coral/SKILL.md')), true)
+    const bionicCoral = fs.readFileSync(
+      path.join(root, '.agents/skills/coral/SKILL.md'),
+      'utf8',
+    )
+    assert.match(bionicCoral, /npx inbase attach --color coral/)
+    assert.doesNotMatch(bionicCoral, /disable-model-invocation:/)
+    assert.doesNotMatch(bionicCoral, /allow_implicit_invocation:/)
     fs.rmSync(path.join(root, '.clinerules'))
     fs.mkdirSync(path.join(root, '.clinerules/workflows'), { recursive: true })
     fs.writeFileSync(path.join(root, '.clinerules/inbase.md'), 'legacy folder rule\n')
@@ -729,9 +737,13 @@ test('init lmstudio installs LM Studio and Bionic files', () => {
     assert.equal(fs.existsSync(path.join(root, '.opencode/skills/inbase/SKILL.md')), false)
     const coral = fs.readFileSync(path.join(root, '.lmstudio/skills/coral/SKILL.md'), 'utf8')
     assert.match(coral, /npx inbase attach --color coral/)
-    assert.match(coral, /disable-model-invocation: true/)
+    assert.match(coral, /name: coral/)
+    assert.doesNotMatch(coral, /disable-model-invocation:/)
+    assert.doesNotMatch(coral, /allow_implicit_invocation:/)
     const agentsCoral = fs.readFileSync(path.join(root, '.agents/skills/coral/SKILL.md'), 'utf8')
     assert.match(agentsCoral, /npx inbase attach --color coral/)
+    assert.doesNotMatch(agentsCoral, /disable-model-invocation:/)
+    assert.doesNotMatch(agentsCoral, /allow_implicit_invocation:/)
     const alias = initProject(root, 'lms')
     assert.deepEqual(
       alias.editors.map((editor) => editor.id),
@@ -876,6 +888,27 @@ test('copySkillTree writes command skills and keeps the inbase skill', () => {
     assert.match(coral, /name: coral/)
     assert.match(coral, /\$ARGUMENTS/)
     assert.equal(fs.existsSync(path.join(first.commandDir, 'attach')), false)
+  } finally {
+    cleanup()
+  }
+})
+
+test('copySkillTree lists command skills when asked', () => {
+  const { root, cleanup } = tempProject()
+  try {
+    copySkillTree(root, {
+      id: 'bionic',
+      skillsRel: '.agents/skills',
+      listCommandSkills: true,
+    })
+    const coral = fs.readFileSync(path.join(root, '.agents/skills/coral/SKILL.md'), 'utf8')
+    assert.match(coral, /^---\nname: coral\n/)
+    assert.match(coral, /allowed-tools: Bash\(npx inbase \*\)/)
+    assert.doesNotMatch(coral, /disable-model-invocation:/)
+    assert.doesNotMatch(coral, /allow_implicit_invocation:/)
+    const inbase = fs.readFileSync(path.join(root, '.agents/skills/inbase/SKILL.md'), 'utf8')
+    assert.match(inbase, /Always work via the plan/)
+    assert.doesNotMatch(inbase, /disable-model-invocation:/)
   } finally {
     cleanup()
   }
