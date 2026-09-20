@@ -356,7 +356,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/blue.md')), true)
     assert.match(
       fs.readFileSync(path.join(root, '.cursor/commands/blue.md'), 'utf8'),
-      /global blueprint/,
+      /npx inbase attach --color blue/,
     )
     assert.doesNotMatch(skillText, /user-invocable:/)
     assert.doesNotMatch(skillText, /allowed-tools:/)

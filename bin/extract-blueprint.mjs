@@ -5,6 +5,7 @@ import { explorerRoot } from './project.mjs'
 import { toPosix } from '../apps/explorer/scripts/scan-ignore.mjs'
 
 const SESSION_COLORS = [
+  { id: 'blue', name: 'Blue', hex: '#38bdf8' },
   { id: 'coral', name: 'Coral', hex: '#f87171' },
   { id: 'amber', name: 'Amber', hex: '#fbbf24' },
   { id: 'lime', name: 'Lime', hex: '#a3e635' },
@@ -305,12 +306,15 @@ export async function writeExtractedBlueprint({
   layer,
 }) {
   const { saveBlueprintDocument } = await loadBlueprintFiles()
-  const global = normalizeExtractLayer(layer)
+  const extracted = normalizeExtractLayer(layer)
+  const locals = emptyLocals().map((local) =>
+    local.color === 'blue' ? { ...local, ...extracted } : local,
+  )
   return saveBlueprintDocument(targetRoot, {
     name,
     filePath: outputPath,
-    global,
-    locals: emptyLocals(),
+    global: extracted,
+    locals,
   })
 }
 

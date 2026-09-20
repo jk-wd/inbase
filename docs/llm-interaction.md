@@ -2,12 +2,13 @@
 
 ## Sessions and colors
 
-`npx inbase run` opens **10 empty chat slots** on the map. Each slot has a color.
+`npx inbase run` opens **11 empty chat slots** on the map. Each slot has a color.
 
 ![LLM session colors](images/LLM-session-colors.png)
 
 | Color | Command | Alias |
 | --- | --- | --- |
+| Blue | `/blue` | `/sky` |
 | Coral | `/coral` | `/red` |
 | Amber | `/amber` | `/yellow` |
 | Lime | `/lime` | `/green` |
@@ -33,13 +34,13 @@ When a chat is attached, the map opens that color’s **LLM session window**. Lo
 
 ![LLM session window attached](images/llm-attached.png)
 
-There is no `/blue` command: blue is not a chat slot. It is the **global blueprint**, shared by every LLM session — covered in the next section.
+Blue is the first color. It works like the others: pick it, draw on it, and connect with `/blue`.
 
 ## Drawing a blueprint
 
 You draw a blueprint **on top of the map** — the spatial plan the LLM follows as closely as possible. It may add files the drawing does not cover when they are needed. Place it before a chat connects, or keep adding after the chat has attached.
 
-Pick a session color in the row above the session window to draw on that color’s local blueprint. **Global blueprint** (next to the fold-in control) draws on the shared blue layer and hides the session window. Hide, Clear, and Cleanup apply to the active color.
+Pick a session color in the row above the session window to draw on that color’s blueprint. Hide, Clear, and Cleanup apply to the active color.
 
 ### Add folders
 
@@ -49,11 +50,11 @@ Right-click a folder on the map and choose **Add folder**. For example, plan a `
 
 ![Add folder from the map context menu](images/creating-an-components-folder-add-folder.png)
 
-2. Enter the name and choose which blueprint it belongs to — **Global** or a session color:
+2. Enter the name and choose which blueprint color it belongs to:
 
-![Name the folder and pick Global or a session color](images/creating-an-components-folder-input.png)
+![Name the folder and pick a session color](images/creating-an-components-folder-input.png)
 
-3. The planned folder appears on the map (blue when it is on the global blueprint):
+3. The planned folder appears on the map in that color:
 
 ![Planned components folder on the map](images/creating-an-components-folder-result.png)
 
@@ -93,16 +94,16 @@ Write what the file should do, then close the note:
 
 ### Session specific blueprint
 
-**Blue** is always the **global** blueprint — every LLM session sees it. The other colors are **session-specific**: only the chat attached to that color receives that layer.
+Each color is its own blueprint. Only the chat attached to that color receives that layer. Blue is first and works the same way.
 
-When you add a folder or file, pick **Global** or a session color at the bottom of the dialog:
+When you add a folder or file, pick a session color at the bottom of the dialog:
 
-![Choose Global or a session color](images/session-specific.png)
+![Choose a session color](images/session-specific.png)
 
-Planned items take that color on the map. Here `components` is global (blue) and `session-specific` belongs to Coral (red):
+Planned items take that color on the map. Here `components` is on Blue and `session-specific` belongs to Coral (red):
 
-![Global and session-specific folders on the map](images/session-specific-result.png)
+![Session-colored folders on the map](images/session-specific-result.png)
 
-![Multiple session blueprints next to the global layer](images/session-specific-result-2.png)
+![Multiple session blueprints](images/session-specific-result-2.png)
 
-Left to right: the first folder is local to `/coral`, the second is local to `/amber`, and the blue folder is the **global** blueprint — shared with both LLM sessions.
+Left to right: the first folder is local to `/coral`, the second is local to `/amber`, and the blue folder belongs to `/blue`.

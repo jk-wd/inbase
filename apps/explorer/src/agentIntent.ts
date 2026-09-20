@@ -16,7 +16,7 @@ import type {
   UserCreatedIsland,
   WorkflowAction,
 } from './types'
-import { GLOBAL_BLUEPRINT_COLOR } from './types'
+import { DEFAULT_SESSION_COLOR } from './types'
 import {
   parseBlueprintNotes,
   parseBlueprintPointers,
@@ -522,7 +522,7 @@ export function persistSessionBlueprint(
       action: 'blueprint_update',
       sessionId,
       ...payload,
-      color: payload.color ?? GLOBAL_BLUEPRINT_COLOR.id,
+      color: payload.color ?? DEFAULT_SESSION_COLOR.id,
     }),
   }).catch(() => {
     // Keep local drafts if the visualizer could not save the blueprint.
@@ -531,7 +531,7 @@ export function persistSessionBlueprint(
 
 export function persistBlueprintHidden(
   hidden: boolean,
-  color: string | null | undefined = GLOBAL_BLUEPRINT_COLOR.id,
+  color: string | null | undefined = DEFAULT_SESSION_COLOR.id,
 ) {
   return fetch('/api/agent-intent', {
     method: 'POST',
@@ -539,33 +539,33 @@ export function persistBlueprintHidden(
     body: JSON.stringify({
       action: 'blueprint_set_hidden',
       hidden,
-      color: color ?? GLOBAL_BLUEPRINT_COLOR.id,
+      color: color ?? DEFAULT_SESSION_COLOR.id,
     }),
   })
 }
 
 export function persistBlueprintClear(
-  color: string | null | undefined = GLOBAL_BLUEPRINT_COLOR.id,
+  color: string | null | undefined = DEFAULT_SESSION_COLOR.id,
 ) {
   return fetch('/api/agent-intent', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       action: 'blueprint_clear',
-      color: color ?? GLOBAL_BLUEPRINT_COLOR.id,
+      color: color ?? DEFAULT_SESSION_COLOR.id,
     }),
   })
 }
 
 export function persistBlueprintCleanup(
-  color: string | null | undefined = GLOBAL_BLUEPRINT_COLOR.id,
+  color: string | null | undefined = DEFAULT_SESSION_COLOR.id,
 ) {
   return fetch('/api/agent-intent', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       action: 'blueprint_cleanup',
-      color: color ?? GLOBAL_BLUEPRINT_COLOR.id,
+      color: color ?? DEFAULT_SESSION_COLOR.id,
     }),
   })
 }

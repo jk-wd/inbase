@@ -281,7 +281,7 @@ function emitApprovalHandshake(store, dataDir, sessionId, manifest) {
     console.log(
       continuing
         ? `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Continue immediately. ${executeStepHint(sessionId)} Do not stop.`
-        : `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Re-read the global blueprint.json and this session's local blueprint before implementing; the user can place files and folders at any time. ${executeStepHint(sessionId)} Do not stop until after the last recorded step.`,
+        : `VISUAL_CODER_EXECUTE Step ${manifest.currentStep} is invoked${title ? `: ${title}` : ''}. Re-read this session's blueprint before implementing; the user can place files and folders at any time. ${executeStepHint(sessionId)} Do not stop until after the last recorded step.`,
     )
     process.exit(0)
   }
@@ -343,61 +343,38 @@ export async function attachSession(args) {
 function printBlueprintDump(blueprint, options = {}) {
   const files = blueprint.files ?? []
   const folders = blueprint.folders ?? []
-  const local = options.local === true
   const colorName = options.colorName || 'session'
-  const readyTag = local
-    ? 'VISUAL_CODER_LOCAL_BLUEPRINT_READY'
-    : 'VISUAL_CODER_BLUEPRINT_READY'
-  const startTag = local
-    ? 'VISUAL_CODER_LOCAL_BLUEPRINT_START'
-    : 'VISUAL_CODER_BLUEPRINT_START'
-  const endTag = local
-    ? 'VISUAL_CODER_LOCAL_BLUEPRINT_END'
-    : 'VISUAL_CODER_BLUEPRINT_END'
-  if (local) {
+  if (blueprint.enabled) {
     console.log(
-      blueprint.enabled
-        ? `${readyTag} The ${colorName} session blueprint has ${files.length} file(s) and ${folders.length} folder(s). This local blueprint is only for this ${colorName} chat. It is leading together with the global blueprint: follow it as closely as possible. Create those paths and honor addedFunctions, addedVariables, addedImports, and notes even if they are not on disk. Do not omit, rename, relocate, or replace them. Extra new files not in either blueprint are allowed when needed if the blueprint does not cover them.`
-        : `${readyTag} The ${colorName} session blueprint is empty. Only this ${colorName} chat can see a local blueprint if the user places one later.`,
+      `VISUAL_CODER_BLUEPRINT_READY The ${colorName} blueprint has ${files.length} file(s) and ${folders.length} folder(s). This blueprint is only for this ${colorName} chat and is leading: follow it as closely as possible. Create those paths and honor addedFunctions, addedVariables, addedImports, and notes even if they are not on disk. Do not omit, rename, relocate, or replace them. Extra new files not in this blueprint are allowed when needed if the blueprint does not cover them.`,
     )
   } else {
     console.log(
-      blueprint.enabled
-        ? `${readyTag} The global blueprint has ${files.length} file(s) and ${folders.length} folder(s). The global blueprint is shared with every session and is leading: follow it as closely as possible. Create those paths and honor addedFunctions, addedVariables, addedImports, and notes even if they are not on disk. Notes are extra instructions or pseudo code for a file, folder, function, or variable — follow them when implementing those items. Do not omit, rename, relocate, or replace them. Extra new files that are not in the global or this session's local blueprint are allowed when needed if the blueprint does not cover them. The user can keep placing files and folders; re-read the global blueprint.json when it is printed again.`
-        : `${readyTag} The global blueprint is empty. The user can still place files and folders on the global or this session's color; re-read the global blueprint.json when it is printed again. Continue without user-placed files until that file has content.`,
+      `VISUAL_CODER_BLUEPRINT_READY The ${colorName} blueprint is empty. The user can still place files and folders on this color; re-read the blueprint when it is printed again. Continue without user-placed files until that dump has content.`,
     )
   }
-  console.log(startTag)
+  console.log('VISUAL_CODER_BLUEPRINT_START')
   console.log(JSON.stringify(blueprint, null, 2))
-  console.log(endTag)
+  console.log('VISUAL_CODER_BLUEPRINT_END')
 }
 
 function printSessionBlueprints(store, dataDir, sessionId) {
-  const global = store.readBlueprint(dataDir)
   const local = store.readLocalBlueprint(dataDir, sessionId)
   const colorName =
     store.resolveSessionColor(store.readManifest(dataDir, sessionId)?.color)?.name ||
     'session'
-  const files = (global.files ?? []).length
-  const folders = (global.folders ?? []).length
-  const localFiles = (local.files ?? []).length
-  const localFolders = (local.folders ?? []).length
-  const detail = [
-    global.enabled ? `global ${files} file(s), ${folders} folder(s)` : null,
-    local.enabled
-      ? `${colorName} ${localFiles} file(s), ${localFolders} folder(s)`
-      : null,
-  ]
-    .filter(Boolean)
-    .join('; ')
-  printBlueprintDump(global)
-  printBlueprintDump(local, { local: true, colorName })
+  const files = (local.files ?? []).length
+  const folders = (local.folders ?? []).length
+  const detail = local.enabled
+    ? `${colorName} ${files} file(s), ${folders} folder(s)`
+    : null
+  printBlueprintDump(local, { colorName })
   console.log(
-    'VISUAL_CODER_SAY_BLUEPRINT Reply in chat now. Start with "I see on the blueprint" and name every file, folder, function, variable, import, note, and pointer from the dumps. Say which items are global and which are this session\'s color. This confirms you interpreted the blueprint correctly. Then, unless you were told to stop and wait, you MUST run report-deliveries with short titles only. Do not invent implementation steps yet. Do not list steps in chat. Then MUST run report-plan for the invoked delivery only. Do not edit files yet. If both dumps are empty, say "I see nothing on the blueprint yet."',
+    'VISUAL_CODER_SAY_BLUEPRINT Reply in chat now. Start with "I see on the blueprint" and name every file, folder, function, variable, import, note, and pointer from the dump. This confirms you interpreted the blueprint correctly. Then, unless you were told to stop and wait, you MUST run report-deliveries with short titles only. Do not invent implementation steps yet. Do not list steps in chat. Then MUST run report-plan for the invoked delivery only. Do not edit files yet. If the dump is empty, say "I see nothing on the blueprint yet."',
   )
-  store.markBlueprintSeen(dataDir, sessionId, global.revision, local.revision)
+  store.markBlueprintSeen(dataDir, sessionId, local.revision, local.revision)
   return {
-    global,
+    global: local,
     local,
     colorName,
     detail: detail || 'none',
@@ -445,7 +422,7 @@ export async function readBlueprint(args) {
     console.log('VISUAL_CODER_INSTRUCTION_START')
     console.log(instruction)
     console.log('VISUAL_CODER_INSTRUCTION_END')
-  } else if (dumped.global.enabled || dumped.local.enabled) {
+  } else if (dumped.local.enabled) {
     console.log(
       'VISUAL_CODER_BLUEPRINT_ONLY No chat instruction. An enabled blueprint is the request: MUST run report-deliveries with short titles first — do not invent implementation steps yet. Then MUST run report-plan for the invoked delivery only, then implement as closely as possible. Ask the user if you need more information before reporting deliveries. Extra files are allowed if the blueprint does not cover them. Do not edit before report-plan.',
     )
@@ -652,7 +629,7 @@ export async function proposePatch(args) {
       config.targetRoot,
     )
     console.log(
-      `Cleared session ${sessionId}; stored diffs were removed. Applied files were kept. The global blueprint remains.`,
+      `Cleared session ${sessionId}; stored diffs were removed. Applied files were kept.`,
     )
     process.exit(0)
   }

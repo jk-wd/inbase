@@ -172,7 +172,7 @@ export const MAX_CONTEXT_TOTAL_BYTES: number
 export const SESSION_SLOT_COUNT: number
 export const SESSION_COLORS: Array<{ id: string; name: string; hex: string }>
 export const SESSION_COLOR_ALIASES: Record<string, string>
-export const GLOBAL_BLUEPRINT_COLOR: { id: 'global'; name: 'Global'; hex: string }
+export const DEFAULT_SESSION_COLOR: { id: string; name: string; hex: string }
 export function sessionColorOrderIndex(colorId: string | null | undefined): number
 export function compareSessionColorOrder(
   left: string | null | undefined,
@@ -190,7 +190,6 @@ export function isChatLocked(dataDir: string, sessionId: string): boolean
 export function colorUnknownMessage(query?: string | null): string
 export function colorBusyMessage(colorName: string): string
 export function colorMissingMessage(colorName: string): string
-export function isGlobalBlueprintColor(colorId: string | null | undefined): boolean
 export function findSessionIdByColor(
   dataDir: string,
   colorId: string | null | undefined,

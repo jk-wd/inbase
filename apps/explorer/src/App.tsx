@@ -104,7 +104,7 @@ import {
   type CodebaseGraph,
   type ExplainSession,
   type ExplainTargetKind,
-  GLOBAL_BLUEPRINT_COLOR,
+  DEFAULT_SESSION_COLOR,
   SESSION_COLORS,
   compareSessionColorOrder,
   type LocalBlueprint,
@@ -138,12 +138,7 @@ function emptySharedBlueprint(): SharedBlueprint {
   }
 }
 
-function blueprintForColor(
-  color: string,
-  global: SharedBlueprint,
-  locals: LocalBlueprint[],
-) {
-  if (color === GLOBAL_BLUEPRINT_COLOR.id) return global
+function blueprintForColor(color: string, locals: LocalBlueprint[]) {
   return locals.find((item) => item.color === color) ?? emptySharedBlueprint()
 }
 
@@ -183,18 +178,9 @@ function blueprintOptionsFrom(
       sessionId: local.sessionId,
     })
   }
-  return [
-    {
-      id: GLOBAL_BLUEPRINT_COLOR.id,
-      name: GLOBAL_BLUEPRINT_COLOR.name,
-      hex: GLOBAL_BLUEPRINT_COLOR.hex,
-      kind: 'global',
-      sessionId: null,
-    },
-    ...[...byColor.values()].sort((left, right) =>
-      compareSessionColorOrder(left.id, right.id),
-    ),
-  ]
+  return [...byColor.values()].sort((left, right) =>
+    compareSessionColorOrder(left.id, right.id),
+  )
 }
 
 function blueprintLiveEnabled(
@@ -300,12 +286,6 @@ function withCapturedBlueprint(
     notes: capture.notes,
     pointers: capture.pointers,
   }
-  if (capture.color === GLOBAL_BLUEPRINT_COLOR.id) {
-    return {
-      global: capturedBlueprintContents(current.global, fields),
-      locals: current.locals,
-    }
-  }
   const existing = current.locals.find((item) => item.color === capture.color)
   const option = capture.options.find((item) => item.id === capture.color)
   const nextLocal: LocalBlueprint = {
@@ -362,12 +342,6 @@ function withBlueprintHidden(
   hidden: boolean,
   options: BlueprintOption[],
 ): { global: SharedBlueprint; locals: LocalBlueprint[] } {
-  if (color === GLOBAL_BLUEPRINT_COLOR.id) {
-    return {
-      global: { ...current.global, hidden },
-      locals: current.locals,
-    }
-  }
   const existing = current.locals.find((item) => item.color === color)
   if (existing) {
     return {
@@ -464,9 +438,6 @@ function withPatchedBlueprint(
   color: string,
   patch: (blueprint: SharedBlueprint) => SharedBlueprint,
 ): { global: SharedBlueprint; locals: LocalBlueprint[] } {
-  if (color === GLOBAL_BLUEPRINT_COLOR.id) {
-    return { global: patch(current.global), locals: current.locals }
-  }
   return {
     global: current.global,
     locals: current.locals.map((item) =>
@@ -485,7 +456,6 @@ function collectMapBlueprints(input: {
   selectedImports: PatchImportAddition[]
   selectedNotes: BlueprintNote[]
   selectedPointers: BlueprintPointer[]
-  global: SharedBlueprint
   locals: LocalBlueprint[]
 }) {
   const blocks = new Map<string, UserCreatedBlock>()
@@ -511,43 +481,9 @@ function collectMapBlueprints(input: {
     notes: BlueprintNote[]
     pointers: BlueprintPointer[]
   }> = [
-    {
-      id: GLOBAL_BLUEPRINT_COLOR.id,
-      hex: GLOBAL_BLUEPRINT_COLOR.hex,
-      hidden: !input.visibleColors.has(GLOBAL_BLUEPRINT_COLOR.id),
-      live: input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id,
-      blocks:
-        input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
-          ? input.selectedBlocks
-          : input.global.files,
-      islands:
-        input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
-          ? input.selectedIslands
-          : input.global.folders,
-      functions:
-        input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
-          ? input.selectedFunctions
-          : input.global.addedFunctions,
-      variables:
-        input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
-          ? input.selectedVariables
-          : input.global.addedVariables,
-      imports:
-        input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
-          ? input.selectedImports
-          : input.global.addedImports,
-      notes:
-        input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
-          ? input.selectedNotes
-          : input.global.notes,
-      pointers:
-        input.selectedColor === GLOBAL_BLUEPRINT_COLOR.id
-          ? input.selectedPointers
-          : input.global.pointers,
-    },
     ...input.locals.map((local) => ({
       id: local.color,
-      hex: local.colorHex || GLOBAL_BLUEPRINT_COLOR.hex,
+      hex: local.colorHex || DEFAULT_SESSION_COLOR.hex,
       hidden: !input.visibleColors.has(local.color),
       live: input.selectedColor === local.color,
       blocks:
@@ -580,6 +516,25 @@ function collectMapBlueprints(input: {
           : local.pointers,
     })),
   ]
+  if (
+    input.selectedColor &&
+    !sources.some((source) => source.id === input.selectedColor)
+  ) {
+    const option = SESSION_COLORS.find((item) => item.id === input.selectedColor)
+    sources.push({
+      id: input.selectedColor,
+      hex: option?.hex || DEFAULT_SESSION_COLOR.hex,
+      hidden: !input.visibleColors.has(input.selectedColor),
+      live: true,
+      blocks: input.selectedBlocks,
+      islands: input.selectedIslands,
+      functions: input.selectedFunctions,
+      variables: input.selectedVariables,
+      imports: input.selectedImports,
+      notes: input.selectedNotes,
+      pointers: input.selectedPointers,
+    })
+  }
 
   sources.sort((left, right) => Number(left.live) - Number(right.live))
   const layers: Array<{
@@ -650,7 +605,7 @@ function pointerColorMaps(
   const files: Record<string, string[]> = {}
   const folders: Record<string, string[]> = {}
   for (const item of pointers) {
-    const hex = item.colorHex || GLOBAL_BLUEPRINT_COLOR.hex
+    const hex = item.colorHex || DEFAULT_SESSION_COLOR.hex
     const target = item.kind === 'folder' ? folders : files
     const list = target[item.path] ?? []
     if (!list.includes(hex)) list.push(hex)
@@ -876,10 +831,10 @@ function Explorer({
     BLUEPRINT_OVERLAY.strength,
   )
   const [blueprintColor, setBlueprintColor] = useState<string>(
-    GLOBAL_BLUEPRINT_COLOR.id,
+    DEFAULT_SESSION_COLOR.id,
   )
   const [visibleBlueprintColors, setVisibleBlueprintColors] = useState<string[]>(
-    [GLOBAL_BLUEPRINT_COLOR.id],
+    [DEFAULT_SESSION_COLOR.id],
   )
   const [globalBlueprint, setGlobalBlueprint] = useState<SharedBlueprint>(
     emptySharedBlueprint,
@@ -910,7 +865,6 @@ function Explorer({
   const blueprintPointersRef = useRef(blueprintPointers)
   const persistBlueprintRef = useRef<() => void>(() => {})
   const selectBlueprintColorRef = useRef<(color: string) => void>(() => {})
-  const globalBlueprintSelectedRef = useRef(true)
   const notesDirty = useRef(false)
   const blueprintPersistGen = useRef(0)
   const notePersistTimer = useRef<number | null>(null)
@@ -964,7 +918,6 @@ function Explorer({
         selectedImports: blueprintImports,
         selectedNotes: blueprintNotes,
         selectedPointers: blueprintPointers,
-        global: globalBlueprint,
         locals: localBlueprints,
       }),
     [
@@ -974,7 +927,6 @@ function Explorer({
       blueprintNotes,
       blueprintPointers,
       blueprintVariables,
-      globalBlueprint,
       localBlueprints,
       userBlocks,
       userIslands,
@@ -992,16 +944,13 @@ function Explorer({
         pointers:
           option.id === blueprintColor
             ? blueprintPointers
-            : option.id === GLOBAL_BLUEPRINT_COLOR.id
-              ? globalBlueprint.pointers
-              : (localBlueprints.find((item) => item.color === option.id)
-                  ?.pointers ?? []),
+            : (localBlueprints.find((item) => item.color === option.id)
+                ?.pointers ?? []),
       })),
     [
       blueprintColor,
       blueprintOptions,
       blueprintPointers,
-      globalBlueprint.pointers,
       localBlueprints,
     ],
   )
@@ -1700,8 +1649,7 @@ function Explorer({
     const matches = (island: UserCreatedIsland) =>
       !island.naming && createdIslandKey(island) === folderPath
     if (userIslandsRef.current.some(matches)) return blueprintColorRef.current
-    const { global, locals } = latestBlueprintsRef.current
-    if (global.folders.some(matches)) return GLOBAL_BLUEPRINT_COLOR.id
+    const { locals } = latestBlueprintsRef.current
     return (
       locals.find((item) => item.folders.some(matches))?.color ?? null
     )
@@ -1749,7 +1697,6 @@ function Explorer({
     }
     const stored = blueprintForColor(
       color,
-      latestBlueprintsRef.current.global,
       latestBlueprintsRef.current.locals,
     )
     return {
@@ -1855,10 +1802,7 @@ function Explorer({
     ) {
       return blueprintColorRef.current
     }
-    const { global, locals } = latestBlueprintsRef.current
-    if (global.files.some((block) => block.id === fileId)) {
-      return GLOBAL_BLUEPRINT_COLOR.id
-    }
+    const { locals } = latestBlueprintsRef.current
     return (
       locals.find((item) =>
         item.files.some((block) => block.id === fileId),
@@ -2558,7 +2502,6 @@ function Explorer({
           setGlobalBlueprint(nextBlueprints.global)
           setLocalBlueprints(nextBlueprints.locals)
           const colorIds = new Set([
-            GLOBAL_BLUEPRINT_COLOR.id,
             ...SESSION_COLORS.map((color) => color.id),
             ...bundle.localBlueprints.map((item) => item.color),
             ...bundle.intents
@@ -2566,8 +2509,8 @@ function Explorer({
               .filter((id): id is string => Boolean(id)),
           ])
           if (!colorIds.has(blueprintColorRef.current)) {
-            blueprintColorRef.current = GLOBAL_BLUEPRINT_COLOR.id
-            setBlueprintColor(GLOBAL_BLUEPRINT_COLOR.id)
+            blueprintColorRef.current = DEFAULT_SESSION_COLOR.id
+            setBlueprintColor(DEFAULT_SESSION_COLOR.id)
           }
           const visible = visibleBlueprintColorsRef.current
           const nextVisible = visible.filter((id) => colorIds.has(id))
@@ -2578,7 +2521,6 @@ function Explorer({
           applyBlueprintContents(
             blueprintForColor(
               blueprintColorRef.current,
-              nextBlueprints.global,
               nextBlueprints.locals,
             ),
             !sessionsChanged,
@@ -2625,15 +2567,9 @@ function Explorer({
         seenSessionIds.current = nextIds
         setFocusedSessionId((current) => {
           const selectedColor = blueprintColorRef.current
-          if (
-            selectedColor &&
-            selectedColor !== GLOBAL_BLUEPRINT_COLOR.id
-          ) {
+          if (selectedColor) {
             const match = merged.find((item) => item.color === selectedColor)
             if (match?.sessionId) return match.sessionId
-          }
-          if (globalBlueprintSelectedRef.current) {
-            return current
           }
           if (appeared && serverFocus && nextIds.has(serverFocus)) {
             return serverFocus
@@ -2836,11 +2772,7 @@ function Explorer({
       blueprintColorRef.current = color
       setBlueprintColor(color)
       applyBlueprintContents(
-        blueprintForColor(
-          color,
-          latestBlueprintsRef.current.global,
-          latestBlueprintsRef.current.locals,
-        ),
+        blueprintForColor(color, latestBlueprintsRef.current.locals),
         false,
       )
     },
@@ -2894,17 +2826,14 @@ function Explorer({
       setGlobalBlueprint(next.global)
       setLocalBlueprints(next.locals)
       applyBlueprintContents(
-        blueprintForColor(blueprintColorRef.current, next.global, next.locals),
+        blueprintForColor(blueprintColorRef.current, next.locals),
         false,
       )
-      const visible = [
-        !next.global.hidden ? GLOBAL_BLUEPRINT_COLOR.id : null,
-        ...next.locals
-          .filter((item) => !item.hidden)
-          .map((item) => item.color),
-      ].filter((id): id is string => Boolean(id))
+      const visible = next.locals
+        .filter((item) => !item.hidden)
+        .map((item) => item.color)
       visibleBlueprintColorsRef.current =
-        visible.length > 0 ? visible : [GLOBAL_BLUEPRINT_COLOR.id]
+        visible.length > 0 ? visible : [DEFAULT_SESSION_COLOR.id]
       setVisibleBlueprintColors(visibleBlueprintColorsRef.current)
       setSavedBlueprint({
         name: loaded.name,
@@ -2921,12 +2850,10 @@ function Explorer({
 
   const selectBlueprintColor = useCallback(
     (color: string) => {
-      globalBlueprintSelectedRef.current = color === GLOBAL_BLUEPRINT_COLOR.id
       if (!currentVisibleColors().includes(color)) {
         applyHiddenToColors([color], false)
       }
       activateBlueprintColor(color)
-      if (color === GLOBAL_BLUEPRINT_COLOR.id) return
       const match =
         liveIntentsRef.current.find((item) => item.color === color) ??
         intents.find((item) => item.color === color)
@@ -2940,7 +2867,6 @@ function Explorer({
   selectBlueprintColorRef.current = selectBlueprintColor
 
   useEffect(() => {
-    if (globalBlueprintSelectedRef.current) return
     const focused =
       intents.find((item) => item.sessionId === focusedSessionId) ??
       intents.find((item) => item.sessionId) ??

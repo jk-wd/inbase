@@ -30,21 +30,20 @@ Skip it for git, lockfiles, `.inbase`, `.cursor`, `.claude`, `.agents`,
 `.zed`, `.rules`, `.cline`, `.clinerules`, `.github/skills`, `.opencode`,
 `.lmstudio`, questions with no code changes, or `/extract-blueprint`.
 
-`npx inbase run` creates 10 empty chat slots. A regular chat connects to
+`npx inbase run` creates 11 empty chat slots. A regular chat connects to
 the next unconnected slot **only for work inside `target`**. You do not need
 `/inbase`. The session window **Done** button keeps applied files and frees
 the color; it does not come through this chat. Do not wait for it.
 
 ## Commands
 
-Colors: `/coral` `/amber` `/lime` `/orange` `/violet` `/teal` `/crimson`
-`/forest` `/grey` `/white`. Aliases: `/red` (Coral), `/yellow` (Amber),
+Colors: `/blue` `/coral` `/amber` `/lime` `/orange` `/violet` `/teal` `/crimson`
+`/forest` `/grey` `/white`. Aliases: `/sky` (Blue), `/red` (Coral), `/yellow` (Amber),
 `/green` (Lime), `/purple` (Violet), `/darkgreen` (Forest), `/gray` (Grey).
 Text after the command is the request. Empty text: attach and start from an
 enabled blueprint only — MUST `report-deliveries` first (titles only, no steps),
 then `report-plan` for the invoked delivery, then implement as closely as
-possible; ask if you need more. Extra files are allowed if the blueprint does not cover them. `/blue` is the global blueprint, not a chat — do not
-attach.
+possible; ask if you need more. Extra files are allowed if the blueprint does not cover them.
 
 - **`/stop`**: discard the plan and patches, free the color, keep live project
   files, then stop. Do not edit files after `/stop`.
@@ -198,35 +197,32 @@ npx inbase read-blueprint --session <color>
 ```
 
    No instruction (empty `$ARGUMENTS`, no `VISUAL_CODER_INSTRUCTION_*`):
-   - `VISUAL_CODER_BLUEPRINT_ONLY`, or either dump `enabled` true: that is the
+   - `VISUAL_CODER_BLUEPRINT_ONLY`, or the dump `enabled` true: that is the
      request. MUST `report-deliveries` first (titles only — do not invent
      steps), then `report-plan` for the invoked delivery from those files,
      folders, symbols, imports, notes, and pointers, then implement as closely
      as possible. Ask if you need more. Extra files are allowed if the blueprint does not cover them.
-   - `VISUAL_CODER_NO_REQUEST`, or both blueprints empty: **stop**. Wait for a
+   - `VISUAL_CODER_NO_REQUEST`, or an empty blueprint: **stop**. Wait for a
      request, `/explainit`, or `/stop`.
 
-   Global (blue) blueprint is shared. Local blueprint is this session's color
-   only. `VISUAL_CODER_INSTRUCTION_*` is the user's request.
+   This session's blueprint is this color only. `VISUAL_CODER_INSTRUCTION_*`
+   is the user's request.
    `VISUAL_CODER_CONTEXT_FILES_*` are session-only context; read each `path`.
    They are not project files to create. Instruction does not override an
    enabled blueprint; if they conflict, ask. No instruction is not a conflict.
 
-3. Read dumps between `VISUAL_CODER_BLUEPRINT_START`/`END` (global) and
-   `VISUAL_CODER_LOCAL_BLUEPRINT_START`/`END` (this color). You can also read
-   `.inbase/blueprint.json`. If either dump is `enabled` true, that blueprint
-   is leading: follow it as closely as possible. After `report-plan`, create
-   those `files`, `folders`, `addedFunctions`, `addedVariables`, and
-   `addedImports` even if they are not on disk. Do not omit, rename, relocate,
-   or replace them. Extra edits to existing files are allowed. Extra new files
-   not in either blueprint are allowed when needed if the blueprint does not
-   cover them. Do not use another session's local blueprint.
+3. Read the dump between `VISUAL_CODER_BLUEPRINT_START`/`END`. If that dump is
+   `enabled` true, that blueprint is leading: follow it as closely as possible.
+   After `report-plan`, create those `files`, `folders`, `addedFunctions`,
+   `addedVariables`, and `addedImports` even if they are not on disk. Do not
+   omit, rename, relocate, or replace them. Extra edits to existing files are
+   allowed. Extra new files not in this blueprint are allowed when needed if
+   the blueprint does not cover them. Do not use another session's blueprint.
 
 4. **Say what you see on the blueprint** before `report-deliveries`. Start with
    `I see on the blueprint` and name every file, folder, function, variable,
-   import, note, and pointer — which are global vs this session's color. If
-   both dumps are empty, say `I see nothing on the blueprint yet.` Do not list
-   implementation steps.
+   import, note, and pointer. If the dump is empty, say
+   `I see nothing on the blueprint yet.` Do not list implementation steps.
 
 5. **MUST run `report-deliveries` now** with every delivery as `--delivery`.
    Titles only. Do not invent implementation steps. Do not list steps in chat.
@@ -284,7 +280,7 @@ npx inbase read-blueprint --session <color>
 - Omit, rename, relocate, or replace files, folders, or symbols from an enabled
   blueprint; follow it as closely as possible. Extra files are allowed only
   when the blueprint does not cover them
-- Read global `user-context.json` for placed files; follow another session's local blueprint; use camera viewpoint to choose files
+- Read global `user-context.json` for placed files; follow another session's blueprint; use camera viewpoint to choose files
 - Edit before `VISUAL_CODER_EXECUTE` on a first plan or a change request
 - Implement two or more plan steps before `propose-patch`, or skip
   `propose-patch` after a finished step

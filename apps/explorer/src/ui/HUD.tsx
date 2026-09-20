@@ -8,7 +8,7 @@ import {
   type AgentIntentStatus,
   type BlueprintNote,
   type BlueprintNoteKind,
-  GLOBAL_BLUEPRINT_COLOR,
+  DEFAULT_SESSION_COLOR,
   SESSION_COLORS,
   compareSessionColorOrder,
   sessionColorPageCount,
@@ -93,7 +93,7 @@ function sessionColorName(intent: AgentIntent) {
 
 function sessionSlashCommand(intent: Pick<AgentIntent, 'color'>) {
   const color = intent.color?.trim()
-  if (!color || color === 'blue') return null
+  if (!color) return null
   return `/${color}`
 }
 
@@ -131,8 +131,7 @@ function ColorConnectHint({
           .{' '}
         </>
       ) : null}
-      A color command with no extra text starts from the enabled blueprint.{' '}
-      <kbd>/blue</kbd> is the global blueprint, not a chat.
+      A color command with no extra text starts from the enabled blueprint.
     </p>
   )
 }
@@ -209,12 +208,10 @@ function ColorPager({
 }
 
 function pagedBlueprintOptions(options: BlueprintOption[], page: number) {
-  const global = options.filter((option) => option.kind === 'global')
-  const sessions = options.filter((option) => option.kind !== 'global')
   const visibleIds = new Set<string>(
     sessionColorsOnPage(page).map((color) => color.id),
   )
-  return [...global, ...sessions.filter((option) => visibleIds.has(option.id))]
+  return options.filter((option) => visibleIds.has(option.id))
 }
 
 function BlueprintLayerSwatches({
@@ -250,33 +247,21 @@ function BlueprintLayerSwatches({
         return (
           <button
             key={option.id}
-            className={
-              option.kind === 'global'
-                ? 'hud-button hud-blueprint-option'
-                : 'hud-button hud-blueprint-option hud-blueprint-option-swatch'
-            }
+            className="hud-button hud-blueprint-option hud-blueprint-option-swatch"
             type="button"
             role="radio"
             aria-checked={selected}
             data-active={selected ? 'true' : undefined}
             disabled={locked}
             aria-label={
-              option.kind === 'global'
-                ? locked
-                  ? 'Adding on the global layer'
-                  : 'Put on the global layer'
-                : locked
-                  ? `Adding on the ${option.name} layer`
-                  : `Put on the ${option.name} layer`
+              locked
+                ? `Adding on the ${option.name} layer`
+                : `Put on the ${option.name} layer`
             }
             title={
-              option.kind === 'global'
-                ? locked
-                  ? 'This blueprint folder is on the global layer'
-                  : 'Global layer'
-                : locked
-                  ? `This blueprint folder is on the ${option.name} layer`
-                  : `${option.name} layer`
+              locked
+                ? `This blueprint folder is on the ${option.name} layer`
+                : `${option.name} layer`
             }
             style={
               {
@@ -292,9 +277,6 @@ function BlueprintLayerSwatches({
               colorHex={option.hex}
               className="hud-session-swatch hud-blueprint-swatch"
             />
-            {option.kind === 'global' ? (
-              <span className="hud-blueprint-select-label">Global</span>
-            ) : null}
           </button>
         )
       })}
@@ -317,7 +299,7 @@ function defaultAddLayerColor(
   if (preferred) return preferred
   if (visible.length === 1) return visible[0]!
   if (current && visible.includes(current)) return current
-  return visible[0] ?? current ?? GLOBAL_BLUEPRINT_COLOR.id
+  return visible[0] ?? current ?? DEFAULT_SESSION_COLOR.id
 }
 
 function AddItemModal({
@@ -458,9 +440,9 @@ function PointColorControl({
   const menuRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const current =
-    colorPointers.find((option) => option.id === (currentColorId ?? 'global')) ??
+    colorPointers.find((option) => option.id === (currentColorId ?? DEFAULT_SESSION_COLOR.id)) ??
     colorPointers[0]
-  const currentHex = current?.hex ?? GLOBAL_BLUEPRINT_COLOR.hex
+  const currentHex = current?.hex ?? DEFAULT_SESSION_COLOR.hex
   const pointed = current ? optionPointed(current, target) : false
   const showMenu = colorPointers.length > 0
 
@@ -588,7 +570,7 @@ function PointColorControl({
                 >
                   <EyeIcon size={15} />
                   <span>
-                    {option.kind === 'global' ? 'Global' : option.name}
+                    {option.name}
                   </span>
                 </button>
               )
@@ -1266,7 +1248,7 @@ function BlueprintPointModal({
                   onClick={() => onToggle(option.id)}
                 >
                   <EyeIcon size={15} />
-                  <span>{option.kind === 'global' ? 'Global' : option.name}</span>
+                  <span>{option.name}</span>
                 </button>
               </li>
             )
@@ -1603,6 +1585,29 @@ function latestDiffForStep(chain: AgentIntent['chain'], stepIndex: number) {
   return chain[stepIndex - 1] ?? null
 }
 
+function planStepOutline(
+  step: { index: number; delivery?: number },
+  siblings: AgentIntent['steps'],
+) {
+  const delivery = step.delivery
+  if (!delivery) return String(step.index)
+  const local = siblings.findIndex((entry) => entry.index === step.index) + 1
+  return local > 0 ? `${delivery}.${local}` : String(step.index)
+}
+
+function planStepOutlineForIntent(
+  intent: AgentIntent,
+  stepIndex: number | null | undefined,
+) {
+  if (typeof stepIndex !== 'number' || !intent.steps?.length) return null
+  const step = intent.steps.find((entry) => entry.index === stepIndex)
+  if (!step) return String(stepIndex)
+  const siblings = step.delivery
+    ? intent.steps.filter((entry) => (entry.delivery ?? 0) === step.delivery)
+    : intent.steps
+  return planStepOutline(step, siblings)
+}
+
 function PlanStepList({
   steps,
   intent,
@@ -1635,9 +1640,10 @@ function PlanStepList({
         const lastStepDone =
           canAcceptProposal && proposed && step.index === intent.steps.length
         const stepDone = accepted || lastStepDone
+        const outline = planStepOutline(step, steps)
         const stepBody = (
           <>
-            <span className="hud-step-index">{step.index}.</span>
+            <span className="hud-step-index">{outline}.</span>
             <span className="hud-step-main">
               <span className="hud-step-title">{step.title}</span>
             </span>
@@ -1656,8 +1662,8 @@ function PlanStepList({
                 aria-current={viewing ? 'step' : undefined}
                 aria-label={
                   canResumeLive
-                    ? `Show live map for step ${step.index}`
-                    : `Show diff for step ${step.index}`
+                    ? `Show live map for step ${outline}`
+                    : `Show diff for step ${outline}`
                 }
                 title={
                   canResumeLive
@@ -1721,10 +1727,25 @@ function SessionPanel({
   )
   const planningDelivery =
     deliveries.length > 0 && currentDelivery > 0 && currentDeliverySteps.length === 0
+  const currentOutline = planStepOutlineForIntent(intent, intent.step)
+  const currentOutlineStep = intent.steps.find(
+    (step) => step.index === intent.step,
+  )
+  const currentOutlineSiblings = currentOutlineStep?.delivery
+    ? intent.steps.filter(
+        (step) => (step.delivery ?? 0) === currentOutlineStep.delivery,
+      )
+    : []
+  const lastOutlineSibling = currentOutlineSiblings.at(-1)
+  const lastOutline = lastOutlineSibling
+    ? planStepOutline(lastOutlineSibling, currentOutlineSiblings)
+    : null
   const stepLabel = planningDelivery
     ? `Delivery ${currentDelivery} of ${deliveries.length}`
-    : deliveries.length > 0 && intent.step && intent.steps.length > 0
-      ? `Delivery ${currentDelivery} of ${deliveries.length} · Step ${intent.step} of ${intent.steps.length}`
+    : deliveries.length > 0 && currentOutline
+      ? `Delivery ${currentDelivery} of ${deliveries.length} · Step ${currentOutline}${
+          lastOutline ? ` of ${lastOutline}` : ''
+        }`
       : intent.step && intent.steps?.length > 0
         ? `Step ${intent.step} of ${intent.steps.length}`
         : 'Patch'
@@ -2300,7 +2321,7 @@ function explorerInstructions({
           id: 'blueprint-select',
           keys: ['Blueprint colors'],
           label:
-            'The color above the session window is the active blueprint. Global blueprint sits next to the fold-in control, draws on the shared blue layer, and hides the session window',
+            'The color above the session window is the active blueprint',
         },
         {
           id: 'blueprint-toggle',
@@ -2427,7 +2448,7 @@ function explorerInstructions({
           id: 'blueprint-select',
           keys: ['Blueprint colors'],
           label:
-            'The color above the session window is the active blueprint. Global blueprint sits next to the fold-in control, draws on the shared blue layer, and hides the session window',
+            'The color above the session window is the active blueprint',
         },
         {
           id: 'blueprint-toggle',
@@ -2774,27 +2795,22 @@ export function HUD({
   const activeBlueprint =
     blueprintOptions.find((option) => option.id === blueprintColor) ??
     SESSION_COLORS.find((color) => color.id === blueprintColor) ??
-    (blueprintColor === GLOBAL_BLUEPRINT_COLOR.id
-      ? GLOBAL_BLUEPRINT_COLOR
-      : null)
+    null
   const nextAttachSession =
     sessions.find((session) => session.sessionId === nextAttachSessionId) ??
     [...sessions].reverse().find((session) => session.awaitingAttach) ??
     null
-  const colorSession =
-    blueprintColor && blueprintColor !== GLOBAL_BLUEPRINT_COLOR.id
-      ? sessions.find((session) => session.color === blueprintColor) ??
-        (intent.color === blueprintColor &&
-        intent.sessionId &&
-        isReviewingIntent(intent.status)
-          ? intent
-          : null)
-      : null
+  const colorSession = blueprintColor
+    ? sessions.find((session) => session.color === blueprintColor) ??
+      (intent.color === blueprintColor &&
+      intent.sessionId &&
+      isReviewingIntent(intent.status)
+        ? intent
+        : null)
+    : null
   const sessionPanelIntent =
     colorSession ??
-    (blueprintColor && blueprintColor !== GLOBAL_BLUEPRINT_COLOR.id
-      ? waitingColorIntent(blueprintColor)
-      : null)
+    (blueprintColor ? waitingColorIntent(blueprintColor) : null)
   const [colorPage, setColorPage] = useState(() =>
     sessionColorPageIndex(intent.color),
   )
@@ -3656,36 +3672,6 @@ export function HUD({
             hidden={leftPanelsHidden}
             onToggle={() => setLeftPanelsHidden((current) => !current)}
           />
-          {onSelectBlueprintColor && (
-            <button
-              className="hud-button hud-blueprint-option"
-              type="button"
-              aria-pressed={blueprintColor === GLOBAL_BLUEPRINT_COLOR.id}
-              data-active={
-                blueprintColor === GLOBAL_BLUEPRINT_COLOR.id
-                  ? 'true'
-                  : undefined
-              }
-              aria-label="Global blueprint"
-              title="Global blueprint. New files go here. The session window stays closed."
-              style={
-                {
-                  '--session-color': GLOBAL_BLUEPRINT_COLOR.hex,
-                } as CSSProperties
-              }
-              onClick={() =>
-                onSelectBlueprintColor(GLOBAL_BLUEPRINT_COLOR.id)
-              }
-            >
-              <SessionSwatch
-                colorHex={GLOBAL_BLUEPRINT_COLOR.hex}
-                className="hud-session-swatch hud-blueprint-swatch"
-              />
-              <span className="hud-blueprint-select-label">
-                Global blueprint
-              </span>
-            </button>
-          )}
         </div>
         <div className="hud-top-end">
           {devTargets?.enabled &&
@@ -3751,29 +3737,20 @@ export function HUD({
                   const baseLabel = stateLabel
                     ? `${label}, ${stateLabel}`
                     : `${color.name} blueprint`
-                  const toggleHint = active
-                    ? 'Click again for global blueprint'
-                    : null
                   return (
                     <button
                       className="hud-button hud-session-tab"
                       type="button"
                       role="tab"
                       aria-selected={active}
-                      aria-label={
-                        toggleHint ? `${baseLabel}. ${toggleHint}` : baseLabel
-                      }
+                      aria-label={baseLabel}
                       data-active={active}
                       data-busy={busy ? true : undefined}
                       key={color.id}
                       title={
-                        toggleHint
-                          ? stateLabel
-                            ? `${label} · ${stateLabel} · ${toggleHint}`
-                            : `${color.name} blueprint · ${toggleHint}`
-                          : stateLabel
-                            ? `${label} · ${stateLabel}`
-                            : `${color.name} blueprint`
+                        stateLabel
+                          ? `${label} · ${stateLabel}`
+                          : `${color.name} blueprint`
                       }
                       style={
                         {
@@ -3781,10 +3758,6 @@ export function HUD({
                         } as CSSProperties
                       }
                       onClick={() => {
-                        if (active) {
-                          onSelectBlueprintColor(GLOBAL_BLUEPRINT_COLOR.id)
-                          return
-                        }
                         if (session?.sessionId)
                           onFocusSession?.(session.sessionId)
                         onSelectBlueprintColor(color.id)

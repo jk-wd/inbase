@@ -1642,6 +1642,10 @@ button {
   margin: 6px 0 0 8px;
 }
 
+.hud-deliveries .hud-step-row {
+  grid-template-columns: 2.8em minmax(0, 1fr);
+}
+
 .hud-steps li {
   margin: 0 0 8px;
 }

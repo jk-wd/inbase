@@ -18,7 +18,7 @@ Skip it for git, lockfiles, `.inbase`, `.cursor`, `.claude`, `.agents`,
 `.zed`, `.rules`, `.cline`, `.clinerules`, `.github/skills`, `.opencode`,
 `.lmstudio`, questions with no code changes, or `/extract-blueprint`.
 
-`npx inbase run` creates 10 empty chat slots. A regular chat connects to
+`npx inbase run` creates 11 empty chat slots. A regular chat connects to
 the next unconnected slot **only for work inside `target`**. You do not need
 `/inbase`.
 
@@ -29,7 +29,7 @@ the next unconnected slot **only for work inside `target`**. You do not need
   the enabled blueprint only: follow it as closely as possible. Ask if you
   need more information. Extra files are allowed if the blueprint does not
   cover them.
-- **`/blue`**: Blue is the global blueprint, not a chat. Do not attach.
+- **`/blue`**: attach to Blue. Use `--session blue`.
 - **`/stop`**: end this session. Discard the plan and patches,
   and free the color slot. Keep live project files. Then stop. Do not edit files after `/stop`.
 - **`/explainit [question]`**: explain mode on the map. If a plan or proposal is
@@ -221,13 +221,13 @@ is waiting, do **not** restart from step 1. Do **not** attach.
 
    If the color command or chat has **no instruction** (empty `$ARGUMENTS`, and
    `read-blueprint` printed no `VISUAL_CODER_INSTRUCTION_*`):
-   - If it prints `VISUAL_CODER_BLUEPRINT_ONLY`, or either blueprint dump has
+   - If it prints `VISUAL_CODER_BLUEPRINT_ONLY`, or the blueprint dump has
      `enabled` true, **that is the request**. Plan from those files,
      folders, symbols, imports, notes, and pointers. Follow the drawing as
      closely as possible. Ask in chat if you need more information before
      reporting the plan. Extra files are allowed if the blueprint does not
      cover them.
-   - If it prints `VISUAL_CODER_NO_REQUEST`, or both blueprints are empty,
+   - If it prints `VISUAL_CODER_NO_REQUEST`, or the blueprint is empty,
      **stop**. Wait for the user to type a request, `/explainit`, or `/stop`.
 
 ```bash
@@ -235,9 +235,8 @@ npx inbase read-blueprint --session <color>
 ```
 
    The user may have placed files and folders on the map, or left the
-   blueprints empty. The **global** (blue) blueprint is shared across sessions.
-   This chat also has a **local** blueprint in this session's color; only this
-   chat receives it. They can keep placing at any time.
+   blueprint empty. This chat only sees this session's color. They can keep
+   placing at any time.
    If `read-blueprint` prints `VISUAL_CODER_INSTRUCTION_START` /
    `VISUAL_CODER_INSTRUCTION_END`, that text is the user's request for this
    session. If it prints `VISUAL_CODER_CONTEXT_FILES_START` /
@@ -249,27 +248,22 @@ npx inbase read-blueprint --session <color>
    ask the user. No instruction is not a conflict: an enabled blueprint alone
    is enough to start.
 3. Read the handshake output between `VISUAL_CODER_BLUEPRINT_START` and
-   `VISUAL_CODER_BLUEPRINT_END` (global, shared), and between
-   `VISUAL_CODER_LOCAL_BLUEPRINT_START` and `VISUAL_CODER_LOCAL_BLUEPRINT_END`
-   (this session's color only). You can also read the global
-   `.inbase/blueprint.json`.
-   If either dump has `enabled` true, **that blueprint is leading**. Follow it
+   `VISUAL_CODER_BLUEPRINT_END`.
+   If that dump has `enabled` true, **that blueprint is leading**. Follow it
    as closely as possible. Treat `files`, `folders`, `addedFunctions`,
    `addedVariables`, and `addedImports` as the source of truth for this chat.
    Create those paths and add those symbols even if they are not on disk.
-   Honor the global blueprint and this session's local blueprint. Do not use
-   another session's local blueprint.
+   Honor this session's blueprint. Do not use another session's blueprint.
    Do not omit, rename, relocate, or replace a blueprint file, folder, symbol,
    or import. Extra edits to existing files are allowed when needed to finish
-   the feature. Extra new files that are not in either blueprint are allowed
+   the feature. Extra new files that are not in this blueprint are allowed
    when needed if the blueprint does not cover them.
 4. **Say what you see on the blueprint** in this chat before listing steps or
    calling `report-plan`. Start with `I see on the blueprint` and name every
-   file, folder, function, variable, import, note, and pointer from the dumps —
-   say which are global and which are this session's color. This tells the user
-   you interpreted the drawing correctly. Do not summarize vaguely. If both
-   dumps are empty, say `I see nothing on the blueprint yet.` Then continue
-   (or stop on `VISUAL_CODER_NO_REQUEST`).
+   file, folder, function, variable, import, note, and pointer from the dump.
+   This tells the user you interpreted the drawing correctly. Do not summarize
+   vaguely. If the dump is empty, say `I see nothing on the blueprint yet.`
+   Then continue (or stop on `VISUAL_CODER_NO_REQUEST`).
 5. List **all** steps needed to finish the feature. Keep steps small enough that
    one recorded step is one landscape change (usually one new file, or a few
    related edits).
@@ -316,7 +310,7 @@ npx inbase report-plan \
     session, or a change request to replace the waiting proposal.
 10. After a finished session, the explorer already removed stored session
     diffs. **Keep the applied project files.** Do not restore, revert, or
-    delete the work. The global blueprint remains. Optionally run
+    delete the work. Optionally run
     `npx inbase propose-patch --session <color> --clear` to drop leftover
     session artifacts — that must not revert files.
 11. When the user types **`/stop`**, do not edit project files. Run
@@ -334,11 +328,11 @@ npx inbase report-plan \
 - Skip saying what you see on the blueprint after `read-blueprint`
 - Report a plan before telling the user what you see on the blueprint (`I see on the blueprint ...`)
 - Run `wait-for-approval` or `explain wait`; those commands are gone
-- Wait for a typed request when `/coral` `/amber` `/lime` `/orange` `/violet` `/teal` `/crimson` `/forest` `/grey` `/white` (or an alias) has no text and an enabled blueprint is already the request
-- Omit, rename, relocate, or replace files, islands, functions, variables, or imports from the global blueprint or this session's local blueprint when that dump is `enabled`
+- Wait for a typed request when `/blue` `/coral` `/amber` `/lime` `/orange` `/violet` `/teal` `/crimson` `/forest` `/grey` `/white` (or an alias) has no text and an enabled blueprint is already the request
+- Omit, rename, relocate, or replace files, islands, functions, variables, or imports from this session's blueprint when that dump is `enabled`
 - Treat the chat request or your own plan as overriding an enabled blueprint; follow it as closely as possible. Extra files are allowed only when the blueprint does not cover them
-- Read global `user-context.json` for placed files; those live on the global or this session's local blueprint
-- Follow another session's local blueprint
+- Read global `user-context.json` for placed files; those live on this session's blueprint
+- Follow another session's blueprint
 - Use the user's camera viewpoint to choose files
 - Edit project files before `VISUAL_CODER_EXECUTE`
 - Edit files for a change request before `report-plan` has replaced the waiting proposal

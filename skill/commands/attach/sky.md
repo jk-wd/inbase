@@ -1,18 +1,18 @@
 ---
-description: Attach this chat to the Blue Inbase session
+description: Attach this chat to the Blue (sky) Inbase session
 ---
 
-The user invoked `/blue`. Attach to **Blue**. Use `--session blue` for every later `inbase` command.
+The user invoked `/sky`. Attach to **Blue**. Use `--session sky` for every later `inbase` command.
 
 If this chat already attached, stay. Do not attach. Treat a later request as a change request: MUST `report-plan` from the last proposal first, then implement. Never edit before `report-plan`.
 
 ```bash
-npx inbase attach --color blue
+npx inbase attach --color sky
 ```
 
 If attach fails, reply with that output and stop.
 
-Continue the Inbase visual edits skill from `read-blueprint` with `--session blue`. After it returns, reply `I see on the blueprint ...`. Then MUST `report-deliveries` with titles only — do not invent steps yet. Then MUST `report-plan` for the invoked delivery only. Only after that command invokes the first step, implement that step only. After each step's edits, MUST `propose-patch` before the next step. Never implement the whole plan first. Never edit before `report-plan`.
+Continue the Inbase visual edits skill from `read-blueprint` with `--session sky`. After it returns, reply `I see on the blueprint ...`. Then MUST `report-deliveries` with titles only — do not invent steps yet. Then MUST `report-plan` for the invoked delivery only. Only after that command invokes the first step, implement that step only. After each step's edits, MUST `propose-patch` before the next step. Never implement the whole plan first. Never edit before `report-plan`.
 
 The user's request is:
 

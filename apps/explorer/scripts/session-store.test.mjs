@@ -160,12 +160,12 @@ test('setup session opens blueprint placement with no LLM attached', () => {
   const env = fixture()
   try {
     const started = setupSession(env.dataDir)
-    assert.equal(started.sessionId, 'coral')
-    assert.equal(started.color, 'coral')
+    assert.equal(started.sessionId, 'blue')
+    assert.equal(started.color, 'blue')
     assert.equal(started.phase, 'blueprint')
     assert.equal(started.awaitingAttach, true)
-    assert.equal(isChatLocked(env.dataDir, 'coral'), false)
-    assert.equal(readChats(env.dataDir).coral.locked, false)
+    assert.equal(isChatLocked(env.dataDir, 'blue'), false)
+    assert.equal(readChats(env.dataDir).blue.locked, false)
     assert.equal(readActiveSession(env.dataDir), started.sessionId)
 
     const intent = sessionIntent(env.dataDir, started.sessionId, ['src/a.ts'])
@@ -396,8 +396,8 @@ test('attach without an id uses the oldest waiting session', () => {
     assert.equal(intent.awaitingAttach, false)
     assert.equal(intent.llmIdle, false)
     assert.equal(intent.lastAck.kind, 'attached')
-    assert.equal(intent.colorName, 'Coral')
-    assert.equal(intent.lastAck.detail, 'Coral')
+    assert.equal(intent.colorName, 'Blue')
+    assert.equal(intent.lastAck.detail, 'Blue')
 
     const again = attachSession(env.dataDir, first.sessionId)
     assert.equal(again.sessionId, first.sessionId)
@@ -440,7 +440,9 @@ test('re-attach to the same session keeps a waiting last proposal', () => {
   }
 })
 
-test('parseSessionColorQuery maps aliases and rejects blue', () => {
+test('parseSessionColorQuery maps aliases including blue', () => {
+  assert.equal(parseSessionColorQuery('blue').id, 'blue')
+  assert.equal(parseSessionColorQuery('sky').id, 'blue')
   assert.equal(parseSessionColorQuery('red').id, 'coral')
   assert.equal(parseSessionColorQuery('Coral').id, 'coral')
   assert.equal(parseSessionColorQuery('YELLOW').id, 'amber')
@@ -454,10 +456,6 @@ test('parseSessionColorQuery maps aliases and rejects blue', () => {
   assert.equal(parseSessionColorQuery('white').id, 'white')
   assert.equal(parseSessionColorQuery(''), null)
   assert.throws(
-    () => parseSessionColorQuery('blue'),
-    (error) => String(error.message).includes('VISUAL_CODER_COLOR_UNKNOWN'),
-  )
-  assert.throws(
     () => parseSessionColorQuery('navy'),
     (error) => String(error.message) === colorUnknownMessage('navy'),
   )
@@ -469,9 +467,9 @@ test('parseSessionColorQuery maps aliases and rejects blue', () => {
 test('attach --color takes that waiting session even if it is not first', () => {
   const env = fixture()
   try {
-    const coral = setupSession(env.dataDir)
-    const amber = setupSession(env.dataDir)
-    const lime = setupSession(env.dataDir)
+    const coral = setupSession(env.dataDir, { sessionId: 'coral' })
+    const amber = setupSession(env.dataDir, { sessionId: 'amber' })
+    const lime = setupSession(env.dataDir, { sessionId: 'lime' })
     assert.equal(coral.color, 'coral')
     assert.equal(amber.color, 'amber')
     assert.equal(lime.color, 'lime')
@@ -515,7 +513,7 @@ test('new attach clears leftover plan on a waiting slot', () => {
     })
 
     const attached = attachSession(env.dataDir, null, {
-      color: 'red',
+      color: 'blue',
       targetRoot: env.targetRoot,
     })
     assert.equal(attached.sessionId, slot.sessionId)
@@ -544,7 +542,7 @@ test('new attach clears leftover plan on a waiting slot', () => {
 test('attach --color starts clean when that color already has leftover LLM work', () => {
   const env = fixture()
   try {
-    const coral = setupSession(env.dataDir)
+    const coral = setupSession(env.dataDir, { sessionId: 'coral' })
     setupSession(env.dataDir)
     attachSession(env.dataDir, coral.sessionId)
     setInitialInstruction(env.dataDir, coral.sessionId, 'Keep the coral request')
@@ -615,16 +613,14 @@ test('attach --color starts clean when that color already has leftover LLM work'
   }
 })
 
-test('attach --color still rejects blue and missing colors', () => {
+test('attach --color accepts blue and rejects missing colors', () => {
   const env = fixture()
   try {
-    const coral = setupSession(env.dataDir)
+    const blue = setupSession(env.dataDir, { sessionId: 'blue' })
     setupSession(env.dataDir)
-    attachSession(env.dataDir, coral.sessionId)
-    assert.throws(
-      () => attachSession(env.dataDir, null, { color: 'blue' }),
-      (error) => String(error.message).includes('VISUAL_CODER_COLOR_UNKNOWN'),
-    )
+    const attached = attachSession(env.dataDir, null, { color: 'blue' })
+    assert.equal(attached.sessionId, blue.sessionId)
+    assert.equal(attached.color, 'blue')
     assert.throws(
       () => attachSession(env.dataDir, null, { color: 'violet' }),
       (error) => String(error.message) === colorMissingMessage('Violet'),
@@ -696,11 +692,12 @@ test('attach fails when no visualizer session is waiting', () => {
   }
 })
 
-test('session colors are ten slots and never blue', () => {
+test('session colors include blue as the first slot', () => {
   assert.equal(SESSION_COLORS.length, SESSION_SLOT_COUNT)
-  assert.equal(SESSION_SLOT_COUNT, 10)
+  assert.equal(SESSION_SLOT_COUNT, 11)
+  assert.equal(SESSION_COLORS[0].id, 'blue')
   assert.equal(
-    SESSION_COLORS.some((color) => color.id === 'blue' || color.id === 'global'),
+    SESSION_COLORS.some((color) => color.id === 'global'),
     false,
   )
 })
@@ -944,7 +941,7 @@ test('session color order stays fixed after a slot is refilled', () => {
       listOpenSessionIds(env.dataDir).includes(created[0].sessionId),
       true,
     )
-    assert.equal(readManifest(env.dataDir, created[0].sessionId).color, 'coral')
+    assert.equal(readManifest(env.dataDir, created[0].sessionId).color, 'blue')
     assert.equal(isChatLocked(env.dataDir, created[0].sessionId), false)
   } finally {
     env.cleanup()
@@ -1014,7 +1011,7 @@ test('shares user-placed files with the chat after Send blueprint', () => {
   }
 })
 
-test('sessions share one blueprint across LLM chats', () => {
+test('sessions keep separate blueprints', () => {
   const env = fixture()
   try {
     startSession(env.dataDir, { sessionId: 'edit-a' })
@@ -1045,9 +1042,10 @@ test('sessions share one blueprint across LLM chats', () => {
     const editingB = sessionIntent(env.dataDir, 'edit-b', ['src/a.ts'])
     assert.equal(editingA.creationMode, true)
     assert.equal(editingB.creationMode, true)
-    assert.deepEqual(editingA.userCreatedBlocks, [blockB])
+    assert.deepEqual(editingA.userCreatedBlocks, [blockA])
     assert.deepEqual(editingB.userCreatedBlocks, [blockB])
-    assert.deepEqual(readBlueprint(env.dataDir).files, [blockB])
+    assert.deepEqual(readLocalBlueprint(env.dataDir, 'edit-a').files, [blockA])
+    assert.deepEqual(readLocalBlueprint(env.dataDir, 'edit-b').files, [blockB])
 
     focusSession(env.dataDir, 'edit-a')
     assert.equal(readActiveSession(env.dataDir), 'edit-a')
@@ -1082,25 +1080,19 @@ test('session-colored blueprints stay local to that color', () => {
     const secondLocal = locals.find((item) => item.sessionId === second.sessionId)
     assert.deepEqual(firstLocal?.files, [block])
     assert.deepEqual(secondLocal?.files, [])
-    assert.equal(readBlueprint(env.dataDir, first.sessionId).enabled, false)
+    assert.equal(readBlueprint(env.dataDir).enabled, false)
   } finally {
     env.cleanup()
   }
 })
 
-test('each chat keeps the global blueprint plus its own color only', () => {
+test('each chat keeps only its own color blueprint', () => {
   const env = fixture()
   try {
-    const coral = setupSession(env.dataDir, { sessionId: 'coral-chat' })
-    const amber = setupSession(env.dataDir, { sessionId: 'amber-chat' })
+    const coral = setupSession(env.dataDir, { sessionId: 'coral' })
+    const amber = setupSession(env.dataDir, { sessionId: 'amber' })
     assert.equal(coral.color, 'coral')
     assert.equal(amber.color, 'amber')
-    const globalBlock = {
-      id: 'src/Global.tsx',
-      name: 'Global.tsx',
-      path: 'src/Global.tsx',
-      folder: 'src',
-    }
     const coralBlock = {
       id: 'src/Coral.tsx',
       name: 'Coral.tsx',
@@ -1113,7 +1105,6 @@ test('each chat keeps the global blueprint plus its own color only', () => {
       path: 'src/Amber.tsx',
       folder: 'src',
     }
-    updateBlueprint(env.dataDir, null, { userCreatedBlocks: [globalBlock] })
     updateBlueprint(env.dataDir, coral.sessionId, {
       color: coral.color,
       userCreatedBlocks: [coralBlock],
@@ -1125,7 +1116,6 @@ test('each chat keeps the global blueprint plus its own color only', () => {
     sendBlueprint(env.dataDir, coral.sessionId, {
       userCreatedBlocks: [coralBlock],
     })
-    assert.deepEqual(readBlueprint(env.dataDir).files, [globalBlock])
     assert.deepEqual(readLocalBlueprint(env.dataDir, coral.sessionId).files, [
       coralBlock,
     ])
@@ -1133,7 +1123,6 @@ test('each chat keeps the global blueprint plus its own color only', () => {
       amberBlock,
     ])
     sendBlueprint(env.dataDir, amber.sessionId)
-    assert.deepEqual(readBlueprint(env.dataDir).files, [globalBlock])
     assert.deepEqual(readLocalBlueprint(env.dataDir, coral.sessionId).files, [
       coralBlock,
     ])
@@ -1142,8 +1131,8 @@ test('each chat keeps the global blueprint plus its own color only', () => {
     ])
     const coralIntent = sessionIntent(env.dataDir, coral.sessionId, ['src/a.ts'])
     const amberIntent = sessionIntent(env.dataDir, amber.sessionId, ['src/a.ts'])
-    assert.deepEqual(coralIntent.userCreatedBlocks, [globalBlock])
-    assert.deepEqual(amberIntent.userCreatedBlocks, [globalBlock])
+    assert.deepEqual(coralIntent.userCreatedBlocks, [coralBlock])
+    assert.deepEqual(amberIntent.userCreatedBlocks, [amberBlock])
     assert.equal(coralIntent.localBlueprintEnabled, true)
     assert.equal(amberIntent.localBlueprintEnabled, true)
   } finally {
@@ -1180,7 +1169,8 @@ test('keeps accepting placed files after the blueprint handshake', () => {
 
     startSession(env.dataDir, { sessionId: 'ask-chat' })
     updateBlueprint(env.dataDir, 'ask-chat', { userCreatedBlocks: [afterSend] })
-    assert.deepEqual(readBlueprint(env.dataDir).files, [afterSend])
+    assert.deepEqual(readLocalBlueprint(env.dataDir, 'ask-chat').files, [afterSend])
+    assert.deepEqual(readLocalBlueprint(env.dataDir, 'later-chat').files, [afterSend])
 
     startSession(env.dataDir, { sessionId: 'skip-chat' })
     answerBlueprint(env.dataDir, 'skip-chat', false)
@@ -1202,9 +1192,10 @@ test('keeps accepting placed files after the blueprint handshake', () => {
   }
 })
 
-test('blueprint stays shared after a session finishes and can be cleaned up', () => {
+test('blueprint on a color can be cleaned up', () => {
   const env = fixture()
   try {
+    ensureSessionPool(env.dataDir)
     const block = {
       id: 'src/a.ts',
       name: 'a.ts',
@@ -1259,6 +1250,7 @@ test('blueprint stays shared after a session finishes and can be cleaned up', ()
 test('pointers mark existing files for the LLM to keep in mind', () => {
   const env = fixture()
   try {
+    ensureSessionPool(env.dataDir)
     const pointers = [
       { kind: 'file', path: 'src/a.ts' },
       { kind: 'folder', path: 'src' },

@@ -152,11 +152,13 @@ function blueprintIntentFields() {
 }
 
 function intentResponse(sessionId?: string) {
-  const base =
-    sessionId !== undefined && sessionId !== ''
-      ? (sessionIntent(dataDir, sessionId, knownFileIds(), undefined, undefined, targetRoot) ?? { ...emptyIntent })
-      : { ...emptyIntent }
-  return { ...base, ...blueprintIntentFields() }
+  if (sessionId !== undefined && sessionId !== '') {
+    return (
+      sessionIntent(dataDir, sessionId, knownFileIds(), undefined, undefined, targetRoot) ??
+      { ...emptyIntent }
+    )
+  }
+  return { ...emptyIntent }
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown) {

@@ -317,13 +317,8 @@ export type SharedBlueprint = {
   pointers: BlueprintPointer[]
 }
 
-export const GLOBAL_BLUEPRINT_COLOR = {
-  id: 'global',
-  name: 'Global',
-  hex: '#38bdf8',
-} as const
-
 export const SESSION_COLORS = [
+  { id: 'blue', name: 'Blue', hex: '#38bdf8' },
   { id: 'coral', name: 'Coral', hex: '#f87171' },
   { id: 'amber', name: 'Amber', hex: '#fbbf24' },
   { id: 'lime', name: 'Lime', hex: '#a3e635' },
@@ -335,6 +330,8 @@ export const SESSION_COLORS = [
   { id: 'grey', name: 'Grey', hex: '#4b5563' },
   { id: 'white', name: 'White', hex: '#f4f4f5' },
 ] as const
+
+export const DEFAULT_SESSION_COLOR = SESSION_COLORS[0]
 
 export const SESSION_COLOR_PAGE_SIZE = 5
 
@@ -370,7 +367,7 @@ export function compareSessionColorOrder(
   return sessionColorOrderIndex(left) - sessionColorOrderIndex(right)
 }
 
-export type BlueprintColorId = typeof GLOBAL_BLUEPRINT_COLOR.id | string
+export type BlueprintColorId = SessionColorId | string
 
 export type LocalBlueprint = SharedBlueprint & {
   color: string
@@ -415,7 +412,7 @@ export type BlueprintOption = {
   id: string
   name: string
   hex: string
-  kind: 'global' | 'local'
+  kind: 'local'
   sessionId?: string | null
 }
 

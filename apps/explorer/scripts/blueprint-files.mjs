@@ -5,7 +5,6 @@ import {
   emptyBlueprint,
   findSessionIdByColor,
   SESSION_COLORS,
-  writeBlueprint,
   writeBlueprintByColor,
 } from './session-store.mjs'
 
@@ -388,15 +387,11 @@ export function applyBlueprintDocument(dataDir, document, options = {}) {
     ...codebaseFileIds(dataDir),
     ...(Array.isArray(options.existingFileIds) ? options.existingFileIds : []),
   ]
-  const global = writeBlueprint(
-    dataDir,
-    withApplicableNotes(
-      { ...emptyBlueprint(), ...parsed.global },
-      existingFileIds,
-      targetRoot,
-    ),
-  )
   const byColor = new Map(parsed.locals.map((local) => [local.color, local]))
+  const defaultColor = SESSION_COLORS[0]
+  if (defaultColor && !byColor.has(defaultColor.id)) {
+    byColor.set(defaultColor.id, parsed.global)
+  }
   const localBlueprints = []
   for (const color of SESSION_COLORS) {
     const local = byColor.get(color.id)
@@ -419,6 +414,9 @@ export function applyBlueprintDocument(dataDir, document, options = {}) {
       ...written,
     })
   }
+  const global =
+    localBlueprints.find((item) => item.color === defaultColor?.id) ??
+    emptyBlueprint()
   return {
     name: parsed.name,
     global,

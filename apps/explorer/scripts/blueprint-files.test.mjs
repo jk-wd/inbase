@@ -142,7 +142,7 @@ test('load restores global and session-colored layers', () => {
     })
     saveBlueprintDocument(env.targetRoot, {
       name: 'feature',
-      global: readBlueprint(env.dataDir),
+      global: readBlueprintByColor(env.dataDir, 'blue'),
       locals: [
         {
           color: 'coral',
@@ -423,7 +423,7 @@ test('applying a document clears colors that were not saved', () => {
       global: { files: [globalFile] },
       locals: [],
     })
-    assert.deepEqual(readBlueprint(env.dataDir).files, [globalFile])
+    assert.deepEqual(readBlueprintByColor(env.dataDir, 'blue').files, [globalFile])
     assert.deepEqual(readBlueprintByColor(env.dataDir, 'coral').files, [])
   } finally {
     env.cleanup()

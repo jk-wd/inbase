@@ -25,6 +25,7 @@ const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const CONNECTED_TTL_MS = 15_000
 const STALLED_WAIT_MS = 2_000
 export const SESSION_COLORS = [
+  { id: 'blue', name: 'Blue', hex: '#38bdf8' },
   { id: 'coral', name: 'Coral', hex: '#f87171' },
   { id: 'amber', name: 'Amber', hex: '#fbbf24' },
   { id: 'lime', name: 'Lime', hex: '#a3e635' },
@@ -37,7 +38,10 @@ export const SESSION_COLORS = [
   { id: 'white', name: 'White', hex: '#f4f4f5' },
 ]
 export const SESSION_SLOT_COUNT = SESSION_COLORS.length
+export const DEFAULT_SESSION_COLOR = SESSION_COLORS[0]
 export const SESSION_COLOR_ALIASES = {
+  blue: 'blue',
+  sky: 'blue',
   coral: 'coral',
   red: 'coral',
   amber: 'amber',
@@ -55,12 +59,6 @@ export const SESSION_COLOR_ALIASES = {
   gray: 'grey',
   white: 'white',
 }
-const GLOBAL_COLOR_QUERIES = new Set(['blue', 'global', 'sky'])
-export const GLOBAL_BLUEPRINT_COLOR = {
-  id: 'global',
-  name: 'Global',
-  hex: '#38bdf8',
-}
 
 function joinOrList(items) {
   if (items.length <= 1) return items[0] ?? ''
@@ -73,7 +71,7 @@ function sessionColorCommandHelp() {
   const aliases = Object.entries(SESSION_COLOR_ALIASES)
     .filter(([alias, id]) => alias !== id)
     .map(([alias]) => `/${alias}`)
-  return `Connect with ${joinOrList(commands)} (aliases: ${joinOrList(aliases)}). Blue is the global blueprint, not a chat.`
+  return `Connect with ${joinOrList(commands)} (aliases: ${joinOrList(aliases)}).`
 }
 
 export const ALL_COLORS_LOCKED_MESSAGE =
@@ -149,7 +147,6 @@ export function compareSessionColorOrder(left, right) {
 function lookupSessionColor(value) {
   if (typeof value !== 'string' || value.trim() === '') return null
   const key = value.trim().toLowerCase()
-  if (GLOBAL_COLOR_QUERIES.has(key)) return null
   const id = SESSION_COLOR_ALIASES[key] ?? resolveSessionColor(key)?.id ?? null
   return resolveSessionColor(id)
 }
@@ -157,9 +154,6 @@ function lookupSessionColor(value) {
 export function parseSessionColorQuery(value) {
   if (typeof value !== 'string' || value.trim() === '') return null
   const key = value.trim()
-  if (GLOBAL_COLOR_QUERIES.has(key.toLowerCase())) {
-    throw new Error(colorUnknownMessage(key.toLowerCase() === 'global' ? 'Global' : 'Blue'))
-  }
   const color = lookupSessionColor(key)
   if (!color) throw new Error(colorUnknownMessage(key))
   return color
@@ -172,11 +166,6 @@ export function resolveSessionId(value) {
     )
   }
   const key = value.trim()
-  if (GLOBAL_COLOR_QUERIES.has(key.toLowerCase())) {
-    throw new Error(
-      colorUnknownMessage(key.toLowerCase() === 'global' ? 'Global' : 'Blue'),
-    )
-  }
   return lookupSessionColor(key)?.id ?? assertSessionId(key)
 }
 
@@ -666,12 +655,7 @@ function localBlueprintFile(dataDir, sessionId) {
   return sessionPaths(dataDir, sessionId).blueprint
 }
 
-export function isGlobalBlueprintColor(colorId) {
-  return !colorId || colorId === GLOBAL_BLUEPRINT_COLOR.id
-}
-
 export function findSessionIdByColor(dataDir, colorId) {
-  if (isGlobalBlueprintColor(colorId)) return null
   const color = resolveSessionColor(colorId)
   if (!color) return null
   const direct = readManifest(dataDir, color.id)
@@ -1062,7 +1046,7 @@ export function sessionIntent(
   const currentPlanStep = manifest.steps.find(
     (step) => step.index === manifest.currentStep,
   )
-  const blueprint = readBlueprint(dataDir, sessionId)
+  const blueprint = readLocalBlueprint(dataDir, sessionId)
   const canEnterBlueprint = manifest.phase === 'blueprint_ask'
   const colored = ensureManifestColor(dataDir, manifest)
   const color = resolveSessionColor(colored.color)
@@ -1650,8 +1634,11 @@ export function answerBlueprint(dataDir, sessionId, enabled) {
   return manifest
 }
 
-export function updateBlueprint(dataDir, _sessionId, input = {}) {
-  const colorId = input.color
+export function updateBlueprint(dataDir, sessionId, input = {}) {
+  const colorId =
+    input.color ||
+    (sessionId ? readManifest(dataDir, sessionId)?.color : null) ||
+    DEFAULT_SESSION_COLOR.id
   const fields = blueprintInputFields(input)
   const current = readBlueprintByColor(dataDir, colorId)
   const next = {
@@ -2674,7 +2661,8 @@ function persistBlueprintFile(file, incoming, current) {
   return next
 }
 
-export function readBlueprint(dataDir, _sessionId) {
+export function readBlueprint(dataDir, sessionId) {
+  if (sessionId) return readLocalBlueprint(dataDir, sessionId)
   return normalizeBlueprint(readJson(blueprintFile(dataDir), emptyBlueprint()))
 }
 
@@ -2686,7 +2674,6 @@ export function readLocalBlueprint(dataDir, sessionId) {
 }
 
 export function readBlueprintByColor(dataDir, colorId) {
-  if (isGlobalBlueprintColor(colorId)) return readBlueprint(dataDir)
   const sessionId = findSessionIdByColor(dataDir, colorId)
   return readLocalBlueprint(dataDir, sessionId)
 }
@@ -2732,7 +2719,6 @@ export function writeLocalBlueprint(dataDir, sessionId, incoming) {
 }
 
 export function writeBlueprintByColor(dataDir, colorId, incoming) {
-  if (isGlobalBlueprintColor(colorId)) return writeBlueprint(dataDir, incoming)
   const sessionId = findSessionIdByColor(dataDir, colorId)
   if (!sessionId) return emptyBlueprint()
   return writeLocalBlueprint(dataDir, sessionId, incoming)
@@ -2743,17 +2729,19 @@ function blueprintInputFields(input = {}) {
   return fields
 }
 
-export function setBlueprintHidden(dataDir, hidden, colorId) {
-  const current = readBlueprintByColor(dataDir, colorId)
-  return writeBlueprintByColor(dataDir, colorId, {
+export function setBlueprintHidden(dataDir, hidden, colorId = DEFAULT_SESSION_COLOR.id) {
+  const color = colorId || DEFAULT_SESSION_COLOR.id
+  const current = readBlueprintByColor(dataDir, color)
+  return writeBlueprintByColor(dataDir, color, {
     ...current,
     hidden: Boolean(hidden),
   })
 }
 
-export function clearBlueprint(dataDir, colorId) {
-  const current = readBlueprintByColor(dataDir, colorId)
-  return writeBlueprintByColor(dataDir, colorId, {
+export function clearBlueprint(dataDir, colorId = DEFAULT_SESSION_COLOR.id) {
+  const color = colorId || DEFAULT_SESSION_COLOR.id
+  const current = readBlueprintByColor(dataDir, color)
+  return writeBlueprintByColor(dataDir, color, {
     ...emptyBlueprint(),
     hidden: current.hidden,
     revision: current.revision,
@@ -2764,9 +2752,10 @@ export function cleanupBlueprint(
   dataDir,
   knownFileIds = [],
   knownFolderPaths = [],
-  colorId,
+  colorId = DEFAULT_SESSION_COLOR.id,
 ) {
-  const current = readBlueprintByColor(dataDir, colorId)
+  const color = colorId || DEFAULT_SESSION_COLOR.id
+  const current = readBlueprintByColor(dataDir, color)
   const knownFiles = new Set(knownFileIds)
   const knownFolders = new Set(knownFolderPaths)
   const removedFiles = new Set(
@@ -2791,7 +2780,7 @@ export function cleanupBlueprint(
     ),
     pointers: current.pointers,
   }
-  return writeBlueprintByColor(dataDir, colorId, next)
+  return writeBlueprintByColor(dataDir, color, next)
 }
 
 export function markBlueprintSeen(dataDir, sessionId, revision, localRevision) {
