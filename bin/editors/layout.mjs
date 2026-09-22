@@ -11,6 +11,7 @@ const RETIRED_COMMAND_NAMES = [
   'explain',
   'go',
   'accept',
+  'stop',
   'skipinbase',
   'pink',
   'emerald',

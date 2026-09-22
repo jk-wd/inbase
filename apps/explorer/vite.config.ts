@@ -29,9 +29,9 @@ import {
   invokeStep,
   listSessionIntents,
   nextAttachSessionId,
-  listOpenSessionIds,
   readActiveSession,
   recycleDisconnectedSessions,
+  sessionPoolScanKey,
   userContextFile as userContextPath,
   notifySessionExplain,
   requestExplainProposal,
@@ -182,13 +182,22 @@ function jsonFilePlugin(): Plugin {
       clearDiffSessions(dataDir, targetRoot)
       ensureSessionPool(dataDir, { count: SESSION_SLOT_COUNT })
       rescanTarget('after starting with a clean data dir')
-      let lastLiveSessionKey = listOpenSessionIds(dataDir).join('\0')
+      let lastLiveSessionKey = sessionPoolScanKey(dataDir)
+      function codebaseRevision() {
+        try {
+          return fs.statSync(codebaseFile).mtimeMs
+        } catch {
+          return 0
+        }
+      }
       function syncDisconnectedSessions() {
         const recycled = recycleDisconnectedSessions(dataDir, targetRoot)
-        const liveKey = listOpenSessionIds(dataDir).join('\0')
-        const changed = recycled.length > 0 || liveKey !== lastLiveSessionKey
+        const liveKey = sessionPoolScanKey(dataDir)
+        const previous = new Set(lastLiveSessionKey.split('\0').filter(Boolean))
+        const next = new Set(liveKey.split('\0').filter(Boolean))
+        const freed = [...previous].some((sessionId) => !next.has(sessionId))
         lastLiveSessionKey = liveKey
-        if (changed) rescanTarget('after LLM session reset')
+        if (recycled.length > 0 || freed) rescanTarget('after LLM session reset')
       }
       server.middlewares.use('/api/user-context', (req, res, next) => {
         if (req.method === 'GET') {
@@ -255,6 +264,7 @@ function jsonFilePlugin(): Plugin {
             intents: listSessionIntents(dataDir, knownFileIds(), targetRoot),
             blueprint: readBlueprint(dataDir),
             localBlueprints: listLocalBlueprints(dataDir),
+            mapRevision: codebaseRevision(),
           })
           return
         }

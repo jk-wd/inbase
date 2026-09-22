@@ -45,28 +45,26 @@ When the user invoked \`/inbase\`, a color command, or \`/connect\`, in this ord
 2. Reply: \`Connecting to the <color> session.\`
 3. Run \`npx inbase read-blueprint --session COLOR\`
 4. Reply: \`I see on the blueprint ...\` (name files, folders, symbols, notes)
-5. MUST run \`npx inbase report-deliveries --session COLOR --feature "..." --delivery "..."\`
-   with titles only — do not invent implementation steps yet.
-6. MUST run \`npx inbase report-plan --session COLOR --feature "..." --steps "..."\`
-   for the invoked delivery only before any file edit. Use sequential steps
-   (\`1\`, \`2\`, \`3\`). Listing steps in chat is not the plan. Never edit before
-   \`report-plan\`. Do not plan later deliveries.
-7. Edit files only after \`VISUAL_CODER_EXECUTE\`, for that invoked step only.
+5. MUST run \`npx inbase report-plan --session COLOR --feature "..." --steps "..."\`
+   with the full list of implementation steps before any file edit. Use sequential
+   steps (\`1\`, \`2\`, \`3\`). Listing steps in chat is not the plan. Never edit
+   before \`report-plan\`.
+6. Edit files only after \`VISUAL_CODER_EXECUTE\`, for that invoked step only.
    Do not spawn subagents. MUST run \`npx inbase propose-patch --session COLOR\`
    with \`--step <id>\` and
    \`--note "path: one-line goal"\` for each changed file and folder before
    starting the next step. No patch file. Never implement the whole plan then
    record once. If the next step is invoked, implement that step only, then
-   propose-patch again. If \`VISUAL_CODER_PLAN_DELIVERY\`, report-plan for that
-   delivery only. After the last recorded step, stop. The user clicks
-   Done in the session window to keep the files and free the color.
+   propose-patch again. After the last recorded step, MUST run
+   \`npx inbase finish --session COLOR\`. That marks the session finished, keeps
+   the files and the blueprint, and frees the color.
 
 If this chat already printed \`VISUAL_CODER_SESSION\`, skip attach. Stay in
-that session. \`/stop\` runs \`npx inbase stop --session COLOR\`.
+that session. After the last recorded step, run \`npx inbase finish --session COLOR\`.
 
 Slash commands \`/inbase\`, \`/connect\`, \`/coral\`, \`/amber\`, \`/lime\`, \`/orange\`, \`/violet\`,
 \`/teal\`, \`/crimson\`, \`/forest\`, \`/grey\`, \`/white\` (and aliases),
-\`/explainit\`, \`/extract-blueprint\`, and \`/stop\` are project commands.
+\`/explainit\`, and \`/extract-blueprint\` are project commands.
 Follow them when the user invokes one.
 
 Follow the rest of this rule exactly.

@@ -41,7 +41,6 @@ Reading the map:
 | Hidden files | H |
 | Connect a chat | `/inbase` (next empty session), `/connect` (first enabled blueprint), or `/blue` `/coral` `/amber` `/lime` `/orange` `/violet` `/teal` `/crimson` `/forest` `/grey` `/white` |
 | Keep the work and free the color | **Done** in the session window |
-| Discard the plan and free the color | `/stop` |
 | Explain | `/explainit` in chat, or `?` then `/explainit` |
 | Extract a blueprint | `/extract-blueprint` |
 | Load an example React app | More → Load (`apps/example-target/blueprints/`) |

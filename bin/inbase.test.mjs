@@ -64,10 +64,10 @@ test('registers Cursor, Claude Code, Agent Skills, Zed, Copilot, Cline, OpenCode
 
 test('Cline command markdown becomes execute_command XML', () => {
   const xml = toClineExecuteCommand(
-    'Run:\n\n```bash\nnpx inbase stop --session <color>\n```\n',
+    'Run:\n\n```bash\nnpx inbase finish --session <color>\n```\n',
   )
   assert.match(xml, /<execute_command>/)
-  assert.match(xml, /<command>npx inbase stop --session COLOR<\/command>/)
+  assert.match(xml, /<command>npx inbase finish --session COLOR<\/command>/)
   assert.match(xml, /<requires_approval>false<\/requires_approval>/)
   assert.equal(stripYamlFrontmatter('---\nname: inbase\n---\n\nBody\n'), 'Body\n')
 })
@@ -86,6 +86,39 @@ test('prependYamlFrontmatter inserts keys once', () => {
   } finally {
     cleanup()
   }
+})
+
+function foldedYamlDescription(text) {
+  const start = text.indexOf('description: >-\n')
+  if (start === -1) throw new Error('expected folded YAML description')
+  const end = text.indexOf('\n---\n', start)
+  if (end === -1) throw new Error('expected frontmatter end after description')
+  return text
+    .slice(start + 'description: >-\n'.length, end)
+    .split('\n')
+    .map((line) => {
+      if (!line.startsWith('  ')) {
+        throw new Error(`description line must be indented: ${JSON.stringify(line)}`)
+      }
+      return line.slice(2)
+    })
+    .join(' ')
+    .replace(/ {2,}/g, ' ')
+    .trim()
+}
+
+test('inbase skill description stays within the 1024-byte Cursor limit', () => {
+  const skillText = fs.readFileSync(path.join(packageRoot, 'skill/inbase/SKILL.md'), 'utf8')
+  const description = foldedYamlDescription(skillText)
+  assert.ok(description.length > 0)
+  assert.ok(
+    Buffer.byteLength(description, 'utf8') <= 1024,
+    `description is ${Buffer.byteLength(description, 'utf8')} bytes; Cursor warns above 1024`,
+  )
+  assert.match(description, /\/inbase/)
+  assert.match(description, /VISUAL_CODER_SESSION/)
+  assert.match(description, /report-plan/)
+  assert.match(description, /outside that target/)
 })
 
 test('copyDir installs the skill template', () => {
@@ -117,8 +150,7 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /VISUAL_CODER_NO_REQUEST/)
     assert.match(skillText, /VISUAL_CODER_DIFF/)
     assert.match(skillText, /Always work via the plan/)
-    assert.match(skillText, /First `report-deliveries`/)
-    assert.match(skillText, /MUST run `npx inbase report-deliveries`/)
+    assert.match(skillText, /First `report-plan`/)
     assert.match(skillText, /MUST run `npx inbase report-plan`/)
     assert.match(skillText, /One step, then `propose-patch`/)
     assert.match(skillText, /Never implement the whole plan/)
@@ -146,7 +178,8 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /`\.lmstudio`/)
     assert.match(skillText, /\/extract-blueprint/)
     assert.doesNotMatch(skillText, /\/blueprint-structure/)
-    assert.match(skillText, /\/stop/)
+    assert.doesNotMatch(skillText, /\/stop/)
+    assert.match(skillText, /inbase finish/)
     assert.match(skillText, /\/connect/)
     assert.match(skillText, /attach --first/)
     assert.match(skillText, /Do not spawn subagents/)
@@ -179,6 +212,7 @@ test('init copies Cursor skills and gitignores .inbase', () => {
     const result = initProject(root, 'cursor')
     fs.writeFileSync(path.join(root, '.cursor/commands/accept.md'), 'legacy /accept command\n')
     fs.writeFileSync(path.join(root, '.cursor/commands/go.md'), 'retired /go command\n')
+    fs.writeFileSync(path.join(root, '.cursor/commands/stop.md'), 'retired /stop command\n')
     fs.writeFileSync(path.join(root, '.cursor/commands/skipinbase.md'), 'retired /skipinbase command\n')
     initProject(root, 'cursor')
     const skill = path.join(root, '.cursor/skills/inbase/SKILL.md')
@@ -208,14 +242,14 @@ test('init copies Cursor skills and gitignores .inbase', () => {
     assert.match(skillText, /\/explainit/)
     assert.match(skillText, /mid-level developer/)
     assert.match(skillText, /once per step/)
-    assert.match(skillText, /\/stop/)
+    assert.doesNotMatch(skillText, /\/stop/)
+    assert.match(skillText, /inbase finish/)
     assert.match(skillText, /I see on the blueprint/)
     assert.match(skillText, /VISUAL_CODER_BLUEPRINT_ONLY/)
     assert.match(skillText, /VISUAL_CODER_NO_REQUEST/)
     assert.match(skillText, /VISUAL_CODER_DIFF/)
     assert.match(skillText, /Always work via the plan/)
-    assert.match(skillText, /First `report-deliveries`/)
-    assert.match(skillText, /MUST run `npx inbase report-deliveries`/)
+    assert.match(skillText, /First `report-plan`/)
     assert.match(skillText, /MUST run `npx inbase report-plan`/)
     assert.match(skillText, /One step, then `propose-patch`/)
     assert.match(skillText, /Never implement the whole plan/)
@@ -353,16 +387,8 @@ test('init copies Cursor skills and gitignores .inbase', () => {
     assert.equal(fs.existsSync(path.join(packageRoot, 'skill/commands/attach/coral.md')), true)
     assert.equal(fs.existsSync(path.join(packageRoot, 'skill/commands/attach/connect.md')), true)
     assert.equal(fs.existsSync(path.join(packageRoot, 'skill/commands/attach/inbase.md')), true)
-    assert.equal(fs.existsSync(path.join(packageRoot, 'skill/commands/stop.md')), true)
-    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/stop.md')), true)
-    assert.match(
-      fs.readFileSync(path.join(root, '.cursor/commands/stop.md'), 'utf8'),
-      /npx inbase stop --session <color>/,
-    )
-    assert.doesNotMatch(
-      fs.readFileSync(path.join(root, '.cursor/commands/stop.md'), 'utf8'),
-      /<session-id>/,
-    )
+    assert.equal(fs.existsSync(path.join(packageRoot, 'skill/commands/stop.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/stop.md')), false)
     assert.equal(fs.existsSync(path.join(packageRoot, 'skill/commands/accept.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/coral.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/attach')), false)
@@ -542,7 +568,6 @@ test('init claude installs only Claude Code files', () => {
       'utf8',
     )
     assert.match(claudeCoral, /npx inbase attach --color coral/)
-    assert.match(claudeCoral, /MUST `report-deliveries`/)
     assert.match(claudeCoral, /MUST `report-plan`/)
     assert.match(claudeCoral, /disable-model-invocation: true/)
     assert.equal(fs.existsSync(path.join(root, '.cursor/skills/inbase/SKILL.md')), false)
@@ -906,23 +931,20 @@ test('copySkillTree writes command skills and keeps the inbase skill', () => {
     assert.doesNotMatch(skillText, /user-invocable:/)
     assert.equal(fs.existsSync(path.join(first.commandDir, 'inbase.md')), false)
     assert.equal(fs.existsSync(path.join(first.commandDir, 'accept/SKILL.md')), false)
-    const stop = fs.readFileSync(path.join(first.commandDir, 'stop/SKILL.md'), 'utf8')
-    assert.match(stop, /^---\nname: stop\n/)
-    assert.match(stop, /npx inbase stop/)
-    assert.match(stop, /disable-model-invocation: true/)
-    assert.match(stop, /allow_implicit_invocation: false/)
-    assert.equal(stop.split('disable-model-invocation: true').length - 1, 1)
+    assert.equal(fs.existsSync(path.join(first.commandDir, 'stop/SKILL.md')), false)
     assert.equal(fs.existsSync(path.join(first.commandDir, 'go/SKILL.md')), false)
     fs.mkdirSync(path.join(root, '.agents/skills/go'), { recursive: true })
     fs.writeFileSync(path.join(root, '.agents/skills/go/SKILL.md'), 'retired /go\n')
     fs.mkdirSync(path.join(root, '.agents/skills/accept'), { recursive: true })
     fs.writeFileSync(path.join(root, '.agents/skills/accept/SKILL.md'), 'retired /accept\n')
+    fs.mkdirSync(path.join(root, '.agents/skills/stop'), { recursive: true })
+    fs.writeFileSync(path.join(root, '.agents/skills/stop/SKILL.md'), 'retired /stop\n')
     copySkillTree(root, { id: 'agents', skillsRel: '.agents/skills' })
     assert.equal(fs.existsSync(path.join(root, '.agents/skills/go/SKILL.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.agents/skills/accept/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.agents/skills/stop/SKILL.md')), false)
     const coral = fs.readFileSync(path.join(first.commandDir, 'coral/SKILL.md'), 'utf8')
     assert.match(coral, /npx inbase attach --color coral/)
-    assert.match(coral, /MUST `report-deliveries`/)
     assert.match(coral, /MUST `report-plan`/)
     assert.match(coral, /MUST `propose-patch`/)
     assert.match(coral, /Never implement the whole plan first/)
@@ -1405,6 +1427,10 @@ test('wait-for-approval and explain wait are removed', () => {
     })
     assert.notEqual(approval.status, 0)
     assert.match(approval.stderr, /wait-for-approval was removed/)
+    const stopped = runCli(['stop', '--session', 'blue'], { cwd: root, env })
+    assert.notEqual(stopped.status, 0)
+    assert.match(stopped.stderr, /stop was removed/)
+    assert.match(stopped.stderr, /inbase finish --session <color>/)
     const waiting = runCli(['explain', 'wait'], { cwd: root, env })
     assert.notEqual(waiting.status, 0)
     assert.match(waiting.stderr, /explain wait was removed/)
@@ -1457,7 +1483,6 @@ test('read-blueprint treats an enabled blueprint as the request when there is no
     )
     assert.equal(withBlueprint.status, 0, withBlueprint.stderr)
     assert.match(withBlueprint.stdout, /VISUAL_CODER_BLUEPRINT_ONLY/)
-    assert.match(withBlueprint.stdout, /MUST run report-deliveries/)
     assert.match(withBlueprint.stdout, /MUST run report-plan/)
     assert.match(withBlueprint.stdout, /follow it as closely as possible/)
     assert.match(withBlueprint.stdout, /allowed when needed if the blueprint does not cover them/)
@@ -1688,104 +1713,6 @@ test('report-plan invokes the first plan step', async () => {
   }
 })
 
-test('report-deliveries invokes planning the first delivery', async () => {
-  const { root, cleanup } = tempProject()
-  const target = path.join(root, 'app')
-  const dataDir = path.join(root, '.inbase')
-  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
-  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
-  const env = {
-    ...process.env,
-    VISUAL_CODER_TARGET: target,
-    INBASE_DATA_DIR: dataDir,
-  }
-  try {
-    const store = await import(
-      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
-    )
-    const started = runCli(
-      ['start-session', '--session', 'deliver-cli', '--name', 'Deliver cli'],
-      { cwd: path.dirname(dataDir), env },
-    )
-    assert.equal(started.status, 0, started.stderr)
-    store.answerBlueprint(dataDir, 'deliver-cli', false)
-    const result = runCli(
-      [
-        'report-deliveries',
-        '--session',
-        'deliver-cli',
-        '--feature',
-        'Deliver cli',
-        '--delivery',
-        'Score system',
-        '--delivery',
-        'Balloon physics',
-      ],
-      { cwd: root, env },
-    )
-    assert.equal(result.status, 0, result.stderr)
-    assert.match(result.stdout, /VISUAL_CODER_DELIVERIES_READY/)
-    assert.match(result.stdout, /VISUAL_CODER_PLAN_DELIVERY/)
-    assert.match(result.stdout, /Score system/)
-    assert.doesNotMatch(result.stdout, /VISUAL_CODER_EXECUTE/)
-    const manifest = store.readManifest(dataDir, 'deliver-cli')
-    assert.equal(manifest.phase, 'preparing')
-    assert.equal(manifest.currentDelivery, 1)
-    assert.equal(manifest.steps.length, 0)
-  } finally {
-    cleanup()
-  }
-})
-
-test('propose-patch CLI asks for the next delivery plan', async () => {
-  const { root, cleanup } = tempProject()
-  const target = path.join(root, 'app')
-  const dataDir = path.join(root, '.inbase')
-  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
-  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
-  const env = {
-    ...process.env,
-    VISUAL_CODER_TARGET: target,
-    INBASE_DATA_DIR: dataDir,
-  }
-  try {
-    const store = await import(
-      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
-    )
-    const started = runCli(
-      ['start-session', '--session', 'next-delivery', '--name', 'Next delivery'],
-      { cwd: path.dirname(dataDir), env },
-    )
-    assert.equal(started.status, 0, started.stderr)
-    store.answerBlueprint(dataDir, 'next-delivery', false)
-    store.reportDeliveries(dataDir, {
-      sessionId: 'next-delivery',
-      feature: 'Next delivery',
-      deliveryTitles: ['Score system', 'Balloon physics'],
-    })
-    store.reportPlan(dataDir, {
-      sessionId: 'next-delivery',
-      feature: 'Next delivery',
-      stepTitles: ['Add score store'],
-      targetRoot: target,
-    })
-    fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 2\n')
-    const result = runCli(['propose-patch', '--session', 'next-delivery'], {
-      cwd: root,
-      env,
-    })
-    assert.equal(result.status, 0, result.stderr)
-    assert.match(result.stdout, /VISUAL_CODER_STEP_READY/)
-    assert.match(result.stdout, /VISUAL_CODER_PLAN_DELIVERY/)
-    assert.match(result.stdout, /Balloon physics/)
-    assert.doesNotMatch(result.stdout, /VISUAL_CODER_EXECUTE/)
-    assert.equal(store.readManifest(dataDir, 'next-delivery').phase, 'preparing')
-    assert.equal(store.readManifest(dataDir, 'next-delivery').currentDelivery, 2)
-  } finally {
-    cleanup()
-  }
-})
-
 test('recording a non-last step continues into the next step', async () => {
   const { root, cleanup } = tempProject()
   const target = path.join(root, 'app')
@@ -1988,7 +1915,7 @@ test('accept keeps new files and --clear does not revert them', async () => {
   }
 })
 
-test('stop clears the session and keeps live files', async () => {
+test('finish marks the session complete and keeps live files', async () => {
   const { root, cleanup } = tempProject()
   const target = path.join(root, 'app')
   const dataDir = path.join(root, '.inbase')
@@ -2003,21 +1930,28 @@ test('stop clears the session and keeps live files', async () => {
     const store = await import(
       pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
     )
-    planSession(store, dataDir, target, 'stop-live', 'Stop live', [
-      'Bump value',
-    ])
+    const created = store.ensureSessionPool(dataDir)
+    const sessionId = created[0].sessionId
+    store.attachSession(dataDir, sessionId)
+    store.reportPlan(dataDir, {
+      sessionId,
+      feature: 'Finish live',
+      stepTitles: ['Bump value'],
+      targetRoot: target,
+    })
     fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 9\n')
     fs.writeFileSync(path.join(target, 'src/balloon.ts'), 'export const balloon = 1\n')
+    store.appendDiff(dataDir, target, { sessionId })
     writeRunningInstance({ dataDir, targetRoot: target })
-    const result = runCli(['stop', '--session', 'stop-live'], {
+    const result = runCli(['finish', '--session', sessionId], {
       cwd: root,
       env,
     })
     assert.equal(result.status, 0, result.stderr)
-    assert.match(result.stdout, /VISUAL_CODER_ACK stopped: session cleared/)
-    assert.match(result.stdout, /VISUAL_CODER_STOPPED Stopped session stop-live/)
-    assert.match(result.stdout, /Live project files were kept/)
-    assert.equal(store.readManifest(dataDir, 'stop-live'), null)
+    assert.match(result.stdout, /VISUAL_CODER_ACK finished: session completed/)
+    assert.match(result.stdout, /VISUAL_CODER_FINISHED Session /)
+    assert.match(result.stdout, /Applied files were kept/)
+    assert.equal(store.readManifest(dataDir, sessionId).awaitingAttach, true)
     assert.equal(
       fs.readFileSync(path.join(target, 'src/a.ts'), 'utf8'),
       'export const value = 9\n',
@@ -2149,7 +2083,6 @@ test('attach --session on an already attached chat stays in that session', async
     const first = runCli(['attach'], { cwd: root, env })
     assert.equal(first.status, 0, first.stderr)
     assert.match(first.stdout, /VISUAL_CODER_ATTACHED/)
-    assert.match(first.stdout, /MUST run report-deliveries/)
     assert.match(first.stdout, /MUST run report-plan/)
     assert.match(first.stdout, /MUST propose-patch/)
     assert.doesNotMatch(first.stdout, /report a plan if you can/)

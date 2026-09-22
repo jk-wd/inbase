@@ -112,7 +112,7 @@ export function nextInvokedStepIds(
   return [...current, ...ready.slice(0, slots)]
 }
 
-export function planLabeledSteps(titles, startAt = 1, delivery = null) {
+export function planLabeledSteps(titles, startAt = 1) {
   if (!Array.isArray(titles) || titles.length === 0) {
     throw new Error('A plan needs at least one step')
   }
@@ -139,13 +139,11 @@ export function planLabeledSteps(titles, startAt = 1, delivery = null) {
       throw new Error(`Duplicate plan step id ${id}`)
     }
     used.add(id)
-    const step = {
+    steps.push({
       index: startAt + steps.length,
       id,
       title: item.title,
-    }
-    if (delivery) step.delivery = delivery
-    steps.push(step)
+    })
   }
   return steps
 }

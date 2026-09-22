@@ -18,6 +18,7 @@ import {
   listOpenSessionIds,
   listSessionIntents,
   recycleDisconnectedSessions,
+  sessionPoolScanKey,
   readActiveSession,
   focusSession,
   readBlueprint,
@@ -25,7 +26,6 @@ import {
   readOverlay,
   readManifest,
   reportPlan as reportPlanStore,
-  reportDeliveries,
   requestExplainProposal,
   clearPendingExplain,
   sendBlueprint,
@@ -889,6 +889,88 @@ test('stopping a connected chat unlocks that color slot', () => {
   }
 })
 
+test('stop keeps the color blueprint and live files', () => {
+  const env = fixture()
+  const addB =
+    '--- /dev/null\n+++ b/src/b.ts\n@@ -0,0 +1,1 @@\n+export const extra = 1\n'
+  try {
+    const created = ensureSessionPool(env.dataDir)
+    const sessionId = created[0].sessionId
+    attachSession(env.dataDir, sessionId)
+    const block = {
+      id: 'src/b.ts',
+      name: 'b.ts',
+      path: 'src/b.ts',
+      folder: 'src',
+    }
+    updateBlueprint(env.dataDir, sessionId, {
+      color: readManifest(env.dataDir, sessionId).color,
+      userCreatedBlocks: [block],
+    })
+    assert.equal(sessionPoolScanKey(env.dataDir), sessionId)
+    reportPlan(env.dataDir, {
+      sessionId,
+      feature: 'Keep blueprint after stop',
+      stepTitles: ['Add extra'],
+      targetRoot: env.targetRoot,
+    })
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId,
+      patchText: addB,
+    })
+
+    stopSession(env.dataDir, sessionId, env.targetRoot)
+    assert.equal(sessionPoolScanKey(env.dataDir), '')
+    assert.equal(readManifest(env.dataDir, sessionId).awaitingAttach, true)
+    assert.deepEqual(readLocalBlueprint(env.dataDir, sessionId).files, [block])
+    assert.equal(readLocalBlueprint(env.dataDir, sessionId).enabled, true)
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/b.ts'), 'utf8'),
+      'export const extra = 1\n',
+    )
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('completeSession keeps the color blueprint', () => {
+  const env = fixture()
+  try {
+    const created = ensureSessionPool(env.dataDir)
+    const sessionId = created[0].sessionId
+    attachSession(env.dataDir, sessionId)
+    const island = {
+      id: 'src/components',
+      name: 'components',
+      path: 'src/components',
+      parent: 'src',
+    }
+    updateBlueprint(env.dataDir, sessionId, {
+      color: readManifest(env.dataDir, sessionId).color,
+      userCreatedIslands: [island],
+    })
+    reportPlan(env.dataDir, {
+      sessionId,
+      feature: 'Keep blueprint after done',
+      stepTitles: ['Change value'],
+      targetRoot: env.targetRoot,
+    })
+    fs.writeFileSync(path.join(env.targetRoot, 'src/a.ts'), 'export const value = 2\n')
+    appendDiff(env.dataDir, env.targetRoot, { sessionId })
+
+    completeSession(env.dataDir, sessionId, env.targetRoot)
+    assert.equal(readManifest(env.dataDir, sessionId).awaitingAttach, true)
+    assert.deepEqual(readLocalBlueprint(env.dataDir, sessionId).folders, [island])
+    assert.equal(readLocalBlueprint(env.dataDir, sessionId).enabled, true)
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('completeSession while the LLM is preparing frees the color slot', () => {
   const env = fixture()
   try {
@@ -1661,95 +1743,6 @@ test('reportPlan invokes the first step', () => {
   }
 })
 
-test('reportDeliveries records titles before any steps', () => {
-  const env = fixture()
-  try {
-    const manifest = reportDeliveries(env.dataDir, {
-      sessionId: 'delivery-chat',
-      feature: 'Balloon shooter',
-      deliveryTitles: ['Score system', 'Balloon physics'],
-    })
-    assert.equal(manifest.phase, 'preparing')
-    assert.equal(manifest.currentDelivery, 1)
-    assert.deepEqual(
-      manifest.deliveries.map((item) => item.title),
-      ['Score system', 'Balloon physics'],
-    )
-    assert.deepEqual(manifest.steps, [])
-    const intent = sessionIntent(env.dataDir, 'delivery-chat', ['src/a.ts'])
-    assert.equal(intent.status, 'preparing')
-    assert.equal(intent.currentDelivery, 1)
-    assert.equal(intent.deliveries.length, 2)
-    assert.equal(intent.lastAck.kind, 'deliveries')
-    assert.match(intent.lastAck.detail, /Score system/)
-  } finally {
-    env.cleanup()
-  }
-})
-
-test('plans one delivery at a time and then the next', () => {
-  const env = fixture()
-  try {
-    reportDeliveries(env.dataDir, {
-      sessionId: 'phased-chat',
-      feature: 'Balloon shooter',
-      deliveryTitles: ['Score system', 'Balloon physics'],
-    })
-    reportPlan(env.dataDir, {
-      sessionId: 'phased-chat',
-      feature: 'Balloon shooter',
-      stepTitles: ['Add score store', 'Wire HUD'],
-      targetRoot: env.targetRoot,
-    })
-    const firstPlan = readManifest(env.dataDir, 'phased-chat')
-    assert.equal(firstPlan.phase, 'working')
-    assert.equal(firstPlan.currentDelivery, 1)
-    assert.equal(firstPlan.steps.length, 2)
-    assert.equal(firstPlan.steps[0].delivery, 1)
-    assert.equal(firstPlan.steps[1].delivery, 1)
-
-    appendDiff(env.dataDir, env.targetRoot, {
-      sessionId: 'phased-chat',
-      patchText: oneToTwo,
-    })
-    const afterFirst = appendDiff(env.dataDir, env.targetRoot, {
-      sessionId: 'phased-chat',
-      patchText: twoToThree,
-    })
-    assert.equal(afterFirst.entry.status, 'applied')
-    assert.equal(afterFirst.manifest.phase, 'preparing')
-    assert.equal(afterFirst.manifest.currentDelivery, 2)
-    assert.equal(afterFirst.manifest.currentStep, 3)
-    assert.equal(sessionIntent(env.dataDir, 'phased-chat').lastAck.kind, 'deliveries')
-    assert.match(sessionIntent(env.dataDir, 'phased-chat').lastAck.detail, /Balloon physics/)
-
-    reportPlan(env.dataDir, {
-      sessionId: 'phased-chat',
-      feature: 'Balloon shooter',
-      stepTitles: ['Spawn balloons'],
-      targetRoot: env.targetRoot,
-    })
-    const secondPlan = readManifest(env.dataDir, 'phased-chat')
-    assert.equal(secondPlan.phase, 'working')
-    assert.equal(secondPlan.currentDelivery, 2)
-    assert.equal(secondPlan.steps.length, 3)
-    assert.equal(secondPlan.steps[2].index, 3)
-    assert.equal(secondPlan.steps[2].delivery, 2)
-    assert.equal(secondPlan.currentStep, 3)
-
-    const last = appendDiff(env.dataDir, env.targetRoot, {
-      sessionId: 'phased-chat',
-      patchText:
-        '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 3\n+export const value = 4\n',
-    })
-    assert.equal(last.entry.status, 'pending')
-    assert.equal(last.manifest.phase, 'review')
-    assert.equal(last.manifest.currentDelivery, 2)
-  } finally {
-    env.cleanup()
-  }
-})
-
 test('runs remaining steps and waits on the last proposal', () => {
   const env = fixture()
   try {
@@ -1824,6 +1817,62 @@ test('the last proposal does not auto-advance', () => {
     assert.equal(last.phase, 'review')
     assert.equal(last.diffs.at(-1).status, 'pending')
     assert.equal(sessionIntent(env.dataDir, 'last-go', ['src/a.ts']).status, 'pending')
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('plan timer starts on the first active step and stops on the last', () => {
+  const env = fixture()
+  try {
+    reportPlan(env.dataDir, {
+      sessionId: 'timer-chat',
+      feature: 'Timed plan',
+      stepTitles: ['Build value', 'Finish value'],
+    })
+    const started = readManifest(env.dataDir, 'timer-chat')
+    assert.equal(typeof started.planTimerStartedAt, 'string')
+    assert.equal(started.planTimerStoppedAt, null)
+    assert.equal(
+      sessionIntent(env.dataDir, 'timer-chat').planTimerStartedAt,
+      started.planTimerStartedAt,
+    )
+
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'timer-chat',
+      patchText: oneToTwo,
+    })
+    const mid = readManifest(env.dataDir, 'timer-chat')
+    assert.equal(mid.planTimerStartedAt, started.planTimerStartedAt)
+    assert.equal(mid.planTimerStoppedAt, null)
+
+    appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'timer-chat',
+      patchText:
+        '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 2\n+export const value = 4\n',
+    })
+    const last = readManifest(env.dataDir, 'timer-chat')
+    assert.equal(last.phase, 'review')
+    assert.equal(last.planTimerStartedAt, started.planTimerStartedAt)
+    assert.equal(typeof last.planTimerStoppedAt, 'string')
+    assert.ok(Date.parse(last.planTimerStoppedAt) >= Date.parse(started.planTimerStartedAt))
+    assert.equal(
+      sessionIntent(env.dataDir, 'timer-chat').planTimerStoppedAt,
+      last.planTimerStoppedAt,
+    )
+
+    const revised = reportPlan(env.dataDir, {
+      sessionId: 'timer-chat',
+      feature: 'Timed plan',
+      stepTitles: ['Tint the value'],
+      targetRoot: env.targetRoot,
+    })
+    assert.equal(revised.phase, 'working')
+    assert.equal(revised.planTimerStoppedAt, null)
+    assert.equal(typeof revised.planTimerStartedAt, 'string')
+    assert.ok(
+      Date.parse(revised.planTimerStartedAt) >= Date.parse(last.planTimerStoppedAt),
+    )
   } finally {
     env.cleanup()
   }

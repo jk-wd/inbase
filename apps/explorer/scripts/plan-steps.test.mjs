@@ -26,12 +26,12 @@ test('parseStepTitle reads lettered ids and leaves plain titles alone', () => {
 })
 
 test('planLabeledSteps auto-numbers plain titles', () => {
-  const steps = planLabeledSteps(['Types', 'UI'], 1, 1)
+  const steps = planLabeledSteps(['Types', 'UI'], 1)
   assert.deepEqual(
-    steps.map((step) => ({ index: step.index, id: step.id, title: step.title, delivery: step.delivery })),
+    steps.map((step) => ({ index: step.index, id: step.id, title: step.title })),
     [
-      { index: 1, id: '1', title: 'Types', delivery: 1 },
-      { index: 2, id: '2', title: 'UI', delivery: 1 },
+      { index: 1, id: '1', title: 'Types' },
+      { index: 2, id: '2', title: 'UI' },
     ],
   )
 })

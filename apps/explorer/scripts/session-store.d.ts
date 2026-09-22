@@ -39,9 +39,7 @@ export type DiffManifest = {
   sessionId: string
   name: string
   feature: string
-  steps: Array<{ index: number; id?: string; title: string; delivery?: number }>
-  deliveries?: Array<{ index: number; title: string }>
-  currentDelivery?: number
+  steps: Array<{ index: number; id?: string; title: string }>
   status: 'active' | 'finished' | 'rejected'
   phase:
     | 'blueprint_ask'
@@ -63,6 +61,8 @@ export type DiffManifest = {
   initialInstruction?: string | null
   contextFiles?: SessionContextFile[]
   workStartedAt: string | null
+  planTimerStartedAt?: string | null
+  planTimerStoppedAt?: string | null
   createdAt: string
   updatedAt: string
   diffs: DiffEntry[]
@@ -107,6 +107,7 @@ export function listOpenSessionIds(
   dataDir: string,
   waiterIds?: Set<string>,
 ): string[]
+export function sessionPoolScanKey(dataDir: string): string
 export function discardInactiveDiffSessions(
   dataDir: string,
   targetRoot?: string | null,
@@ -394,15 +395,6 @@ export function sendBlueprint(
 export function maybeStartVisualizerHandshake(
   dataDir: string,
   sessionId: string,
-): DiffManifest
-export function reportDeliveries(
-  dataDir: string,
-  input: {
-    sessionId: string
-    name?: string
-    feature: string
-    deliveryTitles: string[]
-  },
 ): DiffManifest
 export function reportPlan(
   dataDir: string,

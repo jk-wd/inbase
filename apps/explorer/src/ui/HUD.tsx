@@ -57,15 +57,6 @@ function relationModesForView(mapping: boolean, current: RelationMode) {
 
 function isLastPlanStep(intent: AgentIntent) {
   if (typeof intent.step !== 'number' || !intent.steps?.length) return false
-  const deliveries = intent.deliveries ?? []
-  const current = intent.currentDelivery ?? 0
-  if (deliveries.length > 0) {
-    if (current < deliveries.length) return false
-    const currentSteps = intent.steps.filter(
-      (step) => (step.delivery ?? 0) === current,
-    )
-    if (currentSteps.length === 0) return false
-  }
   return intent.step >= intent.steps.length
 }
 
@@ -1504,11 +1495,8 @@ function sessionLiveStatus(intent: AgentIntent) {
   if (intent.status === 'replanning') {
     return { text: 'LLM is revising the plan', busy: true }
   }
-  if (kind === 'deliveries' || (intent.deliveries?.length && intent.status === 'preparing')) {
+  if (intent.status === 'preparing') {
     return { text: 'LLM is planning steps', busy: true }
-  }
-  if (intent.status === 'preparing' || kind === 'blueprint') {
-    return { text: 'LLM is defining deliveries', busy: true }
   }
   if (kind === 'plan' || intent.status === 'planned') {
     return { text: 'LLM is starting…', busy: true }
@@ -1521,6 +1509,15 @@ function sessionLiveStatus(intent: AgentIntent) {
     return { text: 'LLM attached', busy: true }
   }
   return { text: 'LLM connected', busy: true }
+}
+
+function planStepsInvoked(intent: AgentIntent) {
+  return (
+    intent.steps.length > 0 ||
+    (intent.activeSteps?.length ?? 0) > 0 ||
+    intent.lastAck?.kind === 'invoke' ||
+    intent.lastAck?.kind === 'execute'
+  )
 }
 
 function LiveStatus({
@@ -1574,7 +1571,7 @@ function latestDiffForStep(chain: AgentIntent['chain'], stepIndex: number) {
 }
 
 function planStepOutline(
-  step: { index: number; id?: string; delivery?: number },
+  step: { index: number; id?: string },
   _siblings?: AgentIntent['steps'],
 ) {
   return step.id || String(step.index)
@@ -1587,10 +1584,62 @@ function planStepOutlineForIntent(
   if (typeof stepIndex !== 'number' || !intent.steps?.length) return null
   const step = intent.steps.find((entry) => entry.index === stepIndex)
   if (!step) return String(stepIndex)
-  const siblings = step.delivery
-    ? intent.steps.filter((entry) => (entry.delivery ?? 0) === step.delivery)
-    : intent.steps
-  return planStepOutline(step, siblings)
+  return planStepOutline(step, intent.steps)
+}
+
+function planElapsedMs(
+  startedAt: string | null | undefined,
+  stoppedAt: string | null | undefined,
+  now = Date.now(),
+) {
+  if (!startedAt) return 0
+  const started = Date.parse(startedAt)
+  if (!Number.isFinite(started)) return 0
+  const end = stoppedAt ? Date.parse(stoppedAt) : now
+  const until = Number.isFinite(end) ? end : now
+  return Math.max(0, until - started)
+}
+
+function formatPlanElapsed(ms: number) {
+  const totalSeconds = Math.floor(Math.max(0, ms) / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  }
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
+function PlanTimer({
+  startedAt,
+  stoppedAt,
+}: {
+  startedAt: string | null | undefined
+  stoppedAt: string | null | undefined
+}) {
+  const running = Boolean(startedAt) && !stoppedAt
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    if (!running) return
+    const tick = window.setInterval(() => setNow(Date.now()), 250)
+    return () => window.clearInterval(tick)
+  }, [running, startedAt])
+
+  const elapsed = planElapsedMs(startedAt, stoppedAt, running ? now : undefined)
+  const label = formatPlanElapsed(elapsed)
+
+  return (
+    <p
+      className="hud-plan-timer"
+      role="timer"
+      data-running={running}
+      aria-label={running ? `Plan timer ${label}` : `Plan time ${label}`}
+    >
+      {label}
+    </p>
+  )
 }
 
 function PlanStepList({
@@ -1705,13 +1754,6 @@ function SessionPanel({
   const resumeLiveNext =
     !intent.isActiveDiff && Boolean(intent.working) && !nextDiff
   const liveStep = intent.liveStep ?? (intent.working ? intent.step : null)
-  const deliveries = intent.deliveries ?? []
-  const currentDelivery = intent.currentDelivery ?? 0
-  const currentDeliverySteps = intent.steps.filter(
-    (step) => (step.delivery ?? 0) === currentDelivery,
-  )
-  const planningDelivery =
-    deliveries.length > 0 && currentDelivery > 0 && currentDeliverySteps.length === 0
   const currentOutline = planStepOutlineForIntent(intent, intent.step)
   const activeOutlines = (intent.activeSteps?.length
     ? intent.activeSteps
@@ -1721,23 +1763,13 @@ function SessionPanel({
   )
     .map((index) => planStepOutlineForIntent(intent, index))
     .filter(Boolean)
-  const currentOutlineStep = intent.steps.find(
-    (step) => step.index === intent.step,
-  )
-  const currentOutlineSiblings = currentOutlineStep?.delivery
-    ? intent.steps.filter(
-        (step) => (step.delivery ?? 0) === currentOutlineStep.delivery,
-      )
-    : []
-  const lastOutlineSibling = currentOutlineSiblings.at(-1)
-  const lastOutline = lastOutlineSibling
-    ? planStepOutline(lastOutlineSibling)
+  const lastOutline = intent.steps.length
+    ? planStepOutline(intent.steps.at(-1)!)
     : null
   const activeLabel = activeOutlines.join(', ')
   const stepId = activeLabel || currentOutline
-  const stepLabel = planningDelivery
-    ? `Delivery ${currentDelivery} of ${deliveries.length}`
-    : stepId && lastOutline && lastOutline !== stepId && activeOutlines.length <= 1
+  const stepLabel =
+    stepId && lastOutline && lastOutline !== stepId && activeOutlines.length <= 1
       ? `Step ${stepId} of ${lastOutline}`
       : stepId
         ? activeOutlines.length > 1
@@ -1860,7 +1892,9 @@ function SessionPanel({
           {!intent.awaitingAttach && (
             <>
               {showPlaceHint && !planReady && !pending && <PlaceFilesHint />}
-              {!working && <LiveStatus intent={intent} />}
+              {!working && !planStepsInvoked(intent) && (
+                <LiveStatus intent={intent} />
+              )}
             </>
           )}
           {handshakeSetup ? (
@@ -1928,70 +1962,28 @@ function SessionPanel({
             </>
           ) : handshakeSetup ? null : intent.status === 'finished' ? (
             <p>All plan steps were applied.</p>
-          ) : (showConnectedProgress || preparing) && deliveries.length === 0 ? null : (
+          ) : (showConnectedProgress || preparing) && intent.steps.length === 0 ? null : (
             <p className="hud-step-label">
               {stepLabel}
             </p>
           )}
           {!askingBlueprint && !sendingBlueprint && (
             <>
-              {deliveries.length > 0 ? (
-                <ol className="hud-deliveries">
-                  {deliveries.map((delivery) => {
-                    const deliverySteps = intent.steps.filter(
-                      (step) => (step.delivery ?? 0) === delivery.index,
-                    )
-                    const isPlanning =
-                      currentDelivery === delivery.index &&
-                      deliverySteps.length === 0 &&
-                      intent.status !== 'finished' &&
-                      intent.status !== 'rejected'
-                    const deliveryDone =
-                      deliverySteps.length > 0 &&
-                      deliverySteps.every((step) => acceptedSteps.has(step.index))
-                    return (
-                      <li
-                        key={delivery.index}
-                        data-planning={isPlanning}
-                        data-done={deliveryDone}
-                        data-active={currentDelivery === delivery.index}
-                      >
-                        <div className="hud-delivery-head">
-                          <span className="hud-delivery-index">
-                            {delivery.index}.
-                          </span>
-                          <span className="hud-delivery-title">
-                            {delivery.title}
-                          </span>
-                        </div>
-                        {isPlanning ? (
-                          <p className="hud-delivery-planning">planning steps</p>
-                        ) : (
-                          <PlanStepList
-                            steps={deliverySteps}
-                            intent={intent}
-                            proposalStep={proposalStep}
-                            processingSteps={processingSteps}
-                            acceptedSteps={acceptedSteps}
-                            canAcceptProposal={canAcceptProposal}
-                            onNavigateDiff={onNavigateDiff}
-                          />
-                        )}
-                      </li>
-                    )
-                  })}
-                </ol>
-              ) : (
-                <PlanStepList
-                  steps={intent.steps}
-                  intent={intent}
-                  proposalStep={proposalStep}
-                  processingSteps={processingSteps}
-                  acceptedSteps={acceptedSteps}
-                  canAcceptProposal={canAcceptProposal}
-                  onNavigateDiff={onNavigateDiff}
+              {intent.steps.length > 0 && (
+                <PlanTimer
+                  startedAt={intent.planTimerStartedAt}
+                  stoppedAt={intent.planTimerStoppedAt}
                 />
               )}
+              <PlanStepList
+                steps={intent.steps}
+                intent={intent}
+                proposalStep={proposalStep}
+                processingSteps={processingSteps}
+                acceptedSteps={acceptedSteps}
+                canAcceptProposal={canAcceptProposal}
+                onNavigateDiff={onNavigateDiff}
+              />
               {intent.chain.length > 0 && (
                 <div className="hud-chain">
                   <button
@@ -2309,7 +2301,7 @@ function explorerInstructions({
           id: 'cursor-chat',
           keys: ['Chat'],
           label:
-            '/inbase connects to the next empty session, /connect for the first enabled blueprint, or a color command for that slot; Done in the session window, /explainit /stop; one chat per color',
+            '/inbase connects to the next empty session, /connect for the first enabled blueprint, or a color command for that slot; Done in the session window, /explainit; one chat per color',
         },
         {
           id: 'blueprint-select',
@@ -2436,7 +2428,7 @@ function explorerInstructions({
           id: 'cursor-chat',
           keys: ['Chat'],
           label:
-            '/inbase connects to the next empty session, /connect for the first enabled blueprint, or a color command for that slot; Done in the session window, /explainit /stop; one chat per color',
+            '/inbase connects to the next empty session, /connect for the first enabled blueprint, or a color command for that slot; Done in the session window, /explainit; one chat per color',
         },
         {
           id: 'blueprint-select',

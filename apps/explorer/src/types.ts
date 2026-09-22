@@ -211,12 +211,6 @@ export type PlanStep = {
   index: number
   id?: string
   title: string
-  delivery?: number
-}
-
-export type PlanDelivery = {
-  index: number
-  title: string
 }
 
 export type PatchImport = {
@@ -473,6 +467,7 @@ export type AgentIntentBundle = {
   intents: AgentIntent[]
   blueprint: SharedBlueprint
   localBlueprints: LocalBlueprint[]
+  mapRevision: number
 }
 
 export type ExplainRelation = {
@@ -547,8 +542,6 @@ export type AgentIntent = {
   colorName?: string | null
   colorHex?: string | null
   feature: string | null
-  deliveries?: PlanDelivery[]
-  currentDelivery?: number | null
   steps: PlanStep[]
   step: number | null
   activeSteps?: number[]
@@ -573,6 +566,8 @@ export type AgentIntent = {
   chain: DiffChainEntry[]
   isActiveDiff: boolean
   liveStep?: number | null
+  planTimerStartedAt?: string | null
+  planTimerStoppedAt?: string | null
   preview: boolean
   phase: WorkflowPhase | null
   working: boolean

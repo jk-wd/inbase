@@ -662,6 +662,8 @@ function intentSignature(intent: AgentIntent) {
     isActiveDiff: intent.isActiveDiff,
     liveStep: intent.liveStep,
     working: intent.working,
+    planTimerStartedAt: intent.planTimerStartedAt,
+    planTimerStoppedAt: intent.planTimerStoppedAt,
     chain: intent.chain,
     files: intent.files,
     creates: intent.creates,
@@ -1161,6 +1163,7 @@ function Explorer({
   const browsingHistory = useRef<Record<string, boolean>>({})
   const liveIntentsRef = useRef<AgentIntent[]>([])
   const seenSessionIds = useRef<Set<string>>(new Set())
+  const lastMapRevision = useRef<number | null>(null)
   // null until the first poll seeds waiting/attached state per session.
   const awaitingAttachBySession = useRef<Map<string, boolean> | null>(null)
 
@@ -2556,7 +2559,14 @@ function Explorer({
             !sessionsChanged,
           )
         }
-        if (sessionsChanged) {
+        const mapChanged =
+          typeof bundle.mapRevision === 'number' &&
+          lastMapRevision.current != null &&
+          bundle.mapRevision !== lastMapRevision.current
+        if (typeof bundle.mapRevision === 'number') {
+          lastMapRevision.current = bundle.mapRevision
+        }
+        if (sessionsChanged || mapChanged) {
           await onRefreshGraph()
           if (cancelled) return
         }

@@ -234,8 +234,6 @@ export const emptyIntent: AgentIntent = {
   colorName: null,
   colorHex: null,
   feature: null,
-  deliveries: [],
-  currentDelivery: null,
   steps: [],
   step: null,
   activeSteps: [],
@@ -260,6 +258,8 @@ export const emptyIntent: AgentIntent = {
   chain: [],
   isActiveDiff: false,
   liveStep: null,
+  planTimerStartedAt: null,
+  planTimerStoppedAt: null,
   preview: false,
   phase: null,
   working: false,
@@ -298,17 +298,6 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     colorName: typeof data?.colorName === 'string' ? data.colorName : null,
     colorHex: typeof data?.colorHex === 'string' ? data.colorHex : null,
     feature: data?.feature ?? null,
-    deliveries: Array.isArray(data?.deliveries)
-      ? data.deliveries.flatMap((item) => {
-          if (!item || typeof item !== 'object') return []
-          const index = (item as { index?: unknown }).index
-          const title = (item as { title?: unknown }).title
-          if (typeof index !== 'number' || typeof title !== 'string') return []
-          return [{ index, title }]
-        })
-      : [],
-    currentDelivery:
-      typeof data?.currentDelivery === 'number' ? data.currentDelivery : null,
     steps: Array.isArray(data?.steps)
       ? data.steps.flatMap((item) => {
           if (!item || typeof item !== 'object') return []
@@ -316,13 +305,11 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
           const title = (item as { title?: unknown }).title
           if (typeof index !== 'number' || typeof title !== 'string') return []
           const id = (item as { id?: unknown }).id
-          const delivery = (item as { delivery?: unknown }).delivery
           return [
             {
               index,
               title,
               ...(typeof id === 'string' && id ? { id } : {}),
-              ...(typeof delivery === 'number' ? { delivery } : {}),
             },
           ]
         })
@@ -355,6 +342,10 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     chain: normalizeChain(data?.chain),
     isActiveDiff: Boolean(data?.isActiveDiff),
     liveStep: typeof data?.liveStep === 'number' ? data.liveStep : null,
+    planTimerStartedAt:
+      typeof data?.planTimerStartedAt === 'string' ? data.planTimerStartedAt : null,
+    planTimerStoppedAt:
+      typeof data?.planTimerStoppedAt === 'string' ? data.planTimerStoppedAt : null,
     preview: Boolean(data?.preview),
     phase: data?.phase ?? null,
     working: Boolean(data?.working),
@@ -449,6 +440,7 @@ export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
       intents: [],
       blueprint: emptyBlueprint,
       localBlueprints: [],
+      mapRevision: 0,
     }
   }
   const data = (await response.json()) as {
@@ -458,7 +450,12 @@ export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
     sessionId?: string | null
     blueprint?: Partial<AgentIntentBundle['blueprint']>
     localBlueprints?: unknown
+    mapRevision?: number
   } & Partial<AgentIntent>
+  const mapRevision =
+    typeof data.mapRevision === 'number' && Number.isFinite(data.mapRevision)
+      ? data.mapRevision
+      : 0
   if (Array.isArray(data.intents)) {
     return {
       focusedSessionId:
@@ -472,6 +469,7 @@ export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
         .filter((intent) => Boolean(intent.sessionId)),
       blueprint: normalizeBlueprint(data.blueprint),
       localBlueprints: normalizeLocalBlueprints(data.localBlueprints),
+      mapRevision,
     }
   }
   const intent = normalize(data)
@@ -480,6 +478,7 @@ export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
     nextAttachSessionId: intent.awaitingAttach ? intent.sessionId : null,
     intents: intent.sessionId ? [intent] : [],
     localBlueprints: [],
+    mapRevision,
     blueprint: normalizeBlueprint(data.blueprint ?? {
       hidden: intent.blueprintHidden,
       revision: intent.blueprintRevision,

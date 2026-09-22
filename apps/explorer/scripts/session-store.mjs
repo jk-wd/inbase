@@ -80,7 +80,7 @@ function sessionColorCommandHelp() {
 }
 
 export const ALL_COLORS_LOCKED_MESSAGE =
-  'VISUAL_CODER_ALL_COLORS_LOCKED Every color already has a chat connected. Click Done in a session window or type /stop in a connected chat, then try again.'
+  'VISUAL_CODER_ALL_COLORS_LOCKED Every color already has a chat connected. Click Done in a session window, then try again.'
 export const NOT_RUNNING_MESSAGE =
   "VISUAL_CODER_NOT_RUNNING Inbase isn't running. Start it with `npx inbase run`, then send this request again."
 export const NO_HIERARCHY_BLUEPRINT_MESSAGE =
@@ -90,7 +90,7 @@ export function colorUnknownMessage(query) {
   return `VISUAL_CODER_COLOR_UNKNOWN ${label} is not a chat color. ${sessionColorCommandHelp()}`
 }
 export function colorBusyMessage(colorName) {
-  return `VISUAL_CODER_COLOR_BUSY The ${colorName} session already has a chat connected. Click Done in that session window or type /stop in that chat, then try again.`
+  return `VISUAL_CODER_COLOR_BUSY The ${colorName} session already has a chat connected. Click Done in that session window, then try again.`
 }
 export function colorMissingMessage(colorName) {
   return `VISUAL_CODER_COLOR_UNKNOWN No ${colorName} session is open. Start Inbase with \`npx inbase run\`, then try again.`
@@ -527,6 +527,22 @@ function isStalledWorking(manifest, waiterIds, sessionId, now = Date.now()) {
   return Number.isFinite(started) && now - started >= STALLED_WAIT_MS
 }
 
+function resetPlanTimer(manifest) {
+  manifest.planTimerStartedAt = null
+  manifest.planTimerStoppedAt = null
+}
+
+function startPlanTimer(manifest, at = new Date().toISOString()) {
+  if (manifest.planTimerStartedAt && !manifest.planTimerStoppedAt) return
+  manifest.planTimerStartedAt = at
+  manifest.planTimerStoppedAt = null
+}
+
+function stopPlanTimer(manifest, at = new Date().toISOString()) {
+  if (!manifest.planTimerStartedAt || manifest.planTimerStoppedAt) return
+  manifest.planTimerStoppedAt = at
+}
+
 export function isSessionConnected(
   dataDir,
   sessionId,
@@ -589,6 +605,12 @@ export function listOpenSessionIds(dataDir, waiterIds = waiterSessionIds()) {
     return left.sessionId.localeCompare(right.sessionId)
   })
   return sessions.map((item) => item.sessionId)
+}
+
+export function sessionPoolScanKey(dataDir) {
+  return listOpenSessionIds(dataDir)
+    .filter((sessionId) => readManifest(dataDir, sessionId)?.awaitingAttach !== true)
+    .join('\0')
 }
 
 export function listSessionIntents(dataDir, knownFileIds = [], targetRoot = null) {
@@ -933,8 +955,6 @@ function resetLlmSessionWork(dataDir, sessionId, targetRoot = null) {
     name: '',
     feature: '',
     steps: [],
-    deliveries: [],
-    currentDelivery: 0,
     status: 'active',
     phase: 'blueprint',
     awaitingAttach: true,
@@ -943,6 +963,8 @@ function resetLlmSessionWork(dataDir, sessionId, targetRoot = null) {
     pendingInstruction: null,
     pendingExplain: false,
     workStartedAt: null,
+    planTimerStartedAt: null,
+    planTimerStoppedAt: null,
     diffs: [],
   })
   return readManifest(dataDir, safeId)
@@ -1113,10 +1135,8 @@ export function readManifest(dataDir, sessionId) {
     value.workStartedAt ??= null
   }
   if (typeof value.pendingExplain !== 'boolean') value.pendingExplain = false
-  value.deliveries = Array.isArray(value.deliveries) ? value.deliveries : []
-  if (!Number.isInteger(value.currentDelivery) || value.currentDelivery < 0) {
-    value.currentDelivery = value.deliveries.length > 0 ? 1 : 0
-  }
+  delete value.deliveries
+  delete value.currentDelivery
   value.steps = Array.isArray(value.steps)
     ? value.steps.map((step) => ({
         ...step,
@@ -1128,6 +1148,14 @@ export function readManifest(dataDir, sessionId) {
   value.initialInstruction =
     typeof value.initialInstruction === 'string' ? value.initialInstruction : null
   value.contextFiles = normalizeContextFiles(value.contextFiles)
+  value.planTimerStartedAt =
+    typeof value.planTimerStartedAt === 'string' && value.planTimerStartedAt
+      ? value.planTimerStartedAt
+      : null
+  value.planTimerStoppedAt =
+    typeof value.planTimerStoppedAt === 'string' && value.planTimerStoppedAt
+      ? value.planTimerStoppedAt
+      : null
   return value
 }
 
@@ -1317,8 +1345,6 @@ export function sessionIntent(
         ? manifest.initialInstruction
         : null,
     contextFiles: listContextFiles(dataDir, sessionId).map(publicContextFile),
-    deliveries: manifest.deliveries ?? [],
-    currentDelivery: manifest.currentDelivery ?? 0,
     steps: manifest.steps,
     step: activeView ? manifest.currentStep : selected?.step ?? manifest.currentStep,
     reason: activeView ? currentPlanStep?.title ?? null : selected?.title ?? null,
@@ -1355,6 +1381,8 @@ export function sessionIntent(
     }),
     isActiveDiff: Boolean(selected && selected.id === manifest.activeDiffId),
     liveStep: manifest.currentStep,
+    planTimerStartedAt: manifest.planTimerStartedAt ?? null,
+    planTimerStoppedAt: manifest.planTimerStoppedAt ?? null,
     activeSteps: (manifest.steps ?? [])
       .filter((item) => normalizeCurrentStepIds(manifest).includes(stepIdOf(item)))
       .map((item) => item.index),
@@ -1539,19 +1567,8 @@ export function inspectTargetFile(
   return absolute
 }
 
-function planNamedItems(titles, emptyMessage, emptyTitleMessage, startAt = 1) {
-  if (!Array.isArray(titles) || titles.length === 0) {
-    throw new Error(emptyMessage)
-  }
-  return titles.map((title, offset) => {
-    const trimmed = typeof title === 'string' ? title.trim() : ''
-    if (!trimmed) throw new Error(emptyTitleMessage)
-    return { index: startAt + offset, title: trimmed }
-  })
-}
-
-function planSteps(titles, startAt = 1, delivery = null) {
-  return planLabeledSteps(titles, startAt, delivery)
+function planSteps(titles, startAt = 1) {
+  return planLabeledSteps(titles, startAt)
 }
 
 function normalizeCurrentStepIds(manifest) {
@@ -1630,29 +1647,6 @@ function invokeReadyOnManifest(manifest, maxSubagents = 4) {
   return syncCurrentStep(manifest, next)
 }
 
-function planDeliveries(titles) {
-  return planNamedItems(
-    titles,
-    'At least one delivery is required',
-    'Delivery titles cannot be empty',
-  )
-}
-
-function hasDeliveries(manifest) {
-  return Array.isArray(manifest?.deliveries) && manifest.deliveries.length > 0
-}
-
-function currentDeliveryIndex(manifest) {
-  if (!hasDeliveries(manifest)) return 0
-  return Number.isInteger(manifest.currentDelivery) && manifest.currentDelivery > 0
-    ? manifest.currentDelivery
-    : 1
-}
-
-function hasLaterDelivery(manifest) {
-  return hasDeliveries(manifest) && currentDeliveryIndex(manifest) < manifest.deliveries.length
-}
-
 function pendingReviewDiff(manifest) {
   if (manifest?.phase !== 'review') return null
   const active =
@@ -1698,6 +1692,7 @@ export function invokeReadySteps(dataDir, sessionId, targetRoot = null, maxSubag
   }
   manifest.phase = 'working'
   manifest.workStartedAt = new Date().toISOString()
+  startPlanTimer(manifest)
   writeManifest(dataDir, manifest)
   const labels = invoked.map((id) => {
     const step = manifest.steps.find((item) => stepIdOf(item) === id)
@@ -1740,8 +1735,6 @@ export function startSession(dataDir, input) {
     color: resolveSessionColor(sessionId)?.id ?? existing?.color ?? nextSessionColor(dataDir) ?? SESSION_COLORS[0].id,
     feature: featureName(input.feature) || name,
     steps: [],
-    deliveries: [],
-    currentDelivery: 0,
     status: 'active',
     phase: 'blueprint_ask',
     awaitingAttach: false,
@@ -1752,6 +1745,8 @@ export function startSession(dataDir, input) {
     initialInstruction: null,
     contextFiles: [],
     workStartedAt: null,
+    planTimerStartedAt: null,
+    planTimerStoppedAt: null,
     createdAt: now,
     updatedAt: now,
     diffs: [],
@@ -1790,8 +1785,6 @@ export function setupSession(dataDir, input = {}) {
     color: resolveSessionColor(sessionId)?.id ?? nextSessionColor(dataDir) ?? SESSION_COLORS[0].id,
     feature: featureName(input.feature) || name,
     steps: [],
-    deliveries: [],
-    currentDelivery: 0,
     status: 'active',
     phase: 'blueprint',
     awaitingAttach: true,
@@ -1802,6 +1795,8 @@ export function setupSession(dataDir, input = {}) {
     initialInstruction: null,
     contextFiles: [],
     workStartedAt: null,
+    planTimerStartedAt: null,
+    planTimerStoppedAt: null,
     createdAt: now,
     updatedAt: now,
     diffs: [],
@@ -2063,74 +2058,8 @@ function requireWritableSession(dataDir, sessionId) {
 }
 
 function assignPlanSteps(manifest, stepTitles, startAt = 1) {
-  const delivery = currentDeliveryIndex(manifest) || null
-  const kept = delivery
-    ? (manifest.steps ?? []).filter((step) => (step.delivery ?? 0) < delivery)
-    : []
-  const from = kept.length ? kept.at(-1).index + 1 : startAt
-  manifest.steps = [...kept, ...planSteps(stepTitles, from, delivery)]
-  if (delivery && from !== manifest.currentStep) {
-    manifest.currentStep = from
-  }
-  return manifest.steps.filter((step) => step.index >= from)
-}
-
-export function reportDeliveries(dataDir, input) {
-  const sessionId = resolveSessionId(input.sessionId)
-  const existing = requireWritableSession(dataDir, sessionId)
-  const now = new Date().toISOString()
-
-  if (existing && existing.phase !== 'preparing') {
-    throw new Error(
-      `Session ${sessionId} is not waiting for deliveries. Report-plan for the invoked delivery.`,
-    )
-  }
-  if (existing?.steps?.length) {
-    throw new Error(
-      `Deliveries already recorded for session ${sessionId}. Report-plan for delivery ${currentDeliveryIndex(existing)}.`,
-    )
-  }
-
-  const manifest = existing ?? {
-    version: 2,
-    sessionId,
-    name: sessionName(input.name) || sessionName(input.feature),
-    feature: input.feature,
-    steps: [],
-    deliveries: [],
-    currentDelivery: 0,
-    status: 'active',
-    phase: 'preparing',
-    currentStep: 1,
-    activeDiffId: null,
-    pendingInstruction: null,
-    initialInstruction: null,
-    contextFiles: [],
-    workStartedAt: null,
-    createdAt: now,
-    updatedAt: now,
-    diffs: [],
-  }
-  if (!sessionName(manifest.name)) {
-    manifest.name = sessionName(input.feature)
-  }
-  if (input.feature) manifest.feature = input.feature
-  manifest.deliveries = planDeliveries(input.deliveryTitles)
-  manifest.currentDelivery = 1
-  manifest.status = 'active'
-  manifest.phase = 'preparing'
-  manifest.pendingInstruction = null
-  manifest.workStartedAt = now
-  writeManifest(dataDir, manifest)
-  focusSession(dataDir, sessionId)
-  const first = manifest.deliveries[0]
-  recordSessionAck(
-    dataDir,
-    sessionId,
-    'deliveries',
-    first ? `delivery ${first.index} — ${first.title}` : `${manifest.deliveries.length} delivery(s)`,
-  )
-  return readManifest(dataDir, sessionId) ?? manifest
+  manifest.steps = planSteps(stepTitles, startAt)
+  return manifest.steps
 }
 
 export function reportPlan(dataDir, input) {
@@ -2145,8 +2074,6 @@ export function reportPlan(dataDir, input) {
       name: sessionName(input.name) || sessionName(input.feature),
       feature: input.feature,
       steps: [],
-      deliveries: [],
-      currentDelivery: 0,
       status: 'active',
       phase: 'preparing',
       currentStep: 1,
@@ -2168,6 +2095,7 @@ export function reportPlan(dataDir, input) {
     manifest.phase = 'plan_ready'
     manifest.pendingInstruction = null
     manifest.workStartedAt = null
+    resetPlanTimer(manifest)
     writeManifest(dataDir, manifest)
     focusSession(dataDir, sessionId)
     recordSessionAck(
@@ -2192,10 +2120,9 @@ export function reportPlan(dataDir, input) {
     existing.activeDiffId = pending.id
   }
   if (input.feature) existing.feature = input.feature
-  const delivery = currentDeliveryIndex(existing) || null
   existing.steps = [
     ...existing.steps.filter((step) => step.index < startAt),
-    ...planSteps(input.stepTitles, startAt, delivery),
+    ...planSteps(input.stepTitles, startAt),
   ]
   existing.status = 'active'
   existing.pendingInstruction = null
@@ -2207,6 +2134,7 @@ export function reportPlan(dataDir, input) {
     // Reuse the invoke snapshot so the next propose-patch replaces this proposal.
     existing.phase = 'working'
     existing.workStartedAt = new Date().toISOString()
+    startPlanTimer(existing)
     syncCurrentStep(existing, remaining[0] ? [remainingId] : [])
     writeManifest(dataDir, existing)
     focusSession(dataDir, sessionId)
@@ -2246,7 +2174,7 @@ export function invokeStep(dataDir, sessionId, step, targetRoot = null) {
     if (step !== expected) {
       throw new Error(
         last
-          ? `The last proposal is waiting. Click Done in the session window to finish.`
+          ? `The last proposal is waiting. Run inbase finish --session ${sessionId} or click Done in the session window.`
           : `Step ${active.step} is already recorded.`,
       )
     }
@@ -2264,6 +2192,7 @@ export function invokeStep(dataDir, sessionId, step, targetRoot = null) {
   manifest.currentStep = planned.index
   manifest.phase = 'working'
   manifest.workStartedAt = new Date().toISOString()
+  startPlanTimer(manifest)
   writeManifest(dataDir, manifest)
   const title = planned.title
   recordSessionAck(
@@ -2373,12 +2302,8 @@ export function appendDiff(dataDir, targetRoot, input) {
   const remaining = (manifest.steps ?? []).filter(
     (item) => !completed.has(stepIdOf(item)),
   )
-  const deliveryDone =
-    remaining.filter(
-      (item) => (item.delivery ?? 0) === currentDeliveryIndex(manifest),
-    ).length === 0
   const isLastPlanned = remaining.length === 0
-  const finishSession = isLastPlanned && !hasLaterDelivery(manifest)
+  const finishSession = isLastPlanned
   entry.status = finishSession ? 'pending' : 'applied'
   entry.decidedAt = finishSession ? null : now
   const paths = sessionPaths(dataDir, sessionId)
@@ -2390,17 +2315,8 @@ export function appendDiff(dataDir, targetRoot, input) {
   if (finishSession) {
     manifest.phase = 'review'
     manifest.workStartedAt = null
+    stopPlanTimer(manifest)
     syncCurrentStep(manifest, leftoverCurrent.length ? leftoverCurrent : [stepId])
-  } else if (isLastPlanned || deliveryDone) {
-    manifest.currentDelivery = currentDeliveryIndex(manifest) + 1
-    manifest.phase = 'preparing'
-    manifest.workStartedAt = new Date().toISOString()
-    const lastIndex = Math.max(
-      0,
-      ...(manifest.steps ?? []).map((item) => item.index),
-    )
-    manifest.currentStep = lastIndex + 1
-    manifest.currentStepIds = []
   } else {
     manifest.phase = 'working'
     manifest.workStartedAt = new Date().toISOString()
@@ -2414,7 +2330,7 @@ export function appendDiff(dataDir, targetRoot, input) {
   }
   writeManifest(dataDir, manifest)
   focusSession(dataDir, sessionId)
-  if (!isLastPlanned && !deliveryDone) {
+  if (!finishSession) {
     const nextIds = normalizeCurrentStepIds(manifest)
     const nextTitle = nextIds
       .map((item) => {
@@ -2427,18 +2343,6 @@ export function appendDiff(dataDir, targetRoot, input) {
       sessionId,
       'invoke',
       nextIds.length > 1 ? `steps ${nextTitle}` : `step ${nextTitle || manifest.currentStep}`,
-    )
-  } else if (!finishSession) {
-    const next =
-      manifest.deliveries.find((item) => item.index === manifest.currentDelivery) ??
-      null
-    recordSessionAck(
-      dataDir,
-      sessionId,
-      'deliveries',
-      next
-        ? `delivery ${next.index} — ${next.title}`
-        : `delivery ${manifest.currentDelivery}`,
     )
   }
   const latest = readManifest(dataDir, sessionId)
@@ -2595,7 +2499,7 @@ function resetColorSlot(dataDir, sessionId, targetRoot = null) {
   if (!manifest) return
   const dir = sessionPaths(dataDir, safeId).context
   if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true })
-  writeLocalBlueprint(dataDir, safeId, emptyBlueprint())
+  // Keep this color's blueprint. finish and Done only drop the plan and patches.
   const next = readManifest(dataDir, safeId)
   if (!next) return
   next.initialInstruction = null

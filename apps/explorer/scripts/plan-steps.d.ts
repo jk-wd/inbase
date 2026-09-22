@@ -24,5 +24,4 @@ export function nextInvokedStepIds(
 export function planLabeledSteps(
   titles: string[],
   startAt?: number,
-  delivery?: number | null,
-): Array<{ index: number; id: string; title: string; delivery?: number }>
+): Array<{ index: number; id: string; title: string }>

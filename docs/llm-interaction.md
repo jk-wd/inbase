@@ -30,7 +30,7 @@ That attaches the chat to that color’s empty slot — Coral in the example abo
 
 A regular chat without `/inbase`, `/connect`, or a color command does **not** attach. Keep using those commands when you want the map session.
 
-When a chat is attached, the map opens that color’s **LLM session window**. Look for **ATTACHED** / **LLM CONNECTED** and the current status (for example “LLM is defining deliveries”):
+When a chat is attached, the map opens that color’s **LLM session window**. Look for **ATTACHED** / **LLM CONNECTED** and the current status (for example “LLM is planning steps”):
 
 ![LLM session window attached](images/llm-attached.png)
 
