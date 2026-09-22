@@ -149,13 +149,11 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /\/stop/)
     assert.match(skillText, /\/connect/)
     assert.match(skillText, /attach --first/)
-    assert.match(skillText, /VISUAL_CODER_SUBAGENTS/)
-    assert.match(skillText, /2A/)
-    assert.match(skillText, /propose-patch --session <color> --step 2B/)
-    assert.doesNotMatch(
-      skillText,
-      /Do not attach those subagents to other Inbase colors/,
-    )
+    assert.match(skillText, /Do not spawn subagents/)
+    assert.match(skillText, /sequential steps/)
+    assert.match(skillText, /propose-patch --session <color> --step <id>/)
+    assert.doesNotMatch(skillText, /lettered parallel steps/)
+    assert.doesNotMatch(skillText, /2A/)
     assert.match(skillText, /VISUAL_CODER_NO_BLUEPRINT/)
     assert.match(skillText, /Do not prefix it with/)
     assert.match(skillText, /not wait for the user to click Run/)
@@ -247,8 +245,9 @@ test('init copies Cursor skills and gitignores .inbase', () => {
     assert.doesNotMatch(skillText, /\/blueprint-structure/)
     assert.match(skillText, /\/connect/)
     assert.match(skillText, /attach --first/)
-    assert.match(skillText, /VISUAL_CODER_SUBAGENTS/)
-    assert.match(skillText, /propose-patch --session <color> --step 2B/)
+    assert.match(skillText, /Do not spawn subagents/)
+    assert.match(skillText, /propose-patch --session <color> --step <id>/)
+    assert.doesNotMatch(skillText, /lettered parallel steps/)
     assert.doesNotMatch(
       skillText,
       /Do not attach those subagents to other Inbase colors/,
@@ -389,7 +388,7 @@ test('init copies Cursor skills and gitignores .inbase', () => {
     )
     assert.match(
       fs.readFileSync(path.join(root, '.cursor/commands/coral.md'), 'utf8'),
-      /lettered parallel steps/,
+      /sequential steps/,
     )
     assert.match(
       fs.readFileSync(path.join(root, '.cursor/commands/violet.md'), 'utf8'),
@@ -433,7 +432,7 @@ test('init copies Cursor skills and gitignores .inbase', () => {
     )
     assert.match(
       fs.readFileSync(path.join(root, '.cursor/commands/connect.md'), 'utf8'),
-      /lettered parallel steps/,
+      /sequential steps/,
     )
     assert.doesNotMatch(skillText, /user-invocable:/)
     assert.doesNotMatch(skillText, /allowed-tools:/)
@@ -1482,7 +1481,7 @@ test('read-blueprint treats an enabled blueprint as the request when there is no
   }
 })
 
-test('read-blueprint prints lettered subagent guidance', async () => {
+test('read-blueprint prints sequential session scope', async () => {
   const { root, cleanup } = tempProject()
   const dataDir = path.join(root, '.inbase')
   const env = {
@@ -1518,11 +1517,12 @@ test('read-blueprint prints lettered subagent guidance', async () => {
       env,
     })
     assert.equal(result.status, 0, result.stderr)
-    assert.match(result.stdout, /VISUAL_CODER_MAX_SUBAGENTS 3/)
-    assert.match(result.stdout, /VISUAL_CODER_SUBAGENTS/)
-    assert.match(result.stdout, /lettered parallel steps/)
-    assert.match(result.stdout, /Honor maxSubagents 3 as the max letters/)
-    assert.match(result.stdout, /Do not attach those workers to another color/)
+    assert.match(result.stdout, /VISUAL_CODER_SESSION_SCOPE/)
+    assert.match(result.stdout, /sequential steps \(1, 2, 3\)/)
+    assert.match(result.stdout, /Do not spawn subagents/)
+    assert.doesNotMatch(result.stdout, /VISUAL_CODER_MAX_SUBAGENTS/)
+    assert.doesNotMatch(result.stdout, /lettered parallel steps/)
+    assert.doesNotMatch(result.stdout, /MUST spawn a subagent/)
     assert.doesNotMatch(result.stdout, /VISUAL_CODER_DEPENDS_ON/)
     assert.doesNotMatch(result.stdout, /VISUAL_CODER_RELATIONS_START/)
     assert.doesNotMatch(result.stdout, /npx inbase attach --color/)

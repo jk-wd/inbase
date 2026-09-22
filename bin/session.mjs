@@ -2,7 +2,6 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { explorerRoot, instanceFile, readInstanceFile, takeFlagValue, takeFlagValues } from './project.mjs'
-import { loadInbaseConfig, resolveMaxSubagents } from './inbase-config.mjs'
 import { parseChangeNoteFlags } from '../apps/explorer/scripts/change-notes.mjs'
 
 async function loadExplorer() {
@@ -57,7 +56,6 @@ function currentPlanSteps(manifest) {
 
 function formatExecute(manifest, sessionId, options = {}) {
   const current = currentPlanSteps(manifest)
-  const maxSubagents = options.maxSubagents ?? 4
   const continuing = options.continuing === true
   const tail = continuing
     ? 'Continue immediately. Do not stop.'
@@ -65,19 +63,10 @@ function formatExecute(manifest, sessionId, options = {}) {
   const reread = continuing
     ? ''
     : ' Re-read this session\'s blueprint before implementing; the user can place files and folders at any time.'
-  if (current.length <= 1) {
-    const step = current[0]
-    const id = stepIdOf(step) || String(manifest.currentStep)
-    const title = step?.title
-    return `VISUAL_CODER_EXECUTE Step ${id} is invoked${title ? `: ${title}` : ''}.${reread} ${executeStepHint(sessionId, id)} ${tail}`
-  }
-  const ids = current.map((step) => stepIdOf(step))
-  const list = current
-    .map((step) => `${stepIdOf(step)} ${step.title}`.trim())
-    .join('; ')
-  const mine = ids[0]
-  const others = ids.slice(1)
-  return `VISUAL_CODER_EXECUTE Parallel steps ${ids.join(', ')} are invoked: ${list}. This chat implements ${mine}. MUST spawn a subagent for ${others.join(', ')}. Each worker MUST propose-patch --session ${sessionId} --step <that id> and MUST NOT attach to another color. Never run more than ${maxSubagents} subagents at once.${reread} ${executeStepHint(sessionId, mine)} ${tail}`
+  const step = current[0]
+  const id = stepIdOf(step) || String(manifest.currentStep)
+  const title = step?.title
+  return `VISUAL_CODER_EXECUTE Step ${id} is invoked${title ? `: ${title}` : ''}.${reread} ${executeStepHint(sessionId, id)} ${tail}`
 }
 
 function currentDeliveryRecord(manifest) {
@@ -329,7 +318,6 @@ function emitApprovalHandshake(store, dataDir, sessionId, manifest) {
     console.log(
       formatExecute(manifest, sessionId, {
         continuing,
-        maxSubagents: resolveMaxSubagents(loadInbaseConfig()),
       }),
     )
     process.exit(0)
@@ -386,8 +374,8 @@ export async function attachSession(args) {
     ' If this conversation already printed VISUAL_CODER_SESSION, this is the wrong slot: stop, stay on the original color, and use that --session. Do not report a new plan here.'
   console.log(
     colorName
-      ? `VISUAL_CODER_ATTACHED Attached to the ${colorName} session (${manifest.phase}). Tell the user you connected to the ${colorName} chat. Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then you MUST run report-deliveries with short titles only — do not invent implementation steps yet. Then MUST run report-plan for the invoked delivery only, using lettered parallel steps (2A, 2B) when independent work can run at once. Do not edit any files before report-plan. After report-plan, implement the invoked step only, then MUST propose-patch. If parallel steps are invoked, spawn subagents for the extra letters. Repeat that loop for each later invoked step. After the last step of a delivery, if VISUAL_CODER_PLAN_DELIVERY, report-plan for that delivery only. Never implement the whole plan before propose-patch. After the last recorded step, wait for /explainit, /stop, or a change request in chat.${wrongSlot}`
-      : `VISUAL_CODER_ATTACHED Attached to the next waiting visualizer session ${manifest.name || manifest.sessionId} (${manifest.phase}). Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then you MUST run report-deliveries with short titles only — do not invent implementation steps yet. Then MUST run report-plan for the invoked delivery only, using lettered parallel steps (2A, 2B) when independent work can run at once. Do not edit any files before report-plan. After report-plan, implement the invoked step only, then MUST propose-patch. If parallel steps are invoked, spawn subagents for the extra letters. Repeat that loop for each later invoked step. After the last step of a delivery, if VISUAL_CODER_PLAN_DELIVERY, report-plan for that delivery only. Never implement the whole plan before propose-patch. After the last recorded step, wait for /explainit, /stop, or a change request in chat.${wrongSlot}`,
+      ? `VISUAL_CODER_ATTACHED Attached to the ${colorName} session (${manifest.phase}). Tell the user you connected to the ${colorName} chat. Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then you MUST run report-deliveries with short titles only — do not invent implementation steps yet. Then MUST run report-plan for the invoked delivery only, using sequential steps (1, 2, 3). Do not spawn subagents. Do not edit any files before report-plan. After report-plan, implement the invoked step only, then MUST propose-patch. Repeat that loop for each later invoked step. After the last step of a delivery, if VISUAL_CODER_PLAN_DELIVERY, report-plan for that delivery only. Never implement the whole plan before propose-patch. After the last recorded step, wait for /explainit, /stop, or a change request in chat.${wrongSlot}`
+      : `VISUAL_CODER_ATTACHED Attached to the next waiting visualizer session ${manifest.name || manifest.sessionId} (${manifest.phase}). Use --session ${manifest.sessionId} for every later command. Run inbase read-blueprint --session ${manifest.sessionId} to load the optional blueprint, instruction, and attached files. Then say what you see on the blueprint in chat (I see on the blueprint ...). Then you MUST run report-deliveries with short titles only — do not invent implementation steps yet. Then MUST run report-plan for the invoked delivery only, using sequential steps (1, 2, 3). Do not spawn subagents. Do not edit any files before report-plan. After report-plan, implement the invoked step only, then MUST propose-patch. Repeat that loop for each later invoked step. After the last step of a delivery, if VISUAL_CODER_PLAN_DELIVERY, report-plan for that delivery only. Never implement the whole plan before propose-patch. After the last recorded step, wait for /explainit, /stop, or a change request in chat.${wrongSlot}`,
   )
 }
 
@@ -409,24 +397,15 @@ function printBlueprintDump(blueprint, options = {}) {
   console.log('VISUAL_CODER_BLUEPRINT_END')
 }
 
-function printParallelGuidance(store, dataDir, sessionId) {
-  const maxSubagents = resolveMaxSubagents(loadInbaseConfig())
+function printSessionScope(store, dataDir, sessionId) {
   const color = store.resolveSessionColor(
     store.readManifest(dataDir, sessionId)?.color,
   )
   const colorName = color?.name || 'session'
   const colorId = color?.id || sessionId
-  console.log(`VISUAL_CODER_MAX_SUBAGENTS ${maxSubagents}`)
-  if (maxSubagents <= 0) {
-    console.log(
-      `VISUAL_CODER_SUBAGENTS maxSubagents is 0. Do not spawn subagents. Plan sequential steps for this ${colorName} blueprint only. Report only with --session ${colorId}.`,
-    )
-  } else {
-    console.log(
-      `VISUAL_CODER_SUBAGENTS This chat implements only this ${colorName} blueprint. After you read it, plan lettered parallel steps (2A, 2B, 2A.1) for independent files or slices so work finishes sooner. Honor maxSubagents ${maxSubagents} as the max letters running at once. After report-plan invokes parallel steps, this chat implements one of them. MUST spawn a subagent for each other invoked letter. Each worker implements that step and MUST propose-patch --session ${colorId} --step <id>. Do not attach those workers to another color. If more ready letters exist than the cap, start that many, then start the rest when a worker returns.`,
-    )
-  }
-  return { maxSubagents }
+  console.log(
+    `VISUAL_CODER_SESSION_SCOPE This chat implements only this ${colorName} blueprint. Plan sequential steps (1, 2, 3) for this color only. Report only with --session ${colorId}. Do not spawn subagents.`,
+  )
 }
 
 function printSessionBlueprints(store, dataDir, sessionId) {
@@ -440,9 +419,9 @@ function printSessionBlueprints(store, dataDir, sessionId) {
     ? `${colorName} ${files} file(s), ${folders} folder(s)`
     : null
   printBlueprintDump(local, { colorName })
-  printParallelGuidance(store, dataDir, sessionId)
+  printSessionScope(store, dataDir, sessionId)
   console.log(
-    'VISUAL_CODER_SAY_BLUEPRINT Reply in chat now. Start with "I see on the blueprint" and name every file, folder, function, variable, import, note, and pointer from this color\'s dump. This confirms you interpreted the blueprint correctly. Then, unless you were told to stop and wait, you MUST run report-deliveries with short titles only. Do not invent implementation steps yet. Do not list steps in chat. Then MUST run report-plan for the invoked delivery only, using lettered parallel steps (2A, 2B) when independent work can run at once. Do not edit files yet. If the dump is empty, say "I see nothing on the blueprint yet."',
+    'VISUAL_CODER_SAY_BLUEPRINT Reply in chat now. Start with "I see on the blueprint" and name every file, folder, function, variable, import, note, and pointer from this color\'s dump. This confirms you interpreted the blueprint correctly. Then, unless you were told to stop and wait, you MUST run report-deliveries with short titles only. Do not invent implementation steps yet. Do not list steps in chat. Then MUST run report-plan for the invoked delivery only, using sequential steps (1, 2, 3). Do not spawn subagents. Do not edit files yet. If the dump is empty, say "I see nothing on the blueprint yet."',
   )
   store.markBlueprintSeen(dataDir, sessionId, local.revision, local.revision)
   return {
@@ -570,13 +549,12 @@ export async function reportPlan(args) {
     )
   }
 
-  const maxSubagents = resolveMaxSubagents(loadInbaseConfig())
   const manifest = store.reportPlan(config.dataDir, {
     sessionId,
     feature,
     stepTitles: stepsParsed.values,
     targetRoot: config.targetRoot,
-    maxSubagents,
+    maxSubagents: 1,
   })
   const replacedWaiting = manifest.diffs.some((entry) => entry.status === 'extend')
   if (replacedWaiting && manifest.phase === 'working') {
@@ -595,14 +573,14 @@ export async function reportPlan(args) {
     console.log(
       `VISUAL_CODER_PLAN_READY Revised the plan for session ${sessionId} from step ${stepIdOf(remaining[0]) || startAt}. ${keptLabel}New remaining steps: ${remainingList}. Replaced the waiting proposal with the new remaining steps. Do not ask the user to close the session. Do not edit files before this report-plan.`,
     )
-    console.log(formatExecute(manifest, sessionId, { maxSubagents }))
+    console.log(formatExecute(manifest, sessionId))
     return
   }
   console.log(
     `VISUAL_CODER_PLAN_READY Reported ${manifest.steps.length} plan step(s) for session ${sessionId}.`,
   )
   if (manifest.phase === 'working') {
-    console.log(formatExecute(manifest, sessionId, { maxSubagents }))
+    console.log(formatExecute(manifest, sessionId))
   }
 }
 
@@ -706,14 +684,13 @@ export async function proposePatch(args) {
     usage('propose-patch', '--session <color> [--step <id>] [--note "path: summary"]')
   }
 
-  const maxSubagents = resolveMaxSubagents(loadInbaseConfig())
   let recorded
   try {
     recorded = store.appendDiff(config.dataDir, config.targetRoot, {
       sessionId,
       changeNotes: parseChangeNoteFlags(noteParsed.values),
       step: stepParsed.values[0],
-      maxSubagents,
+      maxSubagents: 1,
     })
   } catch (error) {
     console.error(error instanceof Error ? error.message : error)
@@ -738,7 +715,7 @@ export async function proposePatch(args) {
     console.log(
       `VISUAL_CODER_STEP_READY Recorded the current map overlay as ${entry.id} for session ${sessionId}, step ${recordedId}: ${overlay.files.length} changed, ${overlay.creates.length} added. The next step is already invoked. Implement that next plan step only, then MUST propose-patch again before any later step. Do not stop. Do not ask the user to review this step.`,
     )
-    console.log(formatExecute(manifest, sessionId, { continuing: true, maxSubagents }))
+    console.log(formatExecute(manifest, sessionId, { continuing: true }))
     return
   }
 

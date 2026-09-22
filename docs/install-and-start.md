@@ -47,7 +47,7 @@ Commit an `inbase.json` next to where you run `inbase`. CLI flags and env vars s
 | `target` | Folder the map scans. Use a subfolder in a monorepo, like `"apps/web"`. `/inbase`, `/connect`, and color commands only connect a color session for file changes inside this folder. |
 | `port` | Dev server port. Same as `--port`. |
 | `ignore` | Extra gitignore-style patterns on top of `.gitignore` and the built-in `node_modules` / `dist` skip list. |
-| `maxSubagents` | Max lettered steps a connected chat may run at once (0–16, default 4). After `/connect` or a color command, the LLM looks at **that** blueprint and plans independent slices as `2A` / `2B`. Extra letters are same-color workers; they do not attach to another color. |
+| `maxSubagents` | Reserved. Connected chats currently run plan steps one at a time. |
 | `editor` | Editor from `inbase init <editor>`. The map uses it to open files in Cursor, Zed, or VS Code (Copilot / Cline) when that CLI is available. |
 
 Runtime data stays in `.inbase/` (gitignored). Do not put session or camera state in `inbase.json`.

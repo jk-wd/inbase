@@ -1499,12 +1499,7 @@ function sessionLiveStatus(intent: AgentIntent) {
     return { text: 'LLM is starting…', busy: true }
   }
   if (intent.status === 'working') {
-    return {
-      text: intent.reason
-        ? `LLM is working on ${intent.reason}`
-        : 'LLM is working',
-      busy: true,
-    }
+    return { text: 'LLM is working', busy: true }
   }
   if (intent.status === 'replanning') {
     return { text: 'LLM is revising the plan', busy: true }
@@ -1739,17 +1734,18 @@ function SessionPanel({
     ? planStepOutline(lastOutlineSibling)
     : null
   const activeLabel = activeOutlines.join(', ')
+  const stepId = activeLabel || currentOutline
   const stepLabel = planningDelivery
     ? `Delivery ${currentDelivery} of ${deliveries.length}`
-    : deliveries.length > 0 && (activeLabel || currentOutline)
-      ? `Delivery ${currentDelivery} of ${deliveries.length} · Step ${activeLabel || currentOutline}${
-          lastOutline ? ` of ${lastOutline}` : ''
-        }`
-      : activeLabel && intent.steps?.length > 0
-        ? `Step ${activeLabel}`
+    : stepId && lastOutline && lastOutline !== stepId && activeOutlines.length <= 1
+      ? `Step ${stepId} of ${lastOutline}`
+      : stepId
+        ? activeOutlines.length > 1
+          ? `Steps ${stepId}`
+          : `Step ${stepId}`
         : intent.step && intent.steps?.length > 0
-        ? `Step ${intent.step} of ${intent.steps.length}`
-        : 'Patch'
+          ? `Step ${intent.step} of ${intent.steps.length}`
+          : 'Patch'
   const acceptedSteps = new Set(
     intent.status === 'finished'
       ? intent.steps.map((step) => step.index)
@@ -1864,15 +1860,8 @@ function SessionPanel({
           {!intent.awaitingAttach && (
             <>
               {showPlaceHint && !planReady && !pending && <PlaceFilesHint />}
-              <LiveStatus intent={intent} />
+              {!working && <LiveStatus intent={intent} />}
             </>
-          )}
-          {!llmDisconnected && (intent.steps?.length > 0 || deliveries.length > 0) && (
-            <p className="hud-mode-hint">
-              {deliveries.length > 0
-                ? 'The LLM implements one delivery at a time. Walk the diffs, then Done to keep the changes and free this color. Type /stop in chat to revert and end the session.'
-                : 'The LLM implements the full plan. Walk the diffs, then Done to keep the changes and free this color. Type /stop in chat to revert and end the session.'}
-            </p>
           )}
           {handshakeSetup ? (
             <HandshakeSetup
@@ -1942,7 +1931,6 @@ function SessionPanel({
           ) : (showConnectedProgress || preparing) && deliveries.length === 0 ? null : (
             <p className="hud-step-label">
               {stepLabel}
-              {!planningDelivery && intent.reason ? ` · ${intent.reason}` : ''}
             </p>
           )}
           {!askingBlueprint && !sendingBlueprint && (

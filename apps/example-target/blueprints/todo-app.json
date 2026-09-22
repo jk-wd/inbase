@@ -342,7 +342,7 @@
       {
         "file": "src/todo",
         "kind": "folder",
-        "note": "Plain React todo app. No extra packages. Keep each file small so the LLM can plan lettered parallel steps (2A, 2B) for independent files."
+        "note": "Plain React todo app. No extra packages. Keep each file small."
       },
       {
         "file": "src/todo/types.ts",

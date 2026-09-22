@@ -43,12 +43,11 @@ When the user invoked \`/inbase\`, a color command, or \`/connect\`, in this ord
 5. MUST run \`npx inbase report-deliveries --session COLOR --feature "..." --delivery "..."\`
    with titles only — do not invent implementation steps yet.
 6. MUST run \`npx inbase report-plan --session COLOR --feature "..." --steps "..."\`
-   for the invoked delivery only before any file edit. Prefer lettered parallel
-   steps (\`2A\`, \`2B\`) for independent work. Listing steps in chat is
-   not the plan. Never edit before \`report-plan\`. Do not plan later deliveries.
+   for the invoked delivery only before any file edit. Use sequential steps
+   (\`1\`, \`2\`, \`3\`). Listing steps in chat is not the plan. Never edit before
+   \`report-plan\`. Do not plan later deliveries.
 7. Edit files only after \`VISUAL_CODER_EXECUTE\`, for that invoked step only.
-   If parallel steps are invoked, this chat implements one letter and MUST spawn
-   a subagent for each other letter. MUST run \`npx inbase propose-patch --session COLOR\`
+   Do not spawn subagents. MUST run \`npx inbase propose-patch --session COLOR\`
    with \`--step <id>\` and
    \`--note "path: one-line goal"\` for each changed file and folder before
    starting the next step. No patch file. Never implement the whole plan then

@@ -107,9 +107,3 @@ Planned items take that color on the map. Here `components` is on Blue and `sess
 ![Multiple session blueprints](images/session-specific-result-2.png)
 
 Left to right: the first folder is local to `/coral`, the second is local to `/amber`, and the blue folder belongs to `/blue`.
-
-### Parallel steps
-
-Each blueprint stays on its own color. When a chat connects, the LLM looks at **that** blueprint and plans lettered steps so independent work can run at once: `2A` and `2B` in parallel, then `2A.1` after `2A`. The session window shows those letters together when they are running.
-
-`inbase.json` `maxSubagents` caps how many of those letters can run at once (default 4). The LLM receives that cap with the blueprint. Extra letters are extra workers on **this** color: they `propose-patch --session <color> --step 2B`. They do not attach to other colors.

@@ -7,8 +7,7 @@ description: >-
   VISUAL_CODER_SESSION. Do not use for a regular chat that did not invoke those
   commands. /inbase connects to the next empty session; a color command picks
   that slot; /connect picks the first enabled blueprint. After attach, always
-  read this color's blueprint and plan lettered parallel steps (2A, 2B) so
-  independent work can run at once, capped by maxSubagents. Later turns stay in
+  read this color's blueprint and plan sequential steps (1, 2, 3). Later turns stay in
   that session: never attach again. MUST run `npx inbase report-deliveries`
   with titles only — do not invent steps yet — then `npx inbase report-plan`
   for the invoked delivery before any file edit or propose-patch. Chat steps
@@ -59,9 +58,9 @@ no steps), then `report-plan` for the invoked delivery, then implement as
 closely as possible; ask if you need more. Extra files are allowed if the
 blueprint does not cover them.
 Every attach (`/inbase`, `/connect`, and every color command) uses the same
-start: after `read-blueprint`, this chat implements **only this color**. When
-`report-plan` invokes parallel lettered steps, spawn subagents for the extra
-letters.
+start: after `read-blueprint`, this chat implements **only this color**. Plan
+sequential steps and implement each invoked step in this chat. Do not spawn
+subagents.
 
 - **`/stop`**: discard the plan and patches, free the color, keep live project
   files, then stop. Do not edit files after `/stop`.
@@ -125,13 +124,12 @@ npx inbase report-plan \
   --session <color> \
   --feature "short feature name" \
   --steps "1. Shared types" \
-  --steps "2A. Note card" \
-  --steps "2B. Notes store" \
-  --steps "2A.1. Color picker" \
-  --steps "3. Wire App"
+  --steps "2. Note card" \
+  --steps "3. Notes store" \
+  --steps "4. Wire App"
 ```
 
-Look at this color's blueprint and split independent files or slices into lettered parallel steps (`2A`, `2B`) so they can run at the same time. Nested follow-ups use `2A.1`. Sequential work stays `1`, `2`, `3`. Honor `VISUAL_CODER_MAX_SUBAGENTS` as the max letters running at once. After `report-plan` invokes parallel steps, this chat implements one of them. MUST spawn a subagent for each other invoked letter. Each worker implements only that step and MUST `propose-patch --session <color> --step 2B`. Do not attach those workers to another color.
+Look at this color's blueprint and plan sequential steps (`1`, `2`, `3`). Nested follow-ups use `1.1`. After `report-plan` invokes a step, this chat implements that step and MUST `propose-patch --session <color> --step <id>`. Do not spawn subagents.
 
 **One step, then `propose-patch`. Always. Never implement the whole plan first.**
 
@@ -154,7 +152,7 @@ npx inbase propose-patch --session <color> \
 
 Pass `--note "path: one-line goal"` for every updated, added, or deleted file
 and each changed folder. Do not pass a patch file. Do not write a unified
-diff. After a non-last `propose-patch`, spawn later parallel letters if invoked, then **stop**.
+diff. After a non-last `propose-patch`, continue with the next invoked step in this chat.
 
 Prefer `npx inbase`. Run it from the project working directory.
 Do not prefix it with `cd /absolute/path`. Do not request extra Shell
@@ -211,32 +209,8 @@ say that on a later turn. After `read-blueprint`, start with
 `I see on the blueprint` and name the files, folders, symbols, imports, notes,
 and pointers. Then MUST `report-deliveries` with titles only — do not invent
 steps yet. Then MUST `report-plan` for the invoked delivery before any edit.
-If that plan invokes parallel lettered steps, spawn subagents for the extra letters.
 For other acks, echo the signal, then continue the required tools in the same
 turn. Do not call tools before that sentence. Do not edit before `report-plan`.
-
-## Parallel steps and subagents
-
-Every session start uses the same rule: `/inbase`, `/connect`, `/blue`, `/coral`, and the
-other color commands.
-
-This chat implements **only this color's** blueprint and reports **only** with
-`--session` from `VISUAL_CODER_SESSION`. After `read-blueprint`, look at
-`VISUAL_CODER_MAX_SUBAGENTS` and `VISUAL_CODER_SUBAGENTS`. Analyze this
-blueprint and plan lettered parallel steps so independent work can run at once.
-
-When `report-plan` invokes more than one step (`2A`, `2B`, …), this chat
-implements one of them. MUST spawn a subagent for each other invoked letter.
-Never run more than `VISUAL_CODER_MAX_SUBAGENTS` at once — if more letters are
-ready than that cap, start that many, then start the rest when a worker
-returns. That cap is `inbase.json` `maxSubagents`. If the cap is 0, do not spawn;
-plan sequential steps.
-
-Each parallel-step subagent is a new worker. It MUST:
-
-1. Stay on this color. Do **not** attach
-2. Implement only its assigned step
-3. `propose-patch --session <this color> --step 2B` (use that letter)
 
 ## Required sequence
 
@@ -287,13 +261,12 @@ npx inbase read-blueprint --session <color>
    one delivery.
 
 6. **MUST run `report-plan` now** with `--steps` for the **invoked delivery
-   only**. Prefer lettered parallel steps (`2A`, `2B`) for independent slices,
-   capped by `VISUAL_CODER_MAX_SUBAGENTS`. One recorded step = one landscape change. Chat is not a substitute.
+   only**. Use sequential steps (`1`, `2`, `3`). One recorded step = one landscape change. Chat is not a substitute.
    Do not edit. Do not `propose-patch`. Do not plan later deliveries.
    Wait for `VISUAL_CODER_EXECUTE` from that command.
 
-7. **Only then** implement the **invoked step only**. If several letters are
-   invoked, this chat does one; MUST spawn a subagent for each other letter.
+7. **Only then** implement the **invoked step only** in this chat. Do not spawn
+   subagents.
    Then MUST `propose-patch --step <id>` before touching any later step. Repeat: one step, one
    `propose-patch`. Do **not** implement the whole plan then record once.
    `VISUAL_CODER_EXECUTE` exists only after `report-plan`. Do **not** run
@@ -334,10 +307,8 @@ npx inbase read-blueprint --session <color>
 - Attach after `VISUAL_CODER_SESSION` — that locks a different color
 - Say `Connecting to the ... session` on a later turn
 - Skip `read-blueprint` or skip `I see on the blueprint` before `report-deliveries`
-- Ignore `VISUAL_CODER_SUBAGENTS` / `VISUAL_CODER_MAX_SUBAGENTS`, or
-  spawn more than `VISUAL_CODER_MAX_SUBAGENTS` subagents at once
-- Attach this chat to another color after `VISUAL_CODER_SESSION`, or skip
-  spawning subagents for extra invoked letters, or implement another color's blueprint here
+- Attach this chat to another color after `VISUAL_CODER_SESSION`, spawn
+  subagents, or implement another color's blueprint here
 - Invent implementation steps before `report-deliveries`, or plan later
   deliveries before they are invoked
 - Skip `report-deliveries`, skip `report-plan`, treat chat steps as the plan,

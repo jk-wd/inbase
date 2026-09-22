@@ -4,7 +4,7 @@ When you start an LLM session — for example `/coral build a random color gener
 
 ![LLM session working through a plan](images/llm-working.png)
 
-The LLM reads **this** color's blueprint, lists **deliveries** (shippable chunks), and plans steps for the current delivery. Independent slices become lettered parallel steps (`2A`, `2B`) so they can run at once, capped by `maxSubagents`. Each step is visualized on the map so you can see what changed.
+The LLM reads **this** color's blueprint, lists **deliveries** (shippable chunks), and plans sequential steps for the current delivery. Each step is visualized on the map so you can see what changed.
 
 You can keep chatting in the same thread to steer the work in a different direction whenever you want.
 
