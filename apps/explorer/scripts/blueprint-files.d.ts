@@ -13,6 +13,7 @@ export type BlueprintLayerFields = {
   addedImports: unknown[]
   notes: unknown[]
   pointers: unknown[]
+  dependsOn: string[]
 }
 
 export type BlueprintDocumentLocal = BlueprintLayerFields & {

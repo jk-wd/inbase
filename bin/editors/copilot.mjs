@@ -2,6 +2,7 @@ import { copySkillTree, removeSkillTree } from './layout.mjs'
 
 export const id = 'copilot'
 export const label = 'GitHub Copilot'
+export const openFileKind = 'vscode'
 
 const LAYOUT = { id, skillsRel: '.github/skills' }
 

@@ -20,6 +20,11 @@ import {
 } from './branch-changes.mjs'
 import { diffSourceTrees, restoreSourceTree, snapshotSourceTree } from './tree-diff.mjs'
 import { readExplain } from './explain-store.mjs'
+import {
+  nextInvokedStepIds,
+  planLabeledSteps,
+  stepIdOf,
+} from './plan-steps.mjs'
 
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const CONNECTED_TTL_MS = 15_000
@@ -71,13 +76,15 @@ function sessionColorCommandHelp() {
   const aliases = Object.entries(SESSION_COLOR_ALIASES)
     .filter(([alias, id]) => alias !== id)
     .map(([alias]) => `/${alias}`)
-  return `Connect with ${joinOrList(commands)} (aliases: ${joinOrList(aliases)}).`
+  return `Connect with /inbase, /connect, or ${joinOrList(commands)} (aliases: ${joinOrList(aliases)}).`
 }
 
 export const ALL_COLORS_LOCKED_MESSAGE =
   'VISUAL_CODER_ALL_COLORS_LOCKED Every color already has a chat connected. Click Done in a session window or type /stop in a connected chat, then try again.'
 export const NOT_RUNNING_MESSAGE =
   "VISUAL_CODER_NOT_RUNNING Inbase isn't running. Start it with `npx inbase run`, then send this request again."
+export const NO_HIERARCHY_BLUEPRINT_MESSAGE =
+  'VISUAL_CODER_NO_BLUEPRINT No enabled blueprint is on the map. Draw or load a blueprint first, then type /connect again.'
 export function colorUnknownMessage(query) {
   const label = typeof query === 'string' && query.trim() ? query.trim() : 'That color'
   return `VISUAL_CODER_COLOR_UNKNOWN ${label} is not a chat color. ${sessionColorCommandHelp()}`
@@ -149,6 +156,77 @@ function lookupSessionColor(value) {
   const key = value.trim().toLowerCase()
   const id = SESSION_COLOR_ALIASES[key] ?? resolveSessionColor(key)?.id ?? null
   return resolveSessionColor(id)
+}
+
+export function namedBlueprintDependsOn(colorId, value, graph = null) {
+  const self = lookupSessionColor(colorId)?.id ?? null
+  const seen = new Set()
+  const ids = []
+  for (const raw of Array.isArray(value) ? value : []) {
+    const next = lookupSessionColor(
+      typeof raw === 'string' ? raw : raw && typeof raw === 'object' ? raw.id : null,
+    )
+    if (!next || next.id === self || seen.has(next.id)) continue
+    if (graph && !canDependOn(graph, self, next.id)) continue
+    seen.add(next.id)
+    ids.push(next.id)
+  }
+  return ids
+}
+
+export function colorDependsGraph(layers) {
+  const graph = Object.fromEntries(SESSION_COLORS.map((color) => [color.id, []]))
+  for (const layer of Array.isArray(layers) ? layers : []) {
+    const color = lookupSessionColor(layer?.color)
+    if (!color) continue
+    graph[color.id] = namedBlueprintDependsOn(color.id, layer.dependsOn)
+  }
+  return graph
+}
+
+function reachableDependsOn(graph, from) {
+  const seen = new Set()
+  const stack = [...(graph?.[from] ?? [])]
+  while (stack.length) {
+    const id = stack.pop()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    for (const next of graph?.[id] ?? []) stack.push(next)
+  }
+  return seen
+}
+
+export function canDependOn(graph, from, to) {
+  const source = lookupSessionColor(from)
+  const target = lookupSessionColor(to)
+  if (!source || !target || source.id === target.id) return false
+  return !reachableDependsOn(graph, target.id).has(source.id)
+}
+
+export function colorsDependingOn(graph, colorId) {
+  const color = lookupSessionColor(colorId)
+  if (!color) return []
+  return SESSION_COLORS.filter(
+    (item) => item.id !== color.id && (graph?.[item.id] ?? []).includes(color.id),
+  ).map((item) => item.id)
+}
+
+export function sessionColorRelations(dataDir, sessionId) {
+  const locals = listLocalBlueprints(dataDir)
+  const graph = colorDependsGraph(locals)
+  const color = resolveSessionColor(readManifest(dataDir, sessionId)?.color)
+  const colorId = color?.id ?? null
+  const compact = {}
+  for (const [id, ids] of Object.entries(graph)) {
+    if (ids.length > 0) compact[id] = ids
+  }
+  return {
+    color: colorId,
+    colorName: color?.name ?? null,
+    dependsOn: colorId ? graph[colorId] ?? [] : [],
+    dependents: colorId ? colorsDependingOn(graph, colorId) : [],
+    graph: compact,
+  }
 }
 
 export function parseSessionColorQuery(value) {
@@ -647,6 +725,172 @@ export function nextAttachSessionId(dataDir) {
   return listAttachQueue(dataDir)[0] ?? null
 }
 
+function assignedHierarchyLayers(locals) {
+  return locals.filter(
+    (layer) =>
+      layer.enabled ||
+      (layer.files?.length ?? 0) > 0 ||
+      (layer.folders?.length ?? 0) > 0 ||
+      (layer.dependsOn?.length ?? 0) > 0,
+  )
+}
+
+export function firstEnabledBlueprintColor(dataDir) {
+  const enabled = listLocalBlueprints(dataDir)
+    .filter((layer) => layer.enabled)
+    .sort((left, right) => compareSessionColorOrder(left.color, right.color))
+  return enabled[0]?.color ?? null
+}
+
+export function firstHierarchyAttachColor(dataDir) {
+  return firstEnabledBlueprintColor(dataDir)
+}
+
+function hierarchyColorIds(assigned) {
+  const ids = new Set(assigned.map((layer) => layer.color))
+  for (const layer of assigned) {
+    for (const dep of layer.dependsOn ?? []) {
+      if (lookupSessionColor(dep)) ids.add(dep)
+    }
+  }
+  return ids
+}
+
+export function parallelColorWaves(dependsOnByColor) {
+  const colors = Object.keys(dependsOnByColor)
+  const remaining = new Set(colors)
+  const waves = []
+  while (remaining.size > 0) {
+    const wave = colors.filter((id) => {
+      if (!remaining.has(id)) return false
+      return (dependsOnByColor[id] ?? []).every((dep) => !remaining.has(dep))
+    })
+    if (wave.length === 0) {
+      return { waves, cycle: true, leftover: [...remaining] }
+    }
+    waves.push(wave)
+    for (const id of wave) remaining.delete(id)
+  }
+  return { waves, cycle: false, leftover: [] }
+}
+
+function undirectedColorComponent(graph, start, allowed) {
+  const seen = new Set()
+  const stack = [start]
+  while (stack.length) {
+    const id = stack.pop()
+    if (!id || seen.has(id) || !allowed.has(id)) continue
+    seen.add(id)
+    for (const dep of graph[id] ?? []) stack.push(dep)
+    for (const [other, deps] of Object.entries(graph)) {
+      if ((deps ?? []).includes(id)) stack.push(other)
+    }
+  }
+  return seen
+}
+
+function compactConnectedLayer(layer, attached) {
+  return {
+    color: layer.color,
+    colorName: layer.colorName,
+    enabled: Boolean(layer.enabled),
+    attached: attached === true,
+    dependsOn: Array.isArray(layer.dependsOn) ? [...layer.dependsOn] : [],
+    files: layer.files ?? [],
+    folders: layer.folders ?? [],
+    addedFunctions: layer.addedFunctions ?? [],
+    addedVariables: layer.addedVariables ?? [],
+    addedImports: layer.addedImports ?? [],
+    notes: layer.notes ?? [],
+    pointers: layer.pointers ?? [],
+  }
+}
+
+export function sessionSubagentPlan(dataDir, sessionId, maxSubagents = 4) {
+  const locals = listLocalBlueprints(dataDir)
+  const assigned = assignedHierarchyLayers(locals)
+  const allowed = hierarchyColorIds(assigned)
+  const graph = colorDependsGraph(
+    locals.filter((layer) => allowed.has(layer.color)),
+  )
+  const color = resolveSessionColor(readManifest(dataDir, sessionId)?.color)
+  const colorId = color?.id ?? null
+  const empty = {
+    color: colorId,
+    colorName: color?.name ?? null,
+    connected: [],
+    waves: [],
+    waitFor: [],
+    spawnNow: [],
+    spawnParallel: [],
+    spawnAfterThis: [],
+    attached: {},
+    layers: [],
+    maxSubagents,
+  }
+  if (!colorId || !allowed.has(colorId)) return empty
+
+  const connected = undirectedColorComponent(graph, colorId, allowed)
+  const connectedGraph = {}
+  for (const item of SESSION_COLORS) {
+    if (!connected.has(item.id)) continue
+    connectedGraph[item.id] = (graph[item.id] ?? []).filter((dep) =>
+      connected.has(dep),
+    )
+  }
+  const { waves } = parallelColorWaves(connectedGraph)
+  const attached = {}
+  for (const id of connected) {
+    const sid = findSessionIdByColor(dataDir, id)
+    attached[id] = Boolean(sid && isChatLocked(dataDir, sid))
+  }
+  const thisWaveIndex = waves.findIndex((wave) => wave.includes(colorId))
+  const waitFor = []
+  for (let i = 0; i < thisWaveIndex; i++) waitFor.push(...waves[i])
+  const cap = Number.isInteger(maxSubagents) && maxSubagents > 0 ? maxSubagents : 0
+  let spawnNow = []
+  let spawnParallel = []
+  if (cap > 0) {
+    for (let i = 0; i < thisWaveIndex; i++) {
+      const unattached = waves[i].filter((id) => !attached[id])
+      if (unattached.length > 0) {
+        spawnNow = unattached
+        break
+      }
+    }
+    if (spawnNow.length === 0) {
+      spawnParallel = (waves[thisWaveIndex] ?? []).filter(
+        (id) => id !== colorId && !attached[id],
+      )
+    }
+  }
+  const spawnAfterThis =
+    cap > 0 && thisWaveIndex >= 0
+      ? (waves[thisWaveIndex + 1] ?? []).filter(
+          (id) => id !== colorId && !attached[id],
+        )
+      : []
+  const layers = locals
+    .filter((layer) => connected.has(layer.color))
+    .map((layer) => compactConnectedLayer(layer, attached[layer.color]))
+
+  return {
+    color: colorId,
+    colorName: color?.name ?? null,
+    connected: SESSION_COLORS.map((item) => item.id).filter((id) =>
+      connected.has(id),
+    ),
+    waves,
+    waitFor,
+    spawnNow,
+    spawnParallel,
+    spawnAfterThis,
+    attached,
+    layers,
+    maxSubagents,
+  }
+}
+
 function blueprintFile(dataDir) {
   return path.join(dataDir, 'blueprint.json')
 }
@@ -873,6 +1117,13 @@ export function readManifest(dataDir, sessionId) {
   if (!Number.isInteger(value.currentDelivery) || value.currentDelivery < 0) {
     value.currentDelivery = value.deliveries.length > 0 ? 1 : 0
   }
+  value.steps = Array.isArray(value.steps)
+    ? value.steps.map((step) => ({
+        ...step,
+        id: stepIdOf(step),
+      }))
+    : []
+  value.currentStepIds = normalizeCurrentStepIds(value)
   delete value.stepByStep
   value.initialInstruction =
     typeof value.initialInstruction === 'string' ? value.initialInstruction : null
@@ -1104,6 +1355,9 @@ export function sessionIntent(
     }),
     isActiveDiff: Boolean(selected && selected.id === manifest.activeDiffId),
     liveStep: manifest.currentStep,
+    activeSteps: (manifest.steps ?? [])
+      .filter((item) => normalizeCurrentStepIds(manifest).includes(stepIdOf(item)))
+      .map((item) => item.index),
     preview: previewVisible,
     working:
       isChatLocked(dataDir, sessionId) &&
@@ -1131,6 +1385,7 @@ export function sessionIntent(
     blueprintImports: blueprint.addedImports,
     blueprintNotes: blueprint.notes,
     blueprintPointers: blueprint.pointers,
+    dependsOn: blueprint.dependsOn,
   }
 }
 
@@ -1296,14 +1551,83 @@ function planNamedItems(titles, emptyMessage, emptyTitleMessage, startAt = 1) {
 }
 
 function planSteps(titles, startAt = 1, delivery = null) {
-  const steps = planNamedItems(
-    titles,
-    'A plan needs at least one step',
-    'Plan step titles cannot be empty',
-    startAt,
+  return planLabeledSteps(titles, startAt, delivery)
+}
+
+function normalizeCurrentStepIds(manifest) {
+  if (Array.isArray(manifest.currentStepIds) && manifest.currentStepIds.length > 0) {
+    return manifest.currentStepIds.map((id) => String(id))
+  }
+  const current = (manifest.steps ?? []).find(
+    (step) => step.index === manifest.currentStep,
   )
-  if (!delivery) return steps
-  return steps.map((step) => ({ ...step, delivery }))
+  return current ? [stepIdOf(current)] : []
+}
+
+function completedStepIds(manifest) {
+  const ids = new Set()
+  const byIndex = new Map(
+    (manifest.steps ?? []).map((step) => [step.index, stepIdOf(step)]),
+  )
+  for (const entry of manifest.diffs ?? []) {
+    if (
+      entry.status !== 'applied' &&
+      entry.status !== 'pending' &&
+      entry.status !== 'extend' &&
+      entry.status !== 'extended'
+    ) {
+      continue
+    }
+    const id =
+      typeof entry.stepId === 'string' && entry.stepId.trim()
+        ? entry.stepId.trim()
+        : byIndex.get(entry.step)
+    if (id) ids.add(id)
+  }
+  return ids
+}
+
+function resolvePlanStep(manifest, stepRef) {
+  const steps = manifest.steps ?? []
+  if (stepRef == null || stepRef === '') {
+    const currentId = normalizeCurrentStepIds(manifest)[0]
+    return (
+      steps.find((step) => stepIdOf(step) === currentId) ??
+      steps.find((step) => step.index === manifest.currentStep) ??
+      null
+    )
+  }
+  const raw = String(stepRef).trim()
+  const byId = steps.find(
+    (step) => stepIdOf(step).toUpperCase() === raw.toUpperCase(),
+  )
+  if (byId) return byId
+  const index = Number(raw)
+  if (Number.isInteger(index)) {
+    return steps.find((step) => step.index === index) ?? null
+  }
+  return null
+}
+
+function syncCurrentStep(manifest, stepIds) {
+  const ids = [...new Set((stepIds ?? []).map((id) => String(id)).filter(Boolean))]
+  manifest.currentStepIds = ids
+  const first = (manifest.steps ?? []).find((step) => ids.includes(stepIdOf(step)))
+  if (first) manifest.currentStep = first.index
+  return ids
+}
+
+function invokeReadyOnManifest(manifest, maxSubagents = 4) {
+  const completed = completedStepIds(manifest)
+  const current =
+    manifest.phase === 'plan_ready' ? [] : normalizeCurrentStepIds(manifest)
+  const next = nextInvokedStepIds(
+    manifest.steps,
+    completed,
+    current,
+    maxSubagents,
+  )
+  return syncCurrentStep(manifest, next)
 }
 
 function planDeliveries(titles) {
@@ -1348,11 +1672,11 @@ function canRevisePlan(phase) {
   )
 }
 
-export function autoAdvance(dataDir, sessionId, targetRoot = null) {
+export function autoAdvance(dataDir, sessionId, targetRoot = null, maxSubagents = 4) {
   const manifest = readManifest(dataDir, sessionId)
   if (!manifest) return manifest
   if (manifest.phase === 'plan_ready') {
-    return invokeStep(dataDir, sessionId, manifest.currentStep, targetRoot)
+    return invokeReadySteps(dataDir, sessionId, targetRoot, maxSubagents)
   }
   if (manifest.phase === 'review') {
     const active = manifest.diffs.at(-1)
@@ -1361,6 +1685,32 @@ export function autoAdvance(dataDir, sessionId, targetRoot = null) {
     return invokeStep(dataDir, sessionId, active.step + 1, targetRoot)
   }
   return manifest
+}
+
+export function invokeReadySteps(dataDir, sessionId, targetRoot = null, maxSubagents = 4) {
+  const manifest = requireManifest(dataDir, sessionId)
+  if (manifest.phase !== 'plan_ready' && manifest.phase !== 'working') {
+    throw new Error(`Session ${sessionId} is not ready to invoke a step`)
+  }
+  const invoked = invokeReadyOnManifest(manifest, maxSubagents)
+  if (invoked.length === 0) {
+    throw new Error(`No plan steps are ready to invoke for session ${sessionId}`)
+  }
+  manifest.phase = 'working'
+  manifest.workStartedAt = new Date().toISOString()
+  writeManifest(dataDir, manifest)
+  const labels = invoked.map((id) => {
+    const step = manifest.steps.find((item) => stepIdOf(item) === id)
+    return step?.title ? `${id} — ${step.title}` : id
+  })
+  recordSessionAck(
+    dataDir,
+    sessionId,
+    'invoke',
+    labels.length === 1 ? `step ${labels[0]}` : `steps ${labels.join('; ')}`,
+  )
+  if (targetRoot) snapshotPreStep(dataDir, sessionId, targetRoot)
+  return readManifest(dataDir, sessionId) ?? manifest
 }
 
 export function startSession(dataDir, input) {
@@ -1586,6 +1936,13 @@ function resolveAttachSessionId(dataDir, sessionId, options = {}) {
     if (!color) throw new Error(colorUnknownMessage(options.color))
     return recycleColorSlotForAttach(dataDir, color, targetRoot)
   }
+  if (options.first) {
+    const colorId = firstHierarchyAttachColor(dataDir)
+    if (!colorId) throw new Error(NO_HIERARCHY_BLUEPRINT_MESSAGE)
+    const color = resolveSessionColor(colorId)
+    if (!color) throw new Error(NO_HIERARCHY_BLUEPRINT_MESSAGE)
+    return recycleColorSlotForAttach(dataDir, color, targetRoot)
+  }
   const nextId = nextAttachSessionId(dataDir)
   if (nextId) resetLlmSessionWork(dataDir, nextId, targetRoot)
   return nextId
@@ -1650,6 +2007,8 @@ export function updateBlueprint(dataDir, sessionId, input = {}) {
     addedImports: fields.addedImports ?? current.addedImports,
     notes: fields.notes ?? current.notes,
     pointers: fields.pointers ?? current.pointers,
+    dependsOn:
+      fields.dependsOn !== undefined ? fields.dependsOn : current.dependsOn,
   }
   return writeBlueprintByColor(dataDir, colorId, next)
 }
@@ -1817,7 +2176,7 @@ export function reportPlan(dataDir, input) {
       'plan',
       `${planned.length} step(s)`,
     )
-    return autoAdvance(dataDir, sessionId, input.targetRoot)
+    return autoAdvance(dataDir, sessionId, input.targetRoot, input.maxSubagents)
   }
 
   if (!canRevisePlan(existing.phase)) {
@@ -1843,10 +2202,12 @@ export function reportPlan(dataDir, input) {
 
   const remaining = existing.steps.filter((step) => step.index >= startAt)
   const title = remaining[0]?.title
+  const remainingId = remaining[0] ? stepIdOf(remaining[0]) : String(startAt)
   if (pending) {
     // Reuse the invoke snapshot so the next propose-patch replaces this proposal.
     existing.phase = 'working'
     existing.workStartedAt = new Date().toISOString()
+    syncCurrentStep(existing, remaining[0] ? [remainingId] : [])
     writeManifest(dataDir, existing)
     focusSession(dataDir, sessionId)
     recordSessionAck(dataDir, sessionId, 'plan', `${remaining.length} step(s)`)
@@ -1854,7 +2215,7 @@ export function reportPlan(dataDir, input) {
       dataDir,
       sessionId,
       'invoke',
-      title ? `step ${startAt} — ${title}` : `step ${startAt}`,
+      title ? `step ${remainingId} — ${title}` : `step ${remainingId}`,
     )
     return existing
   }
@@ -1871,7 +2232,7 @@ export function reportPlan(dataDir, input) {
   writeManifest(dataDir, existing)
   focusSession(dataDir, sessionId)
   recordSessionAck(dataDir, sessionId, 'plan', `${remaining.length} step(s)`)
-  return autoAdvance(dataDir, sessionId, input.targetRoot)
+  return autoAdvance(dataDir, sessionId, input.targetRoot, input.maxSubagents)
 }
 
 export function invokeStep(dataDir, sessionId, step, targetRoot = null) {
@@ -1895,18 +2256,21 @@ export function invokeStep(dataDir, sessionId, step, targetRoot = null) {
   if (manifest.phase !== 'plan_ready') {
     throw new Error(`Session ${sessionId} is not ready to invoke a step`)
   }
-  if (step !== manifest.currentStep || !manifest.steps.some((item) => item.index === step)) {
+  const planned = resolvePlanStep(manifest, step)
+  if (!planned) {
     throw new Error(`Step ${step} is not the current plan step`)
   }
+  syncCurrentStep(manifest, [stepIdOf(planned)])
+  manifest.currentStep = planned.index
   manifest.phase = 'working'
   manifest.workStartedAt = new Date().toISOString()
   writeManifest(dataDir, manifest)
-  const title = manifest.steps.find((item) => item.index === step)?.title
+  const title = planned.title
   recordSessionAck(
     dataDir,
     sessionId,
     'invoke',
-    title ? `step ${step} — ${title}` : `step ${step}`,
+    title ? `step ${stepIdOf(planned)} — ${title}` : `step ${stepIdOf(planned)}`,
   )
   if (targetRoot) snapshotPreStep(dataDir, sessionId, targetRoot)
   return manifest
@@ -1952,17 +2316,20 @@ export function appendDiff(dataDir, targetRoot, input) {
 
   const now = new Date().toISOString()
   const parent = manifest.diffs.at(-1) ?? null
-  const step = manifest.currentStep
-  const title = manifest.steps.find((item) => item.index === step)?.title
-  if (!title) throw new Error(`Plan step ${step} does not exist`)
+  const planned = resolvePlanStep(manifest, input.step ?? input.stepId)
+  if (!planned) throw new Error('Plan step does not exist')
+  const step = planned.index
+  const stepId = stepIdOf(planned)
+  const title = planned.title
+  const currentIds = normalizeCurrentStepIds(manifest)
   if (parent && parent.status !== 'extend' && parent.status !== 'applied') {
     throw new Error(`Diff ${parent.id} must be continued or replanned first`)
   }
   if (parent?.status === 'extend' && step !== parent.step) {
     throw new Error(`A revised diff must continue step ${parent.step}`)
   }
-  if (parent?.status === 'applied' && step !== parent.step + 1) {
-    throw new Error(`The next diff must implement step ${parent.step + 1}`)
+  if (parent?.status !== 'extend' && !currentIds.includes(stepId)) {
+    throw new Error(`Step ${stepId} is not currently invoked`)
   }
 
   const knownFileIds = readCodebaseFileIds(dataDir)
@@ -1989,51 +2356,77 @@ export function appendDiff(dataDir, targetRoot, input) {
 
   const id = String(manifest.diffs.length + 1).padStart(4, '0')
   const file = `diffs/${id}.json`
-  const isLastPlanned = step >= manifest.steps.length
-  const finishSession = isLastPlanned && !hasLaterDelivery(manifest)
   const entry = {
     id,
     file,
     parentId: parent?.id ?? null,
     step,
+    stepId,
     title,
-    status: finishSession ? 'pending' : 'applied',
+    status: 'applied',
     instruction: null,
     createdAt: now,
-    decidedAt: finishSession ? null : now,
+    decidedAt: now,
   }
+  manifest.diffs.push(entry)
+  const completed = completedStepIds(manifest)
+  const remaining = (manifest.steps ?? []).filter(
+    (item) => !completed.has(stepIdOf(item)),
+  )
+  const deliveryDone =
+    remaining.filter(
+      (item) => (item.delivery ?? 0) === currentDeliveryIndex(manifest),
+    ).length === 0
+  const isLastPlanned = remaining.length === 0
+  const finishSession = isLastPlanned && !hasLaterDelivery(manifest)
+  entry.status = finishSession ? 'pending' : 'applied'
+  entry.decidedAt = finishSession ? null : now
   const paths = sessionPaths(dataDir, sessionId)
   fs.mkdirSync(paths.diffs, { recursive: true })
   atomicWrite(path.join(paths.root, file), `${JSON.stringify(overlay, null, 2)}\n`)
   manifest.activeDiffId = id
   manifest.pendingInstruction = null
-  manifest.diffs.push(entry)
+  const leftoverCurrent = currentIds.filter((item) => item !== stepId)
   if (finishSession) {
     manifest.phase = 'review'
     manifest.workStartedAt = null
-  } else if (isLastPlanned) {
+    syncCurrentStep(manifest, leftoverCurrent.length ? leftoverCurrent : [stepId])
+  } else if (isLastPlanned || deliveryDone) {
     manifest.currentDelivery = currentDeliveryIndex(manifest) + 1
-    manifest.currentStep = step + 1
     manifest.phase = 'preparing'
     manifest.workStartedAt = new Date().toISOString()
+    const lastIndex = Math.max(
+      0,
+      ...(manifest.steps ?? []).map((item) => item.index),
+    )
+    manifest.currentStep = lastIndex + 1
+    manifest.currentStepIds = []
   } else {
-    manifest.currentStep = step + 1
     manifest.phase = 'working'
     manifest.workStartedAt = new Date().toISOString()
+    const nextIds = nextInvokedStepIds(
+      manifest.steps,
+      completed,
+      leftoverCurrent,
+      input.maxSubagents ?? 4,
+    )
+    syncCurrentStep(manifest, nextIds)
   }
   writeManifest(dataDir, manifest)
   focusSession(dataDir, sessionId)
-  if (!isLastPlanned) {
-    const nextTitle = manifest.steps.find(
-      (item) => item.index === manifest.currentStep,
-    )?.title
+  if (!isLastPlanned && !deliveryDone) {
+    const nextIds = normalizeCurrentStepIds(manifest)
+    const nextTitle = nextIds
+      .map((item) => {
+        const found = manifest.steps.find((stepItem) => stepIdOf(stepItem) === item)
+        return found?.title ? `${item} — ${found.title}` : item
+      })
+      .join('; ')
     recordSessionAck(
       dataDir,
       sessionId,
       'invoke',
-      nextTitle
-        ? `step ${manifest.currentStep} — ${nextTitle}`
-        : `step ${manifest.currentStep}`,
+      nextIds.length > 1 ? `steps ${nextTitle}` : `step ${nextTitle || manifest.currentStep}`,
     )
   } else if (!finishSession) {
     const next =
@@ -2413,6 +2806,7 @@ export function emptyBlueprint() {
     addedImports: [],
     notes: [],
     pointers: [],
+    dependsOn: [],
   }
 }
 
@@ -2567,6 +2961,7 @@ function blueprintContentEqual(left, right) {
       addedImports: left.addedImports,
       notes: left.notes,
       pointers: left.pointers,
+      dependsOn: left.dependsOn,
     }) ===
     JSON.stringify({
       files: right.files,
@@ -2576,11 +2971,12 @@ function blueprintContentEqual(left, right) {
       addedImports: right.addedImports,
       notes: right.notes,
       pointers: right.pointers,
+      dependsOn: right.dependsOn,
     })
   )
 }
 
-function normalizeBlueprint(value) {
+function normalizeBlueprint(value, colorId = null, graph = null) {
   const files = namedBlueprintFiles(value?.files ?? value?.userCreatedBlocks)
   const folders = namedBlueprintFolders(value?.folders ?? value?.userCreatedIslands)
   const addedFunctions = namedBlueprintSymbols(value?.addedFunctions)
@@ -2588,6 +2984,7 @@ function normalizeBlueprint(value) {
   const addedImports = namedBlueprintImportAdditions(value?.addedImports)
   const notes = namedBlueprintNotes(value?.notes)
   const pointers = namedBlueprintPointers(value?.pointers)
+  const dependsOn = namedBlueprintDependsOn(colorId, value?.dependsOn, graph)
   const revision =
     Number.isInteger(value?.revision) && value.revision >= 0 ? value.revision : 0
   return {
@@ -2610,18 +3007,25 @@ function normalizeBlueprint(value) {
     addedImports,
     notes,
     pointers,
+    dependsOn,
   }
 }
 
-function persistBlueprintFile(file, incoming, current) {
-  const next = normalizeBlueprint({
-    ...current,
-    ...incoming,
-    files: incoming?.files ?? incoming?.userCreatedBlocks ?? current.files,
-    folders: incoming?.folders ?? incoming?.userCreatedIslands ?? current.folders,
-    hidden:
-      incoming?.hidden !== undefined ? incoming.hidden : current.hidden,
-  })
+function persistBlueprintFile(file, incoming, current, colorId = null, graph = null) {
+  const next = normalizeBlueprint(
+    {
+      ...current,
+      ...incoming,
+      files: incoming?.files ?? incoming?.userCreatedBlocks ?? current.files,
+      folders: incoming?.folders ?? incoming?.userCreatedIslands ?? current.folders,
+      dependsOn:
+        incoming?.dependsOn !== undefined ? incoming.dependsOn : current.dependsOn,
+      hidden:
+        incoming?.hidden !== undefined ? incoming.hidden : current.hidden,
+    },
+    colorId,
+    graph,
+  )
   if (!blueprintContentEqual(current, next)) {
     next.revision = current.revision + 1
   } else {
@@ -2653,6 +3057,7 @@ function persistBlueprintFile(file, incoming, current) {
         addedImports: namedBlueprintImportAdditions(next.addedImports),
         notes: namedBlueprintNotes(next.notes),
         pointers: namedBlueprintPointers(next.pointers),
+        dependsOn: next.dependsOn,
       },
       null,
       2,
@@ -2663,13 +3068,18 @@ function persistBlueprintFile(file, incoming, current) {
 
 export function readBlueprint(dataDir, sessionId) {
   if (sessionId) return readLocalBlueprint(dataDir, sessionId)
-  return normalizeBlueprint(readJson(blueprintFile(dataDir), emptyBlueprint()))
+  return normalizeBlueprint(
+    readJson(blueprintFile(dataDir), emptyBlueprint()),
+    DEFAULT_SESSION_COLOR.id,
+  )
 }
 
 export function readLocalBlueprint(dataDir, sessionId) {
   if (!sessionId) return emptyBlueprint()
+  const color = resolveSessionColor(readManifest(dataDir, sessionId)?.color)
   return normalizeBlueprint(
     readJson(localBlueprintFile(dataDir, sessionId), emptyBlueprint()),
+    color?.id,
   )
 }
 
@@ -2705,16 +3115,23 @@ export function writeBlueprint(dataDir, sessionIdOrBlueprint, maybeBlueprint) {
     blueprintFile(dataDir),
     incoming,
     readBlueprint(dataDir),
+    DEFAULT_SESSION_COLOR.id,
   )
 }
 
 export function writeLocalBlueprint(dataDir, sessionId, incoming) {
   const safeId = assertSessionId(sessionId)
   requireManifest(dataDir, safeId)
+  const color = resolveSessionColor(readManifest(dataDir, safeId)?.color)
+  const others = listLocalBlueprints(dataDir).filter(
+    (item) => item.sessionId !== safeId,
+  )
   return persistBlueprintFile(
     localBlueprintFile(dataDir, safeId),
     incoming,
     readLocalBlueprint(dataDir, safeId),
+    color?.id,
+    colorDependsGraph(others),
   )
 }
 

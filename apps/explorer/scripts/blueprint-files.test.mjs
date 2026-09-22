@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import {
   applyBlueprintDocument,
   BLUEPRINTS_DIR_NAME,
@@ -229,6 +230,50 @@ test('load restores notes and pointers', () => {
   }
 })
 
+test('save and load restore color depends-on relations', () => {
+  const env = fixture()
+  try {
+    ensureSessionPool(env.dataDir)
+    saveBlueprintDocument(env.targetRoot, {
+      name: 'deps',
+      global: { files: [globalFile] },
+      locals: [
+        {
+          color: 'coral',
+          files: [coralFile],
+          dependsOn: ['blue'],
+        },
+        {
+          color: 'crimson',
+          dependsOn: ['blue', 'coral'],
+        },
+      ],
+    })
+    const loaded = loadBlueprintDocument(env.targetRoot, env.dataDir, {
+      name: 'deps',
+    })
+    assert.deepEqual(loaded.global.dependsOn, [])
+    assert.deepEqual(readBlueprintByColor(env.dataDir, 'coral').dependsOn, ['blue'])
+    assert.deepEqual(readBlueprintByColor(env.dataDir, 'crimson').dependsOn, [
+      'blue',
+      'coral',
+    ])
+    const document = JSON.parse(
+      fs.readFileSync(
+        path.join(env.targetRoot, BLUEPRINTS_DIR_NAME, 'deps.json'),
+        'utf8',
+      ),
+    )
+    assert.deepEqual(document.global.dependsOn, [])
+    assert.deepEqual(
+      document.locals.find((item) => item.color === 'crimson').dependsOn,
+      ['blue', 'coral'],
+    )
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('save keeps notes even when those files are not on disk', () => {
   const env = fixture()
   try {
@@ -425,6 +470,38 @@ test('applying a document clears colors that were not saved', () => {
     })
     assert.deepEqual(readBlueprintByColor(env.dataDir, 'blue').files, [globalFile])
     assert.deepEqual(readBlueprintByColor(env.dataDir, 'coral').files, [])
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('example-target ships four React app blueprints', () => {
+  const targetRoot = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../../example-target',
+  )
+  const listed = listSavedBlueprints(targetRoot)
+  assert.deepEqual(
+    listed.items.map((item) => item.name).sort(),
+    ['counter', 'pomodoro', 'sticky-notes', 'todo-app'],
+  )
+  const env = fixture()
+  try {
+    ensureSessionPool(env.dataDir)
+    loadBlueprintDocument(targetRoot, env.dataDir, { name: 'todo-app' })
+    const blue = readBlueprintByColor(env.dataDir, 'blue')
+    assert.equal(blue.files.length, 13)
+    assert.ok(blue.addedImports.length >= 20)
+    assert.equal(blue.dependsOn.length, 0)
+    assert.equal(readBlueprintByColor(env.dataDir, 'coral').files.length, 0)
+    assert.ok(blue.files.every((item) => item.path.startsWith('src/todo/')))
+
+    loadBlueprintDocument(targetRoot, env.dataDir, { name: 'sticky-notes' })
+    const notes = readBlueprintByColor(env.dataDir, 'blue')
+    assert.equal(notes.files.length, 13)
+    assert.ok(notes.addedFunctions.some((item) => item.name === 'togglePin'))
+    assert.ok(notes.addedFunctions.some((item) => item.name === 'visibleNotes'))
+    assert.ok(notes.files.every((item) => item.path.startsWith('src/notes/')))
   } finally {
     env.cleanup()
   }

@@ -1,0 +1,128 @@
+{
+  "version": 1,
+  "kind": "inbase-blueprint",
+  "name": "counter",
+  "savedAt": "2026-09-20T06:00:00.000Z",
+  "global": {
+    "hidden": false,
+    "files": [
+      {
+        "id": "src/counter/types.ts",
+        "name": "types.ts",
+        "path": "src/counter/types.ts",
+        "folder": "src/counter"
+      },
+      {
+        "id": "src/counter/store.ts",
+        "name": "store.ts",
+        "path": "src/counter/store.ts",
+        "folder": "src/counter"
+      },
+      {
+        "id": "src/counter/Counter.tsx",
+        "name": "Counter.tsx",
+        "path": "src/counter/Counter.tsx",
+        "folder": "src/counter"
+      }
+    ],
+    "folders": [
+      {
+        "id": "src/counter",
+        "name": "counter",
+        "path": "src/counter",
+        "parent": "src"
+      }
+    ],
+    "addedFunctions": [
+      {
+        "name": "increment",
+        "file": "src/counter/store.ts"
+      },
+      {
+        "name": "decrement",
+        "file": "src/counter/store.ts"
+      },
+      {
+        "name": "reset",
+        "file": "src/counter/store.ts"
+      },
+      {
+        "name": "Counter",
+        "file": "src/counter/Counter.tsx"
+      }
+    ],
+    "addedVariables": [
+      {
+        "name": "count",
+        "file": "src/counter/store.ts"
+      }
+    ],
+    "addedImports": [
+      {
+        "name": "CountState",
+        "from": "src/counter/types.ts",
+        "file": "src/counter/store.ts"
+      },
+      {
+        "name": "count",
+        "from": "src/counter/store.ts",
+        "file": "src/counter/Counter.tsx"
+      },
+      {
+        "name": "increment",
+        "from": "src/counter/store.ts",
+        "file": "src/counter/Counter.tsx"
+      },
+      {
+        "name": "decrement",
+        "from": "src/counter/store.ts",
+        "file": "src/counter/Counter.tsx"
+      },
+      {
+        "name": "reset",
+        "from": "src/counter/store.ts",
+        "file": "src/counter/Counter.tsx"
+      },
+      {
+        "name": "Counter",
+        "from": "src/counter/Counter.tsx",
+        "file": "src/App.tsx"
+      }
+    ],
+    "notes": [
+      {
+        "file": "src/counter",
+        "kind": "folder",
+        "note": "Tiny increment/decrement counter. Plain React, no extra packages."
+      },
+      {
+        "file": "src/counter/types.ts",
+        "kind": "file",
+        "note": "Export CountState { value: number }."
+      },
+      {
+        "file": "src/counter/store.ts",
+        "kind": "file",
+        "note": "Module state count. increment, decrement, reset. No React."
+      },
+      {
+        "file": "src/counter/Counter.tsx",
+        "kind": "file",
+        "note": "Show the value with +, -, and Reset buttons."
+      },
+      {
+        "file": "src/App.tsx",
+        "kind": "file",
+        "note": "Import Counter and render it under ColorGenerator. Keep the existing hello world."
+      }
+    ],
+    "pointers": [
+      {
+        "kind": "file",
+        "path": "src/App.tsx"
+      }
+    ],
+    "dependsOn": []
+  },
+  "locals": []
+}

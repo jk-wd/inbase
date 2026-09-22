@@ -38,6 +38,12 @@ function tempProject() {
   }
 }
 
+function initAll(root) {
+  for (const editor of editors) {
+    initProject(root, editor.id)
+  }
+}
+
 function snapshotEnv(...keys) {
   return Object.fromEntries(keys.map((key) => [key, process.env[key]]))
 }
@@ -95,6 +101,10 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /inside the mapped/)
     assert.match(skillText, /inbase\.json/)
     assert.match(skillText, /outside that target/)
+    assert.match(skillText, /A regular chat does \*\*not\*\* connect/)
+    assert.doesNotMatch(skillText, /without \/inbase/)
+    assert.doesNotMatch(skillText, /A regular chat connects/)
+    assert.doesNotMatch(skillText, /You do not need/)
     assert.doesNotMatch(skillText, /whenever the work is file changes in this repository/)
     assert.match(skillText, /VISUAL_CODER_ACK/)
     assert.match(skillText, /Direct response/)
@@ -112,6 +122,7 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /MUST run `npx inbase report-plan`/)
     assert.match(skillText, /One step, then `propose-patch`/)
     assert.match(skillText, /Never implement the whole plan/)
+    assert.match(skillText, /once per step/)
     assert.doesNotMatch(skillText, /report a plan if you can/)
     assert.doesNotMatch(skillText, /implement every invoked step/)
     assert.match(skillText, /Do not ask the user to review a mid-plan step/)
@@ -134,7 +145,18 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /`\.opencode`/)
     assert.match(skillText, /`\.lmstudio`/)
     assert.match(skillText, /\/extract-blueprint/)
+    assert.doesNotMatch(skillText, /\/blueprint-structure/)
     assert.match(skillText, /\/stop/)
+    assert.match(skillText, /\/connect/)
+    assert.match(skillText, /attach --first/)
+    assert.match(skillText, /VISUAL_CODER_SUBAGENTS/)
+    assert.match(skillText, /2A/)
+    assert.match(skillText, /propose-patch --session <color> --step 2B/)
+    assert.doesNotMatch(
+      skillText,
+      /Do not attach those subagents to other Inbase colors/,
+    )
+    assert.match(skillText, /VISUAL_CODER_NO_BLUEPRINT/)
     assert.match(skillText, /Do not prefix it with/)
     assert.match(skillText, /not wait for the user to click Run/)
     assert.match(skillText, /or wait for the user to approve `propose-patch`/)
@@ -152,26 +174,31 @@ test('copyDir installs the skill template', () => {
   }
 })
 
-test('init copies editor skills and gitignores .inbase', () => {
+test('init copies Cursor skills and gitignores .inbase', () => {
   const { root, cleanup } = tempProject()
   const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
   try {
-    const result = initProject(root)
+    const result = initProject(root, 'cursor')
     fs.writeFileSync(path.join(root, '.cursor/commands/accept.md'), 'legacy /accept command\n')
     fs.writeFileSync(path.join(root, '.cursor/commands/go.md'), 'retired /go command\n')
     fs.writeFileSync(path.join(root, '.cursor/commands/skipinbase.md'), 'retired /skipinbase command\n')
-    initProject(root)
+    initProject(root, 'cursor')
     const skill = path.join(root, '.cursor/skills/inbase/SKILL.md')
     assert.equal(result.skillDir, path.join(root, '.cursor/skills/inbase'))
     assert.deepEqual(
       result.editors.map((editor) => editor.id),
-      ['cursor', 'claude', 'agents', 'zed', 'copilot', 'cline', 'opencode', 'lmstudio', 'bionic'],
+      ['cursor'],
     )
+    assert.equal(result.editor, 'cursor')
+    assert.equal(result.openFileLabel, 'Cursor')
     assert.equal(fs.existsSync(skill), true)
     const skillText = fs.readFileSync(skill, 'utf8')
     assert.match(skillText, /npx inbase attach/)
     assert.match(skillText, /inside the mapped/)
     assert.match(skillText, /inbase\.json/)
+    assert.match(skillText, /A regular chat does \*\*not\*\* connect/)
+    assert.doesNotMatch(skillText, /without \/inbase/)
+    assert.doesNotMatch(skillText, /A regular chat connects/)
     assert.match(skillText, /VISUAL_CODER_ACK/)
     assert.match(skillText, /VISUAL_CODER_NOT_RUNNING/)
     assert.match(skillText, /VISUAL_CODER_ALL_COLORS_LOCKED/)
@@ -182,6 +209,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.doesNotMatch(skillText, /\/skipinbase/)
     assert.match(skillText, /\/explainit/)
     assert.match(skillText, /mid-level developer/)
+    assert.match(skillText, /once per step/)
     assert.match(skillText, /\/stop/)
     assert.match(skillText, /I see on the blueprint/)
     assert.match(skillText, /VISUAL_CODER_BLUEPRINT_ONLY/)
@@ -193,6 +221,7 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(skillText, /MUST run `npx inbase report-plan`/)
     assert.match(skillText, /One step, then `propose-patch`/)
     assert.match(skillText, /Never implement the whole plan/)
+    assert.match(skillText, /once per step/)
     assert.doesNotMatch(skillText, /report a plan if you can/)
     assert.doesNotMatch(skillText, /implement every invoked step/)
     assert.match(skillText, /Do not ask the user to review a mid-plan step/)
@@ -215,6 +244,16 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(skillText, /`\.opencode`/)
     assert.match(skillText, /`\.lmstudio`/)
     assert.match(skillText, /\/extract-blueprint/)
+    assert.doesNotMatch(skillText, /\/blueprint-structure/)
+    assert.match(skillText, /\/connect/)
+    assert.match(skillText, /attach --first/)
+    assert.match(skillText, /VISUAL_CODER_SUBAGENTS/)
+    assert.match(skillText, /propose-patch --session <color> --step 2B/)
+    assert.doesNotMatch(
+      skillText,
+      /Do not attach those subagents to other Inbase colors/,
+    )
+    assert.match(skillText, /VISUAL_CODER_NO_BLUEPRINT/)
     assert.match(skillText, /--note "path: one-line goal"/)
     assert.doesNotMatch(skillText, /npx inbase wait-for-approval/)
     assert.doesNotMatch(skillText, /npx inbase explain wait/)
@@ -234,6 +273,10 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(
       fs.readFileSync(path.join(root, '.cursor/commands/inbase.md'), 'utf8'),
       /already printed `VISUAL_CODER_SESSION`/,
+    )
+    assert.doesNotMatch(
+      fs.readFileSync(path.join(root, '.cursor/commands/inbase.md'), 'utf8'),
+      /A regular chat does the same thing/,
     )
     assert.match(
       fs.readFileSync(path.join(root, '.cursor/commands/coral.md'), 'utf8'),
@@ -267,6 +310,14 @@ test('init copies editor skills and gitignores .inbase', () => {
       fs.readFileSync(path.join(root, '.cursor/commands/extract-blueprint.md'), 'utf8'),
       /Do not extract everything/,
     )
+    assert.equal(
+      fs.existsSync(path.join(root, '.cursor/commands/blueprint-structure.md')),
+      false,
+    )
+    assert.equal(
+      fs.existsSync(path.join(root, '.cursor/commands/blueprint-strucure.md')),
+      false,
+    )
     assert.doesNotMatch(
       fs.readFileSync(path.join(root, '.cursor/commands/explainit.md'), 'utf8'),
       /npx inbase explain wait/,
@@ -287,12 +338,21 @@ test('init copies editor skills and gitignores .inbase', () => {
       fs.readFileSync(path.join(root, '.cursor/commands/explainit.md'), 'utf8'),
       /Repeat `--body`/,
     )
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/explainit.md'), 'utf8'),
+      /once per step/,
+    )
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/explainit.md'), 'utf8'),
+      /--step "Second file or topic"/,
+    )
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/go.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/accept.md')), false)
     assert.equal(fs.existsSync(path.join(packageRoot, 'skill/commands/skipinbase.md')), false)
     assert.equal(fs.existsSync(path.join(packageRoot, 'skill/commands/coral.md')), false)
     assert.equal(fs.existsSync(path.join(packageRoot, 'skill/commands/inbase.md')), false)
     assert.equal(fs.existsSync(path.join(packageRoot, 'skill/commands/attach/coral.md')), true)
+    assert.equal(fs.existsSync(path.join(packageRoot, 'skill/commands/attach/connect.md')), true)
     assert.equal(fs.existsSync(path.join(packageRoot, 'skill/commands/attach/inbase.md')), true)
     assert.equal(fs.existsSync(path.join(packageRoot, 'skill/commands/stop.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/stop.md')), true)
@@ -328,6 +388,10 @@ test('init copies editor skills and gitignores .inbase', () => {
       /I see on the blueprint/,
     )
     assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/coral.md'), 'utf8'),
+      /lettered parallel steps/,
+    )
+    assert.match(
       fs.readFileSync(path.join(root, '.cursor/commands/violet.md'), 'utf8'),
       /If `\$ARGUMENTS` is empty/,
     )
@@ -358,6 +422,19 @@ test('init copies editor skills and gitignores .inbase', () => {
       fs.readFileSync(path.join(root, '.cursor/commands/blue.md'), 'utf8'),
       /npx inbase attach --color blue/,
     )
+    assert.equal(fs.existsSync(path.join(root, '.cursor/commands/connect.md')), true)
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/connect.md'), 'utf8'),
+      /npx inbase attach --first/,
+    )
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/connect.md'), 'utf8'),
+      /first enabled blueprint/,
+    )
+    assert.match(
+      fs.readFileSync(path.join(root, '.cursor/commands/connect.md'), 'utf8'),
+      /lettered parallel steps/,
+    )
     assert.doesNotMatch(skillText, /user-invocable:/)
     assert.doesNotMatch(skillText, /allowed-tools:/)
     const permissions = JSON.parse(
@@ -370,10 +447,86 @@ test('init copies editor skills and gitignores .inbase', () => {
       fs.readFileSync(path.join(root, '.cursor/sandbox.json'), 'utf8'),
     )
     assert.equal(sandbox.enableSharedBuildCache, true)
-    const claude = result.editors.find((editor) => editor.id === 'claude')
-    assert.equal(claude?.label, 'Claude Code')
-    assert.equal(claude?.skillDir, path.join(root, '.claude/skills/inbase'))
-    assert.equal(claude?.commandDir, path.join(root, '.claude/commands'))
+    assert.equal(fs.existsSync(path.join(root, '.claude/skills/inbase/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.agents/skills/inbase/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.zed/settings.json')), false)
+    assert.equal(fs.existsSync(path.join(root, '.inbase/user-context.json')), true)
+    assert.match(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), /\.inbase\//)
+    assert.equal(result.configAdded, true)
+    const config = JSON.parse(fs.readFileSync(path.join(root, 'inbase.json'), 'utf8'))
+    assert.equal(config.target, '.')
+    assert.equal(config.port, 5173)
+    assert.deepEqual(config.ignore, [])
+    assert.equal(config.maxSubagents, 4)
+    assert.equal(config.editor, 'cursor')
+    assert.equal(initProject(root, 'cursor').configAdded, false)
+  } finally {
+    restoreEnv(env)
+    cleanup()
+  }
+})
+
+test('init requires an editor', () => {
+  const { root, cleanup } = tempProject()
+  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
+  try {
+    assert.throws(() => initProject(root), /Specify an editor/)
+    assert.throws(() => initProject(root, 'all'), /Specify an editor/)
+    assert.throws(() => initProject(root, 'vim'), /Unknown editor 'vim'/)
+    const missing = runCli(['init'], { cwd: root })
+    assert.notEqual(missing.status, 0)
+    assert.match(missing.stderr, /Usage: inbase init <editor>/)
+    const all = runCli(['init', 'all'], { cwd: root })
+    assert.notEqual(all.status, 0)
+    assert.match(all.stderr, /Specify an editor/)
+  } finally {
+    restoreEnv(env)
+    cleanup()
+  }
+})
+
+test('init records the editor and rewrites it on later init', () => {
+  const { root, cleanup } = tempProject()
+  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
+  try {
+    const zed = initProject(root, 'zed')
+    assert.equal(zed.editor, 'zed')
+    assert.equal(zed.openFileLabel, 'Zed')
+    assert.equal(
+      JSON.parse(fs.readFileSync(path.join(root, 'inbase.json'), 'utf8')).editor,
+      'zed',
+    )
+    const cursor = initProject(root, 'cursor')
+    assert.equal(cursor.configAdded, false)
+    assert.equal(cursor.editor, 'cursor')
+    assert.equal(cursor.openFileLabel, 'Cursor')
+    assert.equal(
+      JSON.parse(fs.readFileSync(path.join(root, 'inbase.json'), 'utf8')).editor,
+      'cursor',
+    )
+    const cli = runCli(['init', 'zed'], { cwd: root })
+    assert.equal(cli.status, 0, cli.stderr)
+    assert.match(cli.stdout, /Map open-file will use Zed/)
+    assert.equal(
+      JSON.parse(fs.readFileSync(path.join(root, 'inbase.json'), 'utf8')).editor,
+      'zed',
+    )
+  } finally {
+    restoreEnv(env)
+    cleanup()
+  }
+})
+
+test('init claude installs only Claude Code files', () => {
+  const { root, cleanup } = tempProject()
+  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
+  try {
+    const result = initProject(root, 'claude')
+    assert.deepEqual(
+      result.editors.map((editor) => editor.id),
+      ['claude'],
+    )
+    assert.equal(result.openFileLabel, null)
     const claudeSkill = fs.readFileSync(
       path.join(root, '.claude/skills/inbase/SKILL.md'),
       'utf8',
@@ -385,7 +538,6 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.equal(fs.existsSync(path.join(root, '.claude/commands/inbase.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.claude/commands/coral.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.claude/commands/accept.md')), false)
-    assert.equal(fs.existsSync(path.join(root, '.claude/commands/skipinbase.md')), false)
     const claudeCoral = fs.readFileSync(
       path.join(root, '.claude/commands/coral.md'),
       'utf8',
@@ -394,169 +546,27 @@ test('init copies editor skills and gitignores .inbase', () => {
     assert.match(claudeCoral, /MUST `report-deliveries`/)
     assert.match(claudeCoral, /MUST `report-plan`/)
     assert.match(claudeCoral, /disable-model-invocation: true/)
-    const agents = result.editors.find((editor) => editor.id === 'agents')
-    assert.equal(agents?.label, 'Agent Skills')
-    assert.equal(agents?.skillDir, path.join(root, '.agents/skills/inbase'))
-    assert.equal(fs.existsSync(path.join(root, '.agents/skills/accept/SKILL.md')), false)
-    assert.equal(fs.existsSync(path.join(root, '.agents/skills/skipinbase/SKILL.md')), false)
-    assert.equal(fs.existsSync(path.join(root, '.agents/skills/stop/SKILL.md')), true)
-    assert.equal(
-      fs.existsSync(path.join(root, '.agents/skills/extract-blueprint/SKILL.md')),
-      true,
+    assert.equal(fs.existsSync(path.join(root, '.cursor/skills/inbase/SKILL.md')), false)
+  } finally {
+    restoreEnv(env)
+    cleanup()
+  }
+})
+
+test('init copilot installs only GitHub Copilot files', () => {
+  const { root, cleanup } = tempProject()
+  const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
+  try {
+    const result = initProject(root, 'copilot')
+    assert.deepEqual(
+      result.editors.map((editor) => editor.id),
+      ['copilot'],
     )
-    const agentsSkill = fs.readFileSync(
-      path.join(root, '.agents/skills/inbase/SKILL.md'),
-      'utf8',
-    )
-    assert.match(agentsSkill, /Always work via the plan/)
-    const zed = result.editors.find((editor) => editor.id === 'zed')
-    assert.equal(zed?.label, 'Zed')
-    assert.equal(zed?.skillDir, path.join(root, '.agents/skills/inbase'))
-    assert.equal(fs.existsSync(path.join(root, '.agents/skills/coral/SKILL.md')), true)
-    assert.equal(fs.existsSync(path.join(root, '.agents/skills/attach')), false)
-    const zedRules = fs.readFileSync(path.join(root, '.rules'), 'utf8')
-    assert.match(zedRules, /Inbase visual edits \(Zed\)/)
-    assert.match(zedRules, /npx inbase attach/)
-    assert.match(zedRules, /I see on the blueprint/)
-    assert.match(zedRules, /MUST run `npx inbase report-deliveries/)
-    assert.match(zedRules, /MUST run `npx inbase report-plan/)
-    assert.match(zedRules, /Never edit before/)
-    assert.match(zedRules, /Never implement the whole plan/)
-    assert.match(zedRules, /\/extract-blueprint/)
-    assert.doesNotMatch(zedRules, /<execute_command>/)
-    const zedSettings = JSON.parse(
-      fs.readFileSync(path.join(root, '.zed/settings.json'), 'utf8'),
-    )
-    assert.equal(
-      zedSettings.agent.tool_permissions.tools.terminal.always_allow[0].pattern,
-      ZED_INBASE_TERMINAL_PATTERN,
-    )
-    assert.equal(
-      zedSettings.agent.tool_permissions.tools.skill.always_allow[0].pattern,
-      ZED_INBASE_SKILL_PATTERN,
-    )
-    const copilot = result.editors.find((editor) => editor.id === 'copilot')
-    assert.equal(copilot?.label, 'GitHub Copilot')
-    assert.equal(copilot?.skillDir, path.join(root, '.github/skills/inbase'))
+    assert.equal(result.editors[0]?.label, 'GitHub Copilot')
+    assert.equal(result.openFileLabel, 'VS Code')
+    assert.equal(fs.existsSync(path.join(root, '.github/skills/inbase/SKILL.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.github/skills/coral/SKILL.md')), true)
-    const cline = result.editors.find((editor) => editor.id === 'cline')
-    assert.equal(cline?.label, 'Cline')
-    assert.equal(cline?.skillDir, path.join(root, '.cline/skills/inbase'))
-    assert.equal(cline?.commandDir, path.join(root, '.cline/workflows'))
-    assert.equal(fs.existsSync(path.join(root, '.cline/skills/accept/SKILL.md')), false)
-    fs.mkdirSync(path.join(root, '.cline/skills/accept'), { recursive: true })
-    fs.writeFileSync(path.join(root, '.cline/skills/accept/SKILL.md'), 'legacy command skill\n')
-    initProject(root)
-    assert.equal(fs.existsSync(path.join(root, '.cline/skills/accept/SKILL.md')), false)
-    assert.equal(fs.existsSync(path.join(root, '.cline/workflows/accept.md')), false)
-    assert.equal(fs.existsSync(path.join(root, '.cline/workflows/skipinbase.md')), false)
-    assert.equal(fs.existsSync(path.join(root, '.cline/workflows/coral.md')), true)
-    assert.equal(fs.existsSync(path.join(root, '.clinerules/workflows')), false)
-    assert.equal(fs.existsSync(path.join(root, '.clinerules/skills')), false)
-    assert.equal(fs.statSync(path.join(root, '.clinerules')).isFile(), true)
-    const clineSkill = fs.readFileSync(
-      path.join(root, '.cline/skills/inbase/SKILL.md'),
-      'utf8',
-    )
-    assert.match(clineSkill, /npx inbase attach/)
-    assert.match(clineSkill, /<execute_command>/)
-    assert.doesNotMatch(clineSkill, /allowed-tools:/)
-    const clineRootSkill = fs.readFileSync(path.join(root, '.cline/SKILL.md'), 'utf8')
-    assert.match(clineRootSkill, /^---\nname: inbase\n/)
-    assert.match(clineRootSkill, /<execute_command>/)
-    const clineRule = fs.readFileSync(path.join(root, '.cline/rules/inbase.md'), 'utf8')
-    assert.match(clineRule, /<execute_command>/)
-    assert.match(clineRule, /npx inbase attach/)
-    assert.match(clineRule, /mapped target/)
-    assert.match(clineRule, /inbase\.json/)
-    assert.match(clineRule, /COLOR/)
-    assert.match(clineRule, /I see on the blueprint/)
-    assert.match(clineRule, /MUST run `npx inbase report-deliveries/)
-    assert.match(clineRule, /MUST run `npx inbase report-plan/)
-    assert.match(clineRule, /Never edit before/)
-    assert.match(clineRule, /Never implement the whole plan/)
-    assert.match(clineRule, /\/extract-blueprint/)
-    assert.equal(fs.statSync(path.join(root, '.clinerules')).isFile(), true)
-    assert.match(
-      fs.readFileSync(path.join(root, '.clinerules'), 'utf8'),
-      /<execute_command>/,
-    )
-    const opencode = result.editors.find((editor) => editor.id === 'opencode')
-    assert.equal(opencode?.label, 'OpenCode')
-    assert.equal(opencode?.skillDir, path.join(root, '.opencode/skills/inbase'))
-    assert.equal(opencode?.commandDir, path.join(root, '.opencode/commands'))
-    assert.equal(fs.existsSync(path.join(root, '.opencode/skills/inbase/SKILL.md')), true)
-    assert.equal(fs.existsSync(path.join(root, '.opencode/commands/coral.md')), true)
-    assert.equal(fs.existsSync(path.join(root, '.opencode/commands/accept.md')), false)
-    const opencodeCoral = fs.readFileSync(
-      path.join(root, '.opencode/commands/coral.md'),
-      'utf8',
-    )
-    assert.match(opencodeCoral, /npx inbase attach --color coral/)
-    assert.match(opencodeCoral, /\$ARGUMENTS/)
-    const opencodeRule = fs.readFileSync(
-      path.join(root, OPENCODE_INSTRUCTION_REL),
-      'utf8',
-    )
-    assert.match(opencodeRule, /Inbase visual edits \(OpenCode\)/)
-    assert.match(opencodeRule, /npx inbase attach/)
-    assert.match(opencodeRule, /I see on the blueprint/)
-    assert.match(opencodeRule, /MUST run `npx inbase report-deliveries/)
-    assert.match(opencodeRule, /MUST run `npx inbase report-plan/)
-    assert.match(opencodeRule, /Never edit before/)
-    assert.match(opencodeRule, /Never implement the whole plan/)
-    assert.doesNotMatch(opencodeRule, /<execute_command>/)
-    const opencodeConfig = JSON.parse(
-      fs.readFileSync(path.join(root, 'opencode.json'), 'utf8'),
-    )
-    assert.equal(opencodeConfig.permission.bash[OPENCODE_INBASE_BASH_PATTERN], 'allow')
-    assert.equal(opencodeConfig.permission.skill[OPENCODE_INBASE_SKILL], 'allow')
-    assert.deepEqual(opencodeConfig.instructions, [OPENCODE_INSTRUCTION_REL])
-    const lmstudio = result.editors.find((editor) => editor.id === 'lmstudio')
-    assert.equal(lmstudio?.label, 'LM Studio')
-    assert.equal(lmstudio?.skillDir, path.join(root, '.lmstudio/skills/inbase'))
-    assert.equal(fs.existsSync(path.join(root, '.lmstudio/skills/inbase/SKILL.md')), true)
-    assert.equal(fs.existsSync(path.join(root, '.lmstudio/skills/coral/SKILL.md')), true)
-    assert.equal(fs.existsSync(path.join(root, '.lmstudio/skills/accept/SKILL.md')), false)
-    const lmstudioSkill = fs.readFileSync(
-      path.join(root, '.lmstudio/skills/inbase/SKILL.md'),
-      'utf8',
-    )
-    assert.match(lmstudioSkill, /Always work via the plan/)
-    assert.match(lmstudioSkill, /allowed-tools: Bash\(npx inbase \*\)/)
-    const lmstudioCoral = fs.readFileSync(
-      path.join(root, '.lmstudio/skills/coral/SKILL.md'),
-      'utf8',
-    )
-    assert.match(lmstudioCoral, /npx inbase attach --color coral/)
-    assert.doesNotMatch(lmstudioCoral, /disable-model-invocation:/)
-    assert.doesNotMatch(lmstudioCoral, /allow_implicit_invocation:/)
-    const bionic = result.editors.find((editor) => editor.id === 'bionic')
-    assert.equal(bionic?.label, 'Bionic')
-    assert.equal(bionic?.skillDir, path.join(root, '.agents/skills/inbase'))
-    assert.equal(fs.existsSync(path.join(root, '.agents/skills/inbase/SKILL.md')), true)
-    assert.equal(fs.existsSync(path.join(root, '.agents/skills/coral/SKILL.md')), true)
-    const bionicCoral = fs.readFileSync(
-      path.join(root, '.agents/skills/coral/SKILL.md'),
-      'utf8',
-    )
-    assert.match(bionicCoral, /npx inbase attach --color coral/)
-    assert.doesNotMatch(bionicCoral, /disable-model-invocation:/)
-    assert.doesNotMatch(bionicCoral, /allow_implicit_invocation:/)
-    fs.rmSync(path.join(root, '.clinerules'))
-    fs.mkdirSync(path.join(root, '.clinerules/workflows'), { recursive: true })
-    fs.writeFileSync(path.join(root, '.clinerules/inbase.md'), 'legacy folder rule\n')
-    initProject(root)
-    assert.equal(fs.statSync(path.join(root, '.clinerules')).isFile(), true)
-    assert.equal(fs.existsSync(path.join(root, '.clinerules/inbase.md')), false)
-    assert.equal(fs.existsSync(path.join(root, '.inbase/user-context.json')), true)
-    assert.match(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), /\.inbase\//)
-    assert.equal(result.configAdded, true)
-    const config = JSON.parse(fs.readFileSync(path.join(root, 'inbase.json'), 'utf8'))
-    assert.equal(config.target, '.')
-    assert.equal(config.port, 5173)
-    assert.deepEqual(config.ignore, [])
-    assert.equal(initProject(root).configAdded, false)
+    assert.equal(fs.existsSync(path.join(root, '.cursor/skills/inbase/SKILL.md')), false)
   } finally {
     restoreEnv(env)
     cleanup()
@@ -582,6 +592,21 @@ test('init cline installs only Cline files', () => {
     assert.equal(fs.existsSync(path.join(root, '.github/skills/inbase/SKILL.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.opencode/skills/inbase/SKILL.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.lmstudio/skills/inbase/SKILL.md')), false)
+    assert.equal(result.editor, 'cline')
+    assert.equal(result.openFileLabel, 'VS Code')
+    fs.mkdirSync(path.join(root, '.cline/skills/accept'), { recursive: true })
+    fs.writeFileSync(path.join(root, '.cline/skills/accept/SKILL.md'), 'legacy command skill\n')
+    initProject(root, 'cline')
+    assert.equal(fs.existsSync(path.join(root, '.cline/skills/accept/SKILL.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cline/workflows/accept.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cline/workflows/skipinbase.md')), false)
+    assert.equal(fs.existsSync(path.join(root, '.cline/workflows/coral.md')), true)
+    fs.rmSync(path.join(root, '.clinerules'))
+    fs.mkdirSync(path.join(root, '.clinerules/workflows'), { recursive: true })
+    fs.writeFileSync(path.join(root, '.clinerules/inbase.md'), 'legacy folder rule\n')
+    initProject(root, 'cline')
+    assert.equal(fs.statSync(path.join(root, '.clinerules')).isFile(), true)
+    assert.equal(fs.existsSync(path.join(root, '.clinerules/inbase.md')), false)
     assert.throws(() => initProject(root, 'vim'), /Unknown editor 'vim'/)
     const codex = initProject(root, 'codex')
     assert.deepEqual(
@@ -605,9 +630,16 @@ test('init zed installs only Zed files', () => {
       ['zed'],
     )
     assert.equal(result.editors[0]?.label, 'Zed')
+    assert.equal(result.editor, 'zed')
+    assert.equal(result.openFileLabel, 'Zed')
+    assert.equal(
+      JSON.parse(fs.readFileSync(path.join(root, 'inbase.json'), 'utf8')).editor,
+      'zed',
+    )
     assert.equal(fs.existsSync(path.join(root, '.agents/skills/inbase/SKILL.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.agents/skills/coral/SKILL.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.agents/skills/extract-blueprint/SKILL.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.agents/skills/blueprint-structure/SKILL.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.rules')), true)
     assert.equal(fs.existsSync(path.join(root, '.zed/settings.json')), true)
     assert.equal(fs.existsSync(path.join(root, '.cursor/skills/inbase/SKILL.md')), false)
@@ -701,6 +733,7 @@ test('init opencode installs only OpenCode files', () => {
     assert.equal(fs.existsSync(path.join(root, '.opencode/skills/inbase/SKILL.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.opencode/commands/coral.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.opencode/commands/extract-blueprint.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.opencode/commands/blueprint-structure.md')), false)
     assert.equal(fs.existsSync(path.join(root, OPENCODE_INSTRUCTION_REL)), true)
     assert.equal(fs.existsSync(path.join(root, 'opencode.json')), true)
     assert.equal(fs.existsSync(path.join(root, '.cursor/skills/inbase/SKILL.md')), false)
@@ -736,6 +769,7 @@ test('init lmstudio installs LM Studio and Bionic files', () => {
     assert.equal(fs.existsSync(path.join(root, '.lmstudio/skills/inbase/SKILL.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.lmstudio/skills/coral/SKILL.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.lmstudio/skills/extract-blueprint/SKILL.md')), true)
+    assert.equal(fs.existsSync(path.join(root, '.lmstudio/skills/blueprint-structure/SKILL.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.lmstudio/skills/accept/SKILL.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.agents/skills/inbase/SKILL.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.agents/skills/coral/SKILL.md')), true)
@@ -1002,7 +1036,7 @@ test('init appends .inbase to an existing gitignore', () => {
     fs.writeFileSync(gitignore, 'node_modules/\ndist\n*.local')
     assert.equal(ensureGitignoreEntry(root), true)
     assert.equal(ensureGitignoreEntry(root), false)
-    initProject(root)
+    initProject(root, 'cursor')
     assert.equal(
       fs.readFileSync(gitignore, 'utf8'),
       'node_modules/\ndist\n*.local\n.inbase/\n',
@@ -1039,7 +1073,7 @@ test('cleanup reverses init and keeps unrelated editor files', () => {
     fs.writeFileSync(path.join(root, '.cursor/skills/other/SKILL.md'), 'other skill\n')
     fs.writeFileSync(path.join(root, '.github/workflows/ci.yml'), 'name: ci\n')
     fs.writeFileSync(path.join(root, '.gitignore'), 'node_modules/\n')
-    initProject(root)
+    initAll(root)
     const result = cleanupProject(root)
     assert.equal(result.dataDirRemoved, true)
     assert.equal(result.configRemoved, true)
@@ -1066,7 +1100,7 @@ test('cleanup reverses init and keeps unrelated editor files', () => {
     assert.equal(fs.existsSync(path.join(root, '.cursor/skills/other/SKILL.md')), true)
     assert.equal(fs.existsSync(path.join(root, '.github/workflows/ci.yml')), true)
     assert.equal(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), 'node_modules/\n')
-    const again = initProject(root)
+    const again = initProject(root, 'cursor')
     assert.equal(fs.existsSync(path.join(again.skillDir, 'SKILL.md')), true)
     assert.equal(again.configAdded, true)
   } finally {
@@ -1079,7 +1113,7 @@ test('cleanup removes leftover skills and rules', () => {
   const { root, cleanup } = tempProject()
   const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
   try {
-    initProject(root)
+    initAll(root)
     fs.mkdirSync(path.join(root, '.cursor/skills/visual-edits'), { recursive: true })
     fs.writeFileSync(
       path.join(root, '.cursor/skills/visual-edits/SKILL.md'),
@@ -1145,7 +1179,7 @@ test('cleanup cline removes only Cline files', () => {
   const { root, cleanup } = tempProject()
   const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
   try {
-    initProject(root)
+    initAll(root)
     const result = cleanupProject(root, 'cline')
     assert.deepEqual(
       result.editors.map((editor) => editor.id),
@@ -1215,7 +1249,7 @@ test('cleanup command removes init files', () => {
   const { root, cleanup } = tempProject()
   const env = snapshotEnv('VISUAL_CODER_TARGET', 'INBASE_DATA_DIR', 'INBASE_CONFIG')
   try {
-    initProject(root)
+    initAll(root)
     const extra = runCli(['cleanup', 'cline', 'nope'], { cwd: root })
     assert.notEqual(extra.status, 0)
     assert.match(extra.stderr, /Usage: inbase cleanup \[editor\]/)
@@ -1241,10 +1275,11 @@ test('help prints usage', async () => {
   }
   try {
     await main(['help'])
-    assert.match(output, /inbase init \[editor\]/)
+    assert.match(output, /inbase init <editor>/)
     assert.match(output, /inbase cleanup \[editor\]/)
     assert.match(output, /inbase run/)
     assert.match(output, /inbase extract-blueprint <folder> <output-file>/)
+    assert.doesNotMatch(output, /inbase blueprint-structure/)
     assert.match(output, /inbase help/)
     assert.match(output, /cursor, claude, agents, zed, copilot, cline, opencode, lmstudio, bionic/)
     assert.doesNotMatch(output, /Agent commands/)
@@ -1447,6 +1482,55 @@ test('read-blueprint treats an enabled blueprint as the request when there is no
   }
 })
 
+test('read-blueprint prints lettered subagent guidance', async () => {
+  const { root, cleanup } = tempProject()
+  const dataDir = path.join(root, '.inbase')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: root,
+    INBASE_DATA_DIR: dataDir,
+    INBASE_CONFIG: path.join(root, 'inbase.json'),
+  }
+  try {
+    fs.writeFileSync(
+      path.join(root, 'inbase.json'),
+      `${JSON.stringify({ target: '.', maxSubagents: 3 }, null, 2)}\n`,
+    )
+    const started = runCli(
+      ['start-session', '--session', 'crimson', '--name', 'Crimson'],
+      { cwd: root, env },
+    )
+    assert.equal(started.status, 0, started.stderr)
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    store.ensureSessionPool(dataDir)
+    store.updateBlueprint(dataDir, 'crimson', {
+      color: 'crimson',
+      dependsOn: ['blue', 'coral'],
+    })
+    store.updateBlueprint(dataDir, 'coral', {
+      color: 'coral',
+      dependsOn: ['blue'],
+    })
+    const result = runCli(['read-blueprint', '--session', 'crimson'], {
+      cwd: root,
+      env,
+    })
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /VISUAL_CODER_MAX_SUBAGENTS 3/)
+    assert.match(result.stdout, /VISUAL_CODER_SUBAGENTS/)
+    assert.match(result.stdout, /lettered parallel steps/)
+    assert.match(result.stdout, /Honor maxSubagents 3 as the max letters/)
+    assert.match(result.stdout, /Do not attach those workers to another color/)
+    assert.doesNotMatch(result.stdout, /VISUAL_CODER_DEPENDS_ON/)
+    assert.doesNotMatch(result.stdout, /VISUAL_CODER_RELATIONS_START/)
+    assert.doesNotMatch(result.stdout, /npx inbase attach --color/)
+  } finally {
+    cleanup()
+  }
+})
+
 test('read-blueprint does not consume a pending map explain', async () => {
   const { root, cleanup } = tempProject()
   const dataDir = path.join(root, '.inbase')
@@ -1504,6 +1588,8 @@ test('explain start uses a pending map question mark', async () => {
     assert.match(result.stdout, /VISUAL_CODER_ACK explain: folder apps\/explorer\/src/)
     assert.match(result.stdout, /VISUAL_CODER_EXPLAIN_STARTED/)
     assert.match(result.stdout, /mid-level teammate/)
+    assert.match(result.stdout, /Call explain report ONCE/)
+    assert.match(result.stdout, /replaces the list/)
     assert.equal(explain.readExplain(dataDir).pendingStart, null)
   } finally {
     cleanup()
@@ -1536,6 +1622,8 @@ test('explain start with a question reports a follow-up when explain is active',
     assert.equal(result.status, 0, result.stderr)
     assert.match(result.stdout, /VISUAL_CODER_ACK question/)
     assert.match(result.stdout, /VISUAL_CODER_EXPLAIN_FOLLOWUP/)
+    assert.match(result.stdout, /ALL sub-steps/)
+    assert.match(result.stdout, /SAME command/)
     assert.match(result.stdout, /VISUAL_CODER_PARENT 1/)
     assert.match(result.stdout, /Why is World selected\?/)
 
@@ -2147,6 +2235,59 @@ test('attach --color starts clean when leftover LLM work is on that slot', async
       fs.readFileSync(path.join(target, 'src/a.ts'), 'utf8'),
       'export const value = 2\n',
     )
+  } finally {
+    cleanup()
+  }
+})
+
+test('attach --first connects the first enabled blueprint', async () => {
+  const { root, cleanup } = tempProject()
+  const target = path.join(root, 'app')
+  const dataDir = path.join(root, '.inbase')
+  fs.mkdirSync(path.join(target, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(target, 'src/a.ts'), 'export const value = 1\n')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: target,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    store.ensureSessionPool(dataDir)
+    writeRunningInstance({ dataDir, targetRoot: target })
+    store.updateBlueprint(dataDir, 'coral', {
+      color: 'coral',
+      userCreatedBlocks: [
+        {
+          id: 'src/Panel.tsx',
+          name: 'Panel.tsx',
+          path: 'src/Panel.tsx',
+          folder: 'src',
+        },
+      ],
+      dependsOn: ['blue'],
+    })
+    store.updateBlueprint(dataDir, 'blue', {
+      color: 'blue',
+      userCreatedBlocks: [
+        {
+          id: 'src/types.ts',
+          name: 'types.ts',
+          path: 'src/types.ts',
+          folder: 'src',
+        },
+      ],
+    })
+    const empty = runCli(['attach', '--first'], { cwd: root, env })
+    assert.equal(empty.status, 0, empty.stderr)
+    assert.match(empty.stdout, /VISUAL_CODER_SESSION blue/)
+    assert.match(empty.stdout, /VISUAL_CODER_COLOR Blue/)
+    assert.match(empty.stdout, /VISUAL_CODER_ATTACHED/)
+    const attached = store.readManifest(dataDir, 'blue')
+    assert.equal(attached.color, 'blue')
+    assert.equal(attached.awaitingAttach, false)
   } finally {
     cleanup()
   }

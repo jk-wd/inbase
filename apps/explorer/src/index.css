@@ -1262,6 +1262,18 @@ button {
   color: #8b95a5;
 }
 
+.hud-depends-button {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .hud-attach-dot {
   width: 7px;
   height: 7px;
@@ -1643,7 +1655,7 @@ button {
 }
 
 .hud-deliveries .hud-step-row {
-  grid-template-columns: 2.8em minmax(0, 1fr);
+  grid-template-columns: 3.2em minmax(0, 1fr);
 }
 
 .hud-steps li {
@@ -1652,7 +1664,7 @@ button {
 
 .hud-step-row {
   display: grid;
-  grid-template-columns: 1.6em minmax(0, 1fr);
+  grid-template-columns: 3.2em minmax(0, 1fr);
   align-items: start;
   justify-content: start;
   gap: 8px;
@@ -2197,6 +2209,54 @@ button {
   padding: 24px;
   background: rgba(12, 14, 18, 0.82);
   pointer-events: auto;
+}
+
+.hud-note-overlay-fixed {
+  position: fixed;
+}
+
+.hud-depends-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: min(60dvh, 420px);
+  overflow: auto;
+}
+
+.hud-depends-list li {
+  display: block;
+  margin: 0;
+}
+
+.hud-depends-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  color: #e7ebf2;
+  background: rgba(25, 28, 34, 0.96);
+  border: 1px solid var(--vc-border);
+  cursor: pointer;
+}
+
+.hud-depends-item:hover,
+.hud-depends-item:focus-within {
+  border-color: #9ad8ff;
+}
+
+.hud-depends-item[data-disabled='true'] {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.hud-depends-item input {
+  flex: none;
+  margin: 0;
+  accent-color: var(--session-color, #9ad8ff);
 }
 
 .hud-note-card {

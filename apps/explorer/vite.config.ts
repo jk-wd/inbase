@@ -514,7 +514,7 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       addedImports?: unknown[]
       notes?: unknown[]
       pointers?: unknown[]
-      files?: unknown[]
+      dependsOn?: unknown[]
       fileId?: string
     }
     const action = body.action
@@ -599,6 +599,7 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
         addedImports: body.addedImports,
         notes: body.notes,
         pointers: body.pointers,
+        dependsOn: body.dependsOn,
       })
     } else if (action === 'blueprint_clear') {
       clearBlueprint(dataDir, body.color)

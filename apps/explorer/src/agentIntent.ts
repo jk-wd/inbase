@@ -16,13 +16,27 @@ import type {
   UserCreatedIsland,
   WorkflowAction,
 } from './types'
-import { DEFAULT_SESSION_COLOR } from './types'
+import { DEFAULT_SESSION_COLOR, SESSION_COLORS } from './types'
 import {
   parseBlueprintNotes,
   parseBlueprintPointers,
   parseUserCreatedBlocks,
   parseUserCreatedIslands,
 } from './userCreated'
+
+function normalizeDependsOn(value: unknown, self?: string | null): string[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const ids: string[] = []
+  for (const raw of value) {
+    const id = typeof raw === 'string' ? raw.trim() : ''
+    if (!id || id === self || seen.has(id)) continue
+    if (!SESSION_COLORS.some((color) => color.id === id)) continue
+    seen.add(id)
+    ids.push(id)
+  }
+  return ids
+}
 
 function normalizeImports(value: unknown): PatchImport[] {
   if (!Array.isArray(value)) return []
@@ -224,6 +238,7 @@ export const emptyIntent: AgentIntent = {
   currentDelivery: null,
   steps: [],
   step: null,
+  activeSteps: [],
   files: [],
   creates: [],
   deletes: [],
@@ -270,6 +285,7 @@ export const emptyIntent: AgentIntent = {
   blueprintImports: [],
   blueprintNotes: [],
   blueprintPointers: [],
+  dependsOn: [],
 }
 
 function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
@@ -293,8 +309,28 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
       : [],
     currentDelivery:
       typeof data?.currentDelivery === 'number' ? data.currentDelivery : null,
-    steps: Array.isArray(data?.steps) ? data.steps : [],
+    steps: Array.isArray(data?.steps)
+      ? data.steps.flatMap((item) => {
+          if (!item || typeof item !== 'object') return []
+          const index = (item as { index?: unknown }).index
+          const title = (item as { title?: unknown }).title
+          if (typeof index !== 'number' || typeof title !== 'string') return []
+          const id = (item as { id?: unknown }).id
+          const delivery = (item as { delivery?: unknown }).delivery
+          return [
+            {
+              index,
+              title,
+              ...(typeof id === 'string' && id ? { id } : {}),
+              ...(typeof delivery === 'number' ? { delivery } : {}),
+            },
+          ]
+        })
+      : [],
     step: typeof data?.step === 'number' ? data.step : null,
+    activeSteps: Array.isArray(data?.activeSteps)
+      ? data.activeSteps.filter((item): item is number => typeof item === 'number')
+      : [],
     files: Array.isArray(data?.files) ? data.files : [],
     creates: Array.isArray(data?.creates) ? data.creates : [],
     deletes: Array.isArray(data?.deletes) ? data.deletes : [],
@@ -349,6 +385,7 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     blueprintImports: normalizeImportAdditions(data?.blueprintImports),
     blueprintNotes: parseBlueprintNotes(data?.blueprintNotes),
     blueprintPointers: parseBlueprintPointers(data?.blueprintPointers),
+    dependsOn: normalizeDependsOn(data?.dependsOn, data?.color),
   }
 }
 
@@ -372,6 +409,10 @@ function normalizeBlueprint(
     addedImports: normalizeImportAdditions(data?.addedImports),
     notes: parseBlueprintNotes(data?.notes),
     pointers: parseBlueprintPointers(data?.pointers),
+    dependsOn: normalizeDependsOn(
+      data?.dependsOn,
+      (data as { color?: unknown } | null | undefined)?.color as string | undefined,
+    ),
   }
 }
 
@@ -513,6 +554,7 @@ export function persistSessionBlueprint(
     addedImports?: PatchImportAddition[]
     notes?: BlueprintNote[]
     pointers?: BlueprintPointer[]
+    dependsOn?: string[]
   },
 ) {
   return fetch('/api/agent-intent', {
@@ -526,6 +568,20 @@ export function persistSessionBlueprint(
     }),
   }).catch(() => {
     // Keep local drafts if the visualizer could not save the blueprint.
+  })
+}
+
+export function persistBlueprintDependsOn(color: string, dependsOn: string[]) {
+  return fetch('/api/agent-intent', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'blueprint_update',
+      color,
+      dependsOn,
+    }),
+  }).catch(() => {
+    // Keep the picker selection if the visualizer could not save it.
   })
 }
 

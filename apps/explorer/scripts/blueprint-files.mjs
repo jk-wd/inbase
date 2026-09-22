@@ -4,6 +4,7 @@ import { toPosix } from './scan-ignore.mjs'
 import {
   emptyBlueprint,
   findSessionIdByColor,
+  namedBlueprintDependsOn,
   SESSION_COLORS,
   writeBlueprintByColor,
 } from './session-store.mjs'
@@ -219,7 +220,7 @@ function withApplicableNotes(layer, existingFileIds, targetRoot) {
   }
 }
 
-function layerFields(value) {
+function layerFields(value, colorId = null) {
   return {
     hidden: Boolean(value?.hidden),
     files: layerList(value, 'files', 'userCreatedBlocks', blueprintFileEntry),
@@ -229,6 +230,7 @@ function layerFields(value) {
     addedImports: Array.isArray(value?.addedImports) ? value.addedImports : [],
     notes: blueprintNotes(value?.notes),
     pointers: Array.isArray(value?.pointers) ? value.pointers : [],
+    dependsOn: namedBlueprintDependsOn(colorId ?? value?.color, value?.dependsOn),
   }
 }
 
@@ -239,7 +241,7 @@ function localLayer(value) {
     color,
     colorName: typeof value?.colorName === 'string' ? value.colorName : color,
     colorHex: typeof value?.colorHex === 'string' ? value.colorHex : '',
-    ...layerFields(value),
+    ...layerFields(value, color),
   }
 }
 
@@ -259,7 +261,7 @@ export function serializeBlueprintDocument(input = {}) {
       typeof input.savedAt === 'string' && input.savedAt
         ? input.savedAt
         : new Date().toISOString(),
-    global: layerFields(input.global),
+    global: layerFields(input.global, SESSION_COLORS[0]?.id),
     locals,
   }
 }

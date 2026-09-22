@@ -11,7 +11,7 @@
 
 ## Blueprint-driven development
 
-When an LLM writes code, it takes over the mental map of the codebase. You lose track of what went where, you lose the mantal map of the codebase.
+When an LLM writes code, it takes over the mental map of the codebase. You lose track of what went where — you lose the mental map of the codebase.
 
 Inbase puts that map in front of you. You draw the intended change as a **blueprint** on a visualization of the real code — planned files, folders, functions, variables, imports, and notes. The LLM must follow that layout. Every step updates the map, so you see the new structure as it lands.
 
@@ -26,7 +26,7 @@ Inbase puts that map in front of you. You draw the intended change as a **bluepr
 | Colors | JS/JSX/MJS/CJS, TS/TSX, CSS, SCSS, JSON, HTML/HTM | Dark grey | `apps/explorer/src/file-colors.ts` |
 | Relations | ESM `import`, `require()`, HTML `<script src>` | Packages and remote URLs | `apps/explorer/scripts/relations/` |
 | Structure | Functions, classes, vars in JS/TS (info panel) | No symbols listed | `apps/explorer/scripts/structure/` |
-| Editors | Cursor, Claude Code, Codex, Zed, Copilot, Cline, OpenCode, LM Studio, Bionic (`inbase init`) | Map still runs in the browser | `bin/editors/` |
+| Editors | Cursor, Claude Code, Codex, Zed, Copilot, Cline, OpenCode, LM Studio, Bionic (`inbase init <editor>`) | Map still runs in the browser | `bin/editors/` |
 
 ---
 

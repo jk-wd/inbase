@@ -51,8 +51,24 @@ export function editorIds() {
   return editors.map((editor) => editor.id)
 }
 
+export function editorList() {
+  return editorIds().join(', ')
+}
+
 export function isAllEditors(name) {
   return name == null || name === '' || String(name).trim().toLowerCase() === 'all'
+}
+
+export function missingEditorError() {
+  return new Error(`Specify an editor. Use one of: ${editorList()}`)
+}
+
+/** Canonical adapter id for an init name, or null when missing/unknown/`all`. */
+export function canonicalEditorId(name) {
+  if (isAllEditors(name)) return null
+  const key = String(name).trim().toLowerCase()
+  const id = EDITOR_ALIASES[key] ?? key
+  return editors.some((editor) => editor.id === id) ? id : null
 }
 
 export function selectEditors(name) {
@@ -64,12 +80,27 @@ export function selectEditors(name) {
   const ids = EDITOR_BUNDLES[id] ?? [id]
   const match = editors.filter((editor) => ids.includes(editor.id))
   if (match.length === 0) {
-    throw new Error(`Unknown editor '${name}'. Use one of: ${editorIds().join(', ')}`)
+    throw new Error(`Unknown editor '${name}'. Use one of: ${editorList()}`)
   }
   return match
 }
 
+export function editorOpenFileKind(name) {
+  const id = canonicalEditorId(name)
+  if (!id) return null
+  return editors.find((editor) => editor.id === id)?.openFileKind ?? null
+}
+
+export function editorOpenFileLabel(name) {
+  const kind = editorOpenFileKind(name)
+  if (kind === 'cursor') return 'Cursor'
+  if (kind === 'zed') return 'Zed'
+  if (kind === 'vscode') return 'VS Code'
+  return null
+}
+
 export function installEditors(projectRoot, name) {
+  if (isAllEditors(name)) throw missingEditorError()
   return selectEditors(name).map((editor) => editor.install(projectRoot))
 }
 

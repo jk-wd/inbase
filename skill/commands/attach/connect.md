@@ -1,0 +1,25 @@
+---
+description: Attach this chat to the first enabled Inbase blueprint
+---
+
+The user invoked `/connect`. Attach to the first enabled blueprint (by color order). Later `inbase` commands use `--session` with the color from `VISUAL_CODER_SESSION`.
+
+If this chat already attached, stay. Do not attach. Treat a later request as a change request: MUST `report-plan` from the last proposal first, then implement. Never edit before `report-plan`.
+
+After `read-blueprint`, look at this color's blueprint only. When `report-plan` invokes lettered parallel steps (2A, 2B), this chat implements one of them. MUST spawn a subagent for each other invoked letter, capped by `maxSubagents`. Each worker implements that step and `propose-patch --session <this color> --step <id>`. Do not attach those workers to another color.
+
+```bash
+npx inbase attach --first
+```
+
+If attach fails, reply with that output and stop.
+
+`VISUAL_CODER_SESSION` is the color. Use `--session` with that color for every later command.
+
+Continue the Inbase visual edits skill from `read-blueprint`. After it returns, reply `I see on the blueprint ...`. Then MUST `report-deliveries` with titles only — do not invent steps yet. Then MUST `report-plan` for the invoked delivery only. Only after that command invokes the first step, implement that step only. After each step's edits, MUST `propose-patch` before the next step. Never implement the whole plan first. Never edit before `report-plan`.
+
+The user's request is:
+
+$ARGUMENTS
+
+If `$ARGUMENTS` is empty, there is no chat instruction. After `read-blueprint`, if this session's blueprint is enabled, that is the request: MUST `report-deliveries` first (titles only), then `report-plan` for the invoked delivery, then implement. Follow the blueprint as closely as possible. Ask in chat if you need more information. Extra files are allowed if the blueprint does not cover them. Do not edit before `report-plan`. If the blueprint is empty, stop and wait for a request, `/explainit`, or `/stop`.

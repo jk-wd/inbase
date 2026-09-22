@@ -6,11 +6,14 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import {
   CONFIG_FILE_NAME,
+  DEFAULT_MAX_SUBAGENTS,
   findInbaseConfigFile,
   loadInbaseConfig,
   parseInbaseConfig,
   resolveConfigPath,
+  resolveMaxSubagents,
   resolvePort,
+  updateInbaseConfigEditor,
   updateInbaseConfigTarget,
   writeInbaseConfig,
 } from './inbase-config.mjs'
@@ -175,11 +178,49 @@ test('updateInbaseConfigTarget rewrites target and preserves other fields', () =
   }
 })
 
+test('updateInbaseConfigEditor rewrites editor and preserves other fields', () => {
+  const { root, cleanup } = tempGitProject()
+  try {
+    writeConfig(root, { target: '.', port: 5188, editor: 'zed' })
+    assert.equal(updateInbaseConfigEditor(root, 'cursor'), true)
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, CONFIG_FILE_NAME), 'utf8')), {
+      target: '.',
+      port: 5188,
+      editor: 'cursor',
+    })
+    assert.equal(parseInbaseConfig(JSON.stringify({ editor: 'Zed' })).editor, 'zed')
+    assert.throws(() => parseInbaseConfig(JSON.stringify({ editor: '' })), /non-empty string/)
+    assert.throws(() => updateInbaseConfigEditor(root, '  '), /non-empty string/)
+  } finally {
+    cleanup()
+  }
+})
+
 test('rejects invalid settings', () => {
   assert.throws(() => parseInbaseConfig('{'), /not valid JSON/)
   assert.throws(() => parseInbaseConfig(JSON.stringify({ target: '' })), /non-empty string/)
   assert.throws(() => parseInbaseConfig(JSON.stringify({ port: 51.5 })), /integer/)
     assert.throws(() => parseInbaseConfig(JSON.stringify({ ignore: 'vendor' })), /array of strings/)
+  assert.throws(
+    () => parseInbaseConfig(JSON.stringify({ maxSubagents: -1 })),
+    /maxSubagents/,
+  )
+  assert.throws(
+    () => parseInbaseConfig(JSON.stringify({ maxSubagents: 1.5 })),
+    /maxSubagents/,
+  )
+})
+
+test('maxSubagents defaults to 4 and accepts 0 through 16', () => {
+  assert.equal(parseInbaseConfig('{}').maxSubagents, DEFAULT_MAX_SUBAGENTS)
+  assert.equal(parseInbaseConfig(JSON.stringify({ maxSubagents: 0 })).maxSubagents, 0)
+  assert.equal(parseInbaseConfig(JSON.stringify({ maxSubagents: 8 })).maxSubagents, 8)
+  assert.equal(resolveMaxSubagents({ maxSubagents: 3 }), 3)
+  assert.equal(resolveMaxSubagents({}), DEFAULT_MAX_SUBAGENTS)
+  assert.throws(
+    () => parseInbaseConfig(JSON.stringify({ maxSubagents: 17 })),
+    /maxSubagents/,
+  )
 })
 
 test('scanTarget honours extra ignore patterns', () => {
@@ -210,6 +251,7 @@ test('scanTarget honours extra ignore patterns', () => {
 test('this repository maps apps/example-target from inbase.json', () => {
   const config = loadInbaseConfig(packageRoot)
   assert.equal(config.target, 'apps/example-target')
+  assert.equal(config.editor, 'cursor')
   assert.equal(
     resolveConfigPath(config.target, config.dir),
     path.join(packageRoot, 'apps/example-target'),

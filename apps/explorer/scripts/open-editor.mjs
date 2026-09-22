@@ -3,8 +3,28 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { loadInbaseConfig } from '../../../bin/inbase-config.mjs'
+import {
+  canonicalEditorId,
+  editorOpenFileKind,
+} from '../../../bin/editors/index.mjs'
 
-export function editorFileUri(filePath) {
+export function configuredEditorId(editorId) {
+  if (editorId != null && String(editorId).trim()) {
+    return canonicalEditorId(editorId) ?? String(editorId).trim().toLowerCase()
+  }
+  const fromEnv = process.env.INBASE_EDITOR?.trim()
+  if (fromEnv) return canonicalEditorId(fromEnv) ?? fromEnv.toLowerCase()
+  try {
+    return loadInbaseConfig().editor
+  } catch {
+    return null
+  }
+}
+
+export function editorFileUri(filePath, editorId) {
+  const kind = editorOpenFileKind(configuredEditorId(editorId))
+  if (kind === 'zed') return `zed://file${encodeURI(filePath)}`
   return `vscode://file${encodeURI(filePath)}`
 }
 
@@ -163,23 +183,61 @@ export function cursorUserDataDirForFile(filePath) {
   return best ?? hookDir
 }
 
+function uniqueCommands(candidates) {
+  return candidates.filter((candidate, index, list) => {
+    if (!candidate || typeof candidate !== 'string') return false
+    return list.indexOf(candidate) === index
+  })
+}
+
 function cursorCliPaths() {
   const home = os.homedir()
   const fromEnv =
     process.env.CURSOR_CLI && fs.existsSync(process.env.CURSOR_CLI)
       ? process.env.CURSOR_CLI
       : null
-  return [
+  return uniqueCommands([
     fromEnv,
     which('cursor'),
     '/Applications/Cursor.app/Contents/Resources/app/bin/cursor',
     path.join(home, '.local/bin/cursor'),
     '/usr/local/bin/cursor',
     '/opt/homebrew/bin/cursor',
-  ].filter((candidate, index, list) => {
-    if (!candidate || typeof candidate !== 'string') return false
-    return list.indexOf(candidate) === index
-  })
+  ])
+}
+
+function zedCliPaths() {
+  const home = os.homedir()
+  const fromEnv =
+    process.env.ZED_CLI && fs.existsSync(process.env.ZED_CLI)
+      ? process.env.ZED_CLI
+      : null
+  return uniqueCommands([
+    fromEnv,
+    which('zed'),
+    '/Applications/Zed.app/Contents/MacOS/cli',
+    path.join(home, '.local/bin/zed'),
+    '/usr/local/bin/zed',
+    '/opt/homebrew/bin/zed',
+  ])
+}
+
+function vscodeCliPaths() {
+  const home = os.homedir()
+  const fromEnv =
+    process.env.CODE_CLI && fs.existsSync(process.env.CODE_CLI)
+      ? process.env.CODE_CLI
+      : null
+  return uniqueCommands([
+    fromEnv,
+    which('code'),
+    which('code-insiders'),
+    '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code',
+    '/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code',
+    path.join(home, '.local/bin/code'),
+    '/usr/local/bin/code',
+    '/opt/homebrew/bin/code',
+  ])
 }
 
 function editorEnv() {
@@ -203,7 +261,7 @@ function runEditor(command, args) {
   return !result.error && result.status === 0
 }
 
-export function openInEditor(filePath) {
+function openInCursor(filePath) {
   const userDataDir = cursorUserDataDirForFile(filePath)
   const goto = ['--goto', `${filePath}:1`]
   if (userDataDir) {
@@ -212,8 +270,37 @@ export function openInEditor(filePath) {
   for (const command of cursorCliPaths()) {
     if (runEditor(command, goto)) return true
   }
+  return openInVsCode(filePath)
+}
 
-  const code = which('code')
-  if (code && runEditor(code, goto)) return true
+function openInZed(filePath) {
+  const location = `${filePath}:1:1`
+  for (const command of zedCliPaths()) {
+    if (runEditor(command, ['-a', location])) return true
+  }
+  for (const command of zedCliPaths()) {
+    if (runEditor(command, [location])) return true
+  }
+  if (process.platform === 'darwin' && runEditor('open', ['-a', 'Zed', filePath])) {
+    return true
+  }
+  return false
+}
+
+function openInVsCode(filePath) {
+  const goto = ['--goto', `${filePath}:1`]
+  for (const command of vscodeCliPaths()) {
+    if (runEditor(command, goto)) return true
+  }
+  return false
+}
+
+export function openInEditor(filePath, editorId) {
+  const id = configuredEditorId(editorId)
+  const kind = editorOpenFileKind(id)
+  if (kind === 'zed') return openInZed(filePath)
+  if (kind === 'vscode') return openInVsCode(filePath)
+  if (kind === 'cursor') return openInCursor(filePath)
+  if (!id) return openInCursor(filePath)
   return false
 }

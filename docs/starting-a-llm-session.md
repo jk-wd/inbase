@@ -1,12 +1,10 @@
 # Starting a LLM session
 
-When you start an LLM session — for example `/coral build a random color generator component` — the chat attaches to that color and the session window opens on the map:
+When you start an LLM session — for example `/coral build a random color generator component` — the chat attaches to that color and the session window opens on the map. `/inbase` does the same for the next empty slot. `/connect` does the same for the first enabled blueprint:
 
 ![LLM session working through a plan](images/llm-working.png)
 
-The LLM first lists **deliveries** (shippable chunks), then plans steps for
-only the current delivery. Each step is visualized on the map so you can see
-what changed.
+The LLM reads **this** color's blueprint, lists **deliveries** (shippable chunks), and plans steps for the current delivery. Independent slices become lettered parallel steps (`2A`, `2B`) so they can run at once, capped by `maxSubagents`. Each step is visualized on the map so you can see what changed.
 
 You can keep chatting in the same thread to steer the work in a different direction whenever you want.
 

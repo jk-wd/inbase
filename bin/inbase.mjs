@@ -21,14 +21,24 @@ import {
   visualizerOrigin,
 } from './project.mjs'
 import {
+  INIT_INBASE_CONFIG,
   loadInbaseConfig,
   rememberInbaseConfig,
   removeInbaseConfig,
   resolveConfigPath,
   resolvePort,
+  updateInbaseConfigEditor,
   writeInbaseConfig,
 } from './inbase-config.mjs'
-import { installEditors, isAllEditors, uninstallEditors } from './editors/index.mjs'
+import {
+  canonicalEditorId,
+  editorList,
+  editorOpenFileLabel,
+  installEditors,
+  isAllEditors,
+  missingEditorError,
+  uninstallEditors,
+} from './editors/index.mjs'
 import {
   proposePatch,
   reportDeliveries,
@@ -46,7 +56,7 @@ import { extractBlueprint } from './extract-blueprint.mjs'
 const HELP = `inbase — a first-person 3D map of a codebase
 
 Usage:
-  inbase init [editor]     Install skills for all editors, or only one
+  inbase init <editor>     Install skills for one editor
                            (cursor, claude, agents, zed, copilot, cline, opencode, lmstudio, bionic)
   inbase cleanup [editor]  Remove skills for all editors, or only one
                            (also removes .inbase/ and inbase.json)
@@ -64,9 +74,14 @@ function printHelp() {
 }
 
 export function initProject(projectRoot = process.cwd(), editor) {
-  const installed = installEditors(projectRoot, editor)
-  const cursor = installed.find((editor) => editor.id === 'cursor') ?? installed[0]
-  if (!cursor) {
+  const editorId = canonicalEditorId(editor)
+  if (!editorId) {
+    if (isAllEditors(editor)) throw missingEditorError()
+    throw new Error(`Unknown editor '${editor}'. Use one of: ${editorList()}`)
+  }
+  const installed = installEditors(projectRoot, editorId)
+  const primary = installed[0]
+  if (!primary) {
     throw new Error('No editor adapters are registered')
   }
   const { dataDir } = applyHostEnv({
@@ -76,13 +91,19 @@ export function initProject(projectRoot = process.cwd(), editor) {
   })
   ensureDataDir(dataDir)
   const gitignoreAdded = ensureGitignoreEntry(projectRoot)
-  const configAdded = writeInbaseConfig(projectRoot)
+  const configAdded = writeInbaseConfig(projectRoot, {
+    ...INIT_INBASE_CONFIG,
+    editor: editorId,
+  })
+  if (!configAdded) updateInbaseConfigEditor(projectRoot, editorId)
   return {
-    skillDir: cursor.skillDir,
-    commandDir: cursor.commandDir,
+    skillDir: primary.skillDir,
+    commandDir: primary.commandDir,
     dataDir,
     gitignoreAdded,
     configAdded,
+    editor: editorId,
+    openFileLabel: editorOpenFileLabel(editorId),
     editors: installed,
   }
 }
@@ -220,8 +241,9 @@ export async function main(argv = process.argv.slice(2)) {
 
   if (command === 'init') {
     const [editorName, extra] = args
-    if (extra) {
-      console.error('Usage: inbase init [editor]')
+    if (!editorName || extra) {
+      console.error('Usage: inbase init <editor>')
+      console.error(`Editors: ${editorList()}`)
       process.exitCode = 1
       return
     }
@@ -247,6 +269,9 @@ export async function main(argv = process.argv.slice(2)) {
     }
     if (result.gitignoreAdded) console.log('Added .inbase/ to .gitignore')
     if (result.configAdded) console.log('Wrote inbase.json')
+    if (result.openFileLabel) {
+      console.log(`Map open-file will use ${result.openFileLabel}`)
+    }
     const names = result.editors.map((editor) => editor.label ?? editor.id)
     const who =
       names.length === 1

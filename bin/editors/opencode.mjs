@@ -30,17 +30,19 @@ const OPENCODE_SCHEMA = 'https://opencode.ai/config.json'
 
 const OPENCODE_PREAMBLE = `# Inbase visual edits (OpenCode)
 
-This rule is **mandatory** for source-file changes inside the mapped target
-from \`inbase.json\` (\`target\`; default \`.\`). Skip it for files outside that
-folder, git, lockfiles, \`.inbase\`, editor skill folders, questions with no
-code changes, or \`/extract-blueprint\`.
+This rule applies **only** when the user invoked \`/inbase\`, \`/connect\`, or a
+session color command (\`/coral\`, \`/amber\`, …), or when this chat already
+printed \`VISUAL_CODER_SESSION\`. A regular chat does **not** attach. Skip it
+for files outside the mapped target from \`inbase.json\` (\`target\`; default \`.\`),
+git, lockfiles, \`.inbase\`, editor skill folders, questions with no code
+changes, or \`/extract-blueprint\`.
 
 OpenCode must **load the \`inbase\` skill** and **run** \`npx inbase\` with the
 bash tool. Do not paste \`npx inbase\` commands as chat text.
 
-On a new file-change request inside \`target\`, in this order:
+When the user invoked \`/inbase\`, a color command, or \`/connect\`, in this order:
 1. Run \`npx inbase attach\` (or \`npx inbase attach --color COLOR\` if the user
-   named a color). Stop if the output is \`VISUAL_CODER_NOT_RUNNING\`. If the
+   named a color, or \`npx inbase attach --first\` for \`/connect\`). Stop if the output is \`VISUAL_CODER_NOT_RUNNING\`. If the
    files are outside \`target\`, do not attach; edit them as a normal task.
 2. Reply: \`Connecting to the <color> session.\`
 3. Run \`npx inbase read-blueprint --session COLOR\`
@@ -48,10 +50,13 @@ On a new file-change request inside \`target\`, in this order:
 5. MUST run \`npx inbase report-deliveries --session COLOR --feature "..." --delivery "..."\`
    with titles only — do not invent implementation steps yet.
 6. MUST run \`npx inbase report-plan --session COLOR --feature "..." --steps "..."\`
-   for the invoked delivery only before any file edit. Listing steps in chat is
+   for the invoked delivery only before any file edit. Prefer lettered parallel
+   steps (\`2A\`, \`2B\`) for independent work. Listing steps in chat is
    not the plan. Never edit before \`report-plan\`. Do not plan later deliveries.
 7. Edit files only after \`VISUAL_CODER_EXECUTE\`, for that invoked step only.
-   MUST run \`npx inbase propose-patch --session COLOR\` with
+   If parallel steps are invoked, this chat implements one letter and MUST spawn
+   a subagent for each other letter. MUST run \`npx inbase propose-patch --session COLOR\`
+   with \`--step <id>\` and
    \`--note "path: one-line goal"\` for each changed file and folder before
    starting the next step. No patch file. Never implement the whole plan then
    record once. If the next step is invoked, implement that step only, then
@@ -62,7 +67,7 @@ On a new file-change request inside \`target\`, in this order:
 If this chat already printed \`VISUAL_CODER_SESSION\`, skip attach. Stay in
 that session. \`/stop\` runs \`npx inbase stop --session COLOR\`.
 
-Slash commands \`/coral\`, \`/amber\`, \`/lime\`, \`/orange\`, \`/violet\`,
+Slash commands \`/inbase\`, \`/connect\`, \`/coral\`, \`/amber\`, \`/lime\`, \`/orange\`, \`/violet\`,
 \`/teal\`, \`/crimson\`, \`/forest\`, \`/grey\`, \`/white\` (and aliases),
 \`/explainit\`, \`/extract-blueprint\`, and \`/stop\` are project commands.
 Follow them when the user invokes one.

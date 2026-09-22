@@ -29,6 +29,10 @@ To run the example React app itself:
 npm run dev:target
 ```
 
+`apps/example-target/blueprints/` has four sample React app blueprints.
+Load one from **More → Load** on the map. `todo-app` is a single Blue layer
+you can run with `/blue` or `/connect`.
+
 ## Pull requests
 
 - Keep the change focused. Prefer one concern per PR.
@@ -36,6 +40,6 @@ npm run dev:target
 - Do not commit `.inbase/`, `inbase-dev/`, session data, or `*.tgz` packs.
 - Match the style of nearby code. No drive-by refactors or formatting-only diffs.
 
-The skill in `skill/inbase/` is what `inbase init` copies into other
+The skill in `skill/inbase/` is what `inbase init <editor>` copies into other
 repos. If you change that loop, keep `skill/inbase/SKILL.md` and the CLI
 session commands in sync.

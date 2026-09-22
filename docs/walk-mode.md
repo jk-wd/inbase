@@ -17,4 +17,5 @@
 | File info | I |
 | Imports / imported-by | K |
 | Point to a target | Point to |
+| Branch changes | G |
 | Hidden files | H |

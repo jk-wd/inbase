@@ -92,7 +92,6 @@ import {
 } from './userCreated'
 import {
   isPatchPreview,
-  isReviewingIntent,
   llmIsMakingChanges,
   type AgentIntent,
   type AimedRelation,
@@ -106,6 +105,7 @@ import {
   type ExplainTargetKind,
   DEFAULT_SESSION_COLOR,
   SESSION_COLORS,
+  SESSION_COLOR_ORDER,
   compareSessionColorOrder,
   type LocalBlueprint,
   type LoadBlueprintInput,
@@ -135,6 +135,7 @@ function emptySharedBlueprint(): SharedBlueprint {
     addedImports: [],
     notes: [],
     pointers: [],
+    dependsOn: [],
   }
 }
 
@@ -379,6 +380,7 @@ function emptiedBlueprint<T extends SharedBlueprint>(current: T): T {
     addedImports: [],
     notes: [],
     pointers: [],
+    dependsOn: [],
   }
 }
 
@@ -446,9 +448,34 @@ function withPatchedBlueprint(
   }
 }
 
+function sameColorIds(left: string[], right: string[]) {
+  return left.length === right.length && left.every((id, index) => id === right[index])
+}
+
+function visibleBlueprintColorIds(
+  locals: Array<{ color: string; hidden?: boolean }>,
+  previous: string[],
+  allowedIds: Iterable<string>,
+) {
+  const allowed = allowedIds instanceof Set ? allowedIds : new Set(allowedIds)
+  const hidden = new Set(
+    locals.filter((item) => item.hidden).map((item) => item.color),
+  )
+  const next: string[] = []
+  const seen = new Set<string>()
+  const add = (id: string) => {
+    if (!id || seen.has(id) || !allowed.has(id) || hidden.has(id)) return
+    seen.add(id)
+    next.push(id)
+  }
+  for (const id of previous) add(id)
+  for (const local of locals) add(local.color)
+  return next.length > 0 ? next : [DEFAULT_SESSION_COLOR.id]
+}
+
 function collectMapBlueprints(input: {
   selectedColor: string
-  visibleColors: ReadonlySet<string>
+  selectedHidden: boolean
   selectedBlocks: UserCreatedBlock[]
   selectedIslands: UserCreatedIsland[]
   selectedFunctions: PatchSymbolAddition[]
@@ -484,7 +511,10 @@ function collectMapBlueprints(input: {
     ...input.locals.map((local) => ({
       id: local.color,
       hex: local.colorHex || DEFAULT_SESSION_COLOR.hex,
-      hidden: !input.visibleColors.has(local.color),
+      hidden:
+        input.selectedColor === local.color
+          ? input.selectedHidden
+          : Boolean(local.hidden),
       live: input.selectedColor === local.color,
       blocks:
         input.selectedColor === local.color
@@ -524,7 +554,7 @@ function collectMapBlueprints(input: {
     sources.push({
       id: input.selectedColor,
       hex: option?.hex || DEFAULT_SESSION_COLOR.hex,
-      hidden: !input.visibleColors.has(input.selectedColor),
+      hidden: input.selectedHidden,
       live: true,
       blocks: input.selectedBlocks,
       islands: input.selectedIslands,
@@ -834,9 +864,9 @@ function Explorer({
     DEFAULT_SESSION_COLOR.id,
   )
   const [visibleBlueprintColors, setVisibleBlueprintColors] = useState<string[]>(
-    [DEFAULT_SESSION_COLOR.id],
+    () => [...SESSION_COLOR_ORDER],
   )
-  const [globalBlueprint, setGlobalBlueprint] = useState<SharedBlueprint>(
+  const [, setGlobalBlueprint] = useState<SharedBlueprint>(
     emptySharedBlueprint,
   )
   const [localBlueprints, setLocalBlueprints] = useState<LocalBlueprint[]>([])
@@ -902,15 +932,11 @@ function Explorer({
     () => new Set(previewGraph.folders.map((folder) => folder.path)),
     [previewGraph],
   )
-  const visibleBlueprintColorSet = useMemo(
-    () => new Set(visibleBlueprintColors),
-    [visibleBlueprintColors],
-  )
   const mapBlueprint = useMemo(
     () =>
       collectMapBlueprints({
         selectedColor: blueprintColor,
-        visibleColors: visibleBlueprintColorSet,
+        selectedHidden: blueprintHidden,
         selectedBlocks: userBlocks,
         selectedIslands: userIslands,
         selectedFunctions: blueprintFunctions,
@@ -922,6 +948,7 @@ function Explorer({
       }),
     [
       blueprintColor,
+      blueprintHidden,
       blueprintFunctions,
       blueprintImports,
       blueprintNotes,
@@ -930,7 +957,6 @@ function Explorer({
       localBlueprints,
       userBlocks,
       userIslands,
-      visibleBlueprintColorSet,
     ],
   )
   const blueprintOptions = useMemo(
@@ -2513,8 +2539,12 @@ function Explorer({
             setBlueprintColor(DEFAULT_SESSION_COLOR.id)
           }
           const visible = visibleBlueprintColorsRef.current
-          const nextVisible = visible.filter((id) => colorIds.has(id))
-          if (nextVisible.length !== visible.length) {
+          const nextVisible = visibleBlueprintColorIds(
+            nextBlueprints.locals,
+            visible,
+            colorIds,
+          )
+          if (!sameColorIds(visible, nextVisible)) {
             visibleBlueprintColorsRef.current = nextVisible
             setVisibleBlueprintColors(nextVisible)
           }
@@ -2646,12 +2676,6 @@ function Explorer({
             !island.naming && createdIslandKey(island) === selectedFolder,
         ),
     )
-  const canAskLlm =
-    Boolean(intent.sessionId) &&
-    isReviewingIntent(intent.status) &&
-    intent.awaitingAttach === false &&
-    !intent.llmIdle
-
   const explainStep = currentExplainStep(explain)
   const explainView = useMemo(
     () => (explaining ? explainFocus(explainStep, displayGraph) : null),
@@ -2829,11 +2853,11 @@ function Explorer({
         blueprintForColor(blueprintColorRef.current, next.locals),
         false,
       )
-      const visible = next.locals
-        .filter((item) => !item.hidden)
-        .map((item) => item.color)
-      visibleBlueprintColorsRef.current =
-        visible.length > 0 ? visible : [DEFAULT_SESSION_COLOR.id]
+      visibleBlueprintColorsRef.current = visibleBlueprintColorIds(
+        next.locals,
+        [...SESSION_COLOR_ORDER],
+        SESSION_COLOR_ORDER,
+      )
       setVisibleBlueprintColors(visibleBlueprintColorsRef.current)
       setSavedBlueprint({
         name: loaded.name,

@@ -297,14 +297,16 @@ npx inbase report-plan \
     invoke the next step. Run `npx inbase explain start` (with `--question` when
     they provided one). If that prints `VISUAL_CODER_EXPLAIN` for a map `?`
     click, inspect that path and report one `--step`. If it prints
-    `VISUAL_CODER_EXPLAIN_FOLLOWUP`, report sub-steps with `--parent` under
-    the current step. Nested follow-ups are allowed (`1.1`, `1.1.1`,
-    `1.1.1.1`, …). If it prints `VISUAL_CODER_PROPOSAL` or `VISUAL_CODER_DIFF`,
-    walk the listed
+    `VISUAL_CODER_EXPLAIN_FOLLOWUP`, report **all** sub-steps in **one**
+    `explain report` with `--parent` under the current step. Nested follow-ups
+    are allowed (`1.1`, `1.1.1`, `1.1.1.1`, …). If it prints
+    `VISUAL_CODER_PROPOSAL` or `VISUAL_CODER_DIFF`, walk the listed
     changes (between `VISUAL_CODER_CHANGES_START` / `END` when present). Then
-    `npx inbase explain report`. Write each `--body` for a mid-level developer:
-    short paragraphs, name the functions, no compressed colon-lists. After
-    reporting, **stop**. The user navigates
+    `npx inbase explain report` **once**, with every `--step` in that same
+    command so they stack as one list on the map. Do not report one step at a
+    time — each report replaces the list. Write each `--body` for a mid-level
+    developer: short paragraphs, name the functions, no compressed colon-lists.
+    After reporting, **stop**. The user navigates
     the map. They type `/explainit` again for a follow-up, click **Done** in the
     session window to keep the files and free the color, `/stop` to end the
     session, or a change request to replace the waiting proposal.
@@ -328,6 +330,7 @@ npx inbase report-plan \
 - Skip saying what you see on the blueprint after `read-blueprint`
 - Report a plan before telling the user what you see on the blueprint (`I see on the blueprint ...`)
 - Run `wait-for-approval` or `explain wait`; those commands are gone
+- Call `explain report` once per step (that replaces the map list; repeat `--step` in one report)
 - Wait for a typed request when `/blue` `/coral` `/amber` `/lime` `/orange` `/violet` `/teal` `/crimson` `/forest` `/grey` `/white` (or an alias) has no text and an enabled blueprint is already the request
 - Omit, rename, relocate, or replace files, islands, functions, variables, or imports from this session's blueprint when that dump is `enabled`
 - Treat the chat request or your own plan as overriding an enabled blueprint; follow it as closely as possible. Extra files are allowed only when the blueprint does not cover them

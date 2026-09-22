@@ -6,6 +6,8 @@ The user invoked `/yellow`. Attach to **Amber**. Use `--session yellow` for ever
 
 If this chat already attached, stay. Do not attach. Treat a later request as a change request: MUST `report-plan` from the last proposal first, then implement. Never edit before `report-plan`.
 
+After `read-blueprint`, look at this color's blueprint only. When `report-plan` invokes lettered parallel steps (2A, 2B), this chat implements one of them. MUST spawn a subagent for each other invoked letter, capped by `maxSubagents`. Each worker implements that step and `propose-patch --session <this color> --step <id>`. Do not attach those workers to another color.
+
 ```bash
 npx inbase attach --color yellow
 ```

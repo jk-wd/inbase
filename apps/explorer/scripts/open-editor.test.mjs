@@ -4,7 +4,9 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import {
+  configuredEditorId,
   cursorUserDataDirForFile,
+  editorFileUri,
   openFoldersFromStorage,
 } from './open-editor.mjs'
 import { pathToFileURL } from 'node:url'
@@ -59,5 +61,27 @@ test('picks the Cursor profile that currently has the file workspace open', () =
     if (previousHook === undefined) delete process.env.VSCODE_IPC_HOOK
     else process.env.VSCODE_IPC_HOOK = previousHook
     fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('file URIs follow the configured editor', () => {
+  const filePath = '/Users/me/Projects/inbase/src/a.ts'
+  assert.equal(editorFileUri(filePath, 'cursor'), `vscode://file${encodeURI(filePath)}`)
+  assert.equal(editorFileUri(filePath, 'zed'), `zed://file${encodeURI(filePath)}`)
+  assert.equal(editorFileUri(filePath, 'copilot'), `vscode://file${encodeURI(filePath)}`)
+  assert.equal(editorFileUri(filePath, 'cline'), `vscode://file${encodeURI(filePath)}`)
+})
+
+test('INBASE_EDITOR selects the open-file editor', () => {
+  const previous = process.env.INBASE_EDITOR
+  try {
+    process.env.INBASE_EDITOR = 'zed'
+    assert.equal(configuredEditorId(), 'zed')
+    process.env.INBASE_EDITOR = 'github-copilot'
+    assert.equal(configuredEditorId(), 'copilot')
+    assert.equal(configuredEditorId('cline'), 'cline')
+  } finally {
+    if (previous === undefined) delete process.env.INBASE_EDITOR
+    else process.env.INBASE_EDITOR = previous
   }
 })

@@ -10,6 +10,7 @@ export type DiffEntry = {
   file: string
   parentId: string | null
   step: number
+  stepId?: string
   title: string
   status: DiffStatus
   instruction: string | null
@@ -38,7 +39,7 @@ export type DiffManifest = {
   sessionId: string
   name: string
   feature: string
-  steps: Array<{ index: number; title: string; delivery?: number }>
+  steps: Array<{ index: number; id?: string; title: string; delivery?: number }>
   deliveries?: Array<{ index: number; title: string }>
   currentDelivery?: number
   status: 'active' | 'finished' | 'rejected'
@@ -55,6 +56,7 @@ export type DiffManifest = {
   awaitingAttach?: boolean
   color?: string
   currentStep: number
+  currentStepIds?: string[]
   activeDiffId: string | null
   pendingInstruction: string | null
   pendingExplain?: boolean
@@ -159,7 +161,11 @@ export function setupSession(
 export function attachSession(
   dataDir: string,
   sessionId?: string | null,
-  options?: { color?: string | null; targetRoot?: string | null },
+  options?: {
+    color?: string | null
+    first?: boolean
+    targetRoot?: string | null
+  },
 ): DiffManifest
 export function setInitialInstruction(
   dataDir: string,
@@ -181,6 +187,69 @@ export function compareSessionColorOrder(
 export function resolveSessionColor(
   colorId: string | null | undefined,
 ): { id: string; name: string; hex: string } | null
+export function namedBlueprintDependsOn(
+  colorId: string | null | undefined,
+  value: unknown,
+  graph?: Record<string, string[]> | null,
+): string[]
+export function colorDependsGraph(
+  layers: Array<{ color?: string | null; dependsOn?: unknown }> | null | undefined,
+): Record<string, string[]>
+export function canDependOn(
+  graph: Record<string, string[]> | null | undefined,
+  from: string | null | undefined,
+  to: string | null | undefined,
+): boolean
+export function colorsDependingOn(
+  graph: Record<string, string[]> | null | undefined,
+  colorId: string | null | undefined,
+): string[]
+export function sessionColorRelations(
+  dataDir: string,
+  sessionId: string,
+): {
+  color: string | null
+  colorName: string | null
+  dependsOn: string[]
+  dependents: string[]
+  graph: Record<string, string[]>
+}
+export function parallelColorWaves(dependsOnByColor: Record<string, string[]>): {
+  waves: string[][]
+  cycle: boolean
+  leftover: string[]
+}
+export type SessionSubagentPlan = {
+  color: string | null
+  colorName: string | null
+  connected: string[]
+  waves: string[][]
+  waitFor: string[]
+  spawnNow: string[]
+  spawnParallel: string[]
+  spawnAfterThis: string[]
+  attached: Record<string, boolean>
+  layers: Array<{
+    color: string
+    colorName: string
+    enabled: boolean
+    attached: boolean
+    dependsOn: string[]
+    files: unknown[]
+    folders: unknown[]
+    addedFunctions: unknown[]
+    addedVariables: unknown[]
+    addedImports: unknown[]
+    notes: unknown[]
+    pointers: unknown[]
+  }>
+  maxSubagents: number
+}
+export function sessionSubagentPlan(
+  dataDir: string,
+  sessionId: string,
+  maxSubagents?: number,
+): SessionSubagentPlan
 export function parseSessionColorQuery(
   value: string | null | undefined,
 ): { id: string; name: string; hex: string } | null
@@ -196,6 +265,9 @@ export function findSessionIdByColor(
 ): string | null
 export const ALL_COLORS_LOCKED_MESSAGE: string
 export const NOT_RUNNING_MESSAGE: string
+export const NO_HIERARCHY_BLUEPRINT_MESSAGE: string
+export function firstEnabledBlueprintColor(dataDir: string): string | null
+export function firstHierarchyAttachColor(dataDir: string): string | null
 export function ensureSessionPool(
   dataDir: string,
   options?: { count?: number; focus?: boolean },
@@ -236,6 +308,7 @@ export type SessionBlueprint = {
   addedImports: unknown[]
   notes: unknown[]
   pointers: unknown[]
+  dependsOn: string[]
 }
 export function emptyBlueprint(): SessionBlueprint
 export function readBlueprint(dataDir: string, sessionId?: string): SessionBlueprint
@@ -310,6 +383,7 @@ export function updateBlueprint(
     addedImports?: unknown[]
     notes?: unknown[]
     pointers?: unknown[]
+    dependsOn?: string[]
   },
 ): SessionBlueprint
 export function sendBlueprint(
@@ -338,13 +412,21 @@ export function reportPlan(
     feature: string
     stepTitles: string[]
     targetRoot?: string | null
+    maxSubagents?: number
   },
 ): DiffManifest
 export function autoAdvance(
   dataDir: string,
   sessionId: string,
   targetRoot?: string | null,
+  maxSubagents?: number,
 ): DiffManifest | null
+export function invokeReadySteps(
+  dataDir: string,
+  sessionId: string,
+  targetRoot?: string | null,
+  maxSubagents?: number,
+): DiffManifest
 export function invokeStep(
   dataDir: string,
   sessionId: string,
@@ -407,6 +489,9 @@ export function appendDiff(
     overlay?: import('./change-overlay.d.ts').ChangeOverlay
     patchText?: string
     changeNotes?: Record<string, string>
+    step?: string | number
+    stepId?: string | number
+    maxSubagents?: number
   },
 ): { manifest: DiffManifest; entry: DiffEntry }
 export function continueDiff(

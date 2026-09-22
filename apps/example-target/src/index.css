@@ -10,9 +10,12 @@ body {
 
 main {
   display: grid;
-  place-items: center;
+  justify-items: center;
+  align-content: start;
+  box-sizing: border-box;
   min-height: 100vh;
   gap: 1.5rem;
+  padding: 2rem 1rem 3rem;
 }
 
 h1 {
@@ -52,4 +55,180 @@ h1 {
 
 .color-generator button:hover {
   background: #f4f4f4;
+}
+
+.notes-app {
+  display: grid;
+  justify-items: center;
+  gap: 1rem;
+  width: min(64rem, 100%);
+}
+
+.notes-board {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+  width: 100%;
+}
+
+.notes-empty {
+  margin: 0;
+  color: #555;
+}
+
+.note-form {
+  display: grid;
+  gap: 0.75rem;
+  width: min(100%, 22rem);
+}
+
+.note-form-text {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid rgb(0 0 0 / 20%);
+  border-radius: 0.5rem;
+  font: inherit;
+  resize: vertical;
+}
+
+.note-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.note-form button {
+  padding: 0.5rem 1rem;
+  border: 1px solid rgb(0 0 0 / 20%);
+  border-radius: 0.5rem;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+}
+
+.note-form button:hover {
+  background: #f4f4f4;
+}
+
+.note-search {
+  display: block;
+  width: min(28rem, 100%);
+}
+
+.note-search input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgb(0 0 0 / 20%);
+  border-radius: 0.5rem;
+  background: #fff;
+  font: inherit;
+}
+
+.note-color-picker {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.note-color-swatch {
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 18%);
+  cursor: pointer;
+}
+
+.note-color-swatch[aria-checked='true'] {
+  border-color: #222;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.note-card {
+  box-sizing: border-box;
+  display: grid;
+  gap: 0.75rem;
+  min-width: 16rem;
+  max-width: 20rem;
+  padding: 0.9rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 16%);
+}
+
+.note-card-text {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 6rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  resize: vertical;
+  cursor: text;
+  font: inherit;
+  line-height: 1.4;
+  color: inherit;
+}
+
+.note-card-text:focus {
+  outline: none;
+}
+
+.note-card-footer {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.note-card-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.note-card-actions button {
+  padding: 0.3rem 0.65rem;
+  border: 1px solid rgb(0 0 0 / 20%);
+  border-radius: 0.4rem;
+  background: rgb(255 255 255 / 70%);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.note-card-actions button:hover {
+  background: #fff;
+}
+
+.note-card-actions button[aria-pressed='true'] {
+  font-weight: 600;
+}
+
+.notes-app {
+  display: grid;
+  justify-items: center;
+  gap: 1rem;
+  width: min(100%, 64rem);
+  padding: 0 1rem 2rem;
+}
+
+.notes-board {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+  width: 100%;
 }

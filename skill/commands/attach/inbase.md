@@ -2,9 +2,11 @@
 description: Attach this chat to the next empty Inbase session, or stay if already attached
 ---
 
-The user invoked `/inbase`. Attach to the next unlocked color. A regular chat does the same thing.
+The user invoked `/inbase`. Attach to the next unlocked color.
 
 If this conversation already printed `VISUAL_CODER_SESSION`, stay. Do not attach. Treat a later request as a change request: MUST `report-plan` from the last proposal first, then implement. Never edit before `report-plan`.
+
+After `read-blueprint`, look at this color's blueprint only. When `report-plan` invokes lettered parallel steps (2A, 2B), this chat implements one of them. MUST spawn a subagent for each other invoked letter, capped by `maxSubagents`. Each worker implements that step and `propose-patch --session <this color> --step <id>`. Do not attach those workers to another color.
 
 ```bash
 npx inbase attach

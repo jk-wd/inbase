@@ -10,6 +10,7 @@ import {
 
 export const id = 'cursor'
 export const label = 'Cursor'
+export const openFileKind = 'cursor'
 
 const LAYOUT = {
   id,

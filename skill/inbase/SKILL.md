@@ -1,58 +1,77 @@
 ---
 name: inbase
 description: >-
-  Grounds source-file changes in the Inbase visual map. Use only when creating,
-  editing, or deleting files inside the mapped target from inbase.json
-  (`target`; default `.`), including when the user chats a change request
-  without /inbase. On the first turn, connects this chat to the next empty
-  Inbase session, or to a color with /coral /red /amber and the other session
-  colors. Later turns stay in that session: never attach again. MUST run
-  `npx inbase report-deliveries` with titles only — do not invent steps yet —
-  then `npx inbase report-plan` for the invoked delivery before any file edit
-  or propose-patch. Chat steps are not the plan. After each invoked step, MUST
-  propose-patch before the next step. Never implement the whole plan first.
-  After the last step of a delivery, if the next delivery is invoked, report-plan
-  for that delivery only. A later change request must report-plan from the last
-  proposal before editing, including after the last recorded step. Do not
-  use for files outside that target (sibling apps, CLI, map tooling), git,
-  docs-only, lockfiles, questions, or `/extract-blueprint`.
+  Grounds source-file changes in the Inbase visual map. Use only when the user
+  invoked /inbase, /connect, or a session color command (/coral /red /amber and
+  the other session colors), or when this conversation already printed
+  VISUAL_CODER_SESSION. Do not use for a regular chat that did not invoke those
+  commands. /inbase connects to the next empty session; a color command picks
+  that slot; /connect picks the first enabled blueprint. After attach, always
+  read this color's blueprint and plan lettered parallel steps (2A, 2B) so
+  independent work can run at once, capped by maxSubagents. Later turns stay in
+  that session: never attach again. MUST run `npx inbase report-deliveries`
+  with titles only — do not invent steps yet — then `npx inbase report-plan`
+  for the invoked delivery before any file edit or propose-patch. Chat steps
+  are not the plan. After each invoked step, MUST propose-patch before the next
+  step. Never implement the whole plan first. After the last step of a
+  delivery, if the next delivery is invoked, report-plan for that delivery
+  only. A later change request must report-plan from the last proposal before
+  editing, including after the last recorded step. Do not use for files
+  outside that target from inbase.json (`target`; default `.`), sibling apps,
+  CLI, map tooling, git, docs-only, lockfiles, questions, or
+  `/extract-blueprint`.
 ---
 
 # Inbase visual edits
 
-Apply this skill **only when the work is file changes inside the mapped
-target**. Read `inbase.json` `target` (relative to that file; `.` if missing).
+Apply this skill **only when** the user invoked `/inbase`, `/connect`, or a
+session color command, **or** this conversation already printed
+`VISUAL_CODER_SESSION`. Work is file changes inside the mapped target.
+Read `inbase.json` `target` (relative to that file; `.` if missing).
 If none of the files you would create, edit, or delete live under that
 folder, do **not** attach, do **not** run `npx inbase attach`, and do **not**
 follow the visual plan loop. Continue as a normal coding task.
+
+If the user sent a regular chat (no `/inbase`, `/connect`, or color command)
+and this chat has never printed `VISUAL_CODER_SESSION`, do **not** attach
+and do **not** follow this skill. Continue as a normal coding task.
 
 Skip it for git, lockfiles, `.inbase`, `.cursor`, `.claude`, `.agents`,
 `.zed`, `.rules`, `.cline`, `.clinerules`, `.github/skills`, `.opencode`,
 `.lmstudio`, questions with no code changes, or `/extract-blueprint`.
 
-`npx inbase run` creates 11 empty chat slots. A regular chat connects to
-the next unconnected slot **only for work inside `target`**. You do not need
-`/inbase`. The session window **Done** button keeps applied files and frees
-the color; it does not come through this chat. Do not wait for it.
+`npx inbase run` creates 11 empty chat slots. Connect with `/inbase` (next
+unconnected slot), a color command, or `/connect` (first enabled blueprint).
+A regular chat does **not** connect. The session window **Done** button keeps
+applied files and frees the color; it does not come through this chat. Do
+not wait for it.
 
 ## Commands
 
 Colors: `/blue` `/coral` `/amber` `/lime` `/orange` `/violet` `/teal` `/crimson`
 `/forest` `/grey` `/white`. Aliases: `/sky` (Blue), `/red` (Coral), `/yellow` (Amber),
 `/green` (Lime), `/purple` (Violet), `/darkgreen` (Forest), `/gray` (Grey).
-Text after the command is the request. Empty text: attach and start from an
-enabled blueprint only — MUST `report-deliveries` first (titles only, no steps),
-then `report-plan` for the invoked delivery, then implement as closely as
-possible; ask if you need more. Extra files are allowed if the blueprint does not cover them.
+`/inbase`: attach to the next unlocked color. `/connect`: attach to the first
+enabled blueprint (by color order), then start from that blueprint. Text after
+`/inbase`, a color, or `/connect` is the request. Empty text: attach and start
+from an enabled blueprint only — MUST `report-deliveries` first (titles only,
+no steps), then `report-plan` for the invoked delivery, then implement as
+closely as possible; ask if you need more. Extra files are allowed if the
+blueprint does not cover them.
+Every attach (`/inbase`, `/connect`, and every color command) uses the same
+start: after `read-blueprint`, this chat implements **only this color**. When
+`report-plan` invokes parallel lettered steps, spawn subagents for the extra
+letters.
 
 - **`/stop`**: discard the plan and patches, free the color, keep live project
   files, then stop. Do not edit files after `/stop`.
 - **`/explainit [question]`**: do not edit. Explain a waiting proposal, git
   diff (`VISUAL_CODER_DIFF`), map `?` click, or follow-up sub-steps.
 - **`/extract-blueprint`**: do not attach. Follow that command.
-- **Any other file-change request inside `target`**: if this conversation
+- **A later file-change request in an attached chat**: if this conversation
   already has `VISUAL_CODER_SESSION`, stay in that session. Do **not** attach.
-  Else attach once. If the files are outside `target`, skip this skill.
+  A regular chat that never invoked `/inbase`, `/connect`, or a color command
+  does **not** attach. If the files are outside `target`, skip this skill.
 
 ## Stay in this session
 
@@ -105,9 +124,14 @@ Same after the last recorded step.
 npx inbase report-plan \
   --session <color> \
   --feature "short feature name" \
-  --steps "New step C" \
-  --steps "Follow-up D"
+  --steps "1. Shared types" \
+  --steps "2A. Note card" \
+  --steps "2B. Notes store" \
+  --steps "2A.1. Color picker" \
+  --steps "3. Wire App"
 ```
+
+Look at this color's blueprint and split independent files or slices into lettered parallel steps (`2A`, `2B`) so they can run at the same time. Nested follow-ups use `2A.1`. Sequential work stays `1`, `2`, `3`. Honor `VISUAL_CODER_MAX_SUBAGENTS` as the max letters running at once. After `report-plan` invokes parallel steps, this chat implements one of them. MUST spawn a subagent for each other invoked letter. Each worker implements only that step and MUST `propose-patch --session <color> --step 2B`. Do not attach those workers to another color.
 
 **One step, then `propose-patch`. Always. Never implement the whole plan first.**
 
@@ -120,7 +144,7 @@ invokes the next step — implement that next step only, then `propose-patch`
 again, in the **same turn**. Do not stop. Do not ask the user to review a mid-plan step.
 If `propose-patch` prints `VISUAL_CODER_PLAN_DELIVERY`, MUST `report-plan`
 with `--steps` for **that delivery only**. Do not invent steps for later
-deliveries. After the last recorded step, stop for `/explainit`, `/stop`, or a change
+deliveries. After the last recorded step, **stop** for `/explainit`, `/stop`, or a change
 request.
 
 ```bash
@@ -130,7 +154,7 @@ npx inbase propose-patch --session <color> \
 
 Pass `--note "path: one-line goal"` for every updated, added, or deleted file
 and each changed folder. Do not pass a patch file. Do not write a unified
-diff. After the last recorded step, **stop**.
+diff. After a non-last `propose-patch`, spawn later parallel letters if invoked, then **stop**.
 
 Prefer `npx inbase`. Run it from the project working directory.
 Do not prefix it with `cd /absolute/path`. Do not request extra Shell
@@ -142,8 +166,9 @@ not wait for the user to click Run.
 If this chat has **never** printed `VISUAL_CODER_SESSION`:
 
 - Color command → `npx inbase attach --color <that command name>` (`/red` → `--color red`).
-- Else if work is only outside `inbase.json` `target`, **stop following this skill**.
-- Else: `npx inbase attach`
+- `/connect` → `npx inbase attach --first`.
+- `/inbase` → `npx inbase attach`
+- Else: **stop following this skill**. Do not attach.
 
 Already-connected colors are skipped unless you asked for that color — then
 leftover LLM work is discarded so this chat **starts clean**. A new attach
@@ -171,6 +196,12 @@ Every color already has a chat connected. Click Done in a session window or type
 
 - `VISUAL_CODER_COLOR_UNKNOWN`: reply with the rest of that line, then **stop**.
 
+- `VISUAL_CODER_NO_BLUEPRINT`:
+
+```
+No enabled blueprint is on the map. Draw or load a blueprint first, then type /connect again.
+```
+
 ## Direct response
 
 The moment a command prints `VISUAL_CODER_ACK`, **reply in this chat first**
@@ -180,8 +211,32 @@ say that on a later turn. After `read-blueprint`, start with
 `I see on the blueprint` and name the files, folders, symbols, imports, notes,
 and pointers. Then MUST `report-deliveries` with titles only — do not invent
 steps yet. Then MUST `report-plan` for the invoked delivery before any edit.
+If that plan invokes parallel lettered steps, spawn subagents for the extra letters.
 For other acks, echo the signal, then continue the required tools in the same
 turn. Do not call tools before that sentence. Do not edit before `report-plan`.
+
+## Parallel steps and subagents
+
+Every session start uses the same rule: `/inbase`, `/connect`, `/blue`, `/coral`, and the
+other color commands.
+
+This chat implements **only this color's** blueprint and reports **only** with
+`--session` from `VISUAL_CODER_SESSION`. After `read-blueprint`, look at
+`VISUAL_CODER_MAX_SUBAGENTS` and `VISUAL_CODER_SUBAGENTS`. Analyze this
+blueprint and plan lettered parallel steps so independent work can run at once.
+
+When `report-plan` invokes more than one step (`2A`, `2B`, …), this chat
+implements one of them. MUST spawn a subagent for each other invoked letter.
+Never run more than `VISUAL_CODER_MAX_SUBAGENTS` at once — if more letters are
+ready than that cap, start that many, then start the rest when a worker
+returns. That cap is `inbase.json` `maxSubagents`. If the cap is 0, do not spawn;
+plan sequential steps.
+
+Each parallel-step subagent is a new worker. It MUST:
+
+1. Stay on this color. Do **not** attach
+2. Implement only its assigned step
+3. `propose-patch --session <this color> --step 2B` (use that letter)
 
 ## Required sequence
 
@@ -217,12 +272,14 @@ npx inbase read-blueprint --session <color>
    `addedVariables`, and `addedImports` even if they are not on disk. Do not
    omit, rename, relocate, or replace them. Extra edits to existing files are
    allowed. Extra new files not in this blueprint are allowed when needed if
-   the blueprint does not cover them. Do not use another session's blueprint.
+   the blueprint does not cover them. Do not implement another color's blueprint in
+   this chat.
 
-4. **Say what you see on the blueprint** before `report-deliveries`. Start with
-   `I see on the blueprint` and name every file, folder, function, variable,
-   import, note, and pointer. If the dump is empty, say
-   `I see nothing on the blueprint yet.` Do not list implementation steps.
+4. **Say what you see on the blueprint** before `report-deliveries`.
+   Start with `I see on the blueprint` and name every file, folder, function,
+   variable, import, note, and pointer for **this** color.
+   If this color's dump is empty, say `I see nothing on the blueprint yet.`
+   Do not list implementation steps.
 
 5. **MUST run `report-deliveries` now** with every delivery as `--delivery`.
    Titles only. Do not invent implementation steps. Do not list steps in chat.
@@ -230,16 +287,20 @@ npx inbase read-blueprint --session <color>
    one delivery.
 
 6. **MUST run `report-plan` now** with `--steps` for the **invoked delivery
-   only**. One recorded step = one landscape change. Chat is not a substitute.
+   only**. Prefer lettered parallel steps (`2A`, `2B`) for independent slices,
+   capped by `VISUAL_CODER_MAX_SUBAGENTS`. One recorded step = one landscape change. Chat is not a substitute.
    Do not edit. Do not `propose-patch`. Do not plan later deliveries.
    Wait for `VISUAL_CODER_EXECUTE` from that command.
 
-7. **Only then** implement the **invoked step only**. Then MUST
-   `propose-patch` before touching any later step. Repeat: one step, one
+7. **Only then** implement the **invoked step only**. If several letters are
+   invoked, this chat does one; MUST spawn a subagent for each other letter.
+   Then MUST `propose-patch --step <id>` before touching any later step. Repeat: one step, one
    `propose-patch`. Do **not** implement the whole plan then record once.
    `VISUAL_CODER_EXECUTE` exists only after `report-plan`. Do **not** run
    `wait-for-approval`. Do **not** edit until that execute line.
    If `VISUAL_CODER_PLAN_DELIVERY`, go back to step 6 for that delivery only.
+   After the last recorded step of this color, stop for `/explainit`,
+   `/stop`, or a change request.
 
 8. **Change request** while a plan or proposal
    is waiting (not `/explainit` or `/stop`), including after the last recorded
@@ -253,9 +314,11 @@ npx inbase read-blueprint --session <color>
 
 9. **`/explainit`**: do not edit. `npx inbase explain start` (with `--question`
    when given). `VISUAL_CODER_EXPLAIN` → one `--step` for that path.
-   `VISUAL_CODER_EXPLAIN_FOLLOWUP` → sub-steps with `--parent` (`1.1`,
-   `1.1.1`, …). `VISUAL_CODER_PROPOSAL` or `VISUAL_CODER_DIFF` → walk
-   `VISUAL_CODER_CHANGES_START`/`END`. Then `npx inbase explain report`.
+   `VISUAL_CODER_EXPLAIN_FOLLOWUP` → all sub-steps in one report with `--parent`
+   (`1.1`, `1.1.1`, …). `VISUAL_CODER_PROPOSAL` or `VISUAL_CODER_DIFF` → walk
+   `VISUAL_CODER_CHANGES_START`/`END`. Then `npx inbase explain report` **once**,
+   with every `--step` in that same command so they stack as one list. Do not
+   report one step at a time — each report replaces the map list.
    Write each `--body` for a mid-level developer: short paragraphs, name the
    functions, no compressed colon-lists. Then **stop**.
 
@@ -271,16 +334,21 @@ npx inbase read-blueprint --session <color>
 - Attach after `VISUAL_CODER_SESSION` — that locks a different color
 - Say `Connecting to the ... session` on a later turn
 - Skip `read-blueprint` or skip `I see on the blueprint` before `report-deliveries`
+- Ignore `VISUAL_CODER_SUBAGENTS` / `VISUAL_CODER_MAX_SUBAGENTS`, or
+  spawn more than `VISUAL_CODER_MAX_SUBAGENTS` subagents at once
+- Attach this chat to another color after `VISUAL_CODER_SESSION`, or skip
+  spawning subagents for extra invoked letters, or implement another color's blueprint here
 - Invent implementation steps before `report-deliveries`, or plan later
   deliveries before they are invoked
 - Skip `report-deliveries`, skip `report-plan`, treat chat steps as the plan,
   or edit / `propose-patch` before `report-plan` prints `VISUAL_CODER_EXECUTE`
 - Run `wait-for-approval` or `explain wait`
-- Wait for a typed request when a color command has no text and an enabled blueprint is the request
+- Call `explain report` once per step (that replaces the map list; repeat `--step` in one report)
+- Wait for a typed request when `/inbase`, a color command, or `/connect` has no text and an enabled blueprint is the request
 - Omit, rename, relocate, or replace files, folders, or symbols from an enabled
   blueprint; follow it as closely as possible. Extra files are allowed only
   when the blueprint does not cover them
-- Read global `user-context.json` for placed files; follow another session's blueprint; use camera viewpoint to choose files
+- Read global `user-context.json` for placed files; implement another color's blueprint in this chat; use camera viewpoint to choose files
 - Edit before `VISUAL_CODER_EXECUTE` on a first plan or a change request
 - Implement two or more plan steps before `propose-patch`, or skip
   `propose-patch` after a finished step
@@ -289,4 +357,6 @@ npx inbase read-blueprint --session <color>
 - Explore after the last recorded step; keep editing after `/stop`
 - Ask the user to close the session when they asked for changes
 - Stay silent before a `VISUAL_CODER_ACK`; propose another patch after `VISUAL_CODER_FINISHED`; restore files after Done
-- Use this flow for git, lockfiles, files outside `target`, or `/extract-blueprint`
+- Use this flow for a regular chat that did not invoke `/inbase`, `/connect`,
+  or a color command, or for git, lockfiles, files outside `target`, or
+  `/extract-blueprint`

@@ -17,6 +17,8 @@ const RETIRED_COMMAND_NAMES = [
   'fuchsia',
   'magenta',
   'gold',
+  'blueprint-structure',
+  'blueprint-strucure',
 ]
 
 export function looksLikeInbaseFile(file) {
@@ -214,7 +216,7 @@ export function copySkillTree(projectRoot, { id, skillsRel, listCommandSkills = 
   prependYamlFrontmatter(path.join(skillDir, 'SKILL.md'), SKILL_TOOL_FRONTMATTER)
   if (fs.existsSync(commandTemplateDir)) {
     for (const { stem, src } of listCommandTemplates()) {
-      // The always-on skill already lives at inbase/SKILL.md and is /inbase.
+      // The inbase skill already lives at inbase/SKILL.md and is /inbase.
       if (stem === 'inbase') continue
       const dest = path.join(commandDir, stem, 'SKILL.md')
       fs.mkdirSync(path.dirname(dest), { recursive: true })

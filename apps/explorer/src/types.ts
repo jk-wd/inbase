@@ -209,6 +209,7 @@ export function llmIsMakingChanges(intent: {
 
 export type PlanStep = {
   index: number
+  id?: string
   title: string
   delivery?: number
 }
@@ -315,6 +316,7 @@ export type SharedBlueprint = {
   addedImports: PatchImportAddition[]
   notes: BlueprintNote[]
   pointers: BlueprintPointer[]
+  dependsOn: string[]
 }
 
 export const SESSION_COLORS = [
@@ -365,6 +367,55 @@ export function compareSessionColorOrder(
   right?: string | null,
 ) {
   return sessionColorOrderIndex(left) - sessionColorOrderIndex(right)
+}
+
+export function colorDependsGraph(
+  layers: Array<{ color?: string | null; dependsOn?: string[] | null }>,
+): Record<string, string[]> {
+  const graph = Object.fromEntries(
+    SESSION_COLORS.map((color) => [color.id, [] as string[]]),
+  )
+  for (const layer of layers) {
+    const color = SESSION_COLORS.find((item) => item.id === layer.color)
+    if (!color) continue
+    const seen = new Set<string>()
+    const ids: string[] = []
+    for (const raw of layer.dependsOn ?? []) {
+      if (!raw || raw === color.id || seen.has(raw)) continue
+      if (!SESSION_COLORS.some((item) => item.id === raw)) continue
+      seen.add(raw)
+      ids.push(raw)
+    }
+    graph[color.id] = ids
+  }
+  return graph
+}
+
+function reachableDependsOn(graph: Record<string, string[]>, from: string) {
+  const seen = new Set<string>()
+  const stack = [...(graph[from] ?? [])]
+  while (stack.length) {
+    const id = stack.pop()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    stack.push(...(graph[id] ?? []))
+  }
+  return seen
+}
+
+export function canDependOn(
+  graph: Record<string, string[]>,
+  from: string,
+  to: string,
+) {
+  if (!from || !to || from === to) return false
+  if (
+    !SESSION_COLORS.some((color) => color.id === from) ||
+    !SESSION_COLORS.some((color) => color.id === to)
+  ) {
+    return false
+  }
+  return !reachableDependsOn(graph, to).has(from)
 }
 
 export type BlueprintColorId = SessionColorId | string
@@ -500,6 +551,7 @@ export type AgentIntent = {
   currentDelivery?: number | null
   steps: PlanStep[]
   step: number | null
+  activeSteps?: number[]
   files: string[]
   creates: string[]
   deletes: string[]
@@ -555,4 +607,5 @@ export type AgentIntent = {
   blueprintImports: PatchImportAddition[]
   blueprintNotes: BlueprintNote[]
   blueprintPointers: BlueprintPointer[]
+  dependsOn: string[]
 }

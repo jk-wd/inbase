@@ -35,6 +35,8 @@ import {
   attachSession,
   listAttachQueue,
   nextAttachSessionId,
+  firstHierarchyAttachColor,
+  NO_HIERARCHY_BLUEPRINT_MESSAGE,
   parseSessionColorQuery,
   resolveSessionId,
   readChats,
@@ -62,6 +64,10 @@ import {
   readLocalBlueprint,
   readBlueprintByColor,
   listLocalBlueprints,
+  canDependOn,
+  colorDependsGraph,
+  sessionColorRelations,
+  sessionSubagentPlan,
   writeManifest,
   isSessionStopped,
   isSessionReleased,
@@ -624,6 +630,85 @@ test('attach --color accepts blue and rejects missing colors', () => {
     assert.throws(
       () => attachSession(env.dataDir, null, { color: 'violet' }),
       (error) => String(error.message) === colorMissingMessage('Violet'),
+    )
+  } finally {
+    env.cleanup()
+  }
+})
+
+function blueprintFile(name) {
+  return {
+    id: `src/${name}`,
+    name,
+    path: `src/${name}`,
+    folder: 'src',
+  }
+}
+
+test('attach --first starts from the first enabled blueprint', () => {
+  const env = fixture()
+  try {
+    const blue = setupSession(env.dataDir, { sessionId: 'blue' })
+    const coral = setupSession(env.dataDir, { sessionId: 'coral' })
+    const amber = setupSession(env.dataDir, { sessionId: 'amber' })
+    updateBlueprint(env.dataDir, coral.sessionId, {
+      color: 'coral',
+      userCreatedBlocks: [blueprintFile('types.ts')],
+    })
+    updateBlueprint(env.dataDir, amber.sessionId, {
+      color: 'amber',
+      userCreatedBlocks: [blueprintFile('Panel.tsx')],
+      dependsOn: ['coral'],
+    })
+    assert.equal(firstHierarchyAttachColor(env.dataDir), 'coral')
+    assert.equal(nextAttachSessionId(env.dataDir), blue.sessionId)
+
+    const attached = attachSession(env.dataDir, null, { first: true })
+    assert.equal(attached.sessionId, coral.sessionId)
+    assert.equal(attached.color, 'coral')
+    assert.equal(attached.awaitingAttach, false)
+    assert.deepEqual(listAttachQueue(env.dataDir), [
+      blue.sessionId,
+      amber.sessionId,
+    ])
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('attach --first picks the earliest independent enabled blueprint', () => {
+  const env = fixture()
+  try {
+    setupSession(env.dataDir, { sessionId: 'blue' })
+    const coral = setupSession(env.dataDir, { sessionId: 'coral' })
+    const amber = setupSession(env.dataDir, { sessionId: 'amber' })
+    updateBlueprint(env.dataDir, coral.sessionId, {
+      color: 'coral',
+      userCreatedBlocks: [blueprintFile('Panel.tsx')],
+    })
+    updateBlueprint(env.dataDir, amber.sessionId, {
+      color: 'amber',
+      userCreatedBlocks: [blueprintFile('Score.tsx')],
+    })
+    assert.equal(firstHierarchyAttachColor(env.dataDir), 'coral')
+
+    const attached = attachSession(env.dataDir, null, { first: true })
+    assert.equal(attached.sessionId, coral.sessionId)
+    assert.equal(attached.color, 'coral')
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('attach --first refuses when no enabled blueprint exists', () => {
+  const env = fixture()
+  try {
+    setupSession(env.dataDir, { sessionId: 'blue' })
+    setupSession(env.dataDir, { sessionId: 'coral' })
+    assert.equal(firstHierarchyAttachColor(env.dataDir), null)
+    assert.throws(
+      () => attachSession(env.dataDir, null, { first: true }),
+      (error) => String(error.message) === NO_HIERARCHY_BLUEPRINT_MESSAGE,
     )
   } finally {
     env.cleanup()
@@ -1247,6 +1332,129 @@ test('blueprint on a color can be cleaned up', () => {
   }
 })
 
+test('session colors can depend on many other colors', () => {
+  const env = fixture()
+  try {
+    ensureSessionPool(env.dataDir)
+    const crimson = updateBlueprint(env.dataDir, null, {
+      color: 'crimson',
+      dependsOn: ['blue', 'coral'],
+    })
+    const coral = updateBlueprint(env.dataDir, null, {
+      color: 'coral',
+      dependsOn: ['blue'],
+    })
+    assert.deepEqual(crimson.dependsOn, ['blue', 'coral'])
+    assert.deepEqual(coral.dependsOn, ['blue'])
+    assert.deepEqual(readBlueprintByColor(env.dataDir, 'crimson').dependsOn, [
+      'blue',
+      'coral',
+    ])
+    assert.equal(
+      sessionIntent(env.dataDir, 'crimson').dependsOn.join(','),
+      'blue,coral',
+    )
+    const relations = sessionColorRelations(env.dataDir, 'crimson')
+    assert.deepEqual(relations.dependsOn, ['blue', 'coral'])
+    assert.deepEqual(relations.graph.crimson, ['blue', 'coral'])
+    assert.deepEqual(relations.graph.coral, ['blue'])
+    const blueRelations = sessionColorRelations(env.dataDir, 'blue')
+    assert.deepEqual(blueRelations.dependents.sort(), ['coral', 'crimson'])
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('session start plans subagents for connected blueprint colors', () => {
+  const env = fixture()
+  try {
+    ensureSessionPool(env.dataDir)
+    updateBlueprint(env.dataDir, 'blue', {
+      color: 'blue',
+      userCreatedBlocks: [blueprintFile('types.ts')],
+    })
+    updateBlueprint(env.dataDir, 'coral', {
+      color: 'coral',
+      userCreatedBlocks: [blueprintFile('Panel.tsx')],
+      dependsOn: ['blue'],
+    })
+    updateBlueprint(env.dataDir, 'amber', {
+      color: 'amber',
+      userCreatedBlocks: [blueprintFile('Score.tsx')],
+      dependsOn: ['blue'],
+    })
+    updateBlueprint(env.dataDir, 'orange', {
+      color: 'orange',
+      userCreatedBlocks: [blueprintFile('App.tsx')],
+      dependsOn: ['coral', 'amber'],
+    })
+    updateBlueprint(env.dataDir, 'white', {
+      color: 'white',
+      userCreatedBlocks: [blueprintFile('orphan.ts')],
+    })
+
+    const fromBlue = sessionSubagentPlan(env.dataDir, 'blue', 4)
+    assert.deepEqual(fromBlue.connected, ['blue', 'coral', 'amber', 'orange'])
+    assert.deepEqual(fromBlue.waves, [['blue'], ['coral', 'amber'], ['orange']])
+    assert.deepEqual(fromBlue.spawnNow, [])
+    assert.deepEqual(fromBlue.spawnParallel, [])
+    assert.deepEqual(fromBlue.spawnAfterThis, ['coral', 'amber'])
+    assert.equal(fromBlue.layers.length, 4)
+    assert.equal(
+      fromBlue.layers.some((layer) => layer.color === 'white'),
+      false,
+    )
+
+    const fromCoral = sessionSubagentPlan(env.dataDir, 'coral', 4)
+    assert.deepEqual(fromCoral.spawnNow, ['blue'])
+    assert.deepEqual(fromCoral.waitFor, ['blue'])
+    assert.deepEqual(fromCoral.spawnParallel, [])
+    assert.deepEqual(fromCoral.spawnAfterThis, ['orange'])
+
+    attachSession(env.dataDir, 'blue')
+    const afterBlue = sessionSubagentPlan(env.dataDir, 'coral', 4)
+    assert.deepEqual(afterBlue.spawnNow, [])
+    assert.deepEqual(afterBlue.spawnParallel, ['amber'])
+    assert.deepEqual(afterBlue.spawnAfterThis, ['orange'])
+
+    const capped = sessionSubagentPlan(env.dataDir, 'blue', 0)
+    assert.deepEqual(capped.spawnNow, [])
+    assert.deepEqual(capped.spawnParallel, [])
+    assert.deepEqual(capped.spawnAfterThis, [])
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('color depends-on relations reject cycles and self', () => {
+  const env = fixture()
+  try {
+    ensureSessionPool(env.dataDir)
+    updateBlueprint(env.dataDir, null, {
+      color: 'blue',
+      dependsOn: ['coral'],
+    })
+    const crimson = updateBlueprint(env.dataDir, null, {
+      color: 'crimson',
+      dependsOn: ['crimson', 'unknown', 'blue'],
+    })
+    assert.deepEqual(crimson.dependsOn, ['blue'])
+    const looping = updateBlueprint(env.dataDir, null, {
+      color: 'coral',
+      dependsOn: ['blue'],
+    })
+    assert.deepEqual(looping.dependsOn, [])
+    assert.equal(canDependOn({ blue: ['coral'] }, 'coral', 'blue'), false)
+    assert.equal(canDependOn({ blue: [] }, 'coral', 'blue'), true)
+    assert.deepEqual(
+      colorDependsGraph([{ color: 'coral', dependsOn: ['red', 'blue'] }]).coral,
+      ['blue'],
+    )
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('pointers mark existing files for the LLM to keep in mind', () => {
   const env = fixture()
   try {
@@ -1395,6 +1603,40 @@ test('hides finished sessions but keeps review and handshake sessions without a 
       'old-review',
       'working-chat',
     ])
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('reportPlan invokes lettered parallel steps together', () => {
+  const env = fixture()
+  try {
+    const manifest = reportPlan(env.dataDir, {
+      sessionId: 'parallel-chat',
+      feature: 'Notes',
+      stepTitles: ['1. Types', '2A. Card', '2B. Store', '3. App'],
+      targetRoot: env.targetRoot,
+    })
+    assert.equal(manifest.phase, 'working')
+    assert.deepEqual(
+      manifest.steps.map((step) => step.id),
+      ['1', '2A', '2B', '3'],
+    )
+    assert.deepEqual(manifest.currentStepIds, ['1'])
+    const afterFirst = appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'parallel-chat',
+      patchText: oneToTwo,
+      step: '1',
+    })
+    assert.deepEqual(afterFirst.manifest.currentStepIds, ['2A', '2B'])
+    assert.deepEqual(sessionIntent(env.dataDir, 'parallel-chat').activeSteps, [2, 3])
+    const afterCard = appendDiff(env.dataDir, env.targetRoot, {
+      sessionId: 'parallel-chat',
+      patchText: twoToThree,
+      step: '2A',
+    })
+    assert.ok(afterCard.manifest.currentStepIds.includes('2B'))
+    assert.equal(afterCard.manifest.phase, 'working')
   } finally {
     env.cleanup()
   }

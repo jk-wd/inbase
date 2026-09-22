@@ -1,0 +1,427 @@
+{
+  "version": 1,
+  "kind": "inbase-blueprint",
+  "name": "todo-app",
+  "savedAt": "2026-09-20T06:00:00.000Z",
+  "global": {
+    "hidden": false,
+    "files": [
+      {
+        "id": "src/todo/types.ts",
+        "name": "types.ts",
+        "path": "src/todo/types.ts",
+        "folder": "src/todo"
+      },
+      {
+        "id": "src/todo/constants.ts",
+        "name": "constants.ts",
+        "path": "src/todo/constants.ts",
+        "folder": "src/todo"
+      },
+      {
+        "id": "src/todo/utils/ids.ts",
+        "name": "ids.ts",
+        "path": "src/todo/utils/ids.ts",
+        "folder": "src/todo/utils"
+      },
+      {
+        "id": "src/todo/utils/storage.ts",
+        "name": "storage.ts",
+        "path": "src/todo/utils/storage.ts",
+        "folder": "src/todo/utils"
+      },
+      {
+        "id": "src/todo/utils/filters.ts",
+        "name": "filters.ts",
+        "path": "src/todo/utils/filters.ts",
+        "folder": "src/todo/utils"
+      },
+      {
+        "id": "src/todo/store/todos.ts",
+        "name": "todos.ts",
+        "path": "src/todo/store/todos.ts",
+        "folder": "src/todo/store"
+      },
+      {
+        "id": "src/todo/components/EmptyState.tsx",
+        "name": "EmptyState.tsx",
+        "path": "src/todo/components/EmptyState.tsx",
+        "folder": "src/todo/components"
+      },
+      {
+        "id": "src/todo/components/TodoItem.tsx",
+        "name": "TodoItem.tsx",
+        "path": "src/todo/components/TodoItem.tsx",
+        "folder": "src/todo/components"
+      },
+      {
+        "id": "src/todo/components/TodoList.tsx",
+        "name": "TodoList.tsx",
+        "path": "src/todo/components/TodoList.tsx",
+        "folder": "src/todo/components"
+      },
+      {
+        "id": "src/todo/components/TodoForm.tsx",
+        "name": "TodoForm.tsx",
+        "path": "src/todo/components/TodoForm.tsx",
+        "folder": "src/todo/components"
+      },
+      {
+        "id": "src/todo/components/TodoFilters.tsx",
+        "name": "TodoFilters.tsx",
+        "path": "src/todo/components/TodoFilters.tsx",
+        "folder": "src/todo/components"
+      },
+      {
+        "id": "src/todo/components/TodoStats.tsx",
+        "name": "TodoStats.tsx",
+        "path": "src/todo/components/TodoStats.tsx",
+        "folder": "src/todo/components"
+      },
+      {
+        "id": "src/todo/TodoApp.tsx",
+        "name": "TodoApp.tsx",
+        "path": "src/todo/TodoApp.tsx",
+        "folder": "src/todo"
+      }
+    ],
+    "folders": [
+      {
+        "id": "src/todo",
+        "name": "todo",
+        "path": "src/todo",
+        "parent": "src"
+      },
+      {
+        "id": "src/todo/utils",
+        "name": "utils",
+        "path": "src/todo/utils",
+        "parent": "src/todo"
+      },
+      {
+        "id": "src/todo/store",
+        "name": "store",
+        "path": "src/todo/store",
+        "parent": "src/todo"
+      },
+      {
+        "id": "src/todo/components",
+        "name": "components",
+        "path": "src/todo/components",
+        "parent": "src/todo"
+      }
+    ],
+    "addedFunctions": [
+      {
+        "name": "createTodo",
+        "file": "src/todo/types.ts"
+      },
+      {
+        "name": "nextId",
+        "file": "src/todo/utils/ids.ts"
+      },
+      {
+        "name": "loadTodos",
+        "file": "src/todo/utils/storage.ts"
+      },
+      {
+        "name": "saveTodos",
+        "file": "src/todo/utils/storage.ts"
+      },
+      {
+        "name": "filterTodos",
+        "file": "src/todo/utils/filters.ts"
+      },
+      {
+        "name": "addTodo",
+        "file": "src/todo/store/todos.ts"
+      },
+      {
+        "name": "toggleTodo",
+        "file": "src/todo/store/todos.ts"
+      },
+      {
+        "name": "removeTodo",
+        "file": "src/todo/store/todos.ts"
+      },
+      {
+        "name": "setFilter",
+        "file": "src/todo/store/todos.ts"
+      },
+      {
+        "name": "EmptyState",
+        "file": "src/todo/components/EmptyState.tsx"
+      },
+      {
+        "name": "TodoItem",
+        "file": "src/todo/components/TodoItem.tsx"
+      },
+      {
+        "name": "TodoList",
+        "file": "src/todo/components/TodoList.tsx"
+      },
+      {
+        "name": "TodoForm",
+        "file": "src/todo/components/TodoForm.tsx"
+      },
+      {
+        "name": "TodoFilters",
+        "file": "src/todo/components/TodoFilters.tsx"
+      },
+      {
+        "name": "TodoStats",
+        "file": "src/todo/components/TodoStats.tsx"
+      },
+      {
+        "name": "TodoApp",
+        "file": "src/todo/TodoApp.tsx"
+      }
+    ],
+    "addedVariables": [
+      {
+        "name": "FILTERS",
+        "file": "src/todo/constants.ts"
+      },
+      {
+        "name": "todos",
+        "file": "src/todo/store/todos.ts"
+      },
+      {
+        "name": "filter",
+        "file": "src/todo/store/todos.ts"
+      }
+    ],
+    "addedImports": [
+      {
+        "name": "Todo",
+        "from": "src/todo/types.ts",
+        "file": "src/todo/utils/storage.ts"
+      },
+      {
+        "name": "Todo",
+        "from": "src/todo/types.ts",
+        "file": "src/todo/utils/filters.ts"
+      },
+      {
+        "name": "FilterId",
+        "from": "src/todo/types.ts",
+        "file": "src/todo/utils/filters.ts"
+      },
+      {
+        "name": "FILTERS",
+        "from": "src/todo/constants.ts",
+        "file": "src/todo/utils/filters.ts"
+      },
+      {
+        "name": "Todo",
+        "from": "src/todo/types.ts",
+        "file": "src/todo/store/todos.ts"
+      },
+      {
+        "name": "createTodo",
+        "from": "src/todo/types.ts",
+        "file": "src/todo/store/todos.ts"
+      },
+      {
+        "name": "nextId",
+        "from": "src/todo/utils/ids.ts",
+        "file": "src/todo/store/todos.ts"
+      },
+      {
+        "name": "loadTodos",
+        "from": "src/todo/utils/storage.ts",
+        "file": "src/todo/store/todos.ts"
+      },
+      {
+        "name": "saveTodos",
+        "from": "src/todo/utils/storage.ts",
+        "file": "src/todo/store/todos.ts"
+      },
+      {
+        "name": "Todo",
+        "from": "src/todo/types.ts",
+        "file": "src/todo/components/TodoItem.tsx"
+      },
+      {
+        "name": "TodoItem",
+        "from": "src/todo/components/TodoItem.tsx",
+        "file": "src/todo/components/TodoList.tsx"
+      },
+      {
+        "name": "EmptyState",
+        "from": "src/todo/components/EmptyState.tsx",
+        "file": "src/todo/components/TodoList.tsx"
+      },
+      {
+        "name": "todos",
+        "from": "src/todo/store/todos.ts",
+        "file": "src/todo/components/TodoList.tsx"
+      },
+      {
+        "name": "toggleTodo",
+        "from": "src/todo/store/todos.ts",
+        "file": "src/todo/components/TodoList.tsx"
+      },
+      {
+        "name": "removeTodo",
+        "from": "src/todo/store/todos.ts",
+        "file": "src/todo/components/TodoList.tsx"
+      },
+      {
+        "name": "filterTodos",
+        "from": "src/todo/utils/filters.ts",
+        "file": "src/todo/components/TodoList.tsx"
+      },
+      {
+        "name": "addTodo",
+        "from": "src/todo/store/todos.ts",
+        "file": "src/todo/components/TodoForm.tsx"
+      },
+      {
+        "name": "FILTERS",
+        "from": "src/todo/constants.ts",
+        "file": "src/todo/components/TodoFilters.tsx"
+      },
+      {
+        "name": "filter",
+        "from": "src/todo/store/todos.ts",
+        "file": "src/todo/components/TodoFilters.tsx"
+      },
+      {
+        "name": "setFilter",
+        "from": "src/todo/store/todos.ts",
+        "file": "src/todo/components/TodoFilters.tsx"
+      },
+      {
+        "name": "todos",
+        "from": "src/todo/store/todos.ts",
+        "file": "src/todo/components/TodoStats.tsx"
+      },
+      {
+        "name": "filterTodos",
+        "from": "src/todo/utils/filters.ts",
+        "file": "src/todo/components/TodoStats.tsx"
+      },
+      {
+        "name": "loadTodos",
+        "from": "src/todo/utils/storage.ts",
+        "file": "src/todo/TodoApp.tsx"
+      },
+      {
+        "name": "todos",
+        "from": "src/todo/store/todos.ts",
+        "file": "src/todo/TodoApp.tsx"
+      },
+      {
+        "name": "TodoForm",
+        "from": "src/todo/components/TodoForm.tsx",
+        "file": "src/todo/TodoApp.tsx"
+      },
+      {
+        "name": "TodoFilters",
+        "from": "src/todo/components/TodoFilters.tsx",
+        "file": "src/todo/TodoApp.tsx"
+      },
+      {
+        "name": "TodoStats",
+        "from": "src/todo/components/TodoStats.tsx",
+        "file": "src/todo/TodoApp.tsx"
+      },
+      {
+        "name": "TodoList",
+        "from": "src/todo/components/TodoList.tsx",
+        "file": "src/todo/TodoApp.tsx"
+      },
+      {
+        "name": "TodoApp",
+        "from": "src/todo/TodoApp.tsx",
+        "file": "src/App.tsx"
+      }
+    ],
+    "notes": [
+      {
+        "file": "src/todo",
+        "kind": "folder",
+        "note": "Plain React todo app. No extra packages. Keep each file small so the LLM can plan lettered parallel steps (2A, 2B) for independent files."
+      },
+      {
+        "file": "src/todo/types.ts",
+        "kind": "file",
+        "note": "Export Todo { id, title, done } and FilterId \"all\" | \"active\" | \"done\". Export createTodo(title, id)."
+      },
+      {
+        "file": "src/todo/constants.ts",
+        "kind": "file",
+        "note": "Export FILTERS: { id: FilterId, label: string }[] for All, Active, Done."
+      },
+      {
+        "file": "src/todo/utils/ids.ts",
+        "kind": "file",
+        "note": "Export nextId() returning a unique string. No React."
+      },
+      {
+        "file": "src/todo/utils/storage.ts",
+        "kind": "file",
+        "note": "loadTodos() / saveTodos(todos) using localStorage key \"example-todos\". No React."
+      },
+      {
+        "file": "src/todo/utils/filters.ts",
+        "kind": "file",
+        "note": "filterTodos(todos, filterId) using FILTERS ids. No React."
+      },
+      {
+        "file": "src/todo/store/todos.ts",
+        "kind": "file",
+        "note": "Module state: todos and filter. addTodo, toggleTodo, removeTodo, setFilter. Persist with storage after each change. No React."
+      },
+      {
+        "file": "src/todo/components/EmptyState.tsx",
+        "kind": "file",
+        "note": "Simple empty-list message. No store imports."
+      },
+      {
+        "file": "src/todo/components/TodoItem.tsx",
+        "kind": "file",
+        "note": "One row: checkbox, title, delete. Props only, no store."
+      },
+      {
+        "file": "src/todo/components/TodoList.tsx",
+        "kind": "file",
+        "note": "Read todos and filter from the store. Map TodoItem. Show EmptyState when the filtered list is empty."
+      },
+      {
+        "file": "src/todo/components/TodoForm.tsx",
+        "kind": "file",
+        "note": "Title input and Add button. Calls addTodo. Independent of the list UI."
+      },
+      {
+        "file": "src/todo/components/TodoFilters.tsx",
+        "kind": "file",
+        "note": "Buttons for FILTERS. Independent of the list and form."
+      },
+      {
+        "file": "src/todo/components/TodoStats.tsx",
+        "kind": "file",
+        "note": "Show active and done counts from the store. Independent of the list and form."
+      },
+      {
+        "file": "src/todo/TodoApp.tsx",
+        "kind": "file",
+        "note": "Shell that loads storage once, then renders form, filters, stats, and list."
+      },
+      {
+        "file": "src/App.tsx",
+        "kind": "file",
+        "note": "Import TodoApp and render it under ColorGenerator. Keep the existing hello world."
+      }
+    ],
+    "pointers": [
+      {
+        "kind": "file",
+        "path": "src/App.tsx"
+      }
+    ],
+    "dependsOn": []
+  },
+  "locals": []
+}

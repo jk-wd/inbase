@@ -131,7 +131,9 @@ function ColorConnectHint({
           .{' '}
         </>
       ) : null}
-      A color command with no extra text starts from the enabled blueprint.
+      Type <kbd>/inbase</kbd> for the next empty slot. A color command with
+      no extra text starts from the enabled blueprint. Type{' '}
+      <kbd>/connect</kbd> to start from the first enabled blueprint.
     </p>
   )
 }
@@ -584,15 +586,6 @@ function PointColorControl({
 
 function fileBase(id: string) {
   return id.split('/').pop() ?? id
-}
-
-function symbolLabels(items: PatchSymbolAddition[]) {
-  const files = new Set(items.map((item) => item.file))
-  const showFile = files.size > 1
-  return items.map((item) => ({
-    key: `${item.file}:${item.name}`,
-    label: showFile ? `${item.name} · ${fileBase(item.file)}` : item.name,
-  }))
 }
 
 function importLabel(item: Pick<PatchImportAddition, 'name' | 'from'>) {
@@ -1354,8 +1347,8 @@ function PanelChrome({
           {title}
         </div>
         <div className="hud-panel-controls">
-          {menu}
           {badge}
+          {menu}
           {onMinimize && (
             <button
               className="hud-button hud-icon-button hud-panel-control"
@@ -1433,16 +1426,16 @@ function HandshakeSetup({
         {awaitingAttach && nextAttachLabel ? (
           <>
             <p>
-              The next chat connects to {nextAttachLabel} first. This
-              session stays in the queue.
+              The next <kbd>/inbase</kbd> chat connects to {nextAttachLabel}{' '}
+              first. This session stays in the queue.
             </p>
             <ColorConnectHint colorCommand={colorCommand} queued />
           </>
         ) : awaitingAttach ? (
           <>
             <p>
-              Open a chat to connect and start. A regular chat takes
-              the next empty slot.
+              Open a chat with <kbd>/inbase</kbd> for the next empty slot, or
+              a color command to connect here.
             </p>
             <ColorConnectHint colorCommand={colorCommand} />
           </>
@@ -1586,13 +1579,10 @@ function latestDiffForStep(chain: AgentIntent['chain'], stepIndex: number) {
 }
 
 function planStepOutline(
-  step: { index: number; delivery?: number },
-  siblings: AgentIntent['steps'],
+  step: { index: number; id?: string; delivery?: number },
+  _siblings?: AgentIntent['steps'],
 ) {
-  const delivery = step.delivery
-  if (!delivery) return String(step.index)
-  const local = siblings.findIndex((entry) => entry.index === step.index) + 1
-  return local > 0 ? `${delivery}.${local}` : String(step.index)
+  return step.id || String(step.index)
 }
 
 function planStepOutlineForIntent(
@@ -1612,7 +1602,7 @@ function PlanStepList({
   steps,
   intent,
   proposalStep,
-  processingStep,
+  processingSteps,
   acceptedSteps,
   canAcceptProposal,
   onNavigateDiff,
@@ -1620,7 +1610,7 @@ function PlanStepList({
   steps: AgentIntent['steps']
   intent: AgentIntent
   proposalStep: number | null
-  processingStep: number | null
+  processingSteps: Set<number>
   acceptedSteps: Set<number>
   canAcceptProposal: boolean
   onNavigateDiff: (sessionId: string, diffId: string | null) => void
@@ -1631,16 +1621,16 @@ function PlanStepList({
     <ol className="hud-steps">
       {steps.map((step) => {
         const proposed = proposalStep === step.index
-        const processing = processingStep === step.index
+        const processing = processingSteps.has(step.index)
         const accepted = acceptedSteps.has(step.index) && !proposed
         const stepDiff = latestDiffForStep(intent.chain, step.index)
         const canResumeLive = processing && !intent.isActiveDiff && !stepDiff
         const canOpenDiff = Boolean(stepDiff) || canResumeLive
         const viewing = Boolean(stepDiff) && intent.step === step.index
         const lastStepDone =
-          canAcceptProposal && proposed && step.index === intent.steps.length
+          canAcceptProposal && proposed && step.index === intent.steps.at(-1)?.index
         const stepDone = accepted || lastStepDone
-        const outline = planStepOutline(step, steps)
+        const outline = planStepOutline(step)
         const stepBody = (
           <>
             <span className="hud-step-index">{outline}.</span>
@@ -1651,7 +1641,7 @@ function PlanStepList({
         )
         return (
           <li
-            key={step.index}
+            key={step.id ?? step.index}
             data-done={stepDone}
             data-active={processing || proposed || viewing}
           >
@@ -1728,6 +1718,14 @@ function SessionPanel({
   const planningDelivery =
     deliveries.length > 0 && currentDelivery > 0 && currentDeliverySteps.length === 0
   const currentOutline = planStepOutlineForIntent(intent, intent.step)
+  const activeOutlines = (intent.activeSteps?.length
+    ? intent.activeSteps
+    : intent.step
+      ? [intent.step]
+      : []
+  )
+    .map((index) => planStepOutlineForIntent(intent, index))
+    .filter(Boolean)
   const currentOutlineStep = intent.steps.find(
     (step) => step.index === intent.step,
   )
@@ -1738,15 +1736,18 @@ function SessionPanel({
     : []
   const lastOutlineSibling = currentOutlineSiblings.at(-1)
   const lastOutline = lastOutlineSibling
-    ? planStepOutline(lastOutlineSibling, currentOutlineSiblings)
+    ? planStepOutline(lastOutlineSibling)
     : null
+  const activeLabel = activeOutlines.join(', ')
   const stepLabel = planningDelivery
     ? `Delivery ${currentDelivery} of ${deliveries.length}`
-    : deliveries.length > 0 && currentOutline
-      ? `Delivery ${currentDelivery} of ${deliveries.length} · Step ${currentOutline}${
+    : deliveries.length > 0 && (activeLabel || currentOutline)
+      ? `Delivery ${currentDelivery} of ${deliveries.length} · Step ${activeLabel || currentOutline}${
           lastOutline ? ` of ${lastOutline}` : ''
         }`
-      : intent.step && intent.steps?.length > 0
+      : activeLabel && intent.steps?.length > 0
+        ? `Step ${activeLabel}`
+        : intent.step && intent.steps?.length > 0
         ? `Step ${intent.step} of ${intent.steps.length}`
         : 'Patch'
   const acceptedSteps = new Set(
@@ -1762,8 +1763,13 @@ function SessionPanel({
   const proposalStep = pending
     ? (latestEntry?.status === 'pending' ? latestEntry.step : intent.step)
     : null
-  const processingStep =
-    (working || intent.working) && typeof liveStep === 'number' ? liveStep : null
+  const processingSteps = new Set(
+    (working || intent.working) && typeof liveStep === 'number'
+      ? intent.activeSteps?.length
+        ? intent.activeSteps
+        : [liveStep]
+      : [],
+  )
   const llmDisconnected =
     Boolean(intent.llmIdle) && intent.awaitingAttach === false
   const canAcceptProposal =
@@ -1879,8 +1885,8 @@ function SessionPanel({
             queuedBehind ? (
               <div className="hud-mode-hint">
                 <p>
-                  The next chat connects to {queuedBehind} first. This
-                  session stays in the queue.
+                  The next <kbd>/inbase</kbd> chat connects to {queuedBehind}{' '}
+                  first. This session stays in the queue.
                 </p>
                 <ColorConnectHint
                   colorCommand={sessionSlashCommand(intent)}
@@ -1890,8 +1896,8 @@ function SessionPanel({
             ) : (
               <div className="hud-mode-hint">
                 <p>
-                  No LLM is attached. Open a chat — it connects to the
-                  next waiting session.
+                  No LLM is attached. Type <kbd>/inbase</kbd>,{' '}
+                  <kbd>/connect</kbd>, or a color command to connect.
                 </p>
                 <ColorConnectHint colorCommand={sessionSlashCommand(intent)} />
               </div>
@@ -1977,7 +1983,7 @@ function SessionPanel({
                             steps={deliverySteps}
                             intent={intent}
                             proposalStep={proposalStep}
-                            processingStep={processingStep}
+                            processingSteps={processingSteps}
                             acceptedSteps={acceptedSteps}
                             canAcceptProposal={canAcceptProposal}
                             onNavigateDiff={onNavigateDiff}
@@ -1992,7 +1998,7 @@ function SessionPanel({
                   steps={intent.steps}
                   intent={intent}
                   proposalStep={proposalStep}
-                  processingStep={processingStep}
+                  processingSteps={processingSteps}
                   acceptedSteps={acceptedSteps}
                   canAcceptProposal={canAcceptProposal}
                   onNavigateDiff={onNavigateDiff}
@@ -2315,7 +2321,7 @@ function explorerInstructions({
           id: 'cursor-chat',
           keys: ['Chat'],
           label:
-            'Connects to the next empty session, or a color command for that slot; Done in the session window, /explainit /stop; one chat per color',
+            '/inbase connects to the next empty session, /connect for the first enabled blueprint, or a color command for that slot; Done in the session window, /explainit /stop; one chat per color',
         },
         {
           id: 'blueprint-select',
@@ -2442,7 +2448,7 @@ function explorerInstructions({
           id: 'cursor-chat',
           keys: ['Chat'],
           label:
-            'Connects to the next empty session, or a color command for that slot; Done in the session window, /explainit /stop; one chat per color',
+            '/inbase connects to the next empty session, /connect for the first enabled blueprint, or a color command for that slot; Done in the session window, /explainit /stop; one chat per color',
         },
         {
           id: 'blueprint-select',
@@ -2630,7 +2636,7 @@ export function HUD({
   onSelectFolder,
   intent,
   intents,
-  focusedSessionId = null,
+  focusedSessionId: _focusedSessionId = null,
   nextAttachSessionId = null,
   onFocusSession,
   onWorkflowAction,

@@ -5,13 +5,18 @@ export const CONFIG_FILE_NAME = 'inbase.json'
 
 export const DEFAULT_PORT = 5173
 
+export const DEFAULT_MAX_SUBAGENTS = 4
+
+export const MAX_SUBAGENTS_LIMIT = 16
+
 export const INIT_INBASE_CONFIG = {
   target: '.',
   port: DEFAULT_PORT,
   ignore: [],
+  maxSubagents: DEFAULT_MAX_SUBAGENTS,
 }
 
-const KNOWN_KEYS = new Set(['target', 'port', 'ignore'])
+const KNOWN_KEYS = new Set(['target', 'port', 'ignore', 'maxSubagents', 'editor'])
 
 function emptyConfig(dir = null, file = null) {
   return {
@@ -20,6 +25,8 @@ function emptyConfig(dir = null, file = null) {
     target: null,
     port: null,
     ignore: [],
+    maxSubagents: DEFAULT_MAX_SUBAGENTS,
+    editor: null,
   }
 }
 
@@ -105,7 +112,34 @@ export function parseInbaseConfig(raw, file = null) {
     config.ignore = parsed.ignore.map((pattern) => pattern.trim()).filter(Boolean)
   }
 
+  if (parsed.maxSubagents != null) {
+    if (
+      !Number.isInteger(parsed.maxSubagents) ||
+      parsed.maxSubagents < 0 ||
+      parsed.maxSubagents > MAX_SUBAGENTS_LIMIT
+    ) {
+      throw configError(
+        file,
+        `"maxSubagents" must be an integer from 0 to ${MAX_SUBAGENTS_LIMIT}`,
+      )
+    }
+    config.maxSubagents = parsed.maxSubagents
+  }
+
+  if (parsed.editor != null) {
+    if (typeof parsed.editor !== 'string' || !parsed.editor.trim()) {
+      throw configError(file, '"editor" must be a non-empty string')
+    }
+    config.editor = parsed.editor.trim().toLowerCase()
+  }
+
   return config
+}
+
+export function resolveMaxSubagents(config = emptyConfig()) {
+  const value = config?.maxSubagents
+  if (!Number.isInteger(value) || value < 0) return DEFAULT_MAX_SUBAGENTS
+  return Math.min(value, MAX_SUBAGENTS_LIMIT)
 }
 
 export function parseInbaseConfigFile(file) {
@@ -153,13 +187,7 @@ export function writeInbaseConfig(projectRoot, values = INIT_INBASE_CONFIG) {
   return true
 }
 
-/**
- * Update `target` in an existing inbase.json. Preserves other fields.
- * Returns false when the file is missing.
- */
-export function updateInbaseConfigTarget(projectRoot, target) {
-  const trimmed = typeof target === 'string' ? target.trim() : ''
-  if (!trimmed) throw configError(null, '"target" must be a non-empty string')
+function rewriteInbaseConfig(projectRoot, patch) {
   const dest = path.join(path.resolve(projectRoot), CONFIG_FILE_NAME)
   if (!isFile(dest)) return false
   let raw
@@ -171,10 +199,30 @@ export function updateInbaseConfigTarget(projectRoot, target) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw configError(dest, 'must be a JSON object')
   }
-  const next = { ...raw, target: trimmed }
+  const next = { ...raw, ...patch }
   parseInbaseConfig(JSON.stringify(next), dest)
   fs.writeFileSync(dest, `${JSON.stringify(next, null, 2)}\n`)
   return true
+}
+
+/**
+ * Update `target` in an existing inbase.json. Preserves other fields.
+ * Returns false when the file is missing.
+ */
+export function updateInbaseConfigTarget(projectRoot, target) {
+  const trimmed = typeof target === 'string' ? target.trim() : ''
+  if (!trimmed) throw configError(null, '"target" must be a non-empty string')
+  return rewriteInbaseConfig(projectRoot, { target: trimmed })
+}
+
+/**
+ * Update `editor` in an existing inbase.json. Preserves other fields.
+ * Returns false when the file is missing.
+ */
+export function updateInbaseConfigEditor(projectRoot, editor) {
+  const trimmed = typeof editor === 'string' ? editor.trim().toLowerCase() : ''
+  if (!trimmed) throw configError(null, '"editor" must be a non-empty string')
+  return rewriteInbaseConfig(projectRoot, { editor: trimmed })
 }
 
 export function removeInbaseConfig(projectRoot) {
