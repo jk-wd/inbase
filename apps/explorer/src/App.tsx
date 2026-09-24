@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { shouldIgnoreShortcut, isKeyboardIsolated } from './keyboard'
-import { emptyIntent, fetchAgentIntents, inspectTargetFile, loadBlueprintFile, performAgentAction, persistBlueprintCleanup, persistBlueprintClear, persistBlueprintHidden, persistSessionBlueprint, persistSessionFocus, pinIntentToDiff, saveBlueprintFile } from './agentIntent'
+import { cloneIntentForHistory, emptyIntent, fetchAgentIntents, historyIntentView, inspectTargetFile, loadBlueprintFile, performAgentAction, persistBlueprintCleanup, persistBlueprintClear, persistBlueprintHidden, persistSessionBlueprint, persistSessionFocus, pinIntentToDiff, saveBlueprintFile } from './agentIntent'
 import { emptyBranchChanges, fetchBranchChanges } from './branchChanges'
 import { fetchCodebase, updateCodebase } from './codebase'
 import {
@@ -1161,6 +1161,7 @@ function Explorer({
   const lastLivePatchSig = useRef<string | null>(null)
   const viewedDiffId = useRef<Record<string, string | null>>({})
   const browsingHistory = useRef<Record<string, boolean>>({})
+  const historyCloneRef = useRef<Record<string, AgentIntent>>({})
   const liveIntentsRef = useRef<AgentIntent[]>([])
   const seenSessionIds = useRef<Set<string>>(new Set())
   const lastMapRevision = useRef<number | null>(null)
@@ -1298,6 +1299,7 @@ function Explorer({
           },
         )
         browsingHistory.current[sessionId] = false
+        delete historyCloneRef.current[sessionId]
         lastIntentSig.current = null
         if (action === 'stop' || action === 'done') {
           const bundle = await fetchAgentIntents()
@@ -1316,6 +1318,7 @@ function Explorer({
           try {
             const bundle = await fetchAgentIntents()
             liveIntentsRef.current = bundle.intents
+            delete historyCloneRef.current[sessionId]
             lastIntentSig.current = null
             setIntents(bundle.intents)
             await onRefreshGraph()
@@ -1343,12 +1346,18 @@ function Explorer({
     lastIntentSig.current = null
     if (followLive) {
       browsingHistory.current[sessionId] = false
+      delete historyCloneRef.current[sessionId]
       viewedDiffId.current[sessionId] = live.diffId
       applyIntent(pinIntentToDiff(live, null, true), sessionId)
     } else {
+      // Walk a frozen clone so live LLM sessions keep updating in liveIntentsRef.
+      if (!historyCloneRef.current[sessionId]) {
+        historyCloneRef.current[sessionId] = cloneIntentForHistory(live)
+      }
+      const clone = historyCloneRef.current[sessionId]
       browsingHistory.current[sessionId] = true
       viewedDiffId.current[sessionId] = diffId
-      applyIntent(pinIntentToDiff(live, diffId, false), sessionId)
+      applyIntent(historyIntentView(clone, diffId, live), sessionId)
     }
     setFocusedSessionId(sessionId)
   }, [applyIntent, intents])
@@ -2572,18 +2581,27 @@ function Explorer({
         }
         setNextAttachSessionId(bundle.nextAttachSessionId)
         liveIntentsRef.current = bundle.intents
+        const liveIds = new Set(
+          bundle.intents
+            .map((item) => item.sessionId)
+            .filter((id): id is string => Boolean(id)),
+        )
+        for (const sessionId of Object.keys(historyCloneRef.current)) {
+          if (liveIds.has(sessionId)) continue
+          delete historyCloneRef.current[sessionId]
+          browsingHistory.current[sessionId] = false
+        }
         const merged: AgentIntent[] = bundle.intents.map((next) => {
           const sessionId = next.sessionId
-          const pinned =
-            sessionId && browsingHistory.current[sessionId]
-              ? viewedDiffId.current[sessionId]
-              : null
-          if (sessionId && pinned) {
-            const frozen = pinIntentToDiff(next, pinned, false)
-            if (!frozen.isActiveDiff) return frozen
+          if (!sessionId || !browsingHistory.current[sessionId]) return next
+          const clone = historyCloneRef.current[sessionId]
+          const pinned = viewedDiffId.current[sessionId]
+          if (!clone || !pinned) {
             browsingHistory.current[sessionId] = false
+            delete historyCloneRef.current[sessionId]
+            return next
           }
-          return next
+          return historyIntentView(clone, pinned, next)
         })
         const signature = JSON.stringify(merged.map(intentSignature))
         if (cancelled || signature === lastIntentSig.current) {

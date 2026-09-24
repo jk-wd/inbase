@@ -22,6 +22,10 @@ import {
   updateBlueprint,
 } from './session-store.mjs'
 
+function blueBlueprint(document) {
+  return document.blueprints.find((item) => item.color === 'blue')
+}
+
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'inbase-blueprints-'))
   const dataDir = path.join(root, 'data')
@@ -101,12 +105,12 @@ test('saved documents use files and folders without positions', () => {
     })
     const document = JSON.parse(fs.readFileSync(saved.path, 'utf8'))
     assert.equal(document.kind, 'inbase-blueprint')
-    assert.deepEqual(document.global.files, [globalFile])
-    assert.deepEqual(document.global.folders, [globalFolder])
-    assert.equal(document.global.userCreatedBlocks, undefined)
-    assert.equal(document.global.userCreatedIslands, undefined)
-    assert.equal('x' in document.global.files[0], false)
-    assert.equal('z' in document.global.files[0], false)
+    assert.deepEqual(blueBlueprint(document).files, [globalFile])
+    assert.deepEqual(blueBlueprint(document).folders, [globalFolder])
+    assert.equal(blueBlueprint(document).userCreatedBlocks, undefined)
+    assert.equal(blueBlueprint(document).userCreatedIslands, undefined)
+    assert.equal('x' in blueBlueprint(document).files[0], false)
+    assert.equal('z' in blueBlueprint(document).files[0], false)
   } finally {
     env.cleanup()
   }
@@ -224,7 +228,7 @@ test('load restores notes and pointers', () => {
         'utf8',
       ),
     )
-    assert.deepEqual(document.global.notes, globalNotes)
+    assert.deepEqual(blueBlueprint(document).notes, globalNotes)
   } finally {
     env.cleanup()
   }
@@ -264,9 +268,9 @@ test('save and load restore color depends-on relations', () => {
         'utf8',
       ),
     )
-    assert.deepEqual(document.global.dependsOn, [])
+    assert.deepEqual(blueBlueprint(document).dependsOn, [])
     assert.deepEqual(
-      document.locals.find((item) => item.color === 'crimson').dependsOn,
+      document.blueprints.find((item) => item.color === 'crimson').dependsOn,
       ['blue', 'coral'],
     )
   } finally {
@@ -289,7 +293,7 @@ test('save keeps notes even when those files are not on disk', () => {
       global: { notes },
     })
     const document = JSON.parse(fs.readFileSync(saved.path, 'utf8'))
-    assert.deepEqual(document.global.notes, notes)
+    assert.deepEqual(blueBlueprint(document).notes, notes)
   } finally {
     env.cleanup()
   }
@@ -451,8 +455,59 @@ test('reads legacy block and island keys', () => {
       userCreatedIslands: [globalFolder],
     },
   })
-  assert.deepEqual(parsed.global.files, [globalFile])
-  assert.deepEqual(parsed.global.folders, [globalFolder])
+  assert.deepEqual(blueBlueprint(parsed).files, [globalFile])
+  assert.deepEqual(blueBlueprint(parsed).folders, [globalFolder])
+})
+
+test('saved documents list blueprints without a global layer', () => {
+  const env = fixture()
+  try {
+    const saved = saveBlueprintDocument(env.targetRoot, {
+      name: 'shape',
+      blueprints: [
+        { color: 'blue', files: [globalFile] },
+        { color: 'coral', files: [coralFile] },
+        { color: 'amber', hidden: true },
+      ],
+    })
+    const document = JSON.parse(fs.readFileSync(saved.path, 'utf8'))
+    assert.equal('global' in document, false)
+    assert.equal('locals' in document, false)
+    assert.deepEqual(
+      document.blueprints.map((item) => item.color),
+      ['blue', 'coral'],
+    )
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('loads legacy global and locals documents', () => {
+  const env = fixture()
+  try {
+    ensureSessionPool(env.dataDir)
+    const legacy = {
+      version: 1,
+      kind: 'inbase-blueprint',
+      name: 'legacy-shape',
+      global: { files: [globalFile] },
+      locals: [{ color: 'coral', files: [coralFile] }],
+    }
+    const parsed = parseBlueprintDocument(legacy)
+    assert.equal('global' in parsed, false)
+    assert.deepEqual(blueBlueprint(parsed).files, [globalFile])
+    const loaded = applyBlueprintDocument(env.dataDir, legacy)
+    assert.deepEqual(loaded.global.files, [globalFile])
+    assert.deepEqual(readBlueprintByColor(env.dataDir, 'coral').files, [coralFile])
+
+    const withBlue = parseBlueprintDocument({
+      ...legacy,
+      locals: [{ color: 'blue', files: [coralFile] }],
+    })
+    assert.deepEqual(blueBlueprint(withBlue).files, [coralFile])
+  } finally {
+    env.cleanup()
+  }
 })
 
 test('applying a document clears colors that were not saved', () => {

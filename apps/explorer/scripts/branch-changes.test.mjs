@@ -243,6 +243,75 @@ test('a missing comparison branch falls back to last commit', () => {
   }
 })
 
+test('lists commits on the current branch and compares against one', () => {
+  const env = fixture()
+  try {
+    const first = runGit(env.repo, ['rev-parse', 'HEAD']).stdout.trim()
+    fs.writeFileSync(
+      path.join(env.targetRoot, 'src/a.ts'),
+      'export function greet() {\n  return 2\n}\n',
+    )
+    runGit(env.repo, ['add', 'src/a.ts'])
+    runGit(env.repo, ['commit', '-m', 'second change'])
+    const tip = runGit(env.repo, ['rev-parse', 'HEAD']).stdout.trim()
+    fs.writeFileSync(
+      path.join(env.targetRoot, 'src/Draft.ts'),
+      'export function Draft() {\n  return true\n}\n',
+    )
+
+    const current = readBranchChanges(env.targetRoot, ['src/a.ts', 'src/keep.ts'])
+    assert.equal(current.current, true)
+    assert.ok(current.commits.some((item) => item.sha === first && item.subject === 'base'))
+    assert.ok(!current.commits.some((item) => item.sha === tip))
+    assert.deepEqual(current.creates, ['src/Draft.ts'])
+    assert.deepEqual(current.files, [])
+
+    const short = current.commits.find((item) => item.sha === first)?.short
+    const against = readBranchChanges(env.targetRoot, ['src/a.ts', 'src/keep.ts'], short)
+    assert.equal(against.current, false)
+    assert.equal(against.base, first)
+    assert.equal(against.baseMissing, false)
+    assert.ok(against.commits.some((item) => item.sha === first))
+    assert.deepEqual(against.files, ['src/a.ts'])
+    assert.deepEqual(against.creates, ['src/Draft.ts'])
+
+    const tipCompare = readBranchChanges(env.targetRoot, ['src/a.ts'], tip)
+    assert.equal(tipCompare.current, true)
+    assert.equal(tipCompare.base, 'main')
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('keeps a selected commit that is older than the recent list', () => {
+  const env = fixture()
+  try {
+    const first = runGit(env.repo, ['rev-parse', 'HEAD']).stdout.trim()
+    for (let index = 0; index < 41; index += 1) {
+      fs.writeFileSync(
+        path.join(env.targetRoot, 'src/a.ts'),
+        `export function greet() {\n  return ${index + 2}\n}\n`,
+      )
+      runGit(env.repo, ['add', 'src/a.ts'])
+      runGit(env.repo, ['commit', '-m', `change ${index + 1}`])
+    }
+
+    const recent = readBranchChanges(env.targetRoot, ['src/a.ts'])
+    assert.equal(recent.commits.length, 40)
+    assert.ok(!recent.commits.some((item) => item.sha === first))
+
+    const against = readBranchChanges(env.targetRoot, ['src/a.ts'], first)
+    assert.equal(against.current, false)
+    assert.equal(against.base, first)
+    assert.equal(against.commits[0]?.sha, first)
+    assert.equal(against.commits[0]?.subject, 'base')
+    assert.equal(against.commits.length, 41)
+    assert.deepEqual(against.files, ['src/a.ts'])
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('selecting the current branch is last commit', () => {
   const env = fixture()
   try {

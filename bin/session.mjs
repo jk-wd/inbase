@@ -220,12 +220,17 @@ async function readVisibleChanges(store, config) {
       context?.branchChangesBase,
     )
     if (branch.available) {
+      const commit = Array.isArray(branch.commits)
+        ? branch.commits.find((item) => item?.sha === branch.base)
+        : null
       const vs =
         branch.current && branch.branch
           ? ` (${branch.branch} vs last commit)`
-          : branch.branch && branch.base
-            ? ` (${branch.branch} vs ${branch.base})`
-            : ''
+          : commit && branch.branch
+            ? ` (${branch.branch} vs ${commit.short})`
+            : branch.branch && branch.base
+              ? ` (${branch.branch} vs ${branch.base})`
+              : ''
       return {
         kind: 'diff',
         question: 'What has changed in this diff?',
@@ -603,10 +608,10 @@ export async function finishWorkflow(args) {
   const { store, config } = await loadExplorer()
   requireVisualizer(store, config)
   const sessionId = resolveCliSessionId(store, config.dataDir, args, 'finish')
-  store.completeSession(config.dataDir, sessionId, config.targetRoot)
-  printAck('finished', 'session completed')
+  store.finishSession(config.dataDir, sessionId, config.targetRoot)
+  printAck('finished', 'session finished')
   console.log(
-    `VISUAL_CODER_FINISHED Session ${sessionId} is finished. Applied files were kept. The blueprint stayed. The color slot is free. Do not restore or revert project files. Do not attach again in this conversation.`,
+    `VISUAL_CODER_FINISHED Session ${sessionId} is finished. Applied files were kept. The blueprint stayed. The session window stays until the user clicks Done. Do not restore or revert project files. Do not attach again in this conversation.`,
   )
 }
 
@@ -675,7 +680,7 @@ export async function proposePatch(args) {
   }
 
   console.log(
-    `VISUAL_CODER_STEP_READY Recorded the current map overlay as ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${overlay.files.length} changed, ${overlay.creates.length} added. That was the last plan step. MUST inbase finish --session ${sessionId}. That marks the session finished, keeps applied files and the blueprint, and frees the color. Then stop. A change request before finish must report-plan with the new remaining steps first — that replaces this proposal from step ${entry.step}. Do not edit files before report-plan.`,
+    `VISUAL_CODER_STEP_READY Recorded the current map overlay as ${entry.id} for session ${sessionId}, step ${entry.step}/${manifest.steps.length}: ${overlay.files.length} changed, ${overlay.creates.length} added. That was the last plan step. MUST inbase finish --session ${sessionId}. That marks the session finished and keeps applied files and the blueprint. The user clicks Done in the session window to clear it. Then stop. A change request before finish must report-plan with the new remaining steps first — that replaces this proposal from step ${entry.step}. Do not edit files before report-plan.`,
   )
 }
 

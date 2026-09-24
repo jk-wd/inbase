@@ -38,8 +38,8 @@ Skip it for git, lockfiles, `.inbase`, `.cursor`, `.claude`, `.agents`,
 unconnected slot), a color command, or `/connect` (first enabled blueprint).
 A regular chat does **not** connect. The session window **Done** button keeps
 applied files and frees the color; it does not come through this chat. After
-the last recorded step, MUST `npx inbase finish --session <color>` instead of
-waiting for Done.
+the last recorded step, MUST `npx inbase finish --session <color>` to mark the
+session finished. Do not wait for Done. Done is how the user clears the window.
 
 ## Commands
 
@@ -118,10 +118,10 @@ Look at this color's blueprint and plan sequential steps (`1`, `2`, `3`). Nested
 Do not batch all plan steps into one edit pass. A non-last `propose-patch`
 invokes the next step — implement that next step only, then `propose-patch`
 again, in the **same turn**. Do not stop. Do not ask the user to review a mid-plan step.
-After the last recorded step, MUST `npx inbase finish --session <color>`. That
-marks the session finished, keeps applied files and the blueprint, and frees
-the color. Then **stop**. A change request before finish must `report-plan`
-first.
+After the last recorded step, MUST `npx inbase finish --session <color>`.
+That marks the session finished and keeps applied files and the blueprint. The
+user clicks Done in the session window to clear it. Then **stop**. A change
+request before finish must `report-plan` first.
 
 ```bash
 npx inbase propose-patch --session <color> \
@@ -275,7 +275,8 @@ npx inbase read-blueprint --session <color>
 
 10. **After the last recorded step**: do not edit further. MUST
     `npx inbase finish --session <color>`. That marks the session finished,
-    keeps applied files and the blueprint, and frees the color. Then **stop**.
+    keeps applied files and the blueprint, and leaves the window until the user
+    clicks Done. Then **stop**.
 
 ## Do not
 

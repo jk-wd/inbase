@@ -52,7 +52,7 @@ When the user invoked \`/inbase\`, a color command, or \`/connect\`, in this ord
    record once. If the next step is invoked, implement that step only, then
    propose-patch again. After the last recorded step, MUST run
    \`npx inbase finish --session COLOR\`. That marks the session finished, keeps
-   the files and the blueprint, and frees the color.
+   the files and the blueprint, and leaves the window until the user clicks Done.
 
 If this chat already printed \`VISUAL_CODER_SESSION\`, skip attach. Stay in
 that session. After the last recorded step, run \`npx inbase finish --session COLOR\`.

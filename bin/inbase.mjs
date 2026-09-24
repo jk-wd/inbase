@@ -376,6 +376,12 @@ export async function main(argv = process.argv.slice(2)) {
     )
     process.exit(1)
   }
+  if (command === 'report-usage') {
+    console.error(
+      'report-usage was removed. Run: npx inbase finish --session <color>',
+    )
+    process.exit(1)
+  }
   if (command === 'finish') {
     await finishWorkflow(args)
     return

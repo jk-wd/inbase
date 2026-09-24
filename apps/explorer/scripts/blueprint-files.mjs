@@ -245,14 +245,51 @@ function localLayer(value) {
   }
 }
 
+function documentBlueprints(input) {
+  const raw = Array.isArray(input.blueprints)
+    ? input.blueprints
+    : Array.isArray(input.locals)
+      ? input.locals
+      : []
+  const blueprints = raw.map(localLayer).filter(Boolean)
+  const defaultColor = SESSION_COLORS[0]
+  if (
+    input.global != null &&
+    defaultColor &&
+    !blueprints.some((item) => item.color === defaultColor.id)
+  ) {
+    blueprints.unshift(
+      localLayer({
+        ...input.global,
+        color: defaultColor.id,
+        colorName: defaultColor.name,
+        colorHex: defaultColor.hex,
+      }),
+    )
+  }
+  return blueprints.filter(hasContent)
+}
+
+const CONTENT_KEYS = [
+  'files',
+  'folders',
+  'addedFunctions',
+  'addedVariables',
+  'addedImports',
+  'notes',
+  'pointers',
+  'dependsOn',
+]
+
+function hasContent(blueprint) {
+  return CONTENT_KEYS.some((key) => blueprint[key].length > 0)
+}
+
 export function serializeBlueprintDocument(input = {}) {
   const name =
     typeof input.name === 'string' && input.name.trim()
       ? input.name.trim()
       : 'Blueprint'
-  const locals = Array.isArray(input.locals)
-    ? input.locals.map(localLayer).filter(Boolean)
-    : []
   return {
     version: BLUEPRINT_DOCUMENT_VERSION,
     kind: BLUEPRINT_DOCUMENT_KIND,
@@ -261,8 +298,7 @@ export function serializeBlueprintDocument(input = {}) {
       typeof input.savedAt === 'string' && input.savedAt
         ? input.savedAt
         : new Date().toISOString(),
-    global: layerFields(input.global, SESSION_COLORS[0]?.id),
-    locals,
+    blueprints: documentBlueprints(input),
   }
 }
 
@@ -279,23 +315,25 @@ export function parseBlueprintDocument(value) {
   ) {
     throw new Error(`Unsupported blueprint version ${value.version}`)
   }
-  const document = serializeBlueprintDocument({
-    name: value.name,
-    savedAt: value.savedAt,
-    global: value.global ?? value,
-    locals: value.locals,
-  })
+  const flatLayer =
+    value.files != null ||
+    value.folders != null ||
+    value.userCreatedBlocks != null ||
+    value.userCreatedIslands != null
   if (
     value.kind == null &&
+    value.blueprints == null &&
     value.global == null &&
-    value.files == null &&
-    value.folders == null &&
-    value.userCreatedBlocks == null &&
-    value.userCreatedIslands == null
+    !flatLayer
   ) {
     throw new Error('Not a blueprint file')
   }
-  return document
+  return serializeBlueprintDocument({
+    name: value.name,
+    savedAt: value.savedAt,
+    blueprints: value.blueprints ?? value.locals,
+    global: value.global ?? (flatLayer ? value : null),
+  })
 }
 
 function readJsonFile(filePath) {
@@ -389,11 +427,8 @@ export function applyBlueprintDocument(dataDir, document, options = {}) {
     ...codebaseFileIds(dataDir),
     ...(Array.isArray(options.existingFileIds) ? options.existingFileIds : []),
   ]
-  const byColor = new Map(parsed.locals.map((local) => [local.color, local]))
+  const byColor = new Map(parsed.blueprints.map((local) => [local.color, local]))
   const defaultColor = SESSION_COLORS[0]
-  if (defaultColor && !byColor.has(defaultColor.id)) {
-    byColor.set(defaultColor.id, parsed.global)
-  }
   const localBlueprints = []
   for (const color of SESSION_COLORS) {
     const local = byColor.get(color.id)

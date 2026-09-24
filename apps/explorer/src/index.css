@@ -943,7 +943,7 @@ button {
   position: fixed;
   z-index: 100;
   display: flex;
-  width: min(260px, calc(100vw - 40px));
+  width: min(340px, calc(100vw - 40px));
   max-height: 280px;
   flex-direction: column;
   gap: 8px;

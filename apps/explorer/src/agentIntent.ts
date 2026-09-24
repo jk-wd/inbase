@@ -175,6 +175,28 @@ function normalizeChain(value: unknown): DiffChainEntry[] {
   })
 }
 
+export function cloneIntentForHistory(intent: AgentIntent): AgentIntent {
+  const clone = structuredClone(intent)
+  if (clone.planTimerStartedAt && !clone.planTimerStoppedAt) {
+    clone.planTimerStoppedAt = new Date().toISOString()
+  }
+  return clone
+}
+
+export function historyIntentView(
+  clone: AgentIntent,
+  diffId: string | null,
+  live: AgentIntent,
+): AgentIntent {
+  return {
+    ...pinIntentToDiff(clone, diffId, false),
+    working: live.working,
+    llmIdle: live.llmIdle,
+    awaitingAttach: live.awaitingAttach,
+    listening: live.listening,
+  }
+}
+
 export function pinIntentToDiff(
   intent: AgentIntent,
   diffId: string | null,
@@ -192,18 +214,27 @@ export function pinIntentToDiff(
     }
   }
   const entry = intent.chain.find((item) => item.id === diffId)
-  if (!entry) return intent
+  if (!entry) {
+    return {
+      ...intent,
+      liveStep,
+      isActiveDiff: false,
+      working: false,
+      stalledWait: false,
+    }
+  }
   return {
     ...intent,
     liveStep,
     diffId: entry.id,
     chainIndex: entry.index,
     isActiveDiff: false,
+    working: false,
+    stalledWait: false,
     step: entry.step,
     reason: entry.title,
-    status: intent.working
-      ? intent.status
-      : entry.status === 'applied'
+    status:
+      entry.status === 'applied'
         ? 'approved'
         : entry.status === 'pending'
           ? 'pending'

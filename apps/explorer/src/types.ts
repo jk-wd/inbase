@@ -107,12 +107,19 @@ export type BranchRef = {
   remote: boolean
 }
 
+export type BranchCommit = {
+  sha: string
+  short: string
+  subject: string
+}
+
 export type BranchChanges = {
   available: boolean
   branch: string | null
   base: string | null
   current: boolean
   branches: BranchRef[]
+  commits: BranchCommit[]
   baseMissing: boolean
   files: string[]
   creates: string[]

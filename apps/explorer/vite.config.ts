@@ -446,6 +446,7 @@ async function decideBlueprints(req: IncomingMessage, res: ServerResponse) {
       directory?: string
       filePath?: string
       document?: unknown
+      blueprints?: unknown
       global?: unknown
       locals?: unknown
     }
@@ -454,8 +455,8 @@ async function decideBlueprints(req: IncomingMessage, res: ServerResponse) {
         name: body.name,
         directory: body.directory,
         filePath: body.filePath,
+        blueprints: body.blueprints ?? body.locals,
         global: body.global,
-        locals: body.locals,
       })
       sendJson(res, 200, saved)
       return

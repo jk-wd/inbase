@@ -3,166 +3,170 @@
   "kind": "inbase-blueprint",
   "name": "pomodoro",
   "savedAt": "2026-09-20T06:00:00.000Z",
-  "global": {
-    "hidden": false,
-    "files": [
-      {
-        "id": "src/pomodoro/types.ts",
-        "name": "types.ts",
-        "path": "src/pomodoro/types.ts",
-        "folder": "src/pomodoro"
-      },
-      {
-        "id": "src/pomodoro/usePomodoro.ts",
-        "name": "usePomodoro.ts",
-        "path": "src/pomodoro/usePomodoro.ts",
-        "folder": "src/pomodoro"
-      },
-      {
-        "id": "src/pomodoro/Display.tsx",
-        "name": "Display.tsx",
-        "path": "src/pomodoro/Display.tsx",
-        "folder": "src/pomodoro"
-      },
-      {
-        "id": "src/pomodoro/Controls.tsx",
-        "name": "Controls.tsx",
-        "path": "src/pomodoro/Controls.tsx",
-        "folder": "src/pomodoro"
-      },
-      {
-        "id": "src/pomodoro/Pomodoro.tsx",
-        "name": "Pomodoro.tsx",
-        "path": "src/pomodoro/Pomodoro.tsx",
-        "folder": "src/pomodoro"
-      }
-    ],
-    "folders": [
-      {
-        "id": "src/pomodoro",
-        "name": "pomodoro",
-        "path": "src/pomodoro",
-        "parent": "src"
-      }
-    ],
-    "addedFunctions": [
-      {
-        "name": "formatTime",
-        "file": "src/pomodoro/types.ts"
-      },
-      {
-        "name": "usePomodoro",
-        "file": "src/pomodoro/usePomodoro.ts"
-      },
-      {
-        "name": "Display",
-        "file": "src/pomodoro/Display.tsx"
-      },
-      {
-        "name": "Controls",
-        "file": "src/pomodoro/Controls.tsx"
-      },
-      {
-        "name": "Pomodoro",
-        "file": "src/pomodoro/Pomodoro.tsx"
-      }
-    ],
-    "addedVariables": [
-      {
-        "name": "WORK_SECONDS",
-        "file": "src/pomodoro/types.ts"
-      },
-      {
-        "name": "BREAK_SECONDS",
-        "file": "src/pomodoro/types.ts"
-      }
-    ],
-    "addedImports": [
-      {
-        "name": "Phase",
-        "from": "src/pomodoro/types.ts",
-        "file": "src/pomodoro/usePomodoro.ts"
-      },
-      {
-        "name": "WORK_SECONDS",
-        "from": "src/pomodoro/types.ts",
-        "file": "src/pomodoro/usePomodoro.ts"
-      },
-      {
-        "name": "BREAK_SECONDS",
-        "from": "src/pomodoro/types.ts",
-        "file": "src/pomodoro/usePomodoro.ts"
-      },
-      {
-        "name": "formatTime",
-        "from": "src/pomodoro/types.ts",
-        "file": "src/pomodoro/Display.tsx"
-      },
-      {
-        "name": "Display",
-        "from": "src/pomodoro/Display.tsx",
-        "file": "src/pomodoro/Pomodoro.tsx"
-      },
-      {
-        "name": "Controls",
-        "from": "src/pomodoro/Controls.tsx",
-        "file": "src/pomodoro/Pomodoro.tsx"
-      },
-      {
-        "name": "usePomodoro",
-        "from": "src/pomodoro/usePomodoro.ts",
-        "file": "src/pomodoro/Pomodoro.tsx"
-      },
-      {
-        "name": "Pomodoro",
-        "from": "src/pomodoro/Pomodoro.tsx",
-        "file": "src/App.tsx"
-      }
-    ],
-    "notes": [
-      {
-        "file": "src/pomodoro",
-        "kind": "folder",
-        "note": "25/5 pomodoro timer. Plain React, no extra packages."
-      },
-      {
-        "file": "src/pomodoro/types.ts",
-        "kind": "file",
-        "note": "Export Phase \"work\" | \"break\", WORK_SECONDS = 25 * 60, BREAK_SECONDS = 5 * 60, and formatTime(seconds)."
-      },
-      {
-        "file": "src/pomodoro/usePomodoro.ts",
-        "kind": "file",
-        "note": "Hook: remaining seconds, phase, running. start, pause, reset. Tick with setInterval."
-      },
-      {
-        "file": "src/pomodoro/Display.tsx",
-        "kind": "file",
-        "note": "Show mm:ss and the current phase. Props only."
-      },
-      {
-        "file": "src/pomodoro/Controls.tsx",
-        "kind": "file",
-        "note": "Start, pause, and reset buttons. Props only. Independent of Display."
-      },
-      {
-        "file": "src/pomodoro/Pomodoro.tsx",
-        "kind": "file",
-        "note": "Wire usePomodoro to Display and Controls."
-      },
-      {
-        "file": "src/App.tsx",
-        "kind": "file",
-        "note": "Import Pomodoro and render it under ColorGenerator. Keep the existing hello world."
-      }
-    ],
-    "pointers": [
-      {
-        "kind": "file",
-        "path": "src/App.tsx"
-      }
-    ],
-    "dependsOn": []
-  },
-  "locals": []
+  "blueprints": [
+    {
+      "color": "blue",
+      "colorName": "Blue",
+      "colorHex": "#38bdf8",
+      "hidden": false,
+      "files": [
+        {
+          "id": "src/pomodoro/types.ts",
+          "name": "types.ts",
+          "path": "src/pomodoro/types.ts",
+          "folder": "src/pomodoro"
+        },
+        {
+          "id": "src/pomodoro/usePomodoro.ts",
+          "name": "usePomodoro.ts",
+          "path": "src/pomodoro/usePomodoro.ts",
+          "folder": "src/pomodoro"
+        },
+        {
+          "id": "src/pomodoro/Display.tsx",
+          "name": "Display.tsx",
+          "path": "src/pomodoro/Display.tsx",
+          "folder": "src/pomodoro"
+        },
+        {
+          "id": "src/pomodoro/Controls.tsx",
+          "name": "Controls.tsx",
+          "path": "src/pomodoro/Controls.tsx",
+          "folder": "src/pomodoro"
+        },
+        {
+          "id": "src/pomodoro/Pomodoro.tsx",
+          "name": "Pomodoro.tsx",
+          "path": "src/pomodoro/Pomodoro.tsx",
+          "folder": "src/pomodoro"
+        }
+      ],
+      "folders": [
+        {
+          "id": "src/pomodoro",
+          "name": "pomodoro",
+          "path": "src/pomodoro",
+          "parent": "src"
+        }
+      ],
+      "addedFunctions": [
+        {
+          "name": "formatTime",
+          "file": "src/pomodoro/types.ts"
+        },
+        {
+          "name": "usePomodoro",
+          "file": "src/pomodoro/usePomodoro.ts"
+        },
+        {
+          "name": "Display",
+          "file": "src/pomodoro/Display.tsx"
+        },
+        {
+          "name": "Controls",
+          "file": "src/pomodoro/Controls.tsx"
+        },
+        {
+          "name": "Pomodoro",
+          "file": "src/pomodoro/Pomodoro.tsx"
+        }
+      ],
+      "addedVariables": [
+        {
+          "name": "WORK_SECONDS",
+          "file": "src/pomodoro/types.ts"
+        },
+        {
+          "name": "BREAK_SECONDS",
+          "file": "src/pomodoro/types.ts"
+        }
+      ],
+      "addedImports": [
+        {
+          "name": "Phase",
+          "from": "src/pomodoro/types.ts",
+          "file": "src/pomodoro/usePomodoro.ts"
+        },
+        {
+          "name": "WORK_SECONDS",
+          "from": "src/pomodoro/types.ts",
+          "file": "src/pomodoro/usePomodoro.ts"
+        },
+        {
+          "name": "BREAK_SECONDS",
+          "from": "src/pomodoro/types.ts",
+          "file": "src/pomodoro/usePomodoro.ts"
+        },
+        {
+          "name": "formatTime",
+          "from": "src/pomodoro/types.ts",
+          "file": "src/pomodoro/Display.tsx"
+        },
+        {
+          "name": "Display",
+          "from": "src/pomodoro/Display.tsx",
+          "file": "src/pomodoro/Pomodoro.tsx"
+        },
+        {
+          "name": "Controls",
+          "from": "src/pomodoro/Controls.tsx",
+          "file": "src/pomodoro/Pomodoro.tsx"
+        },
+        {
+          "name": "usePomodoro",
+          "from": "src/pomodoro/usePomodoro.ts",
+          "file": "src/pomodoro/Pomodoro.tsx"
+        },
+        {
+          "name": "Pomodoro",
+          "from": "src/pomodoro/Pomodoro.tsx",
+          "file": "src/App.tsx"
+        }
+      ],
+      "notes": [
+        {
+          "file": "src/pomodoro",
+          "kind": "folder",
+          "note": "25/5 pomodoro timer. Plain React, no extra packages."
+        },
+        {
+          "file": "src/pomodoro/types.ts",
+          "kind": "file",
+          "note": "Export Phase \"work\" | \"break\", WORK_SECONDS = 25 * 60, BREAK_SECONDS = 5 * 60, and formatTime(seconds)."
+        },
+        {
+          "file": "src/pomodoro/usePomodoro.ts",
+          "kind": "file",
+          "note": "Hook: remaining seconds, phase, running. start, pause, reset. Tick with setInterval."
+        },
+        {
+          "file": "src/pomodoro/Display.tsx",
+          "kind": "file",
+          "note": "Show mm:ss and the current phase. Props only."
+        },
+        {
+          "file": "src/pomodoro/Controls.tsx",
+          "kind": "file",
+          "note": "Start, pause, and reset buttons. Props only. Independent of Display."
+        },
+        {
+          "file": "src/pomodoro/Pomodoro.tsx",
+          "kind": "file",
+          "note": "Wire usePomodoro to Display and Controls."
+        },
+        {
+          "file": "src/App.tsx",
+          "kind": "file",
+          "note": "Import Pomodoro and render it under ColorGenerator. Keep the existing hello world."
+        }
+      ],
+      "pointers": [
+        {
+          "kind": "file",
+          "path": "src/App.tsx"
+        }
+      ],
+      "dependsOn": []
+    }
+  ]
 }

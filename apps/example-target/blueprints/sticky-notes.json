@@ -3,424 +3,428 @@
   "kind": "inbase-blueprint",
   "name": "sticky-notes",
   "savedAt": "2026-09-20T06:30:00.000Z",
-  "global": {
-    "hidden": false,
-    "files": [
-      {
-        "id": "src/notes/types.ts",
-        "name": "types.ts",
-        "path": "src/notes/types.ts",
-        "folder": "src/notes"
-      },
-      {
-        "id": "src/notes/constants.ts",
-        "name": "constants.ts",
-        "path": "src/notes/constants.ts",
-        "folder": "src/notes"
-      },
-      {
-        "id": "src/notes/utils/ids.ts",
-        "name": "ids.ts",
-        "path": "src/notes/utils/ids.ts",
-        "folder": "src/notes/utils"
-      },
-      {
-        "id": "src/notes/utils/storage.ts",
-        "name": "storage.ts",
-        "path": "src/notes/utils/storage.ts",
-        "folder": "src/notes/utils"
-      },
-      {
-        "id": "src/notes/utils/query.ts",
-        "name": "query.ts",
-        "path": "src/notes/utils/query.ts",
-        "folder": "src/notes/utils"
-      },
-      {
-        "id": "src/notes/store/notes.ts",
-        "name": "notes.ts",
-        "path": "src/notes/store/notes.ts",
-        "folder": "src/notes/store"
-      },
-      {
-        "id": "src/notes/components/EmptyState.tsx",
-        "name": "EmptyState.tsx",
-        "path": "src/notes/components/EmptyState.tsx",
-        "folder": "src/notes/components"
-      },
-      {
-        "id": "src/notes/components/ColorPicker.tsx",
-        "name": "ColorPicker.tsx",
-        "path": "src/notes/components/ColorPicker.tsx",
-        "folder": "src/notes/components"
-      },
-      {
-        "id": "src/notes/components/NoteCard.tsx",
-        "name": "NoteCard.tsx",
-        "path": "src/notes/components/NoteCard.tsx",
-        "folder": "src/notes/components"
-      },
-      {
-        "id": "src/notes/components/NoteForm.tsx",
-        "name": "NoteForm.tsx",
-        "path": "src/notes/components/NoteForm.tsx",
-        "folder": "src/notes/components"
-      },
-      {
-        "id": "src/notes/components/NoteSearch.tsx",
-        "name": "NoteSearch.tsx",
-        "path": "src/notes/components/NoteSearch.tsx",
-        "folder": "src/notes/components"
-      },
-      {
-        "id": "src/notes/components/NotesBoard.tsx",
-        "name": "NotesBoard.tsx",
-        "path": "src/notes/components/NotesBoard.tsx",
-        "folder": "src/notes/components"
-      },
-      {
-        "id": "src/notes/NotesApp.tsx",
-        "name": "NotesApp.tsx",
-        "path": "src/notes/NotesApp.tsx",
-        "folder": "src/notes"
-      }
-    ],
-    "folders": [
-      {
-        "id": "src/notes",
-        "name": "notes",
-        "path": "src/notes",
-        "parent": "src"
-      },
-      {
-        "id": "src/notes/utils",
-        "name": "utils",
-        "path": "src/notes/utils",
-        "parent": "src/notes"
-      },
-      {
-        "id": "src/notes/store",
-        "name": "store",
-        "path": "src/notes/store",
-        "parent": "src/notes"
-      },
-      {
-        "id": "src/notes/components",
-        "name": "components",
-        "path": "src/notes/components",
-        "parent": "src/notes"
-      }
-    ],
-    "addedFunctions": [
-      {
-        "name": "createNote",
-        "file": "src/notes/types.ts"
-      },
-      {
-        "name": "nextId",
-        "file": "src/notes/utils/ids.ts"
-      },
-      {
-        "name": "loadNotes",
-        "file": "src/notes/utils/storage.ts"
-      },
-      {
-        "name": "saveNotes",
-        "file": "src/notes/utils/storage.ts"
-      },
-      {
-        "name": "visibleNotes",
-        "file": "src/notes/utils/query.ts"
-      },
-      {
-        "name": "addNote",
-        "file": "src/notes/store/notes.ts"
-      },
-      {
-        "name": "updateNote",
-        "file": "src/notes/store/notes.ts"
-      },
-      {
-        "name": "removeNote",
-        "file": "src/notes/store/notes.ts"
-      },
-      {
-        "name": "togglePin",
-        "file": "src/notes/store/notes.ts"
-      },
-      {
-        "name": "setQuery",
-        "file": "src/notes/store/notes.ts"
-      },
-      {
-        "name": "EmptyState",
-        "file": "src/notes/components/EmptyState.tsx"
-      },
-      {
-        "name": "ColorPicker",
-        "file": "src/notes/components/ColorPicker.tsx"
-      },
-      {
-        "name": "NoteCard",
-        "file": "src/notes/components/NoteCard.tsx"
-      },
-      {
-        "name": "NoteForm",
-        "file": "src/notes/components/NoteForm.tsx"
-      },
-      {
-        "name": "NoteSearch",
-        "file": "src/notes/components/NoteSearch.tsx"
-      },
-      {
-        "name": "NotesBoard",
-        "file": "src/notes/components/NotesBoard.tsx"
-      },
-      {
-        "name": "NotesApp",
-        "file": "src/notes/NotesApp.tsx"
-      }
-    ],
-    "addedVariables": [
-      {
-        "name": "NOTE_COLORS",
-        "file": "src/notes/constants.ts"
-      },
-      {
-        "name": "notes",
-        "file": "src/notes/store/notes.ts"
-      },
-      {
-        "name": "query",
-        "file": "src/notes/store/notes.ts"
-      }
-    ],
-    "addedImports": [
-      {
-        "name": "Note",
-        "from": "src/notes/types.ts",
-        "file": "src/notes/utils/storage.ts"
-      },
-      {
-        "name": "Note",
-        "from": "src/notes/types.ts",
-        "file": "src/notes/utils/query.ts"
-      },
-      {
-        "name": "Note",
-        "from": "src/notes/types.ts",
-        "file": "src/notes/store/notes.ts"
-      },
-      {
-        "name": "createNote",
-        "from": "src/notes/types.ts",
-        "file": "src/notes/store/notes.ts"
-      },
-      {
-        "name": "nextId",
-        "from": "src/notes/utils/ids.ts",
-        "file": "src/notes/store/notes.ts"
-      },
-      {
-        "name": "loadNotes",
-        "from": "src/notes/utils/storage.ts",
-        "file": "src/notes/store/notes.ts"
-      },
-      {
-        "name": "saveNotes",
-        "from": "src/notes/utils/storage.ts",
-        "file": "src/notes/store/notes.ts"
-      },
-      {
-        "name": "NOTE_COLORS",
-        "from": "src/notes/constants.ts",
-        "file": "src/notes/components/ColorPicker.tsx"
-      },
-      {
-        "name": "Note",
-        "from": "src/notes/types.ts",
-        "file": "src/notes/components/NoteCard.tsx"
-      },
-      {
-        "name": "ColorPicker",
-        "from": "src/notes/components/ColorPicker.tsx",
-        "file": "src/notes/components/NoteCard.tsx"
-      },
-      {
-        "name": "updateNote",
-        "from": "src/notes/store/notes.ts",
-        "file": "src/notes/components/NoteCard.tsx"
-      },
-      {
-        "name": "removeNote",
-        "from": "src/notes/store/notes.ts",
-        "file": "src/notes/components/NoteCard.tsx"
-      },
-      {
-        "name": "togglePin",
-        "from": "src/notes/store/notes.ts",
-        "file": "src/notes/components/NoteCard.tsx"
-      },
-      {
-        "name": "addNote",
-        "from": "src/notes/store/notes.ts",
-        "file": "src/notes/components/NoteForm.tsx"
-      },
-      {
-        "name": "ColorPicker",
-        "from": "src/notes/components/ColorPicker.tsx",
-        "file": "src/notes/components/NoteForm.tsx"
-      },
-      {
-        "name": "query",
-        "from": "src/notes/store/notes.ts",
-        "file": "src/notes/components/NoteSearch.tsx"
-      },
-      {
-        "name": "setQuery",
-        "from": "src/notes/store/notes.ts",
-        "file": "src/notes/components/NoteSearch.tsx"
-      },
-      {
-        "name": "notes",
-        "from": "src/notes/store/notes.ts",
-        "file": "src/notes/components/NotesBoard.tsx"
-      },
-      {
-        "name": "query",
-        "from": "src/notes/store/notes.ts",
-        "file": "src/notes/components/NotesBoard.tsx"
-      },
-      {
-        "name": "visibleNotes",
-        "from": "src/notes/utils/query.ts",
-        "file": "src/notes/components/NotesBoard.tsx"
-      },
-      {
-        "name": "NoteCard",
-        "from": "src/notes/components/NoteCard.tsx",
-        "file": "src/notes/components/NotesBoard.tsx"
-      },
-      {
-        "name": "EmptyState",
-        "from": "src/notes/components/EmptyState.tsx",
-        "file": "src/notes/components/NotesBoard.tsx"
-      },
-      {
-        "name": "loadNotes",
-        "from": "src/notes/utils/storage.ts",
-        "file": "src/notes/NotesApp.tsx"
-      },
-      {
-        "name": "notes",
-        "from": "src/notes/store/notes.ts",
-        "file": "src/notes/NotesApp.tsx"
-      },
-      {
-        "name": "NoteForm",
-        "from": "src/notes/components/NoteForm.tsx",
-        "file": "src/notes/NotesApp.tsx"
-      },
-      {
-        "name": "NoteSearch",
-        "from": "src/notes/components/NoteSearch.tsx",
-        "file": "src/notes/NotesApp.tsx"
-      },
-      {
-        "name": "NotesBoard",
-        "from": "src/notes/components/NotesBoard.tsx",
-        "file": "src/notes/NotesApp.tsx"
-      },
-      {
-        "name": "NotesApp",
-        "from": "src/notes/NotesApp.tsx",
-        "file": "src/App.tsx"
-      }
-    ],
-    "notes": [
-      {
-        "file": "src/notes",
-        "kind": "folder",
-        "note": "Sticky notes board with colors, edit, pin, search, and localStorage. Plain React, no extra packages. Keep each file small."
-      },
-      {
-        "file": "src/notes/types.ts",
-        "kind": "file",
-        "note": "Export Note { id, text, color, pinned, updatedAt }. Export createNote(text, color, id) with pinned false and updatedAt = Date.now()."
-      },
-      {
-        "file": "src/notes/constants.ts",
-        "kind": "file",
-        "note": "Export NOTE_COLORS: a short pastel hex list (yellow, pink, mint, blue, peach). First color is the default for new notes."
-      },
-      {
-        "file": "src/notes/utils/ids.ts",
-        "kind": "file",
-        "note": "Export nextId() returning a unique string. No React."
-      },
-      {
-        "file": "src/notes/utils/storage.ts",
-        "kind": "file",
-        "note": "loadNotes() / saveNotes(notes) using localStorage key \"example-notes\". No React."
-      },
-      {
-        "file": "src/notes/utils/query.ts",
-        "kind": "file",
-        "note": "visibleNotes(notes, query) filters by case-insensitive text match, then pinned notes first, then newest updatedAt. No React."
-      },
-      {
-        "file": "src/notes/store/notes.ts",
-        "kind": "file",
-        "note": "Module state: notes and query. addNote(text, color), updateNote(id, { text?, color? }), removeNote(id), togglePin(id), setQuery(text). Persist with storage after each notes change. No React."
-      },
-      {
-        "file": "src/notes/components/EmptyState.tsx",
-        "kind": "file",
-        "note": "Simple empty-board message. Accept an optional query so search-miss copy can differ. No store imports."
-      },
-      {
-        "file": "src/notes/components/ColorPicker.tsx",
-        "kind": "file",
-        "note": "Row of NOTE_COLORS swatches. Props: value and onChange. Independent of the store."
-      },
-      {
-        "file": "src/notes/components/NoteCard.tsx",
-        "kind": "file",
-        "note": "One note: colored card, inline text edit, ColorPicker, pin, delete. Calls updateNote, togglePin, removeNote."
-      },
-      {
-        "file": "src/notes/components/NoteForm.tsx",
-        "kind": "file",
-        "note": "Textarea, ColorPicker, and Add note. Calls addNote. Independent of the board."
-      },
-      {
-        "file": "src/notes/components/NoteSearch.tsx",
-        "kind": "file",
-        "note": "Search input bound to query / setQuery. Independent of the form."
-      },
-      {
-        "file": "src/notes/components/NotesBoard.tsx",
-        "kind": "file",
-        "note": "Read notes and query from the store. Map NoteCard from visibleNotes. Show EmptyState when that list is empty."
-      },
-      {
-        "file": "src/notes/NotesApp.tsx",
-        "kind": "file",
-        "note": "Shell that loads storage once, then renders form, search, and board."
-      },
-      {
-        "file": "src/App.tsx",
-        "kind": "file",
-        "note": "Import NotesApp and render it under ColorGenerator. Keep the existing hello world."
-      }
-    ],
-    "pointers": [
-      {
-        "kind": "file",
-        "path": "src/App.tsx"
-      }
-    ],
-    "dependsOn": []
-  },
-  "locals": []
+  "blueprints": [
+    {
+      "color": "blue",
+      "colorName": "Blue",
+      "colorHex": "#38bdf8",
+      "hidden": false,
+      "files": [
+        {
+          "id": "src/notes/types.ts",
+          "name": "types.ts",
+          "path": "src/notes/types.ts",
+          "folder": "src/notes"
+        },
+        {
+          "id": "src/notes/constants.ts",
+          "name": "constants.ts",
+          "path": "src/notes/constants.ts",
+          "folder": "src/notes"
+        },
+        {
+          "id": "src/notes/utils/ids.ts",
+          "name": "ids.ts",
+          "path": "src/notes/utils/ids.ts",
+          "folder": "src/notes/utils"
+        },
+        {
+          "id": "src/notes/utils/storage.ts",
+          "name": "storage.ts",
+          "path": "src/notes/utils/storage.ts",
+          "folder": "src/notes/utils"
+        },
+        {
+          "id": "src/notes/utils/query.ts",
+          "name": "query.ts",
+          "path": "src/notes/utils/query.ts",
+          "folder": "src/notes/utils"
+        },
+        {
+          "id": "src/notes/store/notes.ts",
+          "name": "notes.ts",
+          "path": "src/notes/store/notes.ts",
+          "folder": "src/notes/store"
+        },
+        {
+          "id": "src/notes/components/EmptyState.tsx",
+          "name": "EmptyState.tsx",
+          "path": "src/notes/components/EmptyState.tsx",
+          "folder": "src/notes/components"
+        },
+        {
+          "id": "src/notes/components/ColorPicker.tsx",
+          "name": "ColorPicker.tsx",
+          "path": "src/notes/components/ColorPicker.tsx",
+          "folder": "src/notes/components"
+        },
+        {
+          "id": "src/notes/components/NoteCard.tsx",
+          "name": "NoteCard.tsx",
+          "path": "src/notes/components/NoteCard.tsx",
+          "folder": "src/notes/components"
+        },
+        {
+          "id": "src/notes/components/NoteForm.tsx",
+          "name": "NoteForm.tsx",
+          "path": "src/notes/components/NoteForm.tsx",
+          "folder": "src/notes/components"
+        },
+        {
+          "id": "src/notes/components/NoteSearch.tsx",
+          "name": "NoteSearch.tsx",
+          "path": "src/notes/components/NoteSearch.tsx",
+          "folder": "src/notes/components"
+        },
+        {
+          "id": "src/notes/components/NotesBoard.tsx",
+          "name": "NotesBoard.tsx",
+          "path": "src/notes/components/NotesBoard.tsx",
+          "folder": "src/notes/components"
+        },
+        {
+          "id": "src/notes/NotesApp.tsx",
+          "name": "NotesApp.tsx",
+          "path": "src/notes/NotesApp.tsx",
+          "folder": "src/notes"
+        }
+      ],
+      "folders": [
+        {
+          "id": "src/notes",
+          "name": "notes",
+          "path": "src/notes",
+          "parent": "src"
+        },
+        {
+          "id": "src/notes/utils",
+          "name": "utils",
+          "path": "src/notes/utils",
+          "parent": "src/notes"
+        },
+        {
+          "id": "src/notes/store",
+          "name": "store",
+          "path": "src/notes/store",
+          "parent": "src/notes"
+        },
+        {
+          "id": "src/notes/components",
+          "name": "components",
+          "path": "src/notes/components",
+          "parent": "src/notes"
+        }
+      ],
+      "addedFunctions": [
+        {
+          "name": "createNote",
+          "file": "src/notes/types.ts"
+        },
+        {
+          "name": "nextId",
+          "file": "src/notes/utils/ids.ts"
+        },
+        {
+          "name": "loadNotes",
+          "file": "src/notes/utils/storage.ts"
+        },
+        {
+          "name": "saveNotes",
+          "file": "src/notes/utils/storage.ts"
+        },
+        {
+          "name": "visibleNotes",
+          "file": "src/notes/utils/query.ts"
+        },
+        {
+          "name": "addNote",
+          "file": "src/notes/store/notes.ts"
+        },
+        {
+          "name": "updateNote",
+          "file": "src/notes/store/notes.ts"
+        },
+        {
+          "name": "removeNote",
+          "file": "src/notes/store/notes.ts"
+        },
+        {
+          "name": "togglePin",
+          "file": "src/notes/store/notes.ts"
+        },
+        {
+          "name": "setQuery",
+          "file": "src/notes/store/notes.ts"
+        },
+        {
+          "name": "EmptyState",
+          "file": "src/notes/components/EmptyState.tsx"
+        },
+        {
+          "name": "ColorPicker",
+          "file": "src/notes/components/ColorPicker.tsx"
+        },
+        {
+          "name": "NoteCard",
+          "file": "src/notes/components/NoteCard.tsx"
+        },
+        {
+          "name": "NoteForm",
+          "file": "src/notes/components/NoteForm.tsx"
+        },
+        {
+          "name": "NoteSearch",
+          "file": "src/notes/components/NoteSearch.tsx"
+        },
+        {
+          "name": "NotesBoard",
+          "file": "src/notes/components/NotesBoard.tsx"
+        },
+        {
+          "name": "NotesApp",
+          "file": "src/notes/NotesApp.tsx"
+        }
+      ],
+      "addedVariables": [
+        {
+          "name": "NOTE_COLORS",
+          "file": "src/notes/constants.ts"
+        },
+        {
+          "name": "notes",
+          "file": "src/notes/store/notes.ts"
+        },
+        {
+          "name": "query",
+          "file": "src/notes/store/notes.ts"
+        }
+      ],
+      "addedImports": [
+        {
+          "name": "Note",
+          "from": "src/notes/types.ts",
+          "file": "src/notes/utils/storage.ts"
+        },
+        {
+          "name": "Note",
+          "from": "src/notes/types.ts",
+          "file": "src/notes/utils/query.ts"
+        },
+        {
+          "name": "Note",
+          "from": "src/notes/types.ts",
+          "file": "src/notes/store/notes.ts"
+        },
+        {
+          "name": "createNote",
+          "from": "src/notes/types.ts",
+          "file": "src/notes/store/notes.ts"
+        },
+        {
+          "name": "nextId",
+          "from": "src/notes/utils/ids.ts",
+          "file": "src/notes/store/notes.ts"
+        },
+        {
+          "name": "loadNotes",
+          "from": "src/notes/utils/storage.ts",
+          "file": "src/notes/store/notes.ts"
+        },
+        {
+          "name": "saveNotes",
+          "from": "src/notes/utils/storage.ts",
+          "file": "src/notes/store/notes.ts"
+        },
+        {
+          "name": "NOTE_COLORS",
+          "from": "src/notes/constants.ts",
+          "file": "src/notes/components/ColorPicker.tsx"
+        },
+        {
+          "name": "Note",
+          "from": "src/notes/types.ts",
+          "file": "src/notes/components/NoteCard.tsx"
+        },
+        {
+          "name": "ColorPicker",
+          "from": "src/notes/components/ColorPicker.tsx",
+          "file": "src/notes/components/NoteCard.tsx"
+        },
+        {
+          "name": "updateNote",
+          "from": "src/notes/store/notes.ts",
+          "file": "src/notes/components/NoteCard.tsx"
+        },
+        {
+          "name": "removeNote",
+          "from": "src/notes/store/notes.ts",
+          "file": "src/notes/components/NoteCard.tsx"
+        },
+        {
+          "name": "togglePin",
+          "from": "src/notes/store/notes.ts",
+          "file": "src/notes/components/NoteCard.tsx"
+        },
+        {
+          "name": "addNote",
+          "from": "src/notes/store/notes.ts",
+          "file": "src/notes/components/NoteForm.tsx"
+        },
+        {
+          "name": "ColorPicker",
+          "from": "src/notes/components/ColorPicker.tsx",
+          "file": "src/notes/components/NoteForm.tsx"
+        },
+        {
+          "name": "query",
+          "from": "src/notes/store/notes.ts",
+          "file": "src/notes/components/NoteSearch.tsx"
+        },
+        {
+          "name": "setQuery",
+          "from": "src/notes/store/notes.ts",
+          "file": "src/notes/components/NoteSearch.tsx"
+        },
+        {
+          "name": "notes",
+          "from": "src/notes/store/notes.ts",
+          "file": "src/notes/components/NotesBoard.tsx"
+        },
+        {
+          "name": "query",
+          "from": "src/notes/store/notes.ts",
+          "file": "src/notes/components/NotesBoard.tsx"
+        },
+        {
+          "name": "visibleNotes",
+          "from": "src/notes/utils/query.ts",
+          "file": "src/notes/components/NotesBoard.tsx"
+        },
+        {
+          "name": "NoteCard",
+          "from": "src/notes/components/NoteCard.tsx",
+          "file": "src/notes/components/NotesBoard.tsx"
+        },
+        {
+          "name": "EmptyState",
+          "from": "src/notes/components/EmptyState.tsx",
+          "file": "src/notes/components/NotesBoard.tsx"
+        },
+        {
+          "name": "loadNotes",
+          "from": "src/notes/utils/storage.ts",
+          "file": "src/notes/NotesApp.tsx"
+        },
+        {
+          "name": "notes",
+          "from": "src/notes/store/notes.ts",
+          "file": "src/notes/NotesApp.tsx"
+        },
+        {
+          "name": "NoteForm",
+          "from": "src/notes/components/NoteForm.tsx",
+          "file": "src/notes/NotesApp.tsx"
+        },
+        {
+          "name": "NoteSearch",
+          "from": "src/notes/components/NoteSearch.tsx",
+          "file": "src/notes/NotesApp.tsx"
+        },
+        {
+          "name": "NotesBoard",
+          "from": "src/notes/components/NotesBoard.tsx",
+          "file": "src/notes/NotesApp.tsx"
+        },
+        {
+          "name": "NotesApp",
+          "from": "src/notes/NotesApp.tsx",
+          "file": "src/App.tsx"
+        }
+      ],
+      "notes": [
+        {
+          "file": "src/notes",
+          "kind": "folder",
+          "note": "Sticky notes board with colors, edit, pin, search, and localStorage. Plain React, no extra packages. Keep each file small."
+        },
+        {
+          "file": "src/notes/types.ts",
+          "kind": "file",
+          "note": "Export Note { id, text, color, pinned, updatedAt }. Export createNote(text, color, id) with pinned false and updatedAt = Date.now()."
+        },
+        {
+          "file": "src/notes/constants.ts",
+          "kind": "file",
+          "note": "Export NOTE_COLORS: a short pastel hex list (yellow, pink, mint, blue, peach). First color is the default for new notes."
+        },
+        {
+          "file": "src/notes/utils/ids.ts",
+          "kind": "file",
+          "note": "Export nextId() returning a unique string. No React."
+        },
+        {
+          "file": "src/notes/utils/storage.ts",
+          "kind": "file",
+          "note": "loadNotes() / saveNotes(notes) using localStorage key \"example-notes\". No React."
+        },
+        {
+          "file": "src/notes/utils/query.ts",
+          "kind": "file",
+          "note": "visibleNotes(notes, query) filters by case-insensitive text match, then pinned notes first, then newest updatedAt. No React."
+        },
+        {
+          "file": "src/notes/store/notes.ts",
+          "kind": "file",
+          "note": "Module state: notes and query. addNote(text, color), updateNote(id, { text?, color? }), removeNote(id), togglePin(id), setQuery(text). Persist with storage after each notes change. No React."
+        },
+        {
+          "file": "src/notes/components/EmptyState.tsx",
+          "kind": "file",
+          "note": "Simple empty-board message. Accept an optional query so search-miss copy can differ. No store imports."
+        },
+        {
+          "file": "src/notes/components/ColorPicker.tsx",
+          "kind": "file",
+          "note": "Row of NOTE_COLORS swatches. Props: value and onChange. Independent of the store."
+        },
+        {
+          "file": "src/notes/components/NoteCard.tsx",
+          "kind": "file",
+          "note": "One note: colored card, inline text edit, ColorPicker, pin, delete. Calls updateNote, togglePin, removeNote."
+        },
+        {
+          "file": "src/notes/components/NoteForm.tsx",
+          "kind": "file",
+          "note": "Textarea, ColorPicker, and Add note. Calls addNote. Independent of the board."
+        },
+        {
+          "file": "src/notes/components/NoteSearch.tsx",
+          "kind": "file",
+          "note": "Search input bound to query / setQuery. Independent of the form."
+        },
+        {
+          "file": "src/notes/components/NotesBoard.tsx",
+          "kind": "file",
+          "note": "Read notes and query from the store. Map NoteCard from visibleNotes. Show EmptyState when that list is empty."
+        },
+        {
+          "file": "src/notes/NotesApp.tsx",
+          "kind": "file",
+          "note": "Shell that loads storage once, then renders form, search, and board."
+        },
+        {
+          "file": "src/App.tsx",
+          "kind": "file",
+          "note": "Import NotesApp and render it under ColorGenerator. Keep the existing hello world."
+        }
+      ],
+      "pointers": [
+        {
+          "kind": "file",
+          "path": "src/App.tsx"
+        }
+      ],
+      "dependsOn": []
+    }
+  ]
 }

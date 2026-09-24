@@ -1948,10 +1948,15 @@ test('finish marks the session complete and keeps live files', async () => {
       env,
     })
     assert.equal(result.status, 0, result.stderr)
-    assert.match(result.stdout, /VISUAL_CODER_ACK finished: session completed/)
+    assert.match(result.stdout, /VISUAL_CODER_ACK finished: session finished/)
     assert.match(result.stdout, /VISUAL_CODER_FINISHED Session /)
     assert.match(result.stdout, /Applied files were kept/)
-    assert.equal(store.readManifest(dataDir, sessionId).awaitingAttach, true)
+    assert.match(result.stdout, /session window stays until the user clicks Done/)
+    const finished = store.readManifest(dataDir, sessionId)
+    assert.equal(finished.phase, 'finished')
+    assert.equal(finished.status, 'finished')
+    assert.equal(finished.awaitingAttach, false)
+    assert.equal(store.isChatLocked(dataDir, sessionId), true)
     assert.equal(
       fs.readFileSync(path.join(target, 'src/a.ts'), 'utf8'),
       'export const value = 9\n',
@@ -1965,7 +1970,7 @@ test('finish marks the session complete and keeps live files', async () => {
   }
 })
 
-test('go finishes the last proposal', async () => {
+test('go applies the last proposal without clearing the session', async () => {
   const { root, cleanup } = tempProject()
   const target = path.join(root, 'app')
   const dataDir = path.join(root, '.inbase')
@@ -1993,9 +1998,11 @@ test('go finishes the last proposal', async () => {
       cwd: root,
       env,
     })
-    assert.equal(result.status, 5, result.stderr)
-    assert.match(result.stdout, /VISUAL_CODER_FINISHED/)
-    assert.equal(store.readManifest(dataDir, 'go-last'), null)
+    assert.equal(result.status, 0, result.stderr)
+    assert.doesNotMatch(result.stdout, /VISUAL_CODER_FINISHED/)
+    const kept = store.readManifest(dataDir, 'go-last')
+    assert.equal(kept.phase, 'review')
+    assert.equal(kept.diffs.at(-1).status, 'applied')
     assert.equal(
       fs.readFileSync(path.join(target, 'src/a.ts'), 'utf8'),
       'export const value = 2\n',

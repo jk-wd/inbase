@@ -14,7 +14,6 @@ import {
   extractBlueprint,
 } from './extract-blueprint.mjs'
 import { parseBlueprintDocument } from '../apps/explorer/scripts/blueprint-files.mjs'
-import { SESSION_COLORS } from '../apps/explorer/scripts/session-store.mjs'
 import { buildScanGraph } from '../apps/explorer/scripts/scan-target.mjs'
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -181,12 +180,15 @@ test('extract-blueprint --write saves a curated document', async () => {
     assert.equal(fs.existsSync(savedPath), true)
     const document = parseBlueprintDocument(JSON.parse(fs.readFileSync(savedPath, 'utf8')))
     assert.equal(document.name, 'demo')
-    assert.deepEqual(document.global.files, [
+    assert.deepEqual(document.blueprints.find((item) => item.color === 'blue').files, [
       { id: 'App.tsx', name: 'App.tsx', path: 'App.tsx', folder: '.' },
     ])
-    assert.equal(document.global.addedFunctions[0].name, 'App')
-    assert.equal(document.global.notes[0].note.includes('data fetching'), true)
-    assert.equal(document.locals.length, SESSION_COLORS.length)
+    assert.equal(document.blueprints.find((item) => item.color === 'blue').addedFunctions[0].name, 'App')
+    assert.equal(document.blueprints.find((item) => item.color === 'blue').notes[0].note.includes('data fetching'), true)
+    assert.deepEqual(
+      document.blueprints.map((item) => item.color),
+      ['blue'],
+    )
   } finally {
     env.cleanup()
   }
@@ -205,12 +207,12 @@ test('writeExtractedBlueprint keeps only curated symbols', async () => {
       },
     })
     const document = parseBlueprintDocument(JSON.parse(fs.readFileSync(saved.path, 'utf8')))
-    assert.equal(document.global.files.length, 1)
-    assert.equal(document.global.addedFunctions.length, 0)
-    assert.deepEqual(document.global.addedVariables, [
+    assert.equal(document.blueprints.find((item) => item.color === 'blue').files.length, 1)
+    assert.equal(document.blueprints.find((item) => item.color === 'blue').addedFunctions.length, 0)
+    assert.deepEqual(document.blueprints.find((item) => item.color === 'blue').addedVariables, [
       { name: 'theme', file: 'src/theme.ts' },
     ])
-    assert.deepEqual(document.global.folders, [
+    assert.deepEqual(document.blueprints.find((item) => item.color === 'blue').folders, [
       { id: 'src', name: 'src', path: 'src', parent: '.' },
     ])
   } finally {

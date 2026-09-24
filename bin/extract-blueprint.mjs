@@ -307,14 +307,13 @@ export async function writeExtractedBlueprint({
 }) {
   const { saveBlueprintDocument } = await loadBlueprintFiles()
   const extracted = normalizeExtractLayer(layer)
-  const locals = emptyLocals().map((local) =>
+  const blueprints = emptyLocals().map((local) =>
     local.color === 'blue' ? { ...local, ...extracted } : local,
   )
   return saveBlueprintDocument(targetRoot, {
     name,
     filePath: outputPath,
-    global: extracted,
-    locals,
+    blueprints,
   })
 }
 

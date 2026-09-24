@@ -55,6 +55,7 @@ import {
   MAX_CONTEXT_FILE_BYTES,
   maybeStartVisualizerHandshake,
   stopSession,
+  finishSession,
   completeSession,
   touchSessionConnection,
   updateBlueprint,
@@ -1037,6 +1038,56 @@ test('completeSession keeps files and frees the color slot', () => {
   }
 })
 
+test('finishSession keeps the window until completeSession', () => {
+  const env = fixture()
+  try {
+    const created = ensureSessionPool(env.dataDir)
+    const sessionId = created[0].sessionId
+    const color = readManifest(env.dataDir, sessionId).color
+    attachSession(env.dataDir, sessionId)
+    reportPlan(env.dataDir, {
+      sessionId,
+      feature: 'Keep finished window',
+      stepTitles: ['Change value'],
+      targetRoot: env.targetRoot,
+    })
+    fs.writeFileSync(path.join(env.targetRoot, 'src/a.ts'), 'export const value = 2\n')
+    appendDiff(env.dataDir, env.targetRoot, { sessionId })
+
+    const finished = finishSession(env.dataDir, sessionId, env.targetRoot)
+    assert.equal(finished.phase, 'finished')
+    assert.equal(finished.status, 'finished')
+    assert.equal(finished.awaitingAttach, false)
+    assert.equal(isChatLocked(env.dataDir, sessionId), true)
+    assert.equal(sessionIntent(env.dataDir, sessionId).status, 'finished')
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
+    assert.throws(
+      () =>
+        reportPlan(env.dataDir, {
+          sessionId,
+          feature: 'After finish',
+          stepTitles: ['More work'],
+          targetRoot: env.targetRoot,
+        }),
+      /VISUAL_CODER_FINISHED/,
+    )
+
+    completeSession(env.dataDir, sessionId, env.targetRoot)
+    const freed = readManifest(env.dataDir, sessionId)
+    assert.equal(freed.sessionId, sessionId)
+    assert.equal(freed.color, color)
+    assert.equal(freed.awaitingAttach, true)
+    assert.equal(isChatLocked(env.dataDir, sessionId), false)
+    assert.equal(freed.phase, 'blueprint')
+    assert.equal(freed.steps.length, 0)
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('completeSession drops the LLM connection without a stop signal', () => {
   const env = fixture()
   try {
@@ -1637,7 +1688,7 @@ test('lists every open LLM session so multiple prompts stay visible', () => {
   }
 })
 
-test('hides finished sessions but keeps review and handshake sessions without a waiter', () => {
+test('hides stopped sessions but keeps finished and review sessions without a waiter', () => {
   const env = fixture()
   const stale = '2026-01-01T00:00:00.000Z'
   try {
@@ -1682,6 +1733,7 @@ test('hides finished sessions but keeps review and handshake sessions without a 
 
     assert.deepEqual(listOpenSessionIds(env.dataDir), [
       'live-chat',
+      'old-finished',
       'old-review',
       'working-chat',
     ])
@@ -1777,12 +1829,13 @@ test('runs remaining steps and waits on the last proposal', () => {
     const lastReview = readManifest(env.dataDir, 'happy-chat')
     assert.equal(lastReview.phase, 'review')
     assert.equal(lastReview.diffs.at(-1).status, 'pending')
-    invokeStep(env.dataDir, 'happy-chat', 2, env.targetRoot)
-    assert.equal(readManifest(env.dataDir, 'happy-chat'), null)
-    assert.equal(
-      fs.existsSync(path.join(env.dataDir, 'diff-sessions', 'happy-chat')),
-      false,
+    assert.throws(
+      () => invokeStep(env.dataDir, 'happy-chat', 2, env.targetRoot),
+      /The last proposal is waiting/,
     )
+    const stillWaiting = readManifest(env.dataDir, 'happy-chat')
+    assert.equal(stillWaiting.phase, 'review')
+    assert.equal(stillWaiting.diffs.at(-1).status, 'pending')
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
       'export const value = 4\n',
@@ -1822,47 +1875,52 @@ test('the last proposal does not auto-advance', () => {
   }
 })
 
-test('plan timer starts on the first active step and stops on the last', () => {
+test('plan timer starts when the LLM connects and starts planning', () => {
   const env = fixture()
   try {
-    reportPlan(env.dataDir, {
-      sessionId: 'timer-chat',
-      feature: 'Timed plan',
-      stepTitles: ['Build value', 'Finish value'],
-    })
-    const started = readManifest(env.dataDir, 'timer-chat')
-    assert.equal(typeof started.planTimerStartedAt, 'string')
-    assert.equal(started.planTimerStoppedAt, null)
+    const slot = setupSession(env.dataDir)
+    assert.equal(slot.planTimerStartedAt, null)
+    const attached = attachSession(env.dataDir, slot.sessionId)
+    assert.equal(attached.phase, 'preparing')
+    assert.equal(typeof attached.planTimerStartedAt, 'string')
+    assert.equal(attached.planTimerStoppedAt, null)
     assert.equal(
-      sessionIntent(env.dataDir, 'timer-chat').planTimerStartedAt,
-      started.planTimerStartedAt,
+      sessionIntent(env.dataDir, slot.sessionId).planTimerStartedAt,
+      attached.planTimerStartedAt,
     )
 
+    const planned = reportPlan(env.dataDir, {
+      sessionId: slot.sessionId,
+      feature: 'Timed plan',
+      stepTitles: ['Build value', 'Finish value'],
+      targetRoot: env.targetRoot,
+    })
+    assert.equal(planned.planTimerStartedAt, attached.planTimerStartedAt)
+    assert.equal(planned.planTimerStoppedAt, null)
+
     appendDiff(env.dataDir, env.targetRoot, {
-      sessionId: 'timer-chat',
+      sessionId: slot.sessionId,
       patchText: oneToTwo,
     })
-    const mid = readManifest(env.dataDir, 'timer-chat')
-    assert.equal(mid.planTimerStartedAt, started.planTimerStartedAt)
+    const mid = readManifest(env.dataDir, slot.sessionId)
+    assert.equal(mid.planTimerStartedAt, attached.planTimerStartedAt)
     assert.equal(mid.planTimerStoppedAt, null)
 
     appendDiff(env.dataDir, env.targetRoot, {
-      sessionId: 'timer-chat',
+      sessionId: slot.sessionId,
       patchText:
         '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const value = 2\n+export const value = 4\n',
     })
-    const last = readManifest(env.dataDir, 'timer-chat')
+    const last = readManifest(env.dataDir, slot.sessionId)
     assert.equal(last.phase, 'review')
-    assert.equal(last.planTimerStartedAt, started.planTimerStartedAt)
+    assert.equal(last.planTimerStartedAt, attached.planTimerStartedAt)
     assert.equal(typeof last.planTimerStoppedAt, 'string')
-    assert.ok(Date.parse(last.planTimerStoppedAt) >= Date.parse(started.planTimerStartedAt))
-    assert.equal(
-      sessionIntent(env.dataDir, 'timer-chat').planTimerStoppedAt,
-      last.planTimerStoppedAt,
+    assert.ok(
+      Date.parse(last.planTimerStoppedAt) >= Date.parse(attached.planTimerStartedAt),
     )
 
     const revised = reportPlan(env.dataDir, {
-      sessionId: 'timer-chat',
+      sessionId: slot.sessionId,
       feature: 'Timed plan',
       stepTitles: ['Tint the value'],
       targetRoot: env.targetRoot,
@@ -2023,11 +2081,13 @@ test('preview keeps earlier diffs visible as later steps accumulate', () => {
     assert.deepEqual(earlier.creates, [])
 
     continueDiff(env.dataDir, env.targetRoot, 'preview-chat', '0002')
-    assert.equal(readManifest(env.dataDir, 'preview-chat'), null)
-    assert.equal(sessionIntent(env.dataDir, 'preview-chat', ['src/a.ts']), null)
+    const kept = readManifest(env.dataDir, 'preview-chat')
+    assert.equal(kept.phase, 'review')
+    assert.equal(kept.diffs.at(-1).status, 'applied')
+    assert.equal(sessionIntent(env.dataDir, 'preview-chat', ['src/a.ts']).status, 'pending')
     assert.equal(
       fs.existsSync(path.join(env.dataDir, 'diff-sessions', 'preview-chat')),
-      false,
+      true,
     )
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
@@ -2294,7 +2354,7 @@ test('preview lists new folders as added islands', () => {
   }
 })
 
-test('finished sessions discard stored blueprint drafts', () => {
+test('accepting the last proposal does not clear the session', () => {
   const env = fixture()
   try {
     startSession(env.dataDir, { sessionId: 'finish-blue' })
@@ -2321,12 +2381,14 @@ test('finished sessions discard stored blueprint drafts', () => {
         '--- /dev/null\n+++ b/src/Draft.tsx\n@@ -0,0 +1,3 @@\n+export function Draft() {\n+  return null\n+}\n',
     })
     continueDiff(env.dataDir, env.targetRoot, 'finish-blue', '0001')
-    assert.equal(readManifest(env.dataDir, 'finish-blue'), null)
+    const kept = readManifest(env.dataDir, 'finish-blue')
+    assert.equal(kept.phase, 'review')
+    assert.equal(kept.diffs.at(-1).status, 'applied')
+    assert.equal(kept.status, 'active')
     assert.equal(
       fs.existsSync(path.join(env.dataDir, 'diff-sessions', 'finish-blue')),
-      false,
+      true,
     )
-    assert.equal(readActiveSession(env.dataDir), null)
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/Draft.tsx'), 'utf8'),
       'export function Draft() {\n  return null\n}\n',
@@ -2355,7 +2417,9 @@ test('accepting the last proposal keeps applied files', () => {
       patchText: addB,
     })
     continueDiff(env.dataDir, env.targetRoot, 'accept-keep', '0002')
-    assert.equal(readManifest(env.dataDir, 'accept-keep'), null)
+    const kept = readManifest(env.dataDir, 'accept-keep')
+    assert.equal(kept.phase, 'review')
+    assert.equal(kept.diffs.at(-1).status, 'applied')
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
       'export const value = 2\n',
@@ -2369,7 +2433,7 @@ test('accepting the last proposal keeps applied files', () => {
   }
 })
 
-test('clearing a finished session keeps applied files', () => {
+test('finished sessions stay until Done and keep applied files', () => {
   const env = fixture()
   const addB =
     '--- /dev/null\n+++ b/src/b.ts\n@@ -0,0 +1,1 @@\n+export const extra = 1\n'
@@ -2387,13 +2451,23 @@ test('clearing a finished session keeps applied files', () => {
       sessionId: 'clear-keep',
       patchText: addB,
     })
-    const waiting = readManifest(env.dataDir, 'clear-keep')
-    assert.equal(waiting.phase, 'review')
-    waiting.phase = 'finished'
-    waiting.status = 'finished'
-    writeManifest(env.dataDir, waiting)
+    const finished = finishSession(env.dataDir, 'clear-keep', env.targetRoot)
+    assert.equal(finished.phase, 'finished')
+    assert.equal(finished.status, 'finished')
+    assert.equal(sessionIntent(env.dataDir, 'clear-keep').status, 'finished')
 
     discardInactiveDiffSessions(env.dataDir, env.targetRoot)
+    assert.equal(readManifest(env.dataDir, 'clear-keep')?.phase, 'finished')
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
+      'export const value = 2\n',
+    )
+    assert.equal(
+      fs.readFileSync(path.join(env.targetRoot, 'src/b.ts'), 'utf8'),
+      'export const extra = 1\n',
+    )
+
+    completeSession(env.dataDir, 'clear-keep', env.targetRoot)
     assert.equal(readManifest(env.dataDir, 'clear-keep'), null)
     assert.equal(
       fs.readFileSync(path.join(env.targetRoot, 'src/a.ts'), 'utf8'),
@@ -2573,10 +2647,10 @@ test('inactive sweep keeps open sessions even without an LLM waiter', () => {
       env.targetRoot,
       new Set(['live-chat']),
     )
-    assert.deepEqual(kept.sort(), ['idle-chat', 'live-chat'])
+    assert.deepEqual(kept.sort(), ['done-chat', 'idle-chat', 'live-chat'])
     assert.equal(readManifest(env.dataDir, 'live-chat')?.feature, 'Keep live')
     assert.equal(readManifest(env.dataDir, 'idle-chat')?.feature, 'Keep idle')
-    assert.equal(readManifest(env.dataDir, 'done-chat'), null)
+    assert.equal(readManifest(env.dataDir, 'done-chat')?.feature, 'Drop finished')
   } finally {
     env.cleanup()
   }

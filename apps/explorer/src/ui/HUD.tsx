@@ -18,6 +18,7 @@ import {
   type BlueprintPointer,
   type BlueprintPointerKind,
   type BranchChanges,
+  type BranchCommit,
   type CodebaseGraph,
   type PatchImportAddition,
   type PatchSymbolAddition,
@@ -1445,7 +1446,7 @@ function sessionLiveStatus(intent: AgentIntent) {
   const browsingHistory = !intent.isActiveDiff && Boolean(intent.diffId)
 
   if (intent.status === 'finished' || kind === 'finished') {
-    return { text: 'Finished', busy: false }
+    return { text: 'Finished — click Done to free this color', busy: false }
   }
   if (kind === 'stopped' || intent.status === 'rejected') {
     return { text: 'Stopped', busy: false }
@@ -1463,12 +1464,7 @@ function sessionLiveStatus(intent: AgentIntent) {
     return { text: 'Explanation is on the map — /explainit for a follow-up', busy: false }
   }
   if (browsingHistory) {
-    return {
-      text: intent.working
-        ? 'Viewing this step · LLM is still working'
-        : 'Reviewing this step',
-      busy: intent.working,
-    }
+    return { text: 'Reviewing this step', busy: false }
   }
   if (
     intent.status === 'approved' ||
@@ -1479,7 +1475,7 @@ function sessionLiveStatus(intent: AgentIntent) {
   }
   if (intent.status === 'pending') {
     if (isLastPlanStep(intent)) {
-      return { text: 'Click Done to keep the changes', busy: false }
+      return { text: 'Waiting for finish', busy: false }
     }
     return { text: 'LLM is continuing', busy: true }
   }
@@ -1648,7 +1644,6 @@ function PlanStepList({
   proposalStep,
   processingSteps,
   acceptedSteps,
-  canAcceptProposal,
   onNavigateDiff,
 }: {
   steps: AgentIntent['steps']
@@ -1656,7 +1651,6 @@ function PlanStepList({
   proposalStep: number | null
   processingSteps: Set<number>
   acceptedSteps: Set<number>
-  canAcceptProposal: boolean
   onNavigateDiff: (sessionId: string, diffId: string | null) => void
 }) {
   const sessionId = intent.sessionId
@@ -1671,9 +1665,7 @@ function PlanStepList({
         const canResumeLive = processing && !intent.isActiveDiff && !stepDiff
         const canOpenDiff = Boolean(stepDiff) || canResumeLive
         const viewing = Boolean(stepDiff) && intent.step === step.index
-        const lastStepDone =
-          canAcceptProposal && proposed && step.index === intent.steps.at(-1)?.index
-        const stepDone = accepted || lastStepDone
+        const stepDone = accepted
         const outline = planStepOutline(step)
         const stepBody = (
           <>
@@ -1751,8 +1743,7 @@ function SessionPanel({
   const previousTarget = freezeLatestWhileLive
     ? intent.chain.at(-1)
     : previousDiff
-  const resumeLiveNext =
-    !intent.isActiveDiff && Boolean(intent.working) && !nextDiff
+  const resumeLiveNext = !intent.isActiveDiff && !nextDiff
   const liveStep = intent.liveStep ?? (intent.working ? intent.step : null)
   const currentOutline = planStepOutlineForIntent(intent, intent.step)
   const activeOutlines = (intent.activeSteps?.length
@@ -1792,7 +1783,9 @@ function SessionPanel({
     ? (latestEntry?.status === 'pending' ? latestEntry.step : intent.step)
     : null
   const processingSteps = new Set(
-    (working || intent.working) && typeof liveStep === 'number'
+    intent.isActiveDiff &&
+      (working || intent.working) &&
+      typeof liveStep === 'number'
       ? intent.activeSteps?.length
         ? intent.activeSteps
         : [liveStep]
@@ -1800,16 +1793,10 @@ function SessionPanel({
   )
   const llmDisconnected =
     Boolean(intent.llmIdle) && intent.awaitingAttach === false
-  const canAcceptProposal =
-    proposalStep !== null &&
-    !llmDisconnected &&
-    proposalStep >= (intent.steps?.length ?? 0)
-  const panelDone =
-    intent.status === 'finished' ||
-    intent.status === 'approved' ||
-    acceptedSteps.size > 0 ||
-    canAcceptProposal
-  const llmRunning = sessionLiveStatus(intent).busy
+  const panelDone = intent.status === 'finished'
+  const llmRunning = intent.isActiveDiff
+    ? sessionLiveStatus(intent).busy
+    : Boolean(intent.working)
   const closeLabel = llmRunning ? 'Cancel' : 'Done'
 
   if (!sessionId || !isReviewingIntent(intent.status)) return null
@@ -1821,7 +1808,11 @@ function SessionPanel({
   const showConnectedProgress =
     llmConnected && !llmDisconnected && (askingBlueprint || sendingBlueprint || preparing)
   const showPlaceHint =
-    canPlace && !intent.working && !askingBlueprint && !sendingBlueprint
+    canPlace &&
+    intent.isActiveDiff &&
+    !intent.working &&
+    !askingBlueprint &&
+    !sendingBlueprint
   const queuedBehind =
     intent.awaitingAttach &&
     nextAttachSession &&
@@ -1926,7 +1917,7 @@ function SessionPanel({
               </div>
             )
           ) : null}
-          {llmDisconnected ? (
+          {llmDisconnected && intent.status !== 'finished' ? (
             <p className="hud-mode-hint">
               This chat is no longer connected. The session will reset.
             </p>
@@ -1969,7 +1960,7 @@ function SessionPanel({
           )}
           {!askingBlueprint && !sendingBlueprint && (
             <>
-              {intent.steps.length > 0 && (
+              {intent.planTimerStartedAt && (
                 <PlanTimer
                   startedAt={intent.planTimerStartedAt}
                   stoppedAt={intent.planTimerStoppedAt}
@@ -1981,7 +1972,6 @@ function SessionPanel({
                 proposalStep={proposalStep}
                 processingSteps={processingSteps}
                 acceptedSteps={acceptedSteps}
-                canAcceptProposal={canAcceptProposal}
                 onNavigateDiff={onNavigateDiff}
               />
               {intent.chain.length > 0 && (
@@ -2057,6 +2047,12 @@ function SessionPanel({
   )
 }
 
+function commitOptionLabel(commit: BranchCommit) {
+  const subject = commit.subject.trim()
+  const text = subject ? `${commit.short} ${subject}` : commit.short
+  return text.length > 56 ? `${text.slice(0, 55)}…` : text
+}
+
 function BranchChangesPanel({
   changes,
   hideChanges,
@@ -2068,17 +2064,28 @@ function BranchChangesPanel({
   onBaseChange?: (next: string | null) => void
   onToggleHideChanges?: () => void
 }) {
+  const selectedCommit = changes.current
+    ? null
+    : (changes.commits ?? []).find((commit) => commit.sha === changes.base)
   const selectedBase = changes.current ? '' : (changes.base ?? '')
   const subtitle = changes.current
     ? changes.branch
       ? `${changes.branch} vs last commit`
       : 'vs last commit'
-    : changes.branch && changes.base
-      ? `${changes.branch} vs ${changes.base}`
-      : changes.base
+    : selectedCommit
+      ? changes.branch
+        ? `${changes.branch} vs ${selectedCommit.short} ${selectedCommit.subject}`.trim()
+        : `${selectedCommit.short} ${selectedCommit.subject}`.trim()
+      : changes.branch && changes.base
+        ? `${changes.branch} vs ${changes.base}`
+        : changes.base
   const emptyMessage = changes.current
     ? 'No uncommitted file changes.'
-    : 'No file changes against this branch.'
+    : selectedCommit
+      ? 'No file changes against this commit.'
+      : 'No file changes against this branch.'
+  const commitGroupLabel =
+    changes.branch && changes.branch !== 'HEAD' ? changes.branch : 'This branch'
   const hasContent =
     changes.files.length > 0 ||
     (changes.createFolders ?? []).length > 0 ||
@@ -2099,6 +2106,11 @@ function BranchChangesPanel({
         <select
           className="hud-button hud-target-select-control hud-branch-base-select"
           aria-label="Compare against"
+          title={
+            selectedCommit
+              ? `${selectedCommit.short} ${selectedCommit.subject}`.trim()
+              : undefined
+          }
           value={selectedBase}
           onChange={(event) => {
             const next = event.target.value
@@ -2106,6 +2118,15 @@ function BranchChangesPanel({
           }}
         >
           <option value="">Last commit</option>
+          {(changes.commits ?? []).length > 0 && (
+            <optgroup label={commitGroupLabel}>
+              {changes.commits.map((commit) => (
+                <option key={commit.sha} value={commit.sha} title={commit.subject}>
+                  {commitOptionLabel(commit)}
+                </option>
+              ))}
+            </optgroup>
+          )}
           {changes.branches.some((item) => !item.remote) && (
             <optgroup label="Local">
               {changes.branches

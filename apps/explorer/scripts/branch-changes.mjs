@@ -119,6 +119,62 @@ export function listCompareBranches(gitRoot, current) {
   ]
 }
 
+const BRANCH_COMMIT_LIMIT = 40
+
+function parseCommitLine(line) {
+  const [sha, short, ...rest] = line.split('\t')
+  if (!sha || !short) return null
+  return { sha, short, subject: rest.join('\t').trim() }
+}
+
+/** Recent commits on HEAD, excluding the tip. The tip is "Last commit". */
+export function listBranchCommits(cwd, limit = BRANCH_COMMIT_LIMIT) {
+  const result = runGit(cwd, [
+    'log',
+    '-n',
+    String(limit),
+    '--skip=1',
+    '--format=%H%x09%h%x09%s',
+    'HEAD',
+  ])
+  if (result.status !== 0) return []
+  return result.stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map(parseCommitLine)
+    .filter(Boolean)
+}
+
+function headSha(cwd) {
+  const result = runGit(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD'])
+  if (result.status !== 0) return null
+  const sha = result.stdout.trim()
+  return sha || null
+}
+
+function commitDetails(cwd, sha) {
+  const show = runGit(cwd, ['log', '-1', '--format=%H%x09%h%x09%s', sha])
+  if (show.status !== 0) return null
+  const line = show.stdout.split('\n').find((item) => item.trim())
+  return line ? parseCommitLine(line.trim()) : null
+}
+
+function resolveCommit(cwd, name, listed) {
+  const known = listed.find((item) => item.sha === name || item.short === name)
+  if (known) return known
+  const verified = runGit(cwd, [
+    'rev-parse',
+    '--verify',
+    '--quiet',
+    `${name}^{commit}`,
+  ])
+  if (verified.status !== 0) return null
+  const sha = verified.stdout.trim()
+  if (!sha) return null
+  return listed.find((item) => item.sha === sha) ?? commitDetails(cwd, sha)
+}
+
 function parseNameStatus(text) {
   const files = []
   const creates = []
@@ -198,6 +254,7 @@ export function emptyBranchChanges() {
     base: null,
     current: true,
     branches: [],
+    commits: [],
     baseMissing: false,
     ...emptyChangeOverlay(),
   }
@@ -327,17 +384,39 @@ export function readBranchChanges(
 
   const branch = currentBranch(targetRoot) ?? currentBranch(gitRoot)
   const branches = listCompareBranches(gitRoot, branch)
+  const commits = listBranchCommits(targetRoot)
   const requested = normalizeBranchChangesBase(baseInput)
-  const usingCurrent = !requested || requested === branch
+  const matchesBranch =
+    Boolean(requested) &&
+    requested !== branch &&
+    branches.some((item) => item.name === requested)
   let ref = 'HEAD'
   let base = branch ?? 'HEAD'
+  let current = true
   let baseMissing = false
-  if (!usingCurrent) {
-    if (refExists(gitRoot, requested)) {
+  let commitList = commits
+  if (requested && requested !== branch) {
+    if (matchesBranch && refExists(gitRoot, requested)) {
       ref = requested
       base = requested
+      current = false
     } else {
-      baseMissing = true
+      const commit = resolveCommit(targetRoot, requested, commits)
+      const head = commit ? headSha(targetRoot) : null
+      if (commit && commit.sha !== head) {
+        ref = commit.sha
+        base = commit.sha
+        current = false
+        if (!commits.some((item) => item.sha === commit.sha)) {
+          commitList = [commit, ...commits]
+        }
+      } else if (!commit && refExists(gitRoot, requested)) {
+        ref = requested
+        base = requested
+        current = false
+      } else if (!commit) {
+        baseMissing = true
+      }
     }
   }
 
@@ -345,8 +424,9 @@ export function readBranchChanges(
     available: true,
     branch,
     base,
-    current: usingCurrent || baseMissing,
+    current,
     branches,
+    commits: commitList,
     baseMissing,
     ...collectDiff(
       targetRoot,

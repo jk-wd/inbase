@@ -1,4 +1,4 @@
-import type { BranchChanges, BranchRef } from './types'
+import type { BranchChanges, BranchCommit, BranchRef } from './types'
 
 export const emptyBranchChanges: BranchChanges = {
   available: false,
@@ -6,6 +6,7 @@ export const emptyBranchChanges: BranchChanges = {
   base: null,
   current: true,
   branches: [],
+  commits: [],
   baseMissing: false,
   files: [],
   creates: [],
@@ -37,6 +38,20 @@ function normalize(data: Partial<BranchChanges> | null | undefined): BranchChang
             return { name: item.name, remote: Boolean(item.remote) }
           })
           .filter((item): item is BranchRef => Boolean(item))
+      : [],
+    commits: Array.isArray(data?.commits)
+      ? data.commits
+          .map((item): BranchCommit | null => {
+            if (!item || typeof item !== 'object') return null
+            if (typeof item.sha !== 'string' || !item.sha) return null
+            if (typeof item.short !== 'string' || !item.short) return null
+            return {
+              sha: item.sha,
+              short: item.short,
+              subject: typeof item.subject === 'string' ? item.subject : '',
+            }
+          })
+          .filter((item): item is BranchCommit => Boolean(item))
       : [],
     baseMissing: Boolean(data?.baseMissing),
     files: Array.isArray(data?.files) ? data.files : [],

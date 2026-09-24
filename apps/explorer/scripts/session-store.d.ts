@@ -529,6 +529,11 @@ export function finalizeFinishedSession(
   sessionId: string,
   targetRoot?: string | null,
 ): void
+export function finishSession(
+  dataDir: string,
+  sessionId: string,
+  targetRoot?: string | null,
+): DiffManifest
 export function completeSession(
   dataDir: string,
   sessionId: string,

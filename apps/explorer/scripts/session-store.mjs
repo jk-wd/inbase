@@ -497,20 +497,29 @@ function waiterSessionIds() {
   return new Set()
 }
 
+function isFinishedSession(manifest) {
+  return (
+    manifest?.phase === 'finished' ||
+    manifest?.status === 'finished'
+  )
+}
+
 function isTerminalSession(manifest) {
   return (
     !manifest ||
-    manifest.phase === 'finished' ||
+    isFinishedSession(manifest) ||
     manifest.phase === 'stopped' ||
-    manifest.status === 'finished' ||
     manifest.status === 'rejected'
   )
 }
 
 function isAcceptedSession(manifest) {
-  return (
-    manifest?.phase === 'finished' ||
-    manifest?.status === 'finished'
+  return isFinishedSession(manifest)
+}
+
+function sessionFinishedError(sessionId) {
+  return new Error(
+    `VISUAL_CODER_FINISHED Session ${assertSessionId(sessionId)} is finished. Do not edit. The user clicks Done in the session window to clear it.`,
   )
 }
 
@@ -525,11 +534,6 @@ function isStalledWorking(manifest, waiterIds, sessionId, now = Date.now()) {
   if (!waiterIds.has(sessionId)) return false
   const started = Date.parse(manifest.workStartedAt)
   return Number.isFinite(started) && now - started >= STALLED_WAIT_MS
-}
-
-function resetPlanTimer(manifest) {
-  manifest.planTimerStartedAt = null
-  manifest.planTimerStoppedAt = null
 }
 
 function startPlanTimer(manifest, at = new Date().toISOString()) {
@@ -589,7 +593,9 @@ export function listOpenSessionIds(dataDir, waiterIds = waiterSessionIds()) {
     try {
       const sessionId = assertSessionId(entry.name)
       const manifest = readManifest(dataDir, sessionId)
-      if (isTerminalSession(manifest)) continue
+      if (!manifest || manifest.phase === 'stopped' || manifest.status === 'rejected') {
+        continue
+      }
       sessions.push({
         sessionId,
         createdAt: typeof manifest.createdAt === 'string' ? manifest.createdAt : '',
@@ -936,7 +942,9 @@ export function findSessionIdByColor(dataDir, colorId) {
 function resetLlmSessionWork(dataDir, sessionId, targetRoot = null) {
   const safeId = assertSessionId(sessionId)
   const manifest = readManifest(dataDir, safeId)
-  if (!manifest || isTerminalSession(manifest)) return manifest
+  if (!manifest || manifest.phase === 'stopped' || manifest.status === 'rejected') {
+    return manifest
+  }
   // Keep live project files. Only clear stored session overlays / plan state.
   void targetRoot
   const paths = sessionPaths(dataDir, safeId)
@@ -973,6 +981,8 @@ function resetLlmSessionWork(dataDir, sessionId, targetRoot = null) {
 function recycleColorSlotForAttach(dataDir, color, targetRoot = null) {
   const matchId = findSessionIdByColor(dataDir, color.id)
   if (!matchId) throw new Error(colorMissingMessage(color.name))
+  const existing = readManifest(dataDir, matchId)
+  if (isFinishedSession(existing)) throw sessionFinishedError(matchId)
   resetLlmSessionWork(dataDir, matchId, targetRoot)
   return matchId
 }
@@ -1717,6 +1727,9 @@ export function startSession(dataDir, input) {
   if (existing && sessionIsWaitingToAttach(existing) && resolveSessionColor(sessionId)) {
     throw sessionStoppedError(sessionId)
   }
+  if (existing && isFinishedSession(existing)) {
+    throw sessionFinishedError(sessionId)
+  }
   if (existing && !sessionIsWaitingToAttach(existing) && !isTerminalSession(existing)) {
     if (name && existing.name !== name) {
       existing.name = name
@@ -1765,6 +1778,9 @@ export function setupSession(dataDir, input = {}) {
     throw new Error(ALL_COLORS_LOCKED_MESSAGE)
   }
   const existing = readManifest(dataDir, sessionId)
+  if (existing && isFinishedSession(existing)) {
+    throw sessionFinishedError(sessionId)
+  }
   if (existing && !isTerminalSession(existing)) {
     throw new Error(`Session ${sessionId} already exists`)
   }
@@ -1954,6 +1970,9 @@ export function attachSession(dataDir, sessionId, options = {}) {
     safeId,
     `No Inbase session ${safeId} is waiting to connect.`,
   )
+  if (isFinishedSession(manifest)) {
+    throw sessionFinishedError(safeId)
+  }
   if (isTerminalSession(manifest)) {
     throw sessionStoppedError(safeId)
   }
@@ -1981,7 +2000,10 @@ export function answerBlueprint(dataDir, sessionId, enabled) {
     throw new Error(`Session ${sessionId} is not asking for a blueprint`)
   }
   manifest.phase = enabled ? 'blueprint' : 'preparing'
-  if (!enabled) manifest.workStartedAt = new Date().toISOString()
+  if (!enabled) {
+    manifest.workStartedAt = new Date().toISOString()
+    startPlanTimer(manifest)
+  }
   writeManifest(dataDir, manifest)
   return manifest
 }
@@ -2016,6 +2038,7 @@ export function sendBlueprint(dataDir, sessionId, _input = {}) {
   }
   manifest.phase = 'preparing'
   manifest.workStartedAt = new Date().toISOString()
+  startPlanTimer(manifest)
   writeManifest(dataDir, manifest)
   return manifest
 }
@@ -2031,6 +2054,7 @@ export function maybeStartVisualizerHandshake(dataDir, sessionId) {
   }
   manifest.phase = 'preparing'
   manifest.workStartedAt = new Date().toISOString()
+  startPlanTimer(manifest)
   writeManifest(dataDir, manifest)
   return manifest
 }
@@ -2042,6 +2066,9 @@ function requireWritableSession(dataDir, sessionId) {
   }
   if (!existing && isSessionReleased(dataDir, sessionId)) {
     throw sessionMissingError(sessionId)
+  }
+  if (isFinishedSession(existing)) {
+    throw sessionFinishedError(sessionId)
   }
   if (
     (existing && sessionIsWaitingToAttach(existing)) ||
@@ -2095,7 +2122,7 @@ export function reportPlan(dataDir, input) {
     manifest.phase = 'plan_ready'
     manifest.pendingInstruction = null
     manifest.workStartedAt = null
-    resetPlanTimer(manifest)
+    startPlanTimer(manifest)
     writeManifest(dataDir, manifest)
     focusSession(dataDir, sessionId)
     recordSessionAck(
@@ -2166,17 +2193,20 @@ export function reportPlan(dataDir, input) {
 export function invokeStep(dataDir, sessionId, step, targetRoot = null) {
   const manifest = requireManifest(dataDir, sessionId)
 
+  if (isFinishedSession(manifest)) {
+    throw sessionFinishedError(sessionId)
+  }
   if (manifest.phase === 'review') {
     if (!targetRoot) throw new Error('A target root is required to apply the current step')
     const active = pendingActive(manifest, manifest.activeDiffId)
     const last = active.step >= manifest.steps.length
-    const expected = last ? active.step : active.step + 1
-    if (step !== expected) {
+    if (last) {
       throw new Error(
-        last
-          ? `The last proposal is waiting. Run inbase finish --session ${sessionId} or click Done in the session window.`
-          : `Step ${active.step} is already recorded.`,
+        `The last proposal is waiting. Run inbase finish --session ${sessionId}. The user clicks Done in the session window to clear it.`,
       )
+    }
+    if (step !== active.step + 1) {
+      throw new Error(`Step ${active.step} is already recorded.`)
     }
     return continueDiff(dataDir, targetRoot, sessionId, active.id)
   }
@@ -2230,6 +2260,9 @@ export function appendDiff(dataDir, targetRoot, input) {
     sessionId,
     `Report a plan for session ${sessionId} first`,
   )
+  if (isFinishedSession(manifest)) {
+    throw sessionFinishedError(sessionId)
+  }
   if (manifest.phase === 'review') {
     throw new Error(
       `A proposal is waiting on step ${manifest.currentStep}. If the user asked for a change, run report-plan with the new remaining steps first — that replaces this proposal from step ${manifest.currentStep}. Do not edit files first. Then implement the invoked step and propose-patch.`,
@@ -2379,14 +2412,14 @@ function applyUnresolved(manifest, diffId) {
 
 export function continueDiff(dataDir, targetRoot, sessionId, diffId) {
   const manifest = requireManifest(dataDir, sessionId)
+  if (isFinishedSession(manifest)) {
+    throw sessionFinishedError(sessionId)
+  }
   const active = pendingActive(manifest, diffId)
   applyUnresolved(manifest, diffId)
 
   if (active.step >= manifest.steps.length) {
-    manifest.phase = 'finished'
-    manifest.status = 'finished'
     writeManifest(dataDir, manifest)
-    finalizeFinishedSession(dataDir, sessionId, targetRoot)
     return manifest
   }
   manifest.currentStep = active.step + 1
@@ -2560,6 +2593,7 @@ export function discardInactiveDiffSessions(
 
   for (const sessionId of listStoredSessionIds(dataDir)) {
     const manifest = readManifest(dataDir, sessionId)
+    if (isFinishedSession(manifest)) continue
     if (!isTerminalSession(manifest)) continue
     const stopping = keep.has(sessionId) && isSessionStopped(dataDir, sessionId)
     if (stopping) continue
@@ -2568,9 +2602,10 @@ export function discardInactiveDiffSessions(
     })
   }
 
-  const liveIds = listStoredSessionIds(dataDir).filter(
-    (id) => !isTerminalSession(readManifest(dataDir, id)),
-  )
+  const liveIds = listStoredSessionIds(dataDir).filter((id) => {
+    const manifest = readManifest(dataDir, id)
+    return Boolean(manifest) && manifest.phase !== 'stopped' && manifest.status !== 'rejected'
+  })
   const active = readActiveSession(dataDir)
   if (active && !liveIds.includes(active)) writeActiveSession(dataDir, null)
   unstageDiffSessionArtifacts(dataDir, targetRoot)
@@ -2595,6 +2630,7 @@ export function recycleDisconnectedSessions(
   for (const sessionId of listOpenSessionIds(dataDir, waiters)) {
     const manifest = readManifest(dataDir, sessionId)
     if (!manifest || manifest.awaitingAttach) continue
+    if (isFinishedSession(manifest)) continue
     if (isSessionConnected(dataDir, sessionId, waiters)) continue
     stopSession(dataDir, sessionId, targetRoot)
     recycled.push(sessionId)
@@ -2686,6 +2722,29 @@ export function finalizeFinishedSession(dataDir, sessionId, targetRoot = null) {
   writeReleasedMarker(dataDir, safeId)
   discardStoredSession(dataDir, safeId, targetRoot, { restore: false })
   refillSessionPool(dataDir)
+}
+
+export function finishSession(dataDir, sessionId, targetRoot = null) {
+  const safeId = assertSessionId(sessionId)
+  const manifest = requireManifest(dataDir, safeId)
+  void targetRoot
+  if (isFinishedSession(manifest)) return readManifest(dataDir, safeId) ?? manifest
+  const active = manifest.diffs.at(-1)
+  if (
+    manifest.phase === 'review' &&
+    active &&
+    active.status === 'pending' &&
+    manifest.activeDiffId === active.id
+  ) {
+    applyUnresolved(manifest, active.id)
+  }
+  manifest.phase = 'finished'
+  manifest.status = 'finished'
+  manifest.workStartedAt = null
+  stopPlanTimer(manifest)
+  writeManifest(dataDir, manifest)
+  recordSessionAck(dataDir, safeId, 'finished', 'session finished')
+  return readManifest(dataDir, safeId) ?? manifest
 }
 
 export function completeSession(dataDir, sessionId, targetRoot = null) {

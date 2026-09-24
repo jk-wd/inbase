@@ -27,8 +27,7 @@ export type BlueprintDocument = {
   kind: typeof BLUEPRINT_DOCUMENT_KIND
   name: string
   savedAt: string
-  global: BlueprintLayerFields
-  locals: BlueprintDocumentLocal[]
+  blueprints: BlueprintDocumentLocal[]
 }
 
 export type SavedBlueprintInfo = {
@@ -64,8 +63,11 @@ export function resolveBlueprintSavePath(
 export function serializeBlueprintDocument(input?: {
   name?: string
   savedAt?: string
-  global?: Partial<BlueprintLayerFields> | null
+  blueprints?: unknown
+  /** @deprecated use `blueprints` */
   locals?: unknown
+  /** @deprecated folded into the first session color when it is not in `blueprints` */
+  global?: Partial<BlueprintLayerFields> | null
 }): BlueprintDocument
 export function parseBlueprintDocument(value: unknown): BlueprintDocument
 export function listSavedBlueprints(targetRoot: string): SavedBlueprintList
@@ -76,8 +78,11 @@ export function saveBlueprintDocument(
     directory?: string
     filePath?: string
     savedAt?: string
-    global?: Partial<BlueprintLayerFields> | null
+    blueprints?: unknown
+    /** @deprecated use `blueprints` */
     locals?: unknown
+    /** @deprecated folded into the first session color when it is not in `blueprints` */
+    global?: Partial<BlueprintLayerFields> | null
   },
 ): SavedBlueprintInfo & {
   fileName: string
