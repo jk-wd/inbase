@@ -13,7 +13,16 @@ const { currentSlug, title } = Astro.props;
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width" />
-    <title>{title}</title>
+    <meta
+      name="description"
+      content="Visual map of your codebase with blueprint-driven AI coding for Cursor, Claude Code, Codex, and other LLM editors."
+    />
+    <meta property="og:title" content={`${title} · Inbase`} />
+    <meta
+      property="og:description"
+      content="Draw blueprints on a live map of your code. LLMs follow the layout step by step."
+    />
+    <title>{title} · Inbase</title>
     <script is:inline>
       (() => {
         const stored = localStorage.getItem("theme");

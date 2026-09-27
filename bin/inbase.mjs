@@ -52,7 +52,7 @@ import {
 } from './session.mjs'
 import { extractBlueprint } from './extract-blueprint.mjs'
 
-const HELP = `inbase — a first-person 3D map of a codebase
+const HELP = `inbase — visual map of your codebase for AI-assisted development
 
 Usage:
   inbase init <editor>     Install skills for one editor

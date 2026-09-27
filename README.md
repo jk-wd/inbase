@@ -9,6 +9,10 @@
   <img src="docs/images/main.png" alt="Inbase map with blueprint and file info panel" width="680" />
 </p>
 
+<p align="center">
+  <strong>Inbase</strong> is a visual map of your codebase for AI-assisted development. Draw blueprints of planned changes; your LLM follows the layout step by step while the map updates in real time.
+</p>
+
 ## Blueprint-driven development
 
 When an LLM writes code, it takes over the mental map of the codebase. You lose track of what went where — you lose the mental map of the codebase.
