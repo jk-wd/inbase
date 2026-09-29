@@ -610,6 +610,7 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
         addedImports: body.addedImports,
         notes: body.notes,
         pointers: body.pointers,
+        deleted: body.deleted,
         dependsOn: body.dependsOn,
       })
     } else if (action === 'blueprint_clear') {

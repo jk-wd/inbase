@@ -317,6 +317,7 @@ export type SharedBlueprint = {
   addedImports: PatchImportAddition[]
   notes: BlueprintNote[]
   pointers: BlueprintPointer[]
+  deleted: string[]
   dependsOn: string[]
 }
 
@@ -609,5 +610,6 @@ export type AgentIntent = {
   blueprintImports: PatchImportAddition[]
   blueprintNotes: BlueprintNote[]
   blueprintPointers: BlueprintPointer[]
+  blueprintDeleted: string[]
   dependsOn: string[]
 }

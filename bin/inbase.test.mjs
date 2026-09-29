@@ -1506,6 +1506,47 @@ test('read-blueprint treats an enabled blueprint as the request when there is no
   }
 })
 
+test('read-blueprint prints deleted files and marks deleted-only blueprints enabled', async () => {
+  const { root, cleanup } = tempProject()
+  const dataDir = path.join(root, '.inbase')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: root,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const started = runCli(
+      ['start-session', '--session', 'deleted-blueprint', '--name', 'Deleted only'],
+      { cwd: root, env },
+    )
+    assert.equal(started.status, 0, started.stderr)
+
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    store.updateBlueprint(dataDir, 'deleted-blueprint', {
+      deleted: ['src/Legacy.ts'],
+    })
+    const local = store.readLocalBlueprint(dataDir, 'deleted-blueprint')
+    assert.deepEqual(local.deleted, ['src/Legacy.ts'])
+    assert.equal(local.enabled, true)
+
+    const dumped = runCli(
+      ['read-blueprint', '--session', 'deleted-blueprint'],
+      { cwd: root, env },
+    )
+    assert.equal(dumped.status, 0, dumped.stderr)
+    assert.match(dumped.stdout, /VISUAL_CODER_BLUEPRINT_ONLY/)
+    assert.match(dumped.stdout, /1 deleted file\(s\)/)
+    assert.match(dumped.stdout, /Delete the 1 file\(s\) in the deleted list/)
+    assert.match(dumped.stdout, /\"deleted\":\s*\[\s*\n\s*"src\/Legacy\.ts"\s*\n\s*\]/m)
+    assert.match(dumped.stdout, /deleted file from this color/)
+    assert.doesNotMatch(dumped.stdout, /VISUAL_CODER_NO_REQUEST/)
+  } finally {
+    cleanup()
+  }
+})
+
 test('read-blueprint prints sequential session scope', async () => {
   const { root, cleanup } = tempProject()
   const dataDir = path.join(root, '.inbase')

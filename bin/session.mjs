@@ -374,10 +374,15 @@ export async function attachSession(args) {
 function printBlueprintDump(blueprint, options = {}) {
   const files = blueprint.files ?? []
   const folders = blueprint.folders ?? []
+  const deleted = blueprint.deleted ?? []
   const colorName = options.colorName || 'session'
   if (blueprint.enabled) {
+    const deletedHint =
+      deleted.length > 0
+        ? ` Delete the ${deleted.length} file(s) in the deleted list (they are file paths or ids: remove them and drop imports, references, and usages of them).`
+        : ''
     console.log(
-      `VISUAL_CODER_BLUEPRINT_READY The ${colorName} blueprint has ${files.length} file(s) and ${folders.length} folder(s). This blueprint is only for this ${colorName} chat and is leading: follow it as closely as possible. Create those paths and honor addedFunctions, addedVariables, addedImports, and notes even if they are not on disk. Do not omit, rename, relocate, or replace them. Extra new files not in this blueprint are allowed when needed if the blueprint does not cover them.`,
+      `VISUAL_CODER_BLUEPRINT_READY The ${colorName} blueprint has ${files.length} file(s), ${folders.length} folder(s), and ${deleted.length} deleted file(s). This blueprint is only for this ${colorName} chat and is leading: follow it as closely as possible. Create those paths and honor addedFunctions, addedVariables, addedImports, and notes even if they are not on disk.${deletedHint} Do not omit, rename, relocate, or replace them. Extra new files not in this blueprint are allowed when needed if the blueprint does not cover them.`,
     )
   } else {
     console.log(
@@ -413,7 +418,7 @@ function printSessionBlueprints(store, dataDir, sessionId) {
   printBlueprintDump(local, { colorName })
   printSessionScope(store, dataDir, sessionId)
   console.log(
-    'VISUAL_CODER_SAY_BLUEPRINT Reply in chat now. Start with "I see on the blueprint" and name every file, folder, function, variable, import, note, and pointer from this color\'s dump. This confirms you interpreted the blueprint correctly. Then, unless you were told to stop and wait, you MUST run report-plan with --steps for the full implementation, using sequential steps (1, 2, 3). Do not spawn subagents. Do not edit files yet. Do not list steps in chat — report-plan is the plan. If the dump is empty, say "I see nothing on the blueprint yet."',
+    'VISUAL_CODER_SAY_BLUEPRINT Reply in chat now. Start with "I see on the blueprint" and name every file, folder, function, variable, import, note, pointer, and deleted file from this color\'s dump. This confirms you interpreted the blueprint correctly. Then, unless you were told to stop and wait, you MUST run report-plan with --steps for the full implementation, using sequential steps (1, 2, 3). Do not spawn subagents. Do not edit files yet. Do not list steps in chat — report-plan is the plan. If the dump is empty, say "I see nothing on the blueprint yet."',
   )
   store.markBlueprintSeen(dataDir, sessionId, local.revision, local.revision)
   return {

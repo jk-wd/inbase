@@ -207,7 +207,8 @@ npx inbase read-blueprint --session <color>
    No instruction (empty `$ARGUMENTS`, no `VISUAL_CODER_INSTRUCTION_*`):
    - `VISUAL_CODER_BLUEPRINT_ONLY`, or the dump `enabled` true: that is the
      request. MUST `report-plan` with `--steps` for the full implementation from
-     those files, folders, symbols, imports, notes, and pointers, then implement
+     those files, folders, symbols, imports, notes, pointers, and deleted files,
+     then implement
      as closely as possible. Ask if you need more. Extra files are allowed if the
      blueprint does not cover them.
    - `VISUAL_CODER_NO_REQUEST`, or an empty blueprint: **stop**. Wait for a
@@ -223,14 +224,16 @@ npx inbase read-blueprint --session <color>
    `enabled` true, that blueprint is leading: follow it as closely as possible.
    After `report-plan`, create those `files`, `folders`, `addedFunctions`,
    `addedVariables`, and `addedImports` even if they are not on disk. Do not
-   omit, rename, relocate, or replace them. Extra edits to existing files are
-   allowed. Extra new files not in this blueprint are allowed when needed if
-   the blueprint does not cover them. Do not implement another color's blueprint in
-   this chat.
+   omit, rename, relocate, or replace them. `deleted` lists file paths or ids
+   the user marked for removal: delete those files (and drop their imports,
+   references, and usages) as part of the plan. Extra edits to existing files
+   are allowed. Extra new files not in this blueprint are allowed when needed
+   if the blueprint does not cover them. Do not implement another color's
+   blueprint in this chat.
 
 4. **Say what you see on the blueprint** before `report-plan`.
    Start with `I see on the blueprint` and name every file, folder, function,
-   variable, import, note, and pointer for **this** color.
+   variable, import, note, pointer, and deleted file for **this** color.
    If this color's dump is empty, say `I see nothing on the blueprint yet.`
    Do not list implementation steps.
 

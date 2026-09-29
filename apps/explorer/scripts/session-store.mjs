@@ -831,6 +831,7 @@ function compactConnectedLayer(layer, attached) {
     addedImports: layer.addedImports ?? [],
     notes: layer.notes ?? [],
     pointers: layer.pointers ?? [],
+    deleted: layer.deleted ?? [],
   }
 }
 
@@ -995,7 +996,8 @@ function blueprintHasContent(blueprint) {
     (blueprint.addedVariables?.length ?? 0) > 0 ||
     (blueprint.addedImports?.length ?? 0) > 0 ||
     (blueprint.notes?.length ?? 0) > 0 ||
-    (blueprint.pointers?.length ?? 0) > 0
+    (blueprint.pointers?.length ?? 0) > 0 ||
+    (blueprint.deleted?.length ?? 0) > 0
   )
 }
 
@@ -1423,6 +1425,7 @@ export function sessionIntent(
     blueprintImports: blueprint.addedImports,
     blueprintNotes: blueprint.notes,
     blueprintPointers: blueprint.pointers,
+    blueprintDeleted: blueprint.deleted,
     dependsOn: blueprint.dependsOn,
   }
 }
@@ -2024,6 +2027,7 @@ export function updateBlueprint(dataDir, sessionId, input = {}) {
     addedImports: fields.addedImports ?? current.addedImports,
     notes: fields.notes ?? current.notes,
     pointers: fields.pointers ?? current.pointers,
+    deleted: fields.deleted ?? current.deleted,
     dependsOn:
       fields.dependsOn !== undefined ? fields.dependsOn : current.dependsOn,
   }
@@ -2769,6 +2773,7 @@ export function emptyBlueprint() {
     addedImports: [],
     notes: [],
     pointers: [],
+    deleted: [],
     dependsOn: [],
   }
 }
@@ -2914,6 +2919,20 @@ function namedBlueprintPointers(value) {
   return pointers
 }
 
+function namedBlueprintDeleted(value) {
+  if (!Array.isArray(value)) return []
+  const seen = new Set()
+  const deleted = []
+  for (const item of value) {
+    if (typeof item !== 'string') continue
+    const id = item.trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    deleted.push(id)
+  }
+  return deleted
+}
+
 function blueprintContentEqual(left, right) {
   return (
     JSON.stringify({
@@ -2924,6 +2943,7 @@ function blueprintContentEqual(left, right) {
       addedImports: left.addedImports,
       notes: left.notes,
       pointers: left.pointers,
+      deleted: left.deleted,
       dependsOn: left.dependsOn,
     }) ===
     JSON.stringify({
@@ -2934,6 +2954,7 @@ function blueprintContentEqual(left, right) {
       addedImports: right.addedImports,
       notes: right.notes,
       pointers: right.pointers,
+      deleted: right.deleted,
       dependsOn: right.dependsOn,
     })
   )
@@ -2947,6 +2968,7 @@ function normalizeBlueprint(value, colorId = null, graph = null) {
   const addedImports = namedBlueprintImportAdditions(value?.addedImports)
   const notes = namedBlueprintNotes(value?.notes)
   const pointers = namedBlueprintPointers(value?.pointers)
+  const deleted = namedBlueprintDeleted(value?.deleted)
   const dependsOn = namedBlueprintDependsOn(colorId, value?.dependsOn, graph)
   const revision =
     Number.isInteger(value?.revision) && value.revision >= 0 ? value.revision : 0
@@ -2961,6 +2983,7 @@ function normalizeBlueprint(value, colorId = null, graph = null) {
       addedImports,
       notes,
       pointers,
+      deleted,
     }),
     sent: true,
     files,
@@ -2970,6 +2993,7 @@ function normalizeBlueprint(value, colorId = null, graph = null) {
     addedImports,
     notes,
     pointers,
+    deleted,
     dependsOn,
   }
 }
@@ -2981,6 +3005,7 @@ function persistBlueprintFile(file, incoming, current, colorId = null, graph = n
       ...incoming,
       files: incoming?.files ?? incoming?.userCreatedBlocks ?? current.files,
       folders: incoming?.folders ?? incoming?.userCreatedIslands ?? current.folders,
+      deleted: incoming?.deleted ?? current.deleted,
       dependsOn:
         incoming?.dependsOn !== undefined ? incoming.dependsOn : current.dependsOn,
       hidden:
@@ -3020,6 +3045,7 @@ function persistBlueprintFile(file, incoming, current, colorId = null, graph = n
         addedImports: namedBlueprintImportAdditions(next.addedImports),
         notes: namedBlueprintNotes(next.notes),
         pointers: namedBlueprintPointers(next.pointers),
+        deleted: namedBlueprintDeleted(next.deleted),
         dependsOn: next.dependsOn,
       },
       null,
@@ -3159,6 +3185,7 @@ export function cleanupBlueprint(
         : !removedFiles.has(item.file),
     ),
     pointers: current.pointers,
+    deleted: current.deleted.filter((id) => !removedFiles.has(id)),
   }
   return writeBlueprintByColor(dataDir, color, next)
 }

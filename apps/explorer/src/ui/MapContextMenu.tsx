@@ -17,6 +17,7 @@ type MapContextMenuProps = {
   onAddFile: (folder: string, color?: string) => void
   onAddFolder: (folder: string, color?: string) => void
   onOpenFile?: (fileId: string) => void
+  onMarkFileDeleted?: (fileId: string) => void
   onAddFileNote?: (fileId: string) => void
   onAddFolderNote?: (folder: string, color?: string) => void
   onExplainFile?: (fileId: string) => void
@@ -34,6 +35,7 @@ export function MapContextMenu({
   onAddFile,
   onAddFolder,
   onOpenFile,
+  onMarkFileDeleted,
   onAddFileNote,
   onAddFolderNote,
   onExplainFile,
@@ -75,6 +77,7 @@ export function MapContextMenu({
   const itemHeight = 42
   const fileItemCount =
     1 +
+    (onMarkFileDeleted ? 1 : 0) +
     (onAddFileNote ? 1 : 0) +
     (onExplainFile ? 1 : 0) +
     (onExplainFolder && folder ? 1 : 0) +
@@ -114,6 +117,18 @@ export function MapContextMenu({
           >
             Open file
           </button>
+          {onMarkFileDeleted ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onMarkFileDeleted(fileId)
+                onClose()
+              }}
+            >
+              Mark as deleted
+            </button>
+          ) : null}
           {onAddFileNote ? (
             <button
               type="button"

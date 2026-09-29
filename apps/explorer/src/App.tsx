@@ -135,6 +135,7 @@ function emptySharedBlueprint(): SharedBlueprint {
     addedImports: [],
     notes: [],
     pointers: [],
+    deleted: [],
     dependsOn: [],
   }
 }
@@ -192,6 +193,7 @@ function blueprintLiveEnabled(
   imports: PatchImportAddition[],
   notes: BlueprintNote[],
   pointers: BlueprintPointer[],
+  deleted: string[] = [],
 ) {
   return (
     namedCreatedBlocks(blocks).length > 0 ||
@@ -200,7 +202,8 @@ function blueprintLiveEnabled(
     variables.length > 0 ||
     imports.length > 0 ||
     notes.length > 0 ||
-    pointers.length > 0
+    pointers.length > 0 ||
+    deleted.length > 0
   )
 }
 
@@ -238,6 +241,7 @@ function capturedBlueprintContents(
     imports: PatchImportAddition[]
     notes: BlueprintNote[]
     pointers: BlueprintPointer[]
+    deleted: string[]
   },
 ): SharedBlueprint {
   return {
@@ -251,6 +255,7 @@ function capturedBlueprintContents(
       capture.imports,
       capture.notes,
       capture.pointers,
+      capture.deleted,
     ),
     files: capture.blocks,
     folders: capture.islands,
@@ -259,6 +264,7 @@ function capturedBlueprintContents(
     addedImports: capture.imports,
     notes: capture.notes,
     pointers: capture.pointers,
+    deleted: capture.deleted,
   }
 }
 
@@ -274,6 +280,7 @@ function withCapturedBlueprint(
     imports: PatchImportAddition[]
     notes: BlueprintNote[]
     pointers: BlueprintPointer[]
+    deleted: string[]
     options: BlueprintOption[]
   },
 ): { global: SharedBlueprint; locals: LocalBlueprint[] } {
@@ -286,6 +293,7 @@ function withCapturedBlueprint(
     imports: capture.imports,
     notes: capture.notes,
     pointers: capture.pointers,
+    deleted: capture.deleted,
   }
   const existing = current.locals.find((item) => item.color === capture.color)
   const option = capture.options.find((item) => item.id === capture.color)
@@ -380,6 +388,7 @@ function emptiedBlueprint<T extends SharedBlueprint>(current: T): T {
     addedImports: [],
     notes: [],
     pointers: [],
+    deleted: [],
     dependsOn: [],
   }
 }
@@ -425,6 +434,7 @@ function cleanedBlueprint<T extends SharedBlueprint>(
       nextImports,
       notes,
       current.pointers,
+      current.deleted,
     ),
     files: nextBlocks,
     folders: nextIslands,
@@ -432,6 +442,7 @@ function cleanedBlueprint<T extends SharedBlueprint>(
     addedVariables: nextVariables,
     addedImports: nextImports,
     notes,
+    deleted: current.deleted.filter((id) => !removed.has(id)),
   }
 }
 
@@ -483,6 +494,7 @@ function collectMapBlueprints(input: {
   selectedImports: PatchImportAddition[]
   selectedNotes: BlueprintNote[]
   selectedPointers: BlueprintPointer[]
+  selectedDeleted: string[]
   locals: LocalBlueprint[]
 }) {
   const blocks = new Map<string, UserCreatedBlock>()
@@ -493,6 +505,7 @@ function collectMapBlueprints(input: {
   const notesByKey = new Map<string, BlueprintNote>()
   const fileNoteColors: Record<string, string[]> = {}
   const folderNoteColors: Record<string, string[]> = {}
+  const deletedIds = new Set<string>()
   const pointers: Array<BlueprintPointer & { colorHex: string }> = []
 
   const sources: Array<{
@@ -507,6 +520,7 @@ function collectMapBlueprints(input: {
     imports: PatchImportAddition[]
     notes: BlueprintNote[]
     pointers: BlueprintPointer[]
+    deleted: string[]
   }> = [
     ...input.locals.map((local) => ({
       id: local.color,
@@ -544,6 +558,10 @@ function collectMapBlueprints(input: {
         input.selectedColor === local.color
           ? input.selectedPointers
           : local.pointers,
+      deleted:
+        input.selectedColor === local.color
+          ? input.selectedDeleted
+          : local.deleted,
     })),
   ]
   if (
@@ -563,6 +581,7 @@ function collectMapBlueprints(input: {
       imports: input.selectedImports,
       notes: input.selectedNotes,
       pointers: input.selectedPointers,
+      deleted: input.selectedDeleted,
     })
   }
 
@@ -601,6 +620,7 @@ function collectMapBlueprints(input: {
       functions.push(...source.functions)
       variables.push(...source.variables)
       imports.push(...source.imports)
+      for (const id of source.deleted) deletedIds.add(id)
       for (const note of source.notes) {
         notesByKey.set(blueprintNoteKey(note), note)
         if (note.kind !== 'file' && note.kind !== 'folder') continue
@@ -626,6 +646,7 @@ function collectMapBlueprints(input: {
     fileNoteColors,
     folderNoteColors,
     pointers,
+    deleted: [...deletedIds],
   }
 }
 
@@ -858,6 +879,7 @@ function Explorer({
   const [blueprintPointers, setBlueprintPointers] = useState<BlueprintPointer[]>(
     [],
   )
+  const [blueprintDeleted, setBlueprintDeleted] = useState<string[]>([])
   const [blueprintHidden, setBlueprintHidden] = useState(false)
   const [blueprintOpacity, setBlueprintOpacity] = useState(
     BLUEPRINT_OVERLAY.strength,
@@ -895,6 +917,7 @@ function Explorer({
   const blueprintImportsRef = useRef(blueprintImports)
   const blueprintNotesRef = useRef(blueprintNotes)
   const blueprintPointersRef = useRef(blueprintPointers)
+  const blueprintDeletedRef = useRef(blueprintDeleted)
   const persistBlueprintRef = useRef<() => void>(() => {})
   const selectBlueprintColorRef = useRef<(color: string) => void>(() => {})
   const notesDirty = useRef(false)
@@ -907,6 +930,7 @@ function Explorer({
   blueprintImportsRef.current = blueprintImports
   blueprintNotesRef.current = blueprintNotes
   blueprintPointersRef.current = blueprintPointers
+  blueprintDeletedRef.current = blueprintDeleted
   const namingId = userBlocks.find((block) => block.naming)?.id ?? null
   const namingIslandId = userIslands.find((island) => island.naming)?.id ?? null
   const previewGraph = useMemo(() => {
@@ -946,6 +970,7 @@ function Explorer({
         selectedImports: blueprintImports,
         selectedNotes: blueprintNotes,
         selectedPointers: blueprintPointers,
+        selectedDeleted: blueprintDeleted,
         locals: localBlueprints,
       }),
     [
@@ -955,6 +980,7 @@ function Explorer({
       blueprintImports,
       blueprintNotes,
       blueprintPointers,
+      blueprintDeleted,
       blueprintVariables,
       localBlueprints,
       userBlocks,
@@ -1051,6 +1077,7 @@ function Explorer({
     for (const pointer of mapBlueprint.pointers) {
       if (pointer.kind !== 'folder') ids.add(pointer.path)
     }
+    for (const id of mapBlueprint.deleted) ids.add(id)
     return [...ids]
   }, [
     changeSet.creates,
@@ -1558,6 +1585,7 @@ function Explorer({
         imports?: PatchImportAddition[]
         notes?: BlueprintNote[]
         pointers?: BlueprintPointer[]
+        deleted?: string[]
       } = {},
     ) => {
       const next = withCapturedBlueprint(latestBlueprintsRef.current, {
@@ -1570,6 +1598,7 @@ function Explorer({
         imports: snapshot.imports ?? blueprintImportsRef.current,
         notes: snapshot.notes ?? blueprintNotesRef.current,
         pointers: snapshot.pointers ?? blueprintPointersRef.current,
+        deleted: snapshot.deleted ?? blueprintDeletedRef.current,
         options: blueprintOptionsRef.current,
       })
       latestBlueprintsRef.current = next
@@ -1588,6 +1617,7 @@ function Explorer({
       imports: PatchImportAddition[] = blueprintImportsRef.current,
       notes: BlueprintNote[] = blueprintNotesRef.current,
       pointers: BlueprintPointer[] = blueprintPointersRef.current,
+      deleted: string[] = blueprintDeletedRef.current,
       color: string = blueprintColorRef.current,
     ) => {
       rememberLiveBlueprint(color, {
@@ -1598,6 +1628,7 @@ function Explorer({
         imports,
         notes,
         pointers,
+        deleted,
       })
       if (notePersistTimer.current != null) {
         window.clearTimeout(notePersistTimer.current)
@@ -1614,6 +1645,7 @@ function Explorer({
         addedImports: imports,
         notes,
         pointers,
+        deleted,
       }).finally(() => {
         if (gen !== blueprintPersistGen.current) return
         if (notePersistTimer.current != null) return
@@ -1650,10 +1682,25 @@ function Explorer({
         addedImports: blueprintImportsRef.current,
         notes: blueprintNotesRef.current,
         pointers: blueprintPointersRef.current,
+        deleted: blueprintDeletedRef.current,
       })
       notesDirty.current = false
     }
   }, [intent.sessionId])
+
+  const handleMarkFileDeleted = useCallback(
+    (fileId: string) => {
+      if (!canPlace || !fileId || fileId.startsWith('draft:')) return
+      const marked = blueprintDeletedRef.current.includes(fileId)
+      const next = marked
+        ? blueprintDeletedRef.current.filter((id) => id !== fileId)
+        : [...blueprintDeletedRef.current, fileId]
+      blueprintDeletedRef.current = next
+      setBlueprintDeleted(next)
+      persistBlueprintSoon()
+    },
+    [canPlace, persistBlueprintSoon],
+  )
 
   const applyBlueprintPointer = useCallback(
     (next: {
@@ -1731,6 +1778,7 @@ function Explorer({
         imports: blueprintImportsRef.current,
         notes: blueprintNotesRef.current,
         pointers: blueprintPointersRef.current,
+        deleted: blueprintDeletedRef.current,
       }
     }
     const stored = blueprintForColor(
@@ -1745,6 +1793,7 @@ function Explorer({
       imports: stored.addedImports,
       notes: stored.notes,
       pointers: stored.pointers,
+      deleted: stored.deleted ?? [],
     }
   }, [])
 
@@ -1790,6 +1839,7 @@ function Explorer({
         source.imports,
         notes,
         source.pointers,
+        source.deleted,
         color,
       )
     },
@@ -1807,9 +1857,12 @@ function Explorer({
         removedBlockIds,
         removedFolderPaths,
       )
+      const removed = new Set(removedBlockIds)
+      const nextDeleted = next.deleted.filter((id) => !removed.has(id))
       if (color === blueprintColorRef.current) {
         blueprintNotesRef.current = next.notes
         blueprintPointersRef.current = next.pointers
+        blueprintDeletedRef.current = nextDeleted
         setUserBlocks(next.blocks)
         setUserIslands(next.islands)
         setBlueprintFunctions(next.functions)
@@ -1817,6 +1870,7 @@ function Explorer({
         setBlueprintImports(next.imports)
         setBlueprintNotes(next.notes)
         setBlueprintPointers(next.pointers)
+        setBlueprintDeleted(nextDeleted)
       }
       persistBlueprint(
         next.blocks,
@@ -1826,6 +1880,7 @@ function Explorer({
         next.imports,
         next.notes,
         next.pointers,
+        nextDeleted,
         color,
       )
     },
@@ -2502,6 +2557,11 @@ function Explorer({
         const nextPointers = parseBlueprintPointers(blueprint.pointers)
         blueprintPointersRef.current = nextPointers
         setBlueprintPointers(nextPointers)
+        const nextDeleted = Array.isArray(blueprint.deleted)
+          ? blueprint.deleted.filter((id): id is string => typeof id === 'string')
+          : []
+        blueprintDeletedRef.current = nextDeleted
+        setBlueprintDeleted(nextDeleted)
       }
       if (!keepDrafts || (!notesDirty.current && !isKeyboardIsolated())) {
         const nextNotes = parseBlueprintNotes(blueprint.notes)
@@ -2663,7 +2723,13 @@ function Explorer({
     ...(previewing ? (changeSet.imports ?? []) : []),
     ...blueprintImportEdges,
   ]
-  const deletedIds = previewing ? changeSet.deletes : []
+  const deletedIds = useMemo(
+    () =>
+      previewing
+        ? [...new Set([...changeSet.deletes, ...mapBlueprint.deleted])]
+        : [...mapBlueprint.deleted],
+    [changeSet.deletes, mapBlueprint.deleted, previewing],
+  )
   const blueprintHasContent = (() => {
     const contents = createdContentsForColor(blueprintColor)
     return blueprintLiveEnabled(
@@ -2674,6 +2740,7 @@ function Explorer({
       contents.imports,
       contents.notes,
       contents.pointers,
+      contents.deleted,
     )
   })()
   const blueprintCanCleanup = (() => {
@@ -2790,7 +2857,11 @@ function Explorer({
         if (color === blueprintColorRef.current) {
           blueprintHiddenRef.current = hidden
           setBlueprintHidden(hidden)
-          rememberLiveBlueprint(color, { hidden })
+          rememberLiveBlueprint(color, {
+            hidden,
+            notes: blueprintNotesRef.current,
+            pointers: blueprintPointersRef.current,
+          })
         } else {
           replaceStoredBlueprints(
             withBlueprintHidden(
@@ -2966,8 +3037,10 @@ function Explorer({
         imports: PatchImportAddition[]
         notes: BlueprintNote[]
         pointers: BlueprintPointer[]
+        deleted?: string[]
       },
     ) => {
+      const nextDeleted = next.deleted ?? []
       if (color === blueprintColorRef.current) {
         userBlocksRef.current = next.blocks
         userIslandsRef.current = next.islands
@@ -2976,6 +3049,7 @@ function Explorer({
         blueprintImportsRef.current = next.imports
         blueprintNotesRef.current = next.notes
         blueprintPointersRef.current = next.pointers
+        blueprintDeletedRef.current = nextDeleted
         setUserBlocks(next.blocks)
         setUserIslands(next.islands)
         setBlueprintFunctions(next.functions)
@@ -2983,6 +3057,7 @@ function Explorer({
         setBlueprintImports(next.imports)
         setBlueprintNotes(next.notes)
         setBlueprintPointers(next.pointers)
+        setBlueprintDeleted(nextDeleted)
       }
       persistBlueprint(
         next.blocks,
@@ -2992,6 +3067,7 @@ function Explorer({
         next.imports,
         next.notes,
         next.pointers,
+        nextDeleted,
         color,
       )
     },
@@ -3294,13 +3370,16 @@ function Explorer({
             .map((island) => island.path),
         )
         const notes = dropBlueprintFileNotes(source.notes, removed, removedFolders)
+        const nextDeleted = source.deleted.filter((id) => !removed.has(id))
         blueprintNotesRef.current = notes
+        blueprintDeletedRef.current = nextDeleted
         setUserBlocks(nextBlocks)
         setUserIslands(nextIslands)
         setBlueprintFunctions(nextFunctions)
         setBlueprintVariables(nextVariables)
         setBlueprintImports(nextImports)
         setBlueprintNotes(notes)
+        setBlueprintDeleted(nextDeleted)
         rememberLiveBlueprint(color, {
           blocks: nextBlocks,
           islands: nextIslands,
@@ -3308,6 +3387,8 @@ function Explorer({
           variables: nextVariables,
           imports: nextImports,
           notes,
+          pointers: blueprintPointersRef.current,
+          deleted: nextDeleted,
         })
       } else {
         replaceStoredBlueprints(
@@ -3563,6 +3644,11 @@ function Explorer({
         onAddFile={beginAddFile}
         onAddFolder={beginAddFolder}
         onOpenFile={inspectFile}
+        onMarkFileDeleted={
+          explaining || !canPlace || !mapMenu?.file
+            ? undefined
+            : handleMarkFileDeleted
+        }
         onAddFileNote={
           explaining ||
           !canPlace ||

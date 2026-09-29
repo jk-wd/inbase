@@ -316,6 +316,7 @@ export const emptyIntent: AgentIntent = {
   blueprintImports: [],
   blueprintNotes: [],
   blueprintPointers: [],
+  blueprintDeleted: [],
   dependsOn: [],
 }
 
@@ -407,6 +408,9 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     blueprintImports: normalizeImportAdditions(data?.blueprintImports),
     blueprintNotes: parseBlueprintNotes(data?.blueprintNotes),
     blueprintPointers: parseBlueprintPointers(data?.blueprintPointers),
+    blueprintDeleted: Array.isArray(data?.blueprintDeleted)
+      ? data.blueprintDeleted.filter((item): item is string => typeof item === 'string')
+      : [],
     dependsOn: normalizeDependsOn(data?.dependsOn, data?.color),
   }
 }
@@ -431,6 +435,9 @@ function normalizeBlueprint(
     addedImports: normalizeImportAdditions(data?.addedImports),
     notes: parseBlueprintNotes(data?.notes),
     pointers: parseBlueprintPointers(data?.pointers),
+    deleted: Array.isArray(data?.deleted)
+      ? data.deleted.filter((item): item is string => typeof item === 'string')
+      : [],
     dependsOn: normalizeDependsOn(
       data?.dependsOn,
       (data as { color?: unknown } | null | undefined)?.color as string | undefined,
@@ -520,7 +527,8 @@ export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
         intent.blueprintVariables.length > 0 ||
         intent.blueprintImports.length > 0 ||
         intent.blueprintNotes.length > 0 ||
-        intent.blueprintPointers.length > 0,
+        intent.blueprintPointers.length > 0 ||
+        intent.blueprintDeleted.length > 0,
       files: intent.userCreatedBlocks,
       folders: intent.userCreatedIslands,
       addedFunctions: intent.blueprintFunctions,
@@ -528,6 +536,7 @@ export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
       addedImports: intent.blueprintImports,
       notes: intent.blueprintNotes,
       pointers: intent.blueprintPointers,
+      deleted: intent.blueprintDeleted,
     }),
   }
 }
@@ -584,6 +593,7 @@ export function persistSessionBlueprint(
     addedImports?: PatchImportAddition[]
     notes?: BlueprintNote[]
     pointers?: BlueprintPointer[]
+    deleted?: string[]
     dependsOn?: string[]
   },
 ) {

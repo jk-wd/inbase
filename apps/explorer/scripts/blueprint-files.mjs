@@ -230,6 +230,9 @@ function layerFields(value, colorId = null) {
     addedImports: Array.isArray(value?.addedImports) ? value.addedImports : [],
     notes: blueprintNotes(value?.notes),
     pointers: Array.isArray(value?.pointers) ? value.pointers : [],
+    deleted: Array.isArray(value?.deleted)
+      ? [...new Set(value.deleted.filter((item) => typeof item === 'string' && item.trim()))]
+      : [],
     dependsOn: namedBlueprintDependsOn(colorId ?? value?.color, value?.dependsOn),
   }
 }
@@ -278,6 +281,7 @@ const CONTENT_KEYS = [
   'addedImports',
   'notes',
   'pointers',
+  'deleted',
   'dependsOn',
 ]
 
