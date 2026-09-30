@@ -49,6 +49,7 @@ import {
   goProposal,
   acceptProposal,
   finishWorkflow,
+  proposeBlueprint,
 } from './session.mjs'
 import { extractBlueprint } from './extract-blueprint.mjs'
 
@@ -388,6 +389,10 @@ export async function main(argv = process.argv.slice(2)) {
   }
   if (command === 'propose-patch') {
     await proposePatch(args)
+    return
+  }
+  if (command === 'propose-blueprint') {
+    await proposeBlueprint(args)
     return
   }
   if (command === 'explain') {

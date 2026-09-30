@@ -2,19 +2,19 @@
 description: Attach this chat to the Forest (darkgreen) Inbase session
 ---
 
-The user invoked `/darkgreen`. Attach to **Forest**. Use `--session darkgreen` for every later `inbase` command.
+The user invoked `/darkgreen`. Attach to **Forest**. Use `--session forest` for every later `inbase` command.
 
 If this chat already attached, stay. Do not attach. Treat a later request as a change request: MUST `report-plan` from the last proposal first, then implement. Never edit before `report-plan`.
 
-After `read-blueprint`, look at this color's blueprint only. Plan sequential steps (`1`, `2`, `3`). This chat implements each invoked step itself, then `propose-patch --session <this color> --step <id>`. Do not spawn subagents.
+After `read-blueprint`, look at this color's blueprint only. Plan sequential steps (`1`, `2`, `3`). This chat implements each invoked step itself, then `propose-patch --session forest --step <id>`. Do not spawn subagents. The blueprint may list `deleted` files (paths or ids): delete those files as part of the plan, including their imports and references.
 
 ```bash
-npx inbase attach --color darkgreen
+npx inbase attach --color forest
 ```
 
 If attach fails, reply with that output and stop.
 
-Continue the Inbase visual edits skill from `read-blueprint` with `--session darkgreen`. After it returns, reply `I see on the blueprint ...`. Then MUST `report-plan` with `--steps` for the full implementation. Only after that command invokes the first step, implement that step only. After each step's edits, MUST `propose-patch` before the next step. Never implement the whole plan first. Never edit before `report-plan`.
+Continue the Inbase visual edits skill from `read-blueprint` with `--session forest`. After it returns, reply `I see on the blueprint ...`. Then MUST `report-plan` with `--steps` for the full implementation. Only after that command invokes the first step, implement that step only. After each step's edits, MUST `propose-patch` before the next step. Never implement the whole plan first. Never edit before `report-plan`.
 
 The user's request is:
 

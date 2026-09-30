@@ -433,7 +433,7 @@ test('init copies Cursor skills and gitignores .inbase', () => {
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/darkgreen.md')), true)
     assert.match(
       fs.readFileSync(path.join(root, '.cursor/commands/darkgreen.md'), 'utf8'),
-      /npx inbase attach --color darkgreen/,
+      /npx inbase attach --color forest/,
     )
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/pink.md')), false)
     assert.equal(fs.existsSync(path.join(root, '.cursor/commands/fuchsia.md')), false)

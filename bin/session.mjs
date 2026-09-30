@@ -812,3 +812,74 @@ export async function runExplain(args) {
     'Stop. Wait for the user to type /explainit in chat for a follow-up, or a change request to replace the waiting proposal.',
   )
 }
+
+export async function proposeBlueprint(args) {
+  const { store, config } = await loadExplorer()
+  const sessionParsed = takeFlagValue(args, '--session')
+  const descriptionParsed = takeFlagValue(args, '--description')
+
+  if (!sessionParsed) {
+    usage('propose-blueprint', '--session <color> --description "<description>" [--write [layer.json|-]]')
+  }
+
+  if (!descriptionParsed) {
+    usage('propose-blueprint', '--session <color> --description "<description>" [--write [layer.json|-]]')
+  }
+
+  const sessionId = resolveFlagSession(store, sessionParsed)
+  const dataDir = config.dataDir
+  requireVisualizer(store, config)
+
+  const manifest = store.readManifest(dataDir, sessionId)
+  if (!manifest) {
+    console.error(`Session not found: ${sessionParsed}`)
+    process.exit(1)
+  }
+
+  const description = descriptionParsed
+  const colorId = manifest.color
+  const colorName = store.resolveSessionColor(colorId)?.name || colorId
+
+  const writeIndex = args.indexOf('--write')
+  if (writeIndex >= 0) {
+    const next = args[writeIndex + 1]
+    const takesPath = Boolean(next) && !next.startsWith('-')
+    const layerPath = takesPath ? next : '-'
+    const raw =
+      !layerPath || layerPath === '-'
+        ? fs.readFileSync(0, 'utf8')
+        : fs.readFileSync(layerPath, 'utf8')
+    let layer
+    try {
+      layer = JSON.parse(raw)
+    } catch {
+      console.error('Could not parse proposed blueprint layer JSON')
+      process.exit(1)
+    }
+
+    const { normalizeExtractLayer } = await import('./extract-blueprint.mjs')
+    const normalized = normalizeExtractLayer(layer)
+    store.writeBlueprintByColor(dataDir, colorId, {
+      ...store.emptyBlueprint(),
+      ...normalized,
+    })
+    console.log(`VISUAL_CODER_BLUEPRINT_PROPOSED Session ${colorId} blueprint has been proposed.`)
+    console.log('The blueprint is now visible on the map. The user can refine it by drawing on the map or by invoking the session color again with a more specific request.')
+    console.log('To start implementing, invoke the session color (e.g., /coral) or run: npx inbase attach --color <color>')
+    return
+  }
+
+  console.log(`VISUAL_CODER_ACK propose-blueprint: proposing blueprint for session ${colorId}`)
+  console.log(`Propose a blueprint for the ${colorName} session from this description. It is a spatial plan that another LLM will follow.`)
+  console.log(`VISUAL_CODER_PROPOSE_BLUEPRINT Session ${colorId} (${colorName})`)
+  console.log(`Description: ${description}`)
+  console.log('VISUAL_CODER_PROPOSE_BLUEPRINT_INSTRUCTION_START')
+  console.log('Read the codebase if needed, then curate a small layer JSON. Paths are relative to the target root.')
+  console.log('Decide what files and folders should exist, what functions, classes, and variables should be added, what imports should exist between files, and what notes should explain the architecture.')
+  console.log('Keep: the folder skeleton that defines the architecture, entry points, public APIs, core domain modules, exported functions and classes, important constants, shared state and config vars, imports that show real coupling, and notes that say why a file or symbol exists, the contract, or a non-obvious invariant.')
+  console.log('Drop: generated files, lockfiles, dist/build/coverage, snapshots, editor/tooling noise, tests unless they are the contract, trivial re-export barrels, every helper/getter/loop var/one-off local, notes that only restate the name, pointers unless something is a landmark.')
+  console.log('Prefer fewer, better items. Notes must add information.')
+  console.log(`Then run: npx inbase propose-blueprint --session ${colorId} --description "${description}" --write`)
+  console.log('and pass the curated layer JSON on stdin (or --write layer.json).')
+  console.log('VISUAL_CODER_PROPOSE_BLUEPRINT_INSTRUCTION_END')
+}
