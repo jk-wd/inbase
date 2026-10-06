@@ -18,6 +18,13 @@ export const CONFIG = {
   sprintSpeed: 16,
 }
 
+/** Map-mode folder connections: one thick line from folder edge to folder edge. */
+export const MAP_BRIDGE = {
+  lineWidth: 1.1,
+  color: '#3b4757',
+  y: 0.02,
+}
+
 /** Greys mirror the Cursor Dark Midnight editor theme. Keep in sync with index.css. */
 export const EDITOR_GREY = {
   chrome: '#191c22',
@@ -27,9 +34,6 @@ export const EDITOR_GREY = {
 
 /** Infinite map/walk backdrop. Keep distinct from chrome HUD greys. */
 export const WORLD_VOID = '#000000'
-
-/** Blueprint file blocks stay this color on every session color. */
-export const BLUEPRINT_FILE_COLOR = '#ffffff'
 
 export type ChangeKind = 'add' | 'edit' | 'remove'
 
@@ -72,8 +76,8 @@ export const CHANGE_HIGHLIGHT: Record<
 export const FILE_SELECTION = {
   color: '#ffffff',
   emissive: '#ffffff',
-  blueprintColor: '#000000',
-  blueprintEmissive: '#000000',
+  blueprintColor: '#ffffff',
+  blueprintEmissive: '#ffffff',
 }
 
 export const MAP_SELECTION = {
@@ -97,11 +101,33 @@ export function explainItemOpacity(dimmed: boolean, base = 1) {
   return dimmed ? base * EXPLAIN_FOCUS.dimOpacity : base
 }
 
-/** Map blocks and bridges stay see-through. Full strength is 75%. */
+/** Blueprint islands and bridges stay see-through. Full strength is 75%. */
 export const MAP_PIECE_OPACITY = 0.75
 
 export function capMapPieceOpacity(opacity: number) {
   return Math.min(opacity, MAP_PIECE_OPACITY)
+}
+
+/** Map camera limits. Tilt 0 is the classic straight-down map. */
+export const MAP_VIEW = {
+  maxTiltDeg: 62,
+  rotateSpeed: 0.6,
+  resetMs: 700,
+  /** Labels stay hidden until the camera has been still this long. */
+  labelSettleMs: 160,
+}
+
+/**
+ * Brightness per map block face. The top stays at 1 so the straight-down map
+ * keeps its colors; darker sides make heights readable once the map is tilted.
+ */
+export const MAP_BLOCK_SHADE = {
+  top: 1,
+  west: 0.82,
+  south: 0.7,
+  north: 0.62,
+  east: 0.56,
+  bottom: 0.4,
 }
 
 export function fileHeight(lines: number) {
@@ -144,12 +170,21 @@ export function lightenColor(hex: string, amount = 0.35) {
 }
 
 export const BLUEPRINT_OVERLAY = {
-  folderOpacity: 0.3,
+  /** Fill opacity of every blueprint folder sheet, so the map reads through. */
+  folderOpacity: 0.55,
   folderOutlineOpacity: 0.7,
   fileOpacity: 0.96,
-  folderY: 13.2,
-  layerStep: 0.14,
+  /** Lift of the first raised blueprint; each further raised color stacks one more lift up. */
+  folderY: 1.2,
+  /** Raised blueprint floors that view culling makes room for. */
+  maxStackedLayers: 6,
   fileLift: 0.35,
+  /** Blueprint-only folders have nothing underneath, so they lie on the ground. */
+  groundY: 0.03,
+  groundLayerStep: 0.015,
+  groundFileLift: 0.02,
+  /** Real files under a shown blueprint folder render as flat tiles. */
+  coveredFileHeight: 0.08,
   strength: 1,
 }
 
@@ -165,6 +200,8 @@ export function blueprintPalette(hex?: string | null) {
     emissive: dimColor(color, 0.45),
     floor: dimColor(color, 0.78),
     aisle: dimColor(color, 0.58),
+    /** File blocks on a blueprint: the blueprint color, darkened. */
+    file: dimColor(color, 0.68),
   }
 }
 

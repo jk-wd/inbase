@@ -39,6 +39,8 @@ import {
 } from '../../scripts/change-notes.mjs'
 import { ColorPageIcon, EyeIcon, FileIcon, FolderIcon, MenuIcon, PanelToggleIcon } from './EyeIcon'
 import { WalkDrop } from './WalkDrop'
+import { MapAngleButton } from './MapAngleButton'
+import { BlueprintColorsMenu } from './BlueprintColorsMenu'
 import { beginKeyboardIsolation, shouldIgnoreShortcut } from '../keyboard'
 import type { DevTargetsState } from '../devTargets'
 import { emptyIntent, fetchSavedBlueprints } from '../agentIntent'
@@ -2379,6 +2381,11 @@ function explorerInstructions({
       items: [
         { id: 'scroll-zoom', keys: ['Scroll'], label: 'Zoom' },
         { id: 'drag-pan', keys: ['Drag'], label: 'Pan' },
+        {
+          id: 'drag-tilt',
+          keys: ['Shift', 'Drag'],
+          label: 'Tilt and rotate the view to see file heights',
+        },
         { id: 'click-block', keys: ['Click'], label: 'A file for info' },
         {
           id: 'click-island',
@@ -2609,6 +2616,8 @@ type HUDProps = {
   blueprintColorPointers?: BlueprintColorOption[]
   onSelectBlueprintColor?: (color: string) => void
   onToggleBlueprintHidden?: () => void
+  hiddenBlueprintColors?: string[]
+  onSetBlueprintColorsHidden?: (colors: string[], hidden: boolean) => void
   onClearBlueprint?: () => void
   onCleanupBlueprint?: () => void
   savedBlueprint?: SavedBlueprintInfo | null
@@ -2709,6 +2718,8 @@ export function HUD({
   blueprintColorPointers = [],
   onSelectBlueprintColor,
   onToggleBlueprintHidden,
+  hiddenBlueprintColors = [],
+  onSetBlueprintColorsHidden,
   onClearBlueprint,
   onCleanupBlueprint,
   savedBlueprint = null,
@@ -4619,6 +4630,15 @@ export function HUD({
           )}
         </div>
         <div className="hud-icon-row">
+          {mode === 'map' && <MapAngleButton />}
+          {onSetBlueprintColorsHidden && (
+            <BlueprintColorsMenu
+              options={blueprintOptions}
+              hiddenColors={hiddenBlueprintColors}
+              disabled={bottomBarInactive}
+              onSetHidden={onSetBlueprintColorsHidden}
+            />
+          )}
           {!bottomBarInactive &&
             onWalkDropStart &&
             onWalkDropMove &&

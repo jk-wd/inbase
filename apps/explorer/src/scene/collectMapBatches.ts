@@ -1,10 +1,8 @@
-import { CONFIG, EXPLAIN_FOCUS, capMapPieceOpacity, dimColor, fileColor, folderAisleColor, folderFloorColor } from '../theme'
+import { EXPLAIN_FOCUS, MAP_BRIDGE, blueprintPalette, dimColor, fileColor, folderFloorColor } from '../theme'
 import type { FileNode, PlacedBridge, PlacedFile, PlacedFolder } from '../types'
-import { BRIDGE_DECK_Y, bridgeDeckPieces } from './Bridge'
+import { mapBridgeLine } from './mapBridgeLine'
 
 const FLOOR_Y = 0
-const AISLE_Y = 0.02
-
 export type MapBoxItem = {
   id: string
   position: [number, number, number]
@@ -25,7 +23,7 @@ export type MapPlaneItem = {
 }
 
 function mapFileInstanceColor(file: FileNode) {
-  if (file.colorHex || file.userCreated) return '#ffffff'
+  if (file.colorHex || file.userCreated) return blueprintPalette(file.colorHex).file
   return fileColor(file.language)
 }
 
@@ -57,13 +55,12 @@ export function collectMapFolderItems(
   folders: Record<string, PlacedFolder>,
   skipPaths: Set<string>,
   dimmed: (path: string) => boolean,
-): { floors: MapPlaneItem[]; aisles: MapPlaneItem[] } {
+): MapPlaneItem[] {
   const floors: MapPlaneItem[] = []
-  const aisles: MapPlaneItem[] = []
   for (const folder of Object.values(folders)) {
     if (skipPaths.has(folder.path)) continue
     const faded = dimmed(folder.path)
-    const opacity = capMapPieceOpacity(faded ? EXPLAIN_FOCUS.dimOpacity : 1)
+    const opacity = faded ? EXPLAIN_FOCUS.dimOpacity : 1
     const z = folder.z + folder.depth / 2
     floors.push({
       id: folder.path,
@@ -75,51 +72,26 @@ export function collectMapFolderItems(
       color: folderFloorColor(folder.path),
       opacity,
     })
-    aisles.push({
-      id: `${folder.path}:aisle`,
-      x: folder.x,
-      z,
-      y: AISLE_Y,
-      width: CONFIG.bridgeWidth,
-      depth: folder.depth,
-      color: folderAisleColor(folder.path),
-      opacity,
-    })
-    if (folder.width > 28) {
-      aisles.push({
-        id: `${folder.path}:dock`,
-        x: folder.x,
-        z: folder.z + folder.depth - CONFIG.bridgeWidth / 2,
-        y: AISLE_Y,
-        width: folder.width,
-        depth: CONFIG.bridgeWidth,
-        color: folderAisleColor(folder.path),
-        opacity,
-      })
-    }
   }
-  return { floors, aisles }
+  return floors
 }
 
 export function collectMapBridgeItems(
   bridges: PlacedBridge[],
-  folders: Record<string, PlacedFolder>,
   dimmed: (id: string) => boolean = () => false,
 ): MapPlaneItem[] {
   const items: MapPlaneItem[] = []
   for (const bridge of bridges) {
-    const opacity = capMapPieceOpacity(
-      dimmed(bridge.id) ? EXPLAIN_FOCUS.dimOpacity : 1,
-    )
-    for (const piece of bridgeDeckPieces(bridge, folders)) {
+    const opacity = dimmed(bridge.id) ? EXPLAIN_FOCUS.dimOpacity : 1
+    for (const piece of mapBridgeLine(bridge)) {
       items.push({
         id: `${bridge.id}:${piece.key}`,
         x: piece.x,
         z: piece.z,
-        y: BRIDGE_DECK_Y,
+        y: MAP_BRIDGE.y,
         width: piece.width,
         depth: piece.depth,
-        color: piece.color,
+        color: MAP_BRIDGE.color,
         opacity,
       })
     }

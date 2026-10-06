@@ -1,9 +1,10 @@
 import { memo, Suspense, useRef, useState } from 'react'
 import { Billboard, Edges, Html, Text } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
-import { BLUEPRINT_FILE_COLOR, CHANGE_HIGHLIGHT, CONFIG, EXPLAIN_FOCUS, dimColor, fileColor, fileEmphasisScale, FILE_SELECTION, MAP_SELECTION, type ChangeKind } from '../theme'
+import { blueprintPalette, CHANGE_HIGHLIGHT, CONFIG, EXPLAIN_FOCUS, dimColor, fileColor, fileEmphasisScale, FILE_SELECTION, MAP_SELECTION, type ChangeKind } from '../theme'
 import { BlueprintEyes, BlueprintNotes, mapMarkDistanceFactor, mapMarkIconWorld, mapMarkOffsetX } from '../ui/EyeIcon'
 import { MapSelectBorder } from './MapSelectBorder'
+import { MAP_BLOCK_GEOMETRY } from './mapBlockGeometry'
 import type { FileNode } from '../types'
 import type { PlacedFile } from '../types'
 
@@ -211,7 +212,8 @@ export const FileBlock = memo(function FileBlock({
   const width = placed.size[0] * emphasis
   const height = placed.size[1]
   const depth = placed.size[2] * emphasis
-  const color = onBlueprint ? BLUEPRINT_FILE_COLOR : fileColor(file.language)
+  const blueprintFile = blueprintPalette(file.colorHex).file
+  const color = onBlueprint ? blueprintFile : fileColor(file.language)
   const muted = dimColor(color, EXPLAIN_FOCUS.dimColorAmount)
   const label = fileLabel(file.name, change, isAdded)
   const markKind = changeMarkKind(change, isAdded)
@@ -248,7 +250,7 @@ export const FileBlock = memo(function FileBlock({
       ? selectionColor
       : dimmed
         ? muted
-        : BLUEPRINT_FILE_COLOR
+        : blueprintFile
     : aimed
       ? '#9ad8ff'
       : selected
@@ -269,9 +271,14 @@ export const FileBlock = memo(function FileBlock({
         scale={[width, height, depth]}
         renderOrder={overlay ? 3 : 0}
       >
-        <boxGeometry args={[1, 1, 1]} />
+        {mapMode ? (
+          <primitive object={MAP_BLOCK_GEOMETRY} attach="geometry" />
+        ) : (
+          <boxGeometry args={[1, 1, 1]} />
+        )}
         {mapMode ? (
           <meshBasicMaterial
+            vertexColors
             color={meshColor}
             toneMapped={false}
             transparent={fade}
@@ -290,7 +297,7 @@ export const FileBlock = memo(function FileBlock({
                   ? FILE_SELECTION.blueprintEmissive
                   : dimmed
                     ? muted
-                    : BLUEPRINT_FILE_COLOR
+                    : blueprintFile
                 : aimed
                   ? '#3a6a80'
                   : selected
@@ -375,7 +382,7 @@ export const FileBlock = memo(function FileBlock({
           depth={depth}
           height={height}
           opacity={opacity}
-          color={onBlueprint && selected ? '#ffffff' : '#000000'}
+          color={onBlueprint && !selected ? '#ffffff' : '#000000'}
         />
       )}
       {(eyeColors.length > 0 || noteColors.length > 0) && !naming && (

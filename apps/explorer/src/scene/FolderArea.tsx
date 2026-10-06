@@ -32,6 +32,8 @@ type FolderAreaProps = {
   opacity?: number
   overlay?: boolean
   overlayY?: number
+  /** Fill opacity of an overlay sheet; below 1 the border becomes a frame so the map shows through. */
+  sheetOpacity?: number
   pickPath?: string
   pickLayer?: string
 }
@@ -50,6 +52,7 @@ export function FolderArea({
   opacity = 1,
   overlay = false,
   overlayY = BLUEPRINT_OVERLAY.folderY,
+  sheetOpacity = 1,
   pickPath,
   pickLayer,
 }: FolderAreaProps) {
@@ -121,7 +124,19 @@ export function FolderArea({
           : undefined
       }
     >
-      {outlineColor && (
+      {outlineColor && overlay && sheetOpacity < 1 && (
+        <MapSelectBorder
+          width={folder.width}
+          depth={folder.depth}
+          y={0.02}
+          stroke={0.45}
+          color={outlineColor}
+          opacity={opacity}
+          renderOrder={2}
+          depthTest
+        />
+      )}
+      {outlineColor && !(overlay && sheetOpacity < 1) && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, overlay ? 0.02 : -0.01, 0]}>
           <planeGeometry args={[folder.width + 0.9, folder.depth + 0.9]} />
           <meshBasicMaterial
@@ -139,7 +154,7 @@ export function FolderArea({
         <meshBasicMaterial
           color={color}
           transparent={faded}
-          opacity={overlay ? wash : opacity}
+          opacity={overlay ? wash * sheetOpacity : opacity}
           depthWrite={!faded}
           toneMapped={overlay ? false : true}
           side={overlay ? DoubleSide : undefined}
@@ -164,13 +179,13 @@ export function FolderArea({
           color={markColor ?? MAP_SELECTION.pointed}
         />
       )}
-      {!overlay && (
+      {!overlay && !mapMode && (
         <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[CONFIG.bridgeWidth, folder.depth]} />
           <meshBasicMaterial color={aisle} {...floorMaterial} />
         </mesh>
       )}
-      {!overlay && folder.width > 28 && (
+      {!overlay && !mapMode && folder.width > 28 && (
         <mesh
           position={[0, 0.02, folder.depth / 2 - CONFIG.bridgeWidth / 2]}
           rotation={[-Math.PI / 2, 0, 0]}

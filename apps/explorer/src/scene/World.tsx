@@ -11,7 +11,8 @@ import {
 } from './collectMapBatches'
 import { RelationLines } from './RelationLines'
 import { Player } from './Player'
-import { MapView, type MapBlueprintMenu, type MapFileLabel, type MapFocusBounds } from './MapView'
+import { MapView, type MapBlueprintMenu, type MapFocusBounds } from './MapView'
+import type { MapFileLabel } from './MapFileLabels'
 import { UserContextTracker } from './UserContextTracker'
 import { WalkLodTracker } from './WalkLodTracker'
 import { computeWalkLod, type WalkLod } from './walkLod'
@@ -31,7 +32,7 @@ import {
   explainHasFocus,
   type ExplainFocus,
 } from '../explain'
-import { BLUEPRINT_OVERLAY, CONFIG, EXPLAIN_FOCUS, WORLD_VOID, blueprintPalette, capMapPieceOpacity, explainItemOpacity, fileColor, fileEmphasisScale } from '../theme'
+import { BLUEPRINT_OVERLAY, EXPLAIN_FOCUS, WORLD_VOID, blueprintPalette, capMapPieceOpacity, explainItemOpacity, fileEmphasisScale } from '../theme'
 import type {
   CodebaseGraph,
   FileNode,
@@ -47,7 +48,14 @@ import type {
   ViewMode,
   WorldLayout,
 } from '../types'
-import { mergeOverlayOnlyFolders, toCreatedFile, type BlueprintOverlayLayer } from '../userCreated'
+import { mapBridgeLine } from './mapBridgeLine'
+import type { MapSheet } from './mapLabelOcclusion'
+import {
+  mergeOverlayOnlyFolders,
+  overlayFolderY,
+  toCreatedFile,
+  type BlueprintOverlayLayer,
+} from '../userCreated'
 
 type WorldProps = {
   graph: CodebaseGraph
@@ -166,11 +174,94 @@ export function World({
   const notedFolders = new Set(notedFolderPaths)
   const mapping = mode === 'map'
   const viewGraph = mapping && mapGraph ? mapGraph : graph
-  const viewLayout = mapping && mapLayout ? mapLayout : layout
+  const groundLayout = mapping && mapLayout ? mapLayout : layout
+  const sheetUnderFile = useMemo(
+    () =>
+      mapping
+        ? filesUnderBlueprints(groundLayout, overlayLayers, namingIslandId)
+        : new Map<string, number>(),
+    [groundLayout, mapping, namingIslandId, overlayLayers],
+  )
+  const viewLayout = useMemo(
+    () => flattenFilesUnderBlueprints(groundLayout, sheetUnderFile),
+    [groundLayout, sheetUnderFile],
+  )
+  /** Relation ends follow what is drawn: blueprint blocks, or the sheet over covered map files. */
+  const relationAnchors = useMemo(() => {
+    if (!mapping || overlayLayers.length === 0) return previewFiles
+    const anchors: Record<string, PlacedFile> = {}
+    const blueprintIds = new Set(
+      viewGraph.files.filter((file) => file.userCreated).map((file) => file.id),
+    )
+    for (const layer of overlayLayers) {
+      for (const [id, placed] of Object.entries(layer.files)) {
+        if (anchors[id] || !blueprintIds.has(id)) continue
+        anchors[id] = overlayFilePlacement(placed, groundLayout.files[id])
+      }
+    }
+    for (const [id, sheetY] of sheetUnderFile) {
+      const file = viewLayout.files[id]
+      if (!file || anchors[id]) continue
+      anchors[id] = { ...file, position: [file.position[0], sheetY - file.size[1] / 2, file.position[2]] }
+    }
+    for (const layer of overlayLayers) {
+      for (const [id, placed] of Object.entries(layer.files)) {
+        if (!anchors[id]) anchors[id] = placed
+      }
+    }
+    return { ...anchors, ...previewFiles }
+  }, [
+    groundLayout.files,
+    mapping,
+    overlayLayers,
+    previewFiles,
+    sheetUnderFile,
+    viewGraph.files,
+    viewLayout.files,
+  ])
+  const overlaySheets = useMemo(() => {
+    const sheets: MapSheet[] = []
+    if (!mapping) return sheets
+    for (const layer of overlayLayers) {
+      for (const folder of Object.values(layer.folders)) {
+        const y = overlayFolderY(layer, folder.path)
+        const bounds = overlayFolderBounds(
+          folder,
+          groundLayout.folders,
+          folder.path === namingIslandId,
+        )
+        if (!bounds) continue
+        sheets.push({
+          path: folder.path,
+          x: bounds.x,
+          z: bounds.z,
+          width: bounds.width,
+          depth: bounds.depth,
+          y,
+        })
+      }
+    }
+    return sheets
+  }, [groundLayout.folders, mapping, namingIslandId, overlayLayers])
+  const blueprintSheets = useMemo(
+    () => overlaySheets.filter((sheet) => sheet.y > BLUEPRINT_OVERLAY.groundY),
+    [overlaySheets],
+  )
+  /** Blueprint-only folders are titled by their highest sheet; real map folders keep their ground label. */
+  const folderLabelAnchors = useMemo(() => {
+    const anchors: Record<string, MapSheet> = {}
+    for (const sheet of overlaySheets) {
+      const onMap = groundLayout.folders[sheet.path]
+      if (onMap && !onMap.added) continue
+      const current = anchors[sheet.path]
+      if (!current || sheet.y >= current.y) anchors[sheet.path] = sheet
+    }
+    return anchors
+  }, [groundLayout.folders, overlaySheets])
   const mapMarker =
-    viewLayout === layout
+    groundLayout === layout
       ? landAt
-      : mapPointOntoFolder(landAt[0], landAt[1], layout, viewLayout)
+      : mapPointOntoFolder(landAt[0], landAt[1], layout, groundLayout)
   const placing = Boolean(namingId || namingIslandId)
   const planned = new Set(plannedIds)
   const ghosts = previewFiles
@@ -315,9 +406,14 @@ export function World({
     const seen = new Set<string>()
     const items: MapFileLabel[] = []
     const overlayFileHex = new Map<string, string>()
+    const overlayFileTop = new Map<string, number>()
     for (const layer of overlayLayers) {
-      for (const id of Object.keys(layer.files)) {
+      for (const [id, placed] of Object.entries(layer.files)) {
         overlayFileHex.set(id, layer.colorHex)
+        if (!overlayFileTop.has(id)) {
+          const drawn = overlayFilePlacement(placed, groundLayout.files[id])
+          overlayFileTop.set(id, drawn.position[1] + drawn.size[1] / 2)
+        }
       }
       for (const id of layer.filledIds) {
         overlayFileHex.set(id, layer.colorHex)
@@ -337,10 +433,12 @@ export function World({
       const noteColors = notedFileColors[id]
       const kind = fileChangeKind(id, planned, created, deleted)
       const scale = fileEmphasisScale(Boolean(extra?.overlay), kind)
+      const groundTop = placed.position[1] + placed.size[1] / 2
       items.push({
         id,
         name,
         x: placed.position[0],
+        y: extra?.overlay ? (overlayFileTop.get(id) ?? groundTop) : groundTop,
         z: placed.position[2],
         width: placed.size[0] * scale,
         depth: placed.size[2] * scale,
@@ -401,6 +499,7 @@ export function World({
     explainActive,
     explainFocus,
     ghosts,
+    groundLayout.files,
     mapping,
     overlayLayers,
     plannedIds,
@@ -532,7 +631,7 @@ export function World({
   ])
   const mapBatches = useMemo(() => {
     if (!mapping) {
-      return { files: [], floors: [], aisles: [], bridges: [] }
+      return { files: [], floors: [], bridges: [] }
     }
     const files = collectMapFileItems(
       viewGraph.files,
@@ -541,7 +640,7 @@ export function World({
       (id, folder) =>
         explainActive && !explainFileFocused(explainFocus, id, folder),
     )
-    const { floors, aisles } = collectMapFolderItems(
+    const floors = collectMapFolderItems(
       viewLayout.folders,
       mapSkipFolderPaths,
       (path) => explainActive && !explainFolderFocused(explainFocus, path),
@@ -549,10 +648,8 @@ export function World({
     return {
       files,
       floors,
-      aisles,
       bridges: collectMapBridgeItems(
         viewLayout.bridges.filter((bridge) => !overlayBridgeIds.has(bridge.id)),
-        viewLayout.folders,
         (id) => explainActive && !explainBridgeFocused(explainFocus, id),
       ),
     }
@@ -632,13 +729,14 @@ export function World({
           mapping && !placing && onBlueprintMenu ? onBlueprintMenu : undefined
         }
         blueprintOpacity={overlayOpacity}
+        blueprintSheets={blueprintSheets}
+        folderLabelAnchors={folderLabelAnchors}
       />
 
       {mapping && (
         <MapBatches
           files={mapBatches.files}
           floors={mapBatches.floors}
-          aisles={mapBatches.aisles}
           bridges={mapBatches.bridges}
         />
       )}
@@ -667,7 +765,7 @@ export function World({
             noted={notedFolders.has(folder.path)}
             notedColors={notedFolderColors[folder.path]}
             opacity={
-              mapping
+              mapping && isBlueprintFolder(folder)
                 ? capMapPieceOpacity(
                     explainItemOpacity(
                       explainActive &&
@@ -736,9 +834,9 @@ export function World({
             added={created.has(file.id) || file.userCreated}
             aimed={aimed}
             pointed={pointed && !mapping}
-            pointedColors={pointedFileColors[file.id]}
+            pointedColors={mapping ? undefined : pointedFileColors[file.id]}
             noted={noted && !mapping}
-            notedColors={notedFileColors[file.id]}
+            notedColors={mapping ? undefined : notedFileColors[file.id]}
             onOpenNote={onOpenFileNote}
             dimmed={dimmed}
             focused={focused && !underBlueprint}
@@ -756,7 +854,7 @@ export function World({
             key={`layer:${layer.id}`}
             layer={layer}
             graph={viewGraph}
-            layout={viewLayout}
+            layout={groundLayout}
             selectedId={selectedId}
             selectedFolder={selectedFolder}
             selectedFolderLayer={selectedFolderLayer}
@@ -833,7 +931,7 @@ export function World({
           onAimRelation={mapping ? onAimRelation : undefined}
           files={viewGraph.files}
           layout={viewLayout}
-          extras={ghosts}
+          extras={relationAnchors}
           plannedIds={plannedIds}
           plannedEdges={plannedImports}
           extraEdges={explainEdges}
@@ -957,6 +1055,14 @@ function fileInsideFolder(file: PlacedFile, folder: PlacedFolder) {
   )
 }
 
+/** A bridge rises only when both ends are raised blueprint folders. */
+function overlayBridgeY(layer: BlueprintOverlayLayer, bridge: PlacedBridge) {
+  const ends = bridge.id.split('→')
+  return Math.min(
+    ...ends.map((path) => layer.folderHeights[path] ?? BLUEPRINT_OVERLAY.groundY),
+  )
+}
+
 function OverlayBridgeStrip({
   bridge,
   color,
@@ -968,30 +1074,26 @@ function OverlayBridgeStrip({
   y: number
   opacity: number
 }) {
-  const from = bridge.points[0]
-  const to = bridge.points[bridge.points.length - 1]
-  if (!from || !to) return null
-  const x = (from[0] + to[0]) / 2
-  const z = (from[1] + to[1]) / 2
-  const alongX = Math.abs(to[0] - from[0]) >= Math.abs(to[1] - from[1])
-  const length = Math.hypot(to[0] - from[0], to[1] - from[1])
+  const pieces = useMemo(() => mapBridgeLine(bridge), [bridge])
   return (
-    <mesh position={[x, y, z]} rotation={[-Math.PI / 2, 0, 0]} visible={opacity > 0}>
-      <planeGeometry
-        args={
-          alongX
-            ? [length, CONFIG.bridgeWidth]
-            : [CONFIG.bridgeWidth, length]
-        }
-      />
-      <meshBasicMaterial
-        color={color}
-        transparent
-        opacity={opacity}
-        depthWrite={false}
-        toneMapped={false}
-      />
-    </mesh>
+    <group position={[0, y, 0]} visible={opacity > 0}>
+      {pieces.map((piece) => (
+        <mesh
+          key={piece.key}
+          position={[piece.x, 0, piece.z]}
+          rotation={[-Math.PI / 2, 0, 0]}
+        >
+          <planeGeometry args={[piece.width, piece.depth]} />
+          <meshBasicMaterial
+            color={color}
+            transparent
+            opacity={opacity}
+            depthWrite={false}
+            toneMapped={false}
+          />
+        </mesh>
+      ))}
+    </group>
   )
 }
 
@@ -1025,6 +1127,64 @@ function clipFolderAwayFromUnrelated(
     x: (left + right) / 2,
     width,
   }
+}
+
+/** Blueprint blocks keep the map footprint of a file already laid out, at the blueprint's height. */
+function overlayFilePlacement(placed: PlacedFile, layoutFile?: PlacedFile): PlacedFile {
+  if (!layoutFile) return placed
+  return {
+    ...placed,
+    position: [layoutFile.position[0], placed.position[1], layoutFile.position[2]],
+    size: layoutFile.size,
+    aisleFace: layoutFile.aisleFace,
+  }
+}
+
+/** Real map files under a blueprint folder, with the height of the sheet covering them. */
+function filesUnderBlueprints(
+  layout: WorldLayout,
+  layers: BlueprintOverlayLayer[],
+  namingIslandId: string | null,
+): Map<string, number> {
+  const covers: { bounds: PlacedFolder; y: number }[] = []
+  for (const layer of layers) {
+    for (const folder of Object.values(layer.folders)) {
+      const bounds = overlayFolderBounds(
+        folder,
+        layout.folders,
+        folder.path === namingIslandId,
+      )
+      if (bounds) covers.push({ bounds, y: overlayFolderY(layer, folder.path) })
+    }
+  }
+  const under = new Map<string, number>()
+  if (covers.length === 0) return under
+  for (const [id, file] of Object.entries(layout.files)) {
+    for (const cover of covers) {
+      if (!fileInsideFolder(file, cover.bounds)) continue
+      under.set(id, Math.max(under.get(id) ?? -Infinity, cover.y))
+    }
+  }
+  return under
+}
+
+function flattenFilesUnderBlueprints(
+  layout: WorldLayout,
+  under: Map<string, number>,
+): WorldLayout {
+  if (under.size === 0) return layout
+  const height = BLUEPRINT_OVERLAY.coveredFileHeight
+  let files: Record<string, PlacedFile> | null = null
+  for (const [id, file] of Object.entries(layout.files)) {
+    if (!under.has(id)) continue
+    files ??= { ...layout.files }
+    files[id] = {
+      ...file,
+      position: [file.position[0], height / 2, file.position[2]],
+      size: [file.size[0], height, file.size[2]],
+    }
+  }
+  return files ? { ...layout, files } : layout
 }
 
 function overlayFolderBounds(
@@ -1085,8 +1245,11 @@ function BlueprintOverlay({
   const filled = new Set(layer.filledIds)
   const filesById = new Map(graph.files.map((file) => [file.id, file]))
   const tint = blueprintPalette(layer.colorHex)
+  const isMapFile = (id: string) => {
+    const node = filesById.get(id)
+    return Boolean(layout.files[id] && node && !node.userCreated)
+  }
   const coveredFiles = Object.values(layout.files).filter((file) => {
-    if (layer.files[file.id]) return false
     const node = filesById.get(file.id)
     if (node?.userCreated) return false
     return Object.values(layer.folders).some((folder) => {
@@ -1118,7 +1281,8 @@ function BlueprintOverlay({
             }
             mapMode
             overlay
-            overlayY={layer.folderY}
+            overlayY={overlayFolderY(layer, folder.path)}
+            sheetOpacity={BLUEPRINT_OVERLAY.folderOpacity}
             opacity={explainItemOpacity(
               explainActive && !explainFolderFocused(explainFocus, folder.path),
               overlayOpacity,
@@ -1134,7 +1298,7 @@ function BlueprintOverlay({
           key={`overlay-bridge:${layer.id}:${bridge.id}`}
           bridge={bridge}
           color={tint.color}
-          y={layer.folderY}
+          y={overlayBridgeY(layer, bridge)}
           opacity={capMapPieceOpacity(
             explainItemOpacity(
               explainActive && !explainBridgeFocused(explainFocus, bridge.id),
@@ -1144,20 +1308,9 @@ function BlueprintOverlay({
         />
       ))}
       {Object.entries(layer.files).map(([id, placed]) => {
+        if (isMapFile(id)) return null
         const existing = filesById.get(id)
-        const layoutFile = layout.files[id]
-        const overlayPlaced: PlacedFile = layoutFile
-          ? {
-              ...placed,
-              position: [
-                layoutFile.position[0],
-                placed.position[1],
-                layoutFile.position[2],
-              ],
-              size: layoutFile.size,
-              aisleFace: layoutFile.aisleFace,
-            }
-          : placed
+        const overlayPlaced = overlayFilePlacement(placed, layout.files[id])
         const file = existing
           ? { ...existing, userCreated: true, colorHex: layer.colorHex }
           : toCreatedFile({
@@ -1204,7 +1357,7 @@ function BlueprintOverlay({
         )
       })}
       {Object.entries(layout.files).map(([id, layoutFile]) => {
-        if (layer.files[id]) return null
+        if (layer.files[id] && !isMapFile(id)) return null
         const hex = layer.colorHex.toLowerCase()
         const noteColors = (notedFileColors[id] ?? []).filter(
           (color) => color.toLowerCase() === hex,
@@ -1223,7 +1376,7 @@ function BlueprintOverlay({
             key={`overlay-marks:${layer.id}:${id}`}
             position={[
               layoutFile.position[0],
-              layer.fileLift + layoutFile.size[1] / 2,
+              overlayFolderY(layer, folderOfFile(id)),
               layoutFile.position[2],
             ]}
             visible={opacity > 0}
@@ -1232,7 +1385,7 @@ function BlueprintOverlay({
               mapMode
               width={layoutFile.size[0]}
               depth={layoutFile.size[2]}
-              height={layoutFile.size[1]}
+              height={0}
               noteColors={noteColors}
               eyeColors={eyeColors}
               fileName={id.split('/').pop() ?? id}
@@ -1252,28 +1405,16 @@ function BlueprintOverlay({
             !explainFileFocused(explainFocus, file.id, folderOfFile(file.id)),
           overlayOpacity,
         )
-        const node = filesById.get(file.id)
         return (
           <group
             key={`covered-file:${layer.id}:${file.id}`}
-            position={[file.position[0], layer.folderY + 0.12, file.position[2]]}
+            position={[
+              file.position[0],
+              overlayFolderY(layer, folderOfFile(file.id)) + 0.12,
+              file.position[2],
+            ]}
             visible={opacity > 0}
           >
-            <mesh
-              rotation={[-Math.PI / 2, 0, 0]}
-              position={[0, -0.04, 0]}
-              renderOrder={4}
-            >
-              <planeGeometry args={[file.size[0], file.size[2]]} />
-              <meshBasicMaterial
-                color={fileColor(node?.language ?? '')}
-                toneMapped={false}
-                transparent
-                opacity={opacity}
-                depthTest={false}
-                depthWrite={false}
-              />
-            </mesh>
             <DashedBlockOutline
               width={file.size[0]}
               depth={file.size[2]}

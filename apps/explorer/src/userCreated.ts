@@ -22,6 +22,10 @@ export type BlueprintLayerSource = {
   hex: string
   blocks: UserCreatedBlock[]
   islands: UserCreatedIsland[]
+  /** Existing folders holding this blueprint's pointers or notes. */
+  markedFolders?: string[]
+  /** Raised floor order; lower stacks closer to the map. */
+  stackOrder?: number
 }
 
 export type BlueprintOverlayLayer = {
@@ -33,6 +37,16 @@ export type BlueprintOverlayLayer = {
   filledIds: string[]
   folderY: number
   fileLift: number
+  /** A blueprint is one sheet: raised to `folderY` when any folder overlaps the map, else on the ground. */
+  folderHeights: Record<string, number>
+}
+
+export function overlayFolderY(layer: BlueprintOverlayLayer, folderPath: string) {
+  return layer.folderHeights[folderPath] ?? layer.folderY
+}
+
+function liftAbove(folderY: number, elevated: boolean) {
+  return folderY + (elevated ? BLUEPRINT_OVERLAY.fileLift : BLUEPRINT_OVERLAY.groundFileLift)
 }
 
 export function languageOfName(name: string) {
@@ -357,6 +371,8 @@ function overlayIslands(
   for (const island of sortCreatedIslandsParentFirst(islands)) {
     const id = islandKey(island)
     if (layout.folders[id]) {
+      // A blueprint folder over a real folder is drawn by the overlay; the map folder stays as scanned.
+      if (!layout.folders[id].added) continue
       folders[id] = {
         ...folders[id],
         added: true,
@@ -815,7 +831,7 @@ function placeOverlayBlocks(
   base: WorldLayout,
   overlayFolders: Record<string, PlacedFolder>,
   blocks: UserCreatedBlock[],
-  fileLift: number,
+  liftOf: (folderPath: string) => number,
 ): { files: Record<string, PlacedFile>; filledIds: string[] } {
   const files: Record<string, PlacedFile> = {}
   const filledIds: string[] = []
@@ -833,7 +849,7 @@ function placeOverlayBlocks(
         ...existingById,
         position: [
           existingById.position[0],
-          fileLift + existingById.size[1] / 2,
+          liftOf(folderOfFile(existingById.id)) + existingById.size[1] / 2,
           existingById.position[2],
         ],
       }
@@ -850,7 +866,7 @@ function placeOverlayBlocks(
         ...existingByName,
         position: [
           existingByName.position[0],
-          fileLift + existingByName.size[1] / 2,
+          liftOf(folderOfFile(existingByName.id)) + existingByName.size[1] / 2,
           existingByName.position[2],
         ],
       }
@@ -874,7 +890,7 @@ function placeOverlayBlocks(
             ? { x: spot.x, z: spot.z }
             : { x: 0, z: 0 },
       startIndex: index,
-      y: fileLift + height / 2,
+      y: liftOf(folderPath) + height / 2,
       occupied: filesOccupancy([base.files, files], block.id),
     })
   }
@@ -885,12 +901,12 @@ function islandsForOverlay(
   blocks: UserCreatedBlock[],
   islands: UserCreatedIsland[],
   base: WorldLayout,
+  markedFolders: string[] = [],
 ) {
   const have = new Set(islands.map((island) => islandKey(island)))
   const implied: UserCreatedIsland[] = []
-  for (const block of blocks) {
-    const folder = block.folder
-    if (!folder || have.has(folder)) continue
+  const imply = (folder: string) => {
+    if (have.has(folder)) return
     have.add(folder)
     const existing = base.folders[folder]
     implied.push({
@@ -900,7 +916,30 @@ function islandsForOverlay(
       parent: folderParent(folder) ?? '.',
     })
   }
+  for (const block of blocks) {
+    if (block.folder) imply(block.folder)
+  }
+  for (const folder of markedFolders) {
+    if (base.folders[folder]) imply(folder)
+  }
   return [...islands, ...implied]
+}
+
+/** Folders a blueprint touches through its file/folder pointers and notes. */
+export function blueprintMarkedFolders(
+  pointers: BlueprintPointer[],
+  notes: BlueprintNote[],
+) {
+  const folders = new Set<string>()
+  for (const pointer of pointers) {
+    if (pointer.path.startsWith('draft:')) continue
+    folders.add(pointer.kind === 'folder' ? pointer.path : folderOfFile(pointer.path))
+  }
+  for (const note of notes) {
+    if (note.file.startsWith('draft:')) continue
+    folders.add(note.kind === 'folder' ? note.file : folderOfFile(note.file))
+  }
+  return [...folders]
 }
 
 export function layoutBlueprintLayers(
@@ -908,23 +947,56 @@ export function layoutBlueprintLayers(
   sources: BlueprintLayerSource[],
 ): BlueprintOverlayLayer[] {
   const combinedIslands = sources.flatMap((source) =>
-    islandsForOverlay(source.blocks, source.islands, base),
+    islandsForOverlay(source.blocks, source.islands, base, source.markedFolders),
   )
   const placed = overlayIslands(base, combinedIslands)
-  return sources.map((source, index) => {
+  const placedSources = sources.map((source, index) => {
     const { folders, bridges } = placeOverlayIslands(
       placed,
-      islandsForOverlay(source.blocks, source.islands, placed),
+      islandsForOverlay(
+        source.blocks,
+        source.islands,
+        placed,
+        source.markedFolders,
+      ),
       source.hex,
     )
-    const folderY =
-      BLUEPRINT_OVERLAY.folderY + index * BLUEPRINT_OVERLAY.layerStep
-    const fileLift = folderY + BLUEPRINT_OVERLAY.fileLift
+    const overlapsMap = Object.values(folders).some((folder) => {
+      const onMap = base.folders[folder.path]
+      return Boolean(onMap && !onMap.added)
+    })
+    return { source, index, folders, bridges, overlapsMap }
+  })
+  const raisedFloor = new Map(
+    placedSources
+      .filter((item) => item.overlapsMap)
+      .sort(
+        (a, b) =>
+          (a.source.stackOrder ?? a.index) - (b.source.stackOrder ?? b.index) ||
+          a.index - b.index,
+      )
+      .map((item, floor) => [item.source.id, floor + 1]),
+  )
+  return placedSources.map(({ source, index, folders, bridges, overlapsMap }) => {
+    /** Raised blueprints stack a full lift apart: floor 1, 2, 3… in session color order. */
+    const folderY = BLUEPRINT_OVERLAY.folderY * (raisedFloor.get(source.id) ?? 1)
+    const groundY =
+      BLUEPRINT_OVERLAY.groundY + index * BLUEPRINT_OVERLAY.groundLayerStep
+    const fileLift = liftAbove(folderY, true)
+    const y = overlapsMap ? folderY : groundY
+    const folderHeights: Record<string, number> = {}
+    for (const [key, folder] of Object.entries(folders)) {
+      folderHeights[key] = y
+      folderHeights[folder.path] = y
+    }
     const { files, filledIds } = placeOverlayBlocks(
       placed,
       folders,
       source.blocks,
-      fileLift,
+      (path) => {
+        const y = folderHeights[path] ?? folderY
+        return liftAbove(y, overlapsMap)
+      },
     )
     return {
       id: source.id,
@@ -935,6 +1007,7 @@ export function layoutBlueprintLayers(
       filledIds,
       folderY,
       fileLift,
+      folderHeights,
     }
   })
 }

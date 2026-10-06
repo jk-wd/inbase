@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import type { MapBoxItem, MapPlaneItem } from './collectMapBatches'
+import { MAP_BLOCK_GEOMETRY } from './mapBlockGeometry'
 
 const DUMMY = new THREE.Object3D()
 const COLOR = new THREE.Color()
@@ -60,8 +61,9 @@ function MapInstancedBoxes({
       frustumCulled={false}
       userData={{ mapFileIds: ids }}
     >
-      <boxGeometry args={[1, 1, 1]} />
+      <primitive object={MAP_BLOCK_GEOMETRY} attach="geometry" />
       <meshBasicMaterial
+        vertexColors
         toneMapped={false}
         transparent={opacity < 1}
         opacity={opacity}
@@ -127,16 +129,13 @@ function MapInstancedPlanes({
 export function MapBatches({
   files,
   floors,
-  aisles,
   bridges,
 }: {
   files: MapBoxItem[]
   floors: MapPlaneItem[]
-  aisles: MapPlaneItem[]
   bridges: MapPlaneItem[]
 }) {
   const floorGroups = groupsByOpacity(floors)
-  const aisleGroups = groupsByOpacity(aisles)
   const fileGroups = groupsByOpacity(files)
   const bridgeGroups = groupsByOpacity(bridges)
   return (
@@ -148,13 +147,6 @@ export function MapBatches({
           opacity={opacity}
           userDataKey="mapFolderPaths"
           pick
-        />
-      ))}
-      {aisleGroups.map(([opacity, items]) => (
-        <MapInstancedPlanes
-          key={`aisles:${opacity}`}
-          items={items}
-          opacity={opacity}
         />
       ))}
       {bridgeGroups.map(([opacity, items]) => (

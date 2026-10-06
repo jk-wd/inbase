@@ -89,6 +89,7 @@ import {
   withUserCreatedLayout,
   layoutBlueprintLayers,
   mergeOverlayOnlyFolders,
+  blueprintMarkedFolders,
 } from './userCreated'
 import {
   isPatchPreview,
@@ -484,6 +485,11 @@ function visibleBlueprintColorIds(
   return next.length > 0 ? next : [DEFAULT_SESSION_COLOR.id]
 }
 
+function sessionColorOrder(id: string) {
+  const index = SESSION_COLORS.findIndex((color) => color.id === id)
+  return index < 0 ? SESSION_COLORS.length : index
+}
+
 function collectMapBlueprints(input: {
   selectedColor: string
   selectedHidden: boolean
@@ -591,6 +597,8 @@ function collectMapBlueprints(input: {
     hex: string
     blocks: UserCreatedBlock[]
     islands: UserCreatedIsland[]
+    markedFolders: string[]
+    stackOrder: number
   }> = []
   for (const source of sources) {
     const visible = visibleItemsForBlueprint(
@@ -609,6 +617,10 @@ function collectMapBlueprints(input: {
         ...island,
         colorHex: source.hex,
       })),
+      markedFolders: source.hidden
+        ? []
+        : blueprintMarkedFolders(source.pointers, source.notes),
+      stackOrder: sessionColorOrder(source.id),
     })
     for (const block of visible.blocks) {
       blocks.set(block.id, { ...block, colorHex: source.hex })
@@ -991,6 +1003,14 @@ function Explorer({
     () => blueprintOptionsFrom(intents, localBlueprints),
     [intents, localBlueprints],
   )
+  const hiddenBlueprintColors = useMemo(() => {
+    const hidden = new Set(
+      localBlueprints.filter((local) => local.hidden).map((local) => local.color),
+    )
+    if (blueprintHidden) hidden.add(blueprintColor)
+    else hidden.delete(blueprintColor)
+    return [...hidden]
+  }, [blueprintColor, blueprintHidden, localBlueprints])
   const blueprintColorPointers = useMemo(
     () =>
       blueprintOptions.map((option) => ({
@@ -3639,6 +3659,8 @@ function Explorer({
         blueprintColorPointers={blueprintColorPointers}
         onSelectBlueprintColor={selectBlueprintColor}
         onToggleBlueprintHidden={toggleActiveBlueprintHidden}
+        hiddenBlueprintColors={hiddenBlueprintColors}
+        onSetBlueprintColorsHidden={applyHiddenToColors}
         onClearBlueprint={clearSharedBlueprint}
         onCleanupBlueprint={cleanupSharedBlueprint}
         savedBlueprint={savedBlueprint}
