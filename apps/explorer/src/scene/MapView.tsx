@@ -6,7 +6,13 @@ import { folderAt, folderOfFile, isBlueprintFolder, worldBounds } from '../layou
 import type { ChangeKind } from '../theme'
 import { blueprintPalette } from '../theme'
 import type { PlacedFolder, WorldLayout } from '../types'
-import { eyeIconMarkup, noteIconMarkup } from '../ui/EyeIcon'
+import {
+  eyeIconMarkup,
+  mapMarkIconWorld,
+  mapMarkOffsetX,
+  mapMarkRowWidth,
+  noteIconMarkup,
+} from '../ui/EyeIcon'
 
 export type MapBlueprintMenu = {
   x: number
@@ -30,6 +36,7 @@ export type MapFileLabel = {
   noted?: boolean
   notedColor?: string
   notedColors?: string[]
+  pointedColors?: string[]
   dimmed?: boolean
   focused?: boolean
   blueprintHex?: string
@@ -211,6 +218,7 @@ type MapViewProps = {
   onSelectFolder: (folderPath: string | null, layer?: string | null) => void
   pickingImport?: boolean
   onBlueprintMenu?: (menu: MapBlueprintMenu) => void
+  blueprintOpacity?: number
 }
 
 export function MapView({
@@ -241,6 +249,7 @@ export function MapView({
   onSelectFolder,
   onBlueprintMenu,
   pickingImport = false,
+  blueprintOpacity = 1,
 }: MapViewProps) {
   const size = useThree((state) => state.size)
   const camera = useThree((state) => state.camera)
@@ -819,10 +828,15 @@ export function MapView({
           notedFolderPaths={notedFolderPaths}
           notedFolderColors={notedFolderColors}
           dimmedFolderPaths={dimmedFolderPaths}
+          blueprintOpacity={blueprintOpacity}
         />
       )}
       {enabled && (
-        <MapFileLabels files={fileLabels} namingFileId={namingFileId} />
+        <MapFileLabels
+          files={fileLabels}
+          namingFileId={namingFileId}
+          blueprintOpacity={blueprintOpacity}
+        />
       )}
       {enabled && marker && <LandMarker marker={marker} />}
       {enabled && dropAt && <WalkDropMarker at={dropAt} />}
@@ -841,11 +855,38 @@ const FILE_LABEL_STACK_GAP = 2
 const MAX_FILE_LABELS = 28
 const FILE_LABEL_CHAR_W = 7.2
 const FILE_LABEL_PAD_X = 12
-const FILE_LABEL_NOTE_W = 12
 const FILE_LABEL_MIN_W = 108
 const FILE_LABEL_MAX_W = 220
 const FILE_LABEL_BLOCK_SCALE = 5.2
-const FILE_NOTE_ICON_SIZE = 10
+const MARK_CLEAR_PX = 6
+const FILE_LABEL_LEADER_BLOCK_PX = 80
+const FILE_LABEL_LEADER_SHIFT_PX = 14
+const FILE_LABEL_LEADER_MIN_PX = 18
+
+function markScreenSpan(file: MapFileLabel, zoom: number) {
+  const notes = file.noted ? Math.max(file.notedColors?.length ?? 1, 1) : 0
+  const eyes = file.pointed ? Math.max(file.pointedColors?.length ?? 1, 1) : 0
+  const count = notes + eyes
+  if (count === 0) return null
+  const iconWorld = mapMarkIconWorld(Math.min(file.width, file.depth), zoom)
+  const half = (mapMarkRowWidth(iconWorld, count) * zoom) / 2
+  const center = mapMarkOffsetX(file.width, file.depth, count, zoom) * zoom
+  return { left: center - half, right: center + half }
+}
+
+function labelHitsMark(
+  file: MapFileLabel,
+  zoom: number,
+  screenX: number,
+  edgeX: number,
+  labelW: number,
+  outer: 1 | -1 | 0,
+) {
+  const span = markScreenSpan(file, zoom)
+  if (!span) return false
+  const box = fileLabelBounds(edgeX, 0, labelW, outer)
+  return box.r > screenX + span.left - MARK_CLEAR_PX && box.l < screenX + span.right + MARK_CLEAR_PX
+}
 
 function projectToScreen(
   x: number,
@@ -991,6 +1032,7 @@ function MapFolderLabels({
   notedFolderPaths,
   notedFolderColors,
   dimmedFolderPaths,
+  blueprintOpacity,
 }: {
   folders: Record<string, PlacedFolder>
   highlightedFolders?: Partial<Record<string, ChangeKind>>
@@ -1001,6 +1043,7 @@ function MapFolderLabels({
   notedFolderPaths: string[]
   notedFolderColors: Record<string, string[]>
   dimmedFolderPaths: string[]
+  blueprintOpacity: number
 }) {
   const camera = useThree((state) => state.camera)
   const gl = useThree((state) => state.gl)
@@ -1015,6 +1058,7 @@ function MapFolderLabels({
   const notedRef = useRef(notedFolderPaths)
   const notedColorsRef = useRef(notedFolderColors)
   const dimmedRef = useRef(dimmedFolderPaths)
+  const blueprintOpacityRef = useRef(blueprintOpacity)
   foldersRef.current = folders
   highlightedRef.current = highlightedFolders
   selectedRef.current = selectedFolder
@@ -1024,6 +1068,7 @@ function MapFolderLabels({
   notedRef.current = notedFolderPaths
   notedColorsRef.current = notedFolderColors
   dimmedRef.current = dimmedFolderPaths
+  blueprintOpacityRef.current = blueprintOpacity
 
   useLayoutEffect(() => {
     const parent = gl.domElement.parentElement
@@ -1176,6 +1221,11 @@ function MapFolderLabels({
         el.dataset.pos = pos
         el.style.transform = `translate3d(${tx}px, ${ty}px, 0) translate(-50%, -50%)`
       }
+      const blueprintLabel = Boolean(next.folder.overlay || next.folder.added)
+      const labelOpacity = blueprintLabel ? blueprintOpacityRef.current : 1
+      if (el.style.opacity !== String(labelOpacity)) {
+        el.style.opacity = String(labelOpacity)
+      }
       if (el.style.visibility !== 'visible') el.style.visibility = 'visible'
     }
   })
@@ -1215,15 +1265,6 @@ function fileNoteColors(file: MapFileLabel) {
 
 function paintFileLabel(el: HTMLElement, file: MapFileLabel) {
   el.replaceChildren()
-  if (file.noted) {
-    for (const color of fileNoteColors(file)) {
-      const note = document.createElement('span')
-      note.className = 'map-file-note'
-      note.style.color = color
-      note.innerHTML = noteIconMarkup(FILE_NOTE_ICON_SIZE)
-      el.appendChild(note)
-    }
-  }
   const name = document.createElement('span')
   name.className = 'map-file-name'
   name.textContent = file.name
@@ -1238,7 +1279,13 @@ type FileLabelCandidate = {
   outer: 1 | -1 | 0
   rank: number
   dist: number
+  anchorX: number
+  anchorY: number
+  halfW: number
+  halfH: number
 }
+
+type FileLabelLeader = { x1: number; y1: number; x2: number; y2: number }
 
 type FileLabelBox = { l: number; t: number; r: number; b: number }
 
@@ -1270,6 +1317,39 @@ function labelsOverlap(
     if (left < box.r && right > box.l && top < box.b && bottom > box.t) return true
   }
   return false
+}
+
+function fileLabelLeader(item: FileLabelCandidate): FileLabelLeader | null {
+  const labelX = Math.round(item.x)
+  const labelY = Math.round(item.y)
+  const labelW = Math.round(item.w)
+  const box = fileLabelBounds(labelX, labelY, labelW, item.outer)
+  const blockL = item.anchorX - item.halfW
+  const blockT = item.anchorY - item.halfH
+  const blockR = item.anchorX + item.halfW
+  const blockB = item.anchorY + item.halfH
+  const offBlock =
+    box.r < blockL + 1 ||
+    box.l > blockR - 1 ||
+    box.b < blockT + 1 ||
+    box.t > blockB - 1
+  if (!offBlock) return null
+  const blockPx = Math.min(item.halfW, item.halfH) * 2
+  const shifted = Math.abs(labelY - item.anchorY) >= FILE_LABEL_LEADER_SHIFT_PX
+  if (blockPx < FILE_LABEL_LEADER_BLOCK_PX && !shifted) return null
+
+  const y1 = (box.t + box.b) / 2
+  const x1 = item.outer === 1 ? box.l : item.outer === -1 ? box.r : item.anchorX
+  const yStart =
+    item.outer === 0 ? Math.min(box.b, Math.max(box.t, item.anchorY)) : y1
+  const xStart =
+    item.outer === 0 ? Math.min(box.r, Math.max(box.l, item.anchorX)) : x1
+  const x2 = Math.round(item.anchorX)
+  const y2 = Math.round(item.anchorY)
+  const startX = Math.round(xStart)
+  const startY = Math.round(yStart)
+  if (Math.hypot(x2 - startX, y2 - startY) < FILE_LABEL_LEADER_MIN_PX) return null
+  return { x1: startX, y1: startY, x2, y2 }
 }
 
 function boxesOverlap(a: FileLabelBox, b: FileLabelBox, pad: number) {
@@ -1357,21 +1437,94 @@ function pickStackedFileLabels(candidates: FileLabelCandidate[], limit: number) 
   return visible
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg'
+
+function createFileLabelLeader() {
+  const group = document.createElementNS(SVG_NS, 'g')
+  group.setAttribute('class', 'map-file-label-leader')
+  group.style.visibility = 'hidden'
+  const halo = document.createElementNS(SVG_NS, 'line')
+  halo.setAttribute('class', 'map-file-label-leader-halo')
+  const line = document.createElementNS(SVG_NS, 'line')
+  line.setAttribute('class', 'map-file-label-leader-line')
+  const dot = document.createElementNS(SVG_NS, 'circle')
+  dot.setAttribute('class', 'map-file-label-leader-dot')
+  dot.setAttribute('r', '2.4')
+  group.append(halo, line, dot)
+  return group
+}
+
+function paintFileLabelLeaders(
+  svg: SVGSVGElement,
+  visible: FileLabelCandidate[],
+  blueprintOpacity: number,
+) {
+  const leaders: FileLabelLeader[] = []
+  const dimmed: boolean[] = []
+  const layerOpacity: number[] = []
+  for (let i = 0; i < visible.length; i += 1) {
+    const leader = fileLabelLeader(visible[i])
+    if (!leader) continue
+    leaders.push(leader)
+    dimmed.push(Boolean(visible[i].file.dimmed))
+    const onBlueprint = Boolean(visible[i].file.overlay)
+    layerOpacity.push(onBlueprint ? blueprintOpacity : 1)
+  }
+
+  while (svg.childElementCount < leaders.length) {
+    svg.appendChild(createFileLabelLeader())
+  }
+
+  const nodes = svg.children
+  for (let i = 0; i < nodes.length; i += 1) {
+    const group = nodes[i] as SVGGElement
+    const leader = leaders[i]
+    if (!leader) {
+      if (group.style.visibility !== 'hidden') group.style.visibility = 'hidden'
+      continue
+    }
+    const signature = `${leader.x1},${leader.y1},${leader.x2},${leader.y2},${dimmed[i] ? 1 : 0},${layerOpacity[i]}`
+    if (group.dataset.sig !== signature) {
+      group.dataset.sig = signature
+      const halo = group.children[0]
+      const line = group.children[1]
+      const dot = group.children[2]
+      for (const el of [halo, line]) {
+        el.setAttribute('x1', String(leader.x1))
+        el.setAttribute('y1', String(leader.y1))
+        el.setAttribute('x2', String(leader.x2))
+        el.setAttribute('y2', String(leader.y2))
+      }
+      dot.setAttribute('cx', String(leader.x2))
+      dot.setAttribute('cy', String(leader.y2))
+      group.classList.toggle('map-file-label-leader-dimmed', dimmed[i])
+    }
+    const opacity = String(layerOpacity[i] ?? 1)
+    if (group.style.opacity !== opacity) group.style.opacity = opacity
+    if (group.style.visibility !== 'visible') group.style.visibility = 'visible'
+  }
+}
+
 function MapFileLabels({
   files,
   namingFileId,
+  blueprintOpacity,
 }: {
   files: MapFileLabel[]
   namingFileId: string | null
+  blueprintOpacity: number
 }) {
   const camera = useThree((state) => state.camera)
   const gl = useThree((state) => state.gl)
   const size = useThree((state) => state.size)
   const layerRef = useRef<HTMLDivElement | null>(null)
+  const leadersRef = useRef<SVGSVGElement | null>(null)
   const filesRef = useRef(files)
   const namingRef = useRef(namingFileId)
+  const blueprintOpacityRef = useRef(blueprintOpacity)
   filesRef.current = files
   namingRef.current = namingFileId
+  blueprintOpacityRef.current = blueprintOpacity
 
   useLayoutEffect(() => {
     const parent = gl.domElement.parentElement
@@ -1380,18 +1533,24 @@ function MapFileLabels({
     layer.className = 'map-file-label-layer'
     layer.style.cssText =
       'position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:70;background:transparent;'
+    const leaders = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    leaders.setAttribute('class', 'map-file-label-leaders')
+    layer.appendChild(leaders)
     parent.appendChild(layer)
     layerRef.current = layer
+    leadersRef.current = leaders
     return () => {
       layer.remove()
       layerRef.current = null
+      leadersRef.current = null
     }
   }, [gl])
 
   useFrame(() => {
     const layer = layerRef.current
+    const leaders = leadersRef.current
     const items = filesRef.current
-    if (!layer) return
+    if (!layer || !leaders) return
     const zoom = 'zoom' in camera ? Number(camera.zoom) : 1
     const view = orthoViewPad(camera, size.width, size.height, 80)
     const cx = size.width * 0.5
@@ -1435,28 +1594,36 @@ function MapFileLabels({
       )
       const width = Math.min(
         maxWidth,
-        file.name.length * FILE_LABEL_CHAR_W +
-          FILE_LABEL_PAD_X +
-          (file.noted ? FILE_LABEL_NOTE_W * fileNoteColors(file).length : 0),
+        file.name.length * FILE_LABEL_CHAR_W + FILE_LABEL_PAD_X,
       )
       const onBlock = block >= 48 && width <= block * 0.9
-      const edgeX = onBlock
-        ? screen.x
-        : screen.x + file.outer * ((file.width * zoom) / 2 + FILE_LABEL_GAP)
+      const halfW = (file.width * zoom) / 2
+      const halfH = (file.depth * zoom) / 2
+      let outer: 1 | -1 | 0 = onBlock ? 0 : file.outer
+      let edgeX = onBlock ? screen.x : screen.x + file.outer * (halfW + FILE_LABEL_GAP)
+      if (labelHitsMark(file, zoom, screen.x, edgeX, width, outer)) {
+        outer = -1
+        edgeX = screen.x - (halfW + FILE_LABEL_GAP)
+      }
       candidates.push({
         file,
         x: edgeX,
         y: screen.y,
         w: width,
-        outer: onBlock ? 0 : file.outer,
+        outer,
         rank: file.selected ? 0 : file.pointed || file.noted || file.focused ? 1 : 2,
         dist: Math.hypot(screen.x - cx, screen.y - cy),
+        anchorX: screen.x,
+        anchorY: screen.y,
+        halfW,
+        halfH,
       })
     }
 
     const visible = pickStackedFileLabels(candidates, MAX_FILE_LABELS)
+    paintFileLabelLeaders(leaders, visible, blueprintOpacityRef.current)
 
-    while (layer.children.length < visible.length) {
+    while (layer.children.length - 1 < visible.length) {
       const el = document.createElement('div')
       el.className = 'map-file-label'
       el.style.position = 'absolute'
@@ -1467,9 +1634,9 @@ function MapFileLabels({
     }
 
     const nodes = layer.children
-    for (let i = 0; i < nodes.length; i += 1) {
+    for (let i = 1; i < nodes.length; i += 1) {
       const el = nodes[i] as HTMLElement
-      const next = visible[i]
+      const next = visible[i - 1]
       if (!next) {
         if (el.style.visibility !== 'hidden') el.style.visibility = 'hidden'
         continue
@@ -1517,6 +1684,11 @@ function MapFileLabels({
       if (el.dataset.pos !== pos) {
         el.dataset.pos = pos
         el.style.transform = `translate3d(${tx}px, ${ty}px, 0) translate(${origin})`
+      }
+      const onBlueprint = Boolean(next.file.overlay)
+      const labelOpacity = onBlueprint ? blueprintOpacityRef.current : 1
+      if (el.style.opacity !== String(labelOpacity)) {
+        el.style.opacity = String(labelOpacity)
       }
       if (el.style.visibility !== 'visible') el.style.visibility = 'visible'
     }

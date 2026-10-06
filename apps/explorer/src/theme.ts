@@ -28,6 +28,9 @@ export const EDITOR_GREY = {
 /** Infinite map/walk backdrop. Keep distinct from chrome HUD greys. */
 export const WORLD_VOID = '#000000'
 
+/** Blueprint file blocks stay this color on every session color. */
+export const BLUEPRINT_FILE_COLOR = '#ffffff'
+
 export type ChangeKind = 'add' | 'edit' | 'remove'
 
 export const FILE_EMPHASIS_SCALE = 2
@@ -37,9 +40,8 @@ export function fileEmphasisScale(
   changeKind: ChangeKind | null,
   added = false,
 ) {
-  if (overlay || added || changeKind) {
-    return FILE_EMPHASIS_SCALE
-  }
+  if (overlay) return 1
+  if (added || changeKind) return FILE_EMPHASIS_SCALE
   return 1
 }
 
@@ -70,6 +72,8 @@ export const CHANGE_HIGHLIGHT: Record<
 export const FILE_SELECTION = {
   color: '#ffffff',
   emissive: '#ffffff',
+  blueprintColor: '#000000',
+  blueprintEmissive: '#000000',
 }
 
 export const MAP_SELECTION = {
@@ -91,6 +95,13 @@ export const EXPLAIN_FOCUS = {
 
 export function explainItemOpacity(dimmed: boolean, base = 1) {
   return dimmed ? base * EXPLAIN_FOCUS.dimOpacity : base
+}
+
+/** Map blocks and bridges stay see-through. Full strength is 75%. */
+export const MAP_PIECE_OPACITY = 0.75
+
+export function capMapPieceOpacity(opacity: number) {
+  return Math.min(opacity, MAP_PIECE_OPACITY)
 }
 
 export function fileHeight(lines: number) {
@@ -139,7 +150,7 @@ export const BLUEPRINT_OVERLAY = {
   folderY: 13.2,
   layerStep: 0.14,
   fileLift: 0.35,
-  strength: 0.55,
+  strength: 1,
 }
 
 export function blueprintPalette(hex?: string | null) {

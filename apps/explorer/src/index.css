@@ -283,6 +283,11 @@ button {
   color: #d7eef8;
 }
 
+.hud-button.hud-explain-return {
+  border-color: #9ad8ff;
+  color: #d7eef8;
+}
+
 .hud-bottom-actions {
   display: flex;
   gap: 8px;
@@ -527,6 +532,37 @@ button {
   z-index: 70;
 }
 
+.map-file-label-leaders {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.map-file-label-leader-halo {
+  stroke: rgba(8, 10, 14, 0.92);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+}
+
+.map-file-label-leader-line {
+  stroke: rgba(241, 245, 250, 0.94);
+  stroke-width: 1.25;
+  stroke-linecap: round;
+}
+
+.map-file-label-leader-dot {
+  fill: #f1f5fa;
+  stroke: rgba(8, 10, 14, 0.92);
+  stroke-width: 1.25;
+}
+
+.map-file-label-leader-dimmed {
+  opacity: var(--explain-dim-opacity);
+}
+
 .map-relation-layer {
   position: absolute;
   inset: 0;
@@ -568,18 +604,6 @@ button {
   font-weight: 600;
   line-height: 1.25;
   letter-spacing: 0.01em;
-}
-
-.map-file-note {
-  display: grid;
-  place-items: center;
-  flex: none;
-  line-height: 0;
-  opacity: 0.8;
-}
-
-.map-file-note svg {
-  display: block;
 }
 
 .map-file-label-selected {
@@ -1502,9 +1526,19 @@ button {
 .blueprint-note-mark {
   display: grid;
   place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   color: #f4f7fb;
+  background: #000;
+  border: 0;
+  border-radius: 50%;
   line-height: 0;
-  opacity: 0.85;
+}
+
+button.blueprint-note-mark {
+  cursor: pointer;
+  pointer-events: auto;
 }
 
 .blueprint-note-mark svg {
@@ -2561,6 +2595,13 @@ button {
   display: flex;
   align-items: flex-start;
   gap: 12px;
+  flex: none;
+}
+
+.explain-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex: none;
 }
 

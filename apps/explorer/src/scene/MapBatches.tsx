@@ -12,14 +12,14 @@ function useInstanceCap(count: number) {
   return cap.current
 }
 
-function splitByOpacity<T extends { opacity: number }>(items: T[]) {
-  const solid: T[] = []
-  const faded: T[] = []
+function groupsByOpacity<T extends { opacity: number }>(items: T[]) {
+  const groups = new Map<number, T[]>()
   for (const item of items) {
-    if (item.opacity < 1) faded.push(item)
-    else solid.push(item)
+    const list = groups.get(item.opacity)
+    if (list) list.push(item)
+    else groups.set(item.opacity, [item])
   }
-  return { solid, faded }
+  return [...groups.entries()]
 }
 
 function MapInstancedBoxes({
@@ -135,29 +135,42 @@ export function MapBatches({
   aisles: MapPlaneItem[]
   bridges: MapPlaneItem[]
 }) {
-  const fileParts = splitByOpacity(files)
-  const floorParts = splitByOpacity(floors)
-  const aisleParts = splitByOpacity(aisles)
-  const bridgeParts = splitByOpacity(bridges)
+  const floorGroups = groupsByOpacity(floors)
+  const aisleGroups = groupsByOpacity(aisles)
+  const fileGroups = groupsByOpacity(files)
+  const bridgeGroups = groupsByOpacity(bridges)
   return (
     <group>
-      <MapInstancedPlanes
-        items={floorParts.solid}
-        userDataKey="mapFolderPaths"
-        pick
-      />
-      <MapInstancedPlanes
-        items={floorParts.faded}
-        opacity={floorParts.faded[0]?.opacity}
-        userDataKey="mapFolderPaths"
-        pick
-      />
-      <MapInstancedPlanes items={aisleParts.solid} />
-      <MapInstancedPlanes items={aisleParts.faded} opacity={aisleParts.faded[0]?.opacity} />
-      <MapInstancedPlanes items={bridgeParts.solid} />
-      <MapInstancedPlanes items={bridgeParts.faded} opacity={bridgeParts.faded[0]?.opacity} />
-      <MapInstancedBoxes items={fileParts.solid} />
-      <MapInstancedBoxes items={fileParts.faded} opacity={fileParts.faded[0]?.opacity} />
+      {floorGroups.map(([opacity, items]) => (
+        <MapInstancedPlanes
+          key={`floors:${opacity}`}
+          items={items}
+          opacity={opacity}
+          userDataKey="mapFolderPaths"
+          pick
+        />
+      ))}
+      {aisleGroups.map(([opacity, items]) => (
+        <MapInstancedPlanes
+          key={`aisles:${opacity}`}
+          items={items}
+          opacity={opacity}
+        />
+      ))}
+      {bridgeGroups.map(([opacity, items]) => (
+        <MapInstancedPlanes
+          key={`bridges:${opacity}`}
+          items={items}
+          opacity={opacity}
+        />
+      ))}
+      {fileGroups.map(([opacity, items]) => (
+        <MapInstancedBoxes
+          key={`files:${opacity}`}
+          items={items}
+          opacity={opacity}
+        />
+      ))}
     </group>
   )
 }

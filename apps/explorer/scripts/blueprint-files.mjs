@@ -17,6 +17,38 @@ export function defaultBlueprintsDir(targetRoot) {
   return path.join(path.resolve(targetRoot), BLUEPRINTS_DIR_NAME)
 }
 
+export function blueprintSubjectSlug(value) {
+  const raw = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  const slug = raw
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48)
+    .replace(/-+$/g, '')
+  return slug || 'blueprint'
+}
+
+export function nextNumberedBlueprintFile(targetRoot, subject) {
+  const slug = blueprintSubjectSlug(subject)
+  const directory = defaultBlueprintsDir(targetRoot)
+  let max = 0
+  if (fs.existsSync(directory)) {
+    const pattern = new RegExp(`^${slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)\\.json$`, 'i')
+    for (const fileName of fs.readdirSync(directory)) {
+      const match = pattern.exec(fileName)
+      if (!match) continue
+      const num = Number(match[1])
+      if (Number.isInteger(num) && num > max) max = num
+    }
+  }
+  const number = max + 1
+  return {
+    subject: slug,
+    number,
+    fileName: `${slug}-${number}.json`,
+    filePath: `blueprints/${slug}-${number}.json`,
+  }
+}
+
 export function blueprintFileName(name) {
   const trimmed = typeof name === 'string' ? name.trim() : ''
   if (!trimmed) throw new Error('Blueprint name is required')

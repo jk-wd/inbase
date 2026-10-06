@@ -51,6 +51,16 @@ export type SavedBlueprintList = {
 }
 
 export function defaultBlueprintsDir(targetRoot: string): string
+export function blueprintSubjectSlug(value: string): string
+export function nextNumberedBlueprintFile(
+  targetRoot: string,
+  subject: string,
+): {
+  subject: string
+  number: number
+  fileName: string
+  filePath: string
+}
 export function blueprintFileName(name: string): string
 export function resolveBlueprintSavePath(
   targetRoot: string,

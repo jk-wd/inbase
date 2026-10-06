@@ -8,6 +8,7 @@ type MapSelectBorderProps = {
   y?: number
   stroke?: number
   color?: string
+  opacity?: number
   renderOrder?: number
   depthTest?: boolean
   userData?: Record<string, unknown>
@@ -19,6 +20,7 @@ export function MapSelectBorder({
   y = 0.04,
   stroke = MAP_SELECTION.blockPad,
   color = MAP_SELECTION.color,
+  opacity = 1,
   renderOrder = 10,
   depthTest = false,
   userData,
@@ -56,7 +58,7 @@ export function MapSelectBorder({
         color={color}
         toneMapped={false}
         transparent
-        opacity={1}
+        opacity={opacity}
         depthTest={depthTest}
         side={THREE.DoubleSide}
         depthWrite={false}

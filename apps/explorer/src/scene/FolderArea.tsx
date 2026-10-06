@@ -101,7 +101,7 @@ export function FolderArea({
         : folder.name
 
   const faded = overlay || opacity < 1
-  const wash = overlay ? BLUEPRINT_OVERLAY.folderOpacity * opacity : opacity
+  const wash = opacity
   const outlineColor =
     outline && faded && !overlay
       ? dimColor(outline, EXPLAIN_FOCUS.dimColorAmount)
@@ -128,9 +128,7 @@ export function FolderArea({
             color={outlineColor}
             toneMapped={false}
             transparent={faded}
-            opacity={
-              overlay ? BLUEPRINT_OVERLAY.folderOutlineOpacity * opacity : floorMaterial.opacity
-            }
+            opacity={overlay ? opacity : floorMaterial.opacity}
             depthWrite={!faded}
             side={overlay ? DoubleSide : undefined}
           />
@@ -154,6 +152,7 @@ export function FolderArea({
           y={overlay ? 0.08 : 0.06}
           stroke={MAP_SELECTION.islandPad}
           color={MAP_SELECTION.island}
+          opacity={overlay ? opacity : 1}
         />
       )}
       {(eyeColors.length > 0 || noteColors.length > 0) && !naming && !overlay && (

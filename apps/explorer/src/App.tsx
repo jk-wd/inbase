@@ -1142,10 +1142,16 @@ function Explorer({
   const explainExitPendingRef = useRef(false)
   const explainEpochRef = useRef(0)
   const cardExplain = explainIsCard(explain)
-  const explaining =
+  const [parkedExplainQuestion, setParkedExplainQuestion] = useState<
+    string | null
+  >(null)
+  const explainSessionOpen =
     explain.active &&
     !cardExplain &&
     explain.question !== dismissedCardQuestion
+  const explainOnMap =
+    explainSessionOpen && parkedExplainQuestion === explain.question
+  const explaining = explainSessionOpen && !explainOnMap
   const [landAt, setLandAt] = useState<[number, number]>([
     layout.spawn[0],
     layout.spawn[2],
@@ -1488,8 +1494,12 @@ function Explorer({
   }, [])
 
   useEffect(() => {
-    if (explain.active && mode !== 'map') openMap()
-  }, [explain.active, mode, openMap])
+    if (explaining && mode !== 'map') openMap()
+  }, [explaining, mode, openMap])
+
+  useEffect(() => {
+    if (!explain.active) setParkedExplainQuestion(null)
+  }, [explain.active])
 
   useEffect(() => {
     if (
@@ -1519,6 +1529,7 @@ function Explorer({
       explainEpochRef.current += 1
       explainExitPendingRef.current = true
       setDismissedCardQuestion(options?.dismissQuestion ?? null)
+      setParkedExplainQuestion(null)
       setExplain(emptyExplain())
       openMap()
       void persistExplainStop().finally(() => {
@@ -1528,6 +1539,16 @@ function Explorer({
     },
     [openMap],
   )
+
+  const returnToMapFromExplain = useCallback(() => {
+    setParkedExplainQuestion(explain.question)
+    openMap()
+  }, [explain.question, openMap])
+
+  const resumeExplain = useCallback(() => {
+    setParkedExplainQuestion(null)
+    openMap()
+  }, [openMap])
 
   const closeAskCard = useCallback(() => {
     exitExplain({ dismissQuestion: explain.question })
@@ -1978,7 +1999,7 @@ function Explorer({
   )
 
   const openMapFileNote = useCallback(
-    (fileId: string) => {
+    (fileId: string, _colorHex?: string) => {
       if (fileId.startsWith('draft:')) return
       selectFile(fileId)
       setFileNoteTick((tick) => tick + 1)
@@ -3500,6 +3521,7 @@ function Explorer({
             revealFlightKey={mapReveal?.key ?? 0}
             landEnabled={!explaining}
             droppingWalk={Boolean(walkDrop)}
+            onOpenFileNote={explaining ? undefined : openMapFileNote}
           />
         </Canvas>
         </CanvasErrorBoundary>
@@ -3513,6 +3535,7 @@ function Explorer({
             explain={explain}
             onStep={goExplainStep}
             onExit={exitExplain}
+            onReturnToMap={returnToMapFromExplain}
           />
           {explainFile && explainStep ? (
             <>
@@ -3624,6 +3647,8 @@ function Explorer({
         devTargets={devTargets}
         onSelectDevTarget={onSelectDevTarget}
         explainMode={explaining}
+        explainPaused={explainOnMap}
+        onResumeExplain={resumeExplain}
       />
       <MapContextMenu
         menu={mapMenu}

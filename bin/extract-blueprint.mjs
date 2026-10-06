@@ -214,6 +214,19 @@ function normalizePointer(item) {
   return { kind, path: pointerPath, name }
 }
 
+function normalizeDeleted(value) {
+  if (!Array.isArray(value)) return []
+  const seen = new Set()
+  const deleted = []
+  for (const item of value) {
+    const id = posixPath(typeof item === 'string' ? item : '')
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    deleted.push(id)
+  }
+  return deleted
+}
+
 export function normalizeExtractLayer(layer = {}) {
   const files = []
   const seenFiles = new Set()
@@ -262,6 +275,7 @@ export function normalizeExtractLayer(layer = {}) {
   const pointers = (Array.isArray(layer.pointers) ? layer.pointers : [])
     .map(normalizePointer)
     .filter(Boolean)
+  const deleted = normalizeDeleted(layer.deleted)
 
   return {
     hidden: false,
@@ -274,6 +288,7 @@ export function normalizeExtractLayer(layer = {}) {
     addedImports,
     notes,
     pointers,
+    deleted,
   }
 }
 

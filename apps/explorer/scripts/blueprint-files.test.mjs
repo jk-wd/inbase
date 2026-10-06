@@ -8,7 +8,9 @@ import {
   applyBlueprintDocument,
   BLUEPRINTS_DIR_NAME,
   blueprintFileName,
+  blueprintSubjectSlug,
   defaultBlueprintsDir,
+  nextNumberedBlueprintFile,
   listSavedBlueprints,
   loadBlueprintDocument,
   parseBlueprintDocument,
@@ -21,6 +23,29 @@ import {
   readBlueprintByColor,
   updateBlueprint,
 } from './session-store.mjs'
+
+test('numbered blueprint files use subject-num and skip taken numbers', () => {
+  const env = fixture()
+  try {
+    assert.equal(blueprintSubjectSlug('Timer App!'), 'timer-app')
+    const first = nextNumberedBlueprintFile(env.targetRoot, 'Timer App!')
+    assert.deepEqual(first, {
+      subject: 'timer-app',
+      number: 1,
+      fileName: 'timer-app-1.json',
+      filePath: 'blueprints/timer-app-1.json',
+    })
+    fs.mkdirSync(path.join(env.targetRoot, 'blueprints'), { recursive: true })
+    fs.writeFileSync(path.join(env.targetRoot, 'blueprints', 'timer-app-1.json'), '{}')
+    fs.writeFileSync(path.join(env.targetRoot, 'blueprints', 'timer-app-4.json'), '{}')
+    fs.writeFileSync(path.join(env.targetRoot, 'blueprints', 'other-1.json'), '{}')
+    const next = nextNumberedBlueprintFile(env.targetRoot, 'timer-app')
+    assert.equal(next.fileName, 'timer-app-5.json')
+    assert.equal(next.number, 5)
+  } finally {
+    env.cleanup()
+  }
+})
 
 function blueBlueprint(document) {
   return document.blueprints.find((item) => item.color === 'blue')

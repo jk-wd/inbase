@@ -95,6 +95,43 @@ test('normalizeExtractLayer infers parent folders for kept files', () => {
   assert.equal(layer.notes[0].kind, 'file')
 })
 
+test('normalizeExtractLayer keeps pointers, symbol notes, and deletions', () => {
+  const layer = normalizeExtractLayer({
+    files: [{ path: 'src/timer/Timer.tsx' }],
+    pointers: [
+      { kind: 'file', path: 'src/App.tsx' },
+      { kind: 'folder', path: 'src' },
+      { kind: 'function', path: 'src/App.tsx', name: 'App' },
+      { kind: 'variable', path: 'src/theme.ts', name: 'theme' },
+      { kind: 'function', path: 'src/App.tsx' },
+    ],
+    notes: [
+      {
+        file: 'src/timer/Timer.tsx',
+        kind: 'function',
+        name: 'Timer',
+        note: 'Top-level component.',
+      },
+      {
+        file: 'src/timer/types.ts',
+        kind: 'variable',
+        name: 'WORK_SECONDS',
+        note: '25 * 60.',
+      },
+    ],
+    deleted: ['src/legacy/OldTimer.tsx', 'src/legacy/OldTimer.tsx', ''],
+  })
+  assert.deepEqual(layer.pointers, [
+    { kind: 'file', path: 'src/App.tsx' },
+    { kind: 'folder', path: 'src' },
+    { kind: 'function', path: 'src/App.tsx', name: 'App' },
+    { kind: 'variable', path: 'src/theme.ts', name: 'theme' },
+  ])
+  assert.equal(layer.notes[0].kind, 'function')
+  assert.equal(layer.notes[1].kind, 'variable')
+  assert.deepEqual(layer.deleted, ['src/legacy/OldTimer.tsx'])
+})
+
 test('extract-blueprint keeps folder notes', () => {
   const layer = normalizeExtractLayer({
     folders: [{ path: 'src/widgets' }],

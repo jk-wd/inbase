@@ -14,10 +14,12 @@ export function ExplainHud({
   explain,
   onStep,
   onExit,
+  onReturnToMap,
 }: {
   explain: ExplainSession
   onStep: (step: string) => void
   onExit: () => void
+  onReturnToMap: () => void
 }) {
   const step = currentExplainStep(explain)
   const count = explain.steps.length
@@ -49,7 +51,7 @@ export function ExplainHud({
       if (event.repeat) return
       if (event.code === 'Escape') {
         event.preventDefault()
-        onExit()
+        onReturnToMap()
         return
       }
       if (shouldIgnoreShortcut(event)) return
@@ -68,7 +70,7 @@ export function ExplainHud({
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [goTo, hasSteps, neighbor, onExit])
+  }, [goTo, hasSteps, neighbor, onReturnToMap])
 
   useEffect(() => {
     activeItemRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
@@ -84,27 +86,37 @@ export function ExplainHud({
         <p className="explain-question">
           {explain.question || 'Explanation'}
         </p>
-        <button
-          className="hud-button explain-exit"
-          type="button"
-          aria-label="Exit explain mode"
-          title="Exit explain mode (Esc)"
-          onClick={onExit}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            width="18"
-            height="18"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            aria-hidden="true"
+        <div className="explain-header-actions">
+          <button
+            className="hud-button"
+            type="button"
+            title="Return to the map. The explanation stays open."
+            onClick={onReturnToMap}
           >
-            <path d="M6 6l12 12" />
-            <path d="M18 6L6 18" />
-          </svg>
-        </button>
+            Map
+          </button>
+          <button
+            className="hud-button explain-exit"
+            type="button"
+            aria-label="Exit explain mode"
+            title="Exit explain mode"
+            onClick={onExit}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <path d="M6 6l12 12" />
+              <path d="M18 6L6 18" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       <p className="explain-esc-hint">

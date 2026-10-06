@@ -1,4 +1,4 @@
-import { CONFIG, EXPLAIN_FOCUS, blueprintPalette, dimColor, fileColor, folderAisleColor, folderFloorColor } from '../theme'
+import { CONFIG, EXPLAIN_FOCUS, capMapPieceOpacity, dimColor, fileColor, folderAisleColor, folderFloorColor } from '../theme'
 import type { FileNode, PlacedBridge, PlacedFile, PlacedFolder } from '../types'
 import { BRIDGE_DECK_Y, bridgeDeckPieces } from './Bridge'
 
@@ -25,8 +25,7 @@ export type MapPlaneItem = {
 }
 
 function mapFileInstanceColor(file: FileNode) {
-  if (file.colorHex) return blueprintPalette(file.colorHex).color
-  if (file.userCreated) return '#7ec8e8'
+  if (file.colorHex || file.userCreated) return '#ffffff'
   return fileColor(file.language)
 }
 
@@ -64,7 +63,7 @@ export function collectMapFolderItems(
   for (const folder of Object.values(folders)) {
     if (skipPaths.has(folder.path)) continue
     const faded = dimmed(folder.path)
-    const opacity = faded ? EXPLAIN_FOCUS.dimOpacity : 1
+    const opacity = capMapPieceOpacity(faded ? EXPLAIN_FOCUS.dimOpacity : 1)
     const z = folder.z + folder.depth / 2
     floors.push({
       id: folder.path,
@@ -109,7 +108,9 @@ export function collectMapBridgeItems(
 ): MapPlaneItem[] {
   const items: MapPlaneItem[] = []
   for (const bridge of bridges) {
-    const opacity = dimmed(bridge.id) ? EXPLAIN_FOCUS.dimOpacity : 1
+    const opacity = capMapPieceOpacity(
+      dimmed(bridge.id) ? EXPLAIN_FOCUS.dimOpacity : 1,
+    )
     for (const piece of bridgeDeckPieces(bridge, folders)) {
       items.push({
         id: `${bridge.id}:${piece.key}`,

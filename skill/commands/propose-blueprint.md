@@ -30,22 +30,18 @@ npx inbase propose-blueprint --session <color> --description "<description>"
 
 This prints `VISUAL_CODER_PROPOSE_BLUEPRINT` with the description and an instruction block. Follow that instruction.
 
-4. Read the codebase if needed. Look at the target folder structure to understand what already exists. Use the description to decide:
-   - What files should be created or modified
-   - What folders should exist
-   - What functions, classes, and variables should be added
-   - What imports should exist between files
-   - What notes should be attached to explain the architecture
+4. Read the codebase if needed. Look at the target folder structure to understand what already exists. Curate a layer JSON. Paths are relative to the target root. Use every blueprint construct the description needs. Leave a field empty only when the plan does not need it.
 
-   Curate a **small** layer JSON. Paths are relative to the target root.
+   - **files** — new files to create.
+   - **folders** — the folder skeleton to create.
+   - **addedFunctions** — functions and classes to add. Classes go here.
+   - **addedVariables** — constants, shared state, and config vars.
+   - **addedImports** — import relations, the arcs between files. Each one binds `name` from `from` into `file`.
+   - **notes** — instructions on a file, folder, function, or variable. `kind` is `file`, `folder`, `function`, or `variable`. Function and variable notes include `name`. A note states the contract or a non-obvious invariant.
+   - **pointers** — point at an existing file, folder, function, or variable the next chat must keep in view and usually edit. `kind` is `file`, `folder`, `function`, or `variable`. Function and variable pointers include `name`. An existing path you will edit goes here, with a note and any new imports into it. It does not also go in `files` or `folders`.
+   - **deleted** — existing file paths this plan removes.
 
-   Keep:
-   - The folder skeleton that defines the architecture
-   - Entry points, public APIs, core domain modules
-   - Exported functions and classes that are the real API
-   - Important constants, shared state, and config vars
-   - Imports that show real coupling between files
-   - Notes that say why a file or symbol exists, the contract, or a non-obvious invariant
+   Put new modules in `files` and `folders`, with their functions, vars, relations, and notes. Point at the existing entry point you will edit.
 
    Drop:
    - Generated files, lockfiles, dist/build/coverage, snapshots, editor/tooling noise
@@ -53,32 +49,41 @@ This prints `VISUAL_CODER_PROPOSE_BLUEPRINT` with the description and an instruc
    - Trivial re-export barrels unless they ARE the public API
    - Every helper, getter, loop var, and one-off local
    - Notes that only restate the file or symbol name
-   - Pointers unless something is a landmark the next chat must keep in view
 
-   Prefer fewer, better items. Notes must add information.
+   Include `"subject"`: a short kebab-case name for this plan, such as `"timer"`.
 
    ```json
    {
-     "files": [{ "path": "src/App.tsx" }],
-     "folders": [{ "path": "src" }],
-     "addedFunctions": [{ "name": "App", "file": "src/App.tsx" }],
-     "addedVariables": [{ "name": "theme", "file": "src/theme.ts" }],
-     "addedImports": [{ "name": "theme", "from": "./theme", "file": "src/App.tsx" }],
+     "subject": "timer",
+     "files": [{ "path": "src/timer/Timer.tsx" }],
+     "folders": [{ "path": "src/timer" }],
+     "addedFunctions": [{ "name": "Timer", "file": "src/timer/Timer.tsx" }],
+     "addedVariables": [{ "name": "WORK_SECONDS", "file": "src/timer/types.ts" }],
+     "addedImports": [{ "name": "Timer", "from": "./timer/Timer", "file": "src/App.tsx" }],
      "notes": [
-       { "file": "src/App.tsx", "kind": "file", "note": "Root UI. Mounts routes; do not add data fetching here." }
+       { "file": "src/timer", "kind": "folder", "note": "Timer feature. No extra packages." },
+       { "file": "src/timer/Timer.tsx", "kind": "file", "note": "Wire the hook to the view." },
+       { "file": "src/timer/Timer.tsx", "kind": "function", "name": "Timer", "note": "Top-level component. Props only." },
+       { "file": "src/timer/types.ts", "kind": "variable", "name": "WORK_SECONDS", "note": "25 * 60. Do not read this from props." }
      ],
-     "pointers": []
+     "pointers": [
+       { "kind": "file", "path": "src/App.tsx" },
+       { "kind": "folder", "path": "src" },
+       { "kind": "function", "path": "src/App.tsx", "name": "App" },
+       { "kind": "variable", "path": "src/theme.ts", "name": "theme" }
+     ],
+     "deleted": ["src/legacy/OldTimer.tsx"]
    }
    ```
 
-5. Write the proposed blueprint:
+5. Save the proposed blueprint. This always writes `blueprints/<subject>-<num>.json` in the target. Do not pass `--write`.
 
 ```bash
-npx inbase propose-blueprint --session <color> --description "<description>" --write
+npx inbase propose-blueprint --session <color> --description "<description>"
 ```
 
-Pass the curated layer JSON on stdin. This saves the blueprint to the session, making it visible on the map.
+Pass the curated layer JSON on stdin, or pass a `layer.json` path. The number is the next free one for that subject. The blueprint is also saved on the session and shown on the map. Pass `--dont-write-to-file` only when the map should update and the blueprint file should not be written.
 
-6. Tell the user that the blueprint has been proposed and is now visible on the map. Briefly name the files, folders, and symbols you proposed.
+6. Tell the user that the blueprint has been proposed and is now visible on the map. Name the file from `VISUAL_CODER_BLUEPRINT_FILE`. Briefly name the files, folders, functions, vars, relations, notes, pointers, and deletions you proposed.
 
 7. **Stop.** Do not start implementing. The user will invoke the session color (e.g., `/coral`) to start implementing the blueprint.

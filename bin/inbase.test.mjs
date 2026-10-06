@@ -1402,11 +1402,12 @@ test('start-session writes a manifest under .inbase', async () => {
   }
 })
 
-function runCli(args, { cwd, env } = {}) {
+function runCli(args, { cwd, env, input } = {}) {
   return spawnSync(process.execPath, [path.join(packageRoot, 'bin/inbase.mjs'), ...args], {
     cwd: cwd ?? packageRoot,
     encoding: 'utf8',
     env,
+    input,
   })
 }
 
@@ -1542,6 +1543,147 @@ test('read-blueprint prints deleted files and marks deleted-only blueprints enab
     assert.match(dumped.stdout, /\"deleted\":\s*\[\s*\n\s*"src\/Legacy\.ts"\s*\n\s*\]/m)
     assert.match(dumped.stdout, /deleted file from this color/)
     assert.doesNotMatch(dumped.stdout, /VISUAL_CODER_NO_REQUEST/)
+  } finally {
+    cleanup()
+  }
+})
+
+test('propose-blueprint writes files, symbols, relations, notes, pointers, and deletions', async () => {
+  const { root, cleanup } = tempProject()
+  const dataDir = path.join(root, '.inbase')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: root,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    fs.mkdirSync(dataDir, { recursive: true })
+    writeRunningInstance({ dataDir, targetRoot: root })
+    const started = runCli(
+      ['start-session', '--session', 'coral', '--name', 'Coral'],
+      { cwd: root, env },
+    )
+    assert.equal(started.status, 0, started.stderr)
+
+    const instruction = runCli(
+      ['propose-blueprint', '--session', 'coral', '--description', 'Add a timer'],
+      { cwd: root, env },
+    )
+    assert.equal(instruction.status, 0, instruction.stderr)
+    assert.match(instruction.stdout, /VISUAL_CODER_PROPOSE_BLUEPRINT_INSTRUCTION_START/)
+    assert.match(instruction.stdout, /addedImports: import relations/)
+    assert.match(instruction.stdout, /pointers: point at an existing file/)
+    assert.match(instruction.stdout, /"kind":"variable"/)
+    assert.match(instruction.stdout, /deleted: existing file paths/)
+    assert.match(instruction.stdout, /--dont-write-to-file/)
+    assert.doesNotMatch(instruction.stdout, /--write/)
+    assert.doesNotMatch(instruction.stdout, /pointers unless/)
+
+    const layer = {
+      subject: 'Timer',
+      files: [{ path: 'src/timer/Timer.tsx' }],
+      folders: [{ path: 'src/timer' }],
+      addedFunctions: [{ name: 'Timer', file: 'src/timer/Timer.tsx' }],
+      addedVariables: [{ name: 'WORK_SECONDS', file: 'src/timer/types.ts' }],
+      addedImports: [{ name: 'Timer', from: './timer/Timer', file: 'src/App.tsx' }],
+      notes: [
+        { file: 'src/timer', kind: 'folder', note: 'Timer feature.' },
+        { file: 'src/timer/Timer.tsx', kind: 'function', name: 'Timer', note: 'Top-level component.' },
+        { file: 'src/timer/types.ts', kind: 'variable', name: 'WORK_SECONDS', note: '25 * 60.' },
+      ],
+      pointers: [
+        { kind: 'file', path: 'src/App.tsx' },
+        { kind: 'folder', path: 'src' },
+        { kind: 'function', path: 'src/App.tsx', name: 'App' },
+        { kind: 'variable', path: 'src/theme.ts', name: 'theme' },
+      ],
+      deleted: ['src/legacy/OldTimer.tsx'],
+    }
+    const written = runCli(
+      [
+        'propose-blueprint',
+        '--session',
+        'coral',
+        '--description',
+        'Add a timer',
+      ],
+      { cwd: root, env, input: JSON.stringify(layer) },
+    )
+    assert.equal(written.status, 0, written.stderr)
+    assert.match(written.stdout, /VISUAL_CODER_BLUEPRINT_FILE blueprints\/timer-1\.json/)
+    assert.match(written.stdout, /1 file\(s\), 2 folder\(s\), 1 function\(s\), 1 var\(s\), 1 relation\(s\), 3 note\(s\), 4 pointer\(s\), 1 deleted file/)
+    const savedPath = path.join(root, 'blueprints', 'timer-1.json')
+    assert.equal(fs.existsSync(savedPath), true)
+    const document = JSON.parse(fs.readFileSync(savedPath, 'utf8'))
+    assert.equal(document.name, 'timer-1')
+    assert.equal(document.blueprints[0].color, 'coral')
+    assert.equal(document.blueprints[0].files[0].path, 'src/timer/Timer.tsx')
+
+    const again = runCli(
+      [
+        'propose-blueprint',
+        '--session',
+        'coral',
+        '--description',
+        'Add a timer',
+      ],
+      { cwd: root, env, input: JSON.stringify(layer) },
+    )
+    assert.equal(again.status, 0, again.stderr)
+    assert.match(again.stdout, /VISUAL_CODER_BLUEPRINT_FILE blueprints\/timer-2\.json/)
+    assert.equal(fs.existsSync(path.join(root, 'blueprints', 'timer-2.json')), true)
+
+    const skipped = runCli(
+      [
+        'propose-blueprint',
+        '--session',
+        'coral',
+        '--description',
+        'Add a timer',
+        '--dont-write-to-file',
+      ],
+      { cwd: root, env, input: JSON.stringify(layer) },
+    )
+    assert.equal(skipped.status, 0, skipped.stderr)
+    assert.match(skipped.stdout, /VISUAL_CODER_BLUEPRINT_FILE skipped/)
+    assert.equal(fs.existsSync(path.join(root, 'blueprints', 'timer-3.json')), false)
+
+    const rejected = runCli(
+      [
+        'propose-blueprint',
+        '--session',
+        'coral',
+        '--description',
+        'Add a timer',
+        '--write',
+      ],
+      { cwd: root, env, input: JSON.stringify(layer) },
+    )
+    assert.notEqual(rejected.status, 0)
+    assert.match(rejected.stderr, /Omit --write/)
+
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    const saved = store.readBlueprintByColor(dataDir, 'coral')
+    assert.equal(saved.files[0].path, 'src/timer/Timer.tsx')
+    assert.deepEqual(
+      saved.folders.map((folder) => folder.path),
+      ['src', 'src/timer'],
+    )
+    assert.equal(saved.addedFunctions[0].name, 'Timer')
+    assert.equal(saved.addedVariables[0].name, 'WORK_SECONDS')
+    assert.equal(saved.addedImports[0].name, 'Timer')
+    assert.deepEqual(
+      saved.notes.map((note) => note.kind),
+      ['folder', 'function', 'variable'],
+    )
+    assert.deepEqual(
+      saved.pointers.map((pointer) => pointer.kind),
+      ['file', 'folder', 'function', 'variable'],
+    )
+    assert.deepEqual(saved.deleted, ['src/legacy/OldTimer.tsx'])
+    assert.equal(saved.enabled, true)
   } finally {
     cleanup()
   }

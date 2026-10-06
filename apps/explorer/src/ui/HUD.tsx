@@ -2617,6 +2617,8 @@ type HUDProps = {
   devTargets?: DevTargetsState
   onSelectDevTarget?: (id: string) => void
   explainMode?: boolean
+  explainPaused?: boolean
+  onResumeExplain?: () => void
 }
 
 export function HUD({
@@ -2697,7 +2699,7 @@ export function HUD({
   onRenameCreatedFolder,
   onInspectFile,
   onInspectBlock,
-  blueprintOpacity = 0.55,
+  blueprintOpacity = 1,
   onBlueprintOpacityChange,
   blueprintHasContent = false,
   blueprintCanCleanup = false,
@@ -2715,6 +2717,8 @@ export function HUD({
   devTargets,
   onSelectDevTarget,
   explainMode = false,
+  explainPaused = false,
+  onResumeExplain,
 }: HUDProps) {
   const selected = graph.files.find((file) => file.id === selectedId)
   const selectedFolderNode = graph.folders.find(
@@ -3619,6 +3623,17 @@ export function HUD({
   const currentInstructionView: InstructionView = mapping ? 'map' : 'walk'
   const modeButtons = (
     <div className="hud-mode">
+      {explainPaused && onResumeExplain ? (
+        <button
+          className="hud-button hud-explain-return"
+          type="button"
+          title="Return to the explanation"
+          aria-label="Return to explain session"
+          onClick={onResumeExplain}
+        >
+          Explain
+        </button>
+      ) : null}
       <button
         className="hud-button"
         data-active={mapping}

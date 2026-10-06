@@ -1,5 +1,46 @@
 import type { ReactNode } from 'react'
 
+export const MAP_MARK_ICON_PX = 24
+export const MAP_MARK_GAP_PX = 4
+/** On-screen cap. Below this, one badge matches the file's shorter side. */
+export const MAP_MARK_MAX_PX = 40
+const MAP_MARK_EDGE_GAP = 0.28
+
+/** World size of one badge. Matches the file until it would pass MAP_MARK_MAX_PX. */
+export function mapMarkIconWorld(fileSize: number, zoom: number) {
+  if (fileSize <= 0) return 0
+  const safeZoom = Math.max(zoom, 0.001)
+  return Math.min(fileSize, MAP_MARK_MAX_PX / safeZoom)
+}
+
+/** World width of a map badge row. `iconWorld` is one badge's world size. */
+export function mapMarkRowWidth(iconWorld: number, count: number) {
+  if (count <= 0 || iconWorld <= 0) return 0
+  const css = count * MAP_MARK_ICON_PX + (count - 1) * MAP_MARK_GAP_PX
+  return css * (iconWorld / MAP_MARK_ICON_PX)
+}
+
+/** +X offset from the file center so the badge row sits just outside the square. */
+export function mapMarkOffsetX(
+  fileWidth: number,
+  fileDepth: number,
+  count: number,
+  zoom = Number.POSITIVE_INFINITY,
+) {
+  const fileSize = Math.min(fileWidth, fileDepth)
+  const iconWorld = mapMarkIconWorld(fileSize, zoom)
+  const edgeGap = fileSize > 0 ? MAP_MARK_EDGE_GAP * (iconWorld / fileSize) : 0
+  return fileWidth / 2 + mapMarkRowWidth(iconWorld, count) / 2 + edgeGap
+}
+
+export function mapMarkDistanceFactor(
+  fileWidth: number,
+  fileDepth: number,
+  zoom: number,
+) {
+  return mapMarkIconWorld(Math.min(fileWidth, fileDepth), zoom) / MAP_MARK_ICON_PX
+}
+
 export const EYE_ICON_PATH =
   'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z'
 
@@ -205,6 +246,7 @@ function BlueprintMarkRow({
   label,
   icon: Icon,
   markClass = 'blueprint-eye',
+  onOpen,
 }: {
   colors: string[]
   mapMode?: boolean
@@ -212,24 +254,49 @@ function BlueprintMarkRow({
   label: string
   icon: typeof EyeIcon
   markClass?: string
+  onOpen?: (color: string) => void
 }) {
   if (colors.length === 0) return null
   return (
     <div
       className={colors.length > 1 ? 'blueprint-eye-row' : undefined}
-      role="img"
-      aria-label={label}
+      role={onOpen ? undefined : 'img'}
+      aria-label={onOpen ? undefined : label}
     >
-      {colors.map((hex, index) => (
-        <div
-          className={markClass}
-          data-map={mapMode ? 'true' : 'false'}
-          key={`${hex}-${index}`}
-          style={{ color: hex }}
-        >
-          <Icon size={size} title={index === 0 ? label : undefined} />
-        </div>
-      ))}
+      {colors.map((hex, index) => {
+        const icon = <Icon size={size} title={index === 0 && !onOpen ? label : undefined} />
+        if (!onOpen) {
+          return (
+            <div
+              className={markClass}
+              data-map={mapMode ? 'true' : 'false'}
+              key={`${hex}-${index}`}
+              style={{ color: hex }}
+            >
+              {icon}
+            </div>
+          )
+        }
+        return (
+          <button
+            type="button"
+            className={markClass}
+            data-map={mapMode ? 'true' : 'false'}
+            key={`${hex}-${index}`}
+            style={{ color: hex, pointerEvents: 'auto' }}
+            title={label}
+            aria-label={label}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation()
+              event.preventDefault()
+              onOpen(hex)
+            }}
+          >
+            {icon}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -257,13 +324,15 @@ export function BlueprintEyes({
 export function BlueprintNotes({
   colors,
   mapMode,
-  size = 12,
+  size = 16,
   label = 'File note',
+  onOpen,
 }: {
   colors: string[]
   mapMode?: boolean
   size?: number
   label?: string
+  onOpen?: (color: string) => void
 }) {
   return (
     <BlueprintMarkRow
@@ -273,6 +342,7 @@ export function BlueprintNotes({
       label={label}
       icon={NoteIcon}
       markClass="blueprint-note-mark"
+      onOpen={onOpen}
     />
   )
 }

@@ -819,11 +819,24 @@ export async function proposeBlueprint(args) {
   const descriptionParsed = takeFlagValue(args, '--description')
 
   if (!sessionParsed) {
-    usage('propose-blueprint', '--session <color> --description "<description>" [--write [layer.json|-]]')
+    usage(
+      'propose-blueprint',
+      '--session <color> --description "<description>" [layer.json|-] [--dont-write-to-file]',
+    )
   }
 
   if (!descriptionParsed) {
-    usage('propose-blueprint', '--session <color> --description "<description>" [--write [layer.json|-]]')
+    usage(
+      'propose-blueprint',
+      '--session <color> --description "<description>" [layer.json|-] [--dont-write-to-file]',
+    )
+  }
+
+  if (args.includes('--write')) {
+    console.error(
+      'propose-blueprint writes the blueprint file unless you pass --dont-write-to-file. Omit --write.',
+    )
+    process.exit(1)
   }
 
   const sessionId = resolveFlagSession(store, sessionParsed)
@@ -839,16 +852,10 @@ export async function proposeBlueprint(args) {
   const description = descriptionParsed
   const colorId = manifest.color
   const colorName = store.resolveSessionColor(colorId)?.name || colorId
-
-  const writeIndex = args.indexOf('--write')
-  if (writeIndex >= 0) {
-    const next = args[writeIndex + 1]
-    const takesPath = Boolean(next) && !next.startsWith('-')
-    const layerPath = takesPath ? next : '-'
-    const raw =
-      !layerPath || layerPath === '-'
-        ? fs.readFileSync(0, 'utf8')
-        : fs.readFileSync(layerPath, 'utf8')
+  const dontWriteToFile = args.includes('--dont-write-to-file')
+  const layerArg = proposedLayerArg(args)
+  const raw = readProposedLayer(layerArg)
+  if (raw && raw.trim()) {
     let layer
     try {
       layer = JSON.parse(raw)
@@ -857,13 +864,44 @@ export async function proposeBlueprint(args) {
       process.exit(1)
     }
 
-    const { normalizeExtractLayer } = await import('./extract-blueprint.mjs')
+    const [{ normalizeExtractLayer }, blueprintFiles] = await Promise.all([
+      import('./extract-blueprint.mjs'),
+      import(pathToFileURL(path.join(explorerRoot, 'scripts/blueprint-files.mjs')).href),
+    ])
     const normalized = normalizeExtractLayer(layer)
+    const subjectSource =
+      typeof layer.subject === 'string' && layer.subject.trim()
+        ? layer.subject
+        : description
+    const numbered = blueprintFiles.nextNumberedBlueprintFile(
+      config.targetRoot,
+      subjectSource,
+    )
+    const color = store.resolveSessionColor(colorId)
+    if (!dontWriteToFile) {
+      const saved = blueprintFiles.saveBlueprintDocument(config.targetRoot, {
+        name: `${numbered.subject}-${numbered.number}`,
+        filePath: numbered.filePath,
+        blueprints: [
+          {
+            color: colorId,
+            colorName: color?.name || colorName,
+            colorHex: color?.hex || '',
+            ...normalized,
+          },
+        ],
+      })
+      console.log(`VISUAL_CODER_BLUEPRINT_FILE ${saved.relativePath}`)
+    } else {
+      console.log('VISUAL_CODER_BLUEPRINT_FILE skipped')
+    }
     store.writeBlueprintByColor(dataDir, colorId, {
       ...store.emptyBlueprint(),
       ...normalized,
     })
-    console.log(`VISUAL_CODER_BLUEPRINT_PROPOSED Session ${colorId} blueprint has been proposed.`)
+    console.log(
+      `VISUAL_CODER_BLUEPRINT_PROPOSED Session ${colorId} blueprint: ${normalized.files.length} file(s), ${normalized.folders.length} folder(s), ${normalized.addedFunctions.length} function(s), ${normalized.addedVariables.length} var(s), ${normalized.addedImports.length} relation(s), ${normalized.notes.length} note(s), ${normalized.pointers.length} pointer(s), ${normalized.deleted.length} deleted file(s).`,
+    )
     console.log('The blueprint is now visible on the map. The user can refine it by drawing on the map or by invoking the session color again with a more specific request.')
     console.log('To start implementing, invoke the session color (e.g., /coral) or run: npx inbase attach --color <color>')
     return
@@ -874,12 +912,51 @@ export async function proposeBlueprint(args) {
   console.log(`VISUAL_CODER_PROPOSE_BLUEPRINT Session ${colorId} (${colorName})`)
   console.log(`Description: ${description}`)
   console.log('VISUAL_CODER_PROPOSE_BLUEPRINT_INSTRUCTION_START')
-  console.log('Read the codebase if needed, then curate a small layer JSON. Paths are relative to the target root.')
-  console.log('Decide what files and folders should exist, what functions, classes, and variables should be added, what imports should exist between files, and what notes should explain the architecture.')
-  console.log('Keep: the folder skeleton that defines the architecture, entry points, public APIs, core domain modules, exported functions and classes, important constants, shared state and config vars, imports that show real coupling, and notes that say why a file or symbol exists, the contract, or a non-obvious invariant.')
-  console.log('Drop: generated files, lockfiles, dist/build/coverage, snapshots, editor/tooling noise, tests unless they are the contract, trivial re-export barrels, every helper/getter/loop var/one-off local, notes that only restate the name, pointers unless something is a landmark.')
-  console.log('Prefer fewer, better items. Notes must add information.')
-  console.log(`Then run: npx inbase propose-blueprint --session ${colorId} --description "${description}" --write`)
-  console.log('and pass the curated layer JSON on stdin (or --write layer.json).')
+  console.log('Read the codebase if needed, then curate a layer JSON. Paths are relative to the target root. Use every blueprint construct the description needs. Leave a field empty only when the plan does not need it.')
+  console.log('Include "subject": a short kebab-case name for this plan, such as "timer". Saving writes blueprints/<subject>-<num>.json in the target. The number is the next free one for that subject. Pass --dont-write-to-file to update the map without writing that file.')
+  console.log('files: new files to create. [{"path":"src/timer/Timer.tsx"}]')
+  console.log('folders: the folder skeleton to create. [{"path":"src/timer"}]')
+  console.log('addedFunctions: functions and classes to add. [{"name":"Timer","file":"src/timer/Timer.tsx"}]')
+  console.log('addedVariables: constants, shared state, and config vars. [{"name":"WORK_SECONDS","file":"src/timer/types.ts"}]')
+  console.log('addedImports: import relations, the arcs between files. [{"name":"Timer","from":"./timer/Timer","file":"src/App.tsx"}]')
+  console.log('notes: instructions on a file, folder, function, or variable. kind is file, folder, function, or variable. Function and variable notes include name. A note states the contract or a non-obvious invariant.')
+  console.log('  {"file":"src/timer","kind":"folder","note":"Timer feature. No extra packages."}')
+  console.log('  {"file":"src/timer/Timer.tsx","kind":"file","note":"Wire the hook to the view."}')
+  console.log('  {"file":"src/timer/Timer.tsx","kind":"function","name":"Timer","note":"Top-level component. Props only."}')
+  console.log('  {"file":"src/timer/types.ts","kind":"variable","name":"WORK_SECONDS","note":"25 * 60. Do not read this from props."}')
+  console.log('pointers: point at an existing file, folder, function, or variable the next chat must keep in view and usually edit. An existing path you will edit goes here, with a note and any new imports into it. It does not also go in files or folders.')
+  console.log('  {"kind":"file","path":"src/App.tsx"}')
+  console.log('  {"kind":"folder","path":"src"}')
+  console.log('  {"kind":"function","path":"src/App.tsx","name":"App"}')
+  console.log('  {"kind":"variable","path":"src/theme.ts","name":"theme"}')
+  console.log('deleted: existing file paths this plan removes. ["src/legacy/OldTimer.tsx"]')
+  console.log('Put new modules in files and folders, with their functions, vars, relations, and notes. Point at the existing entry point you will edit.')
+  console.log('Drop: generated files, lockfiles, dist/build/coverage, snapshots, editor/tooling noise, tests unless they are the contract, trivial re-export barrels, every helper/getter/loop var/one-off local, and notes that only restate the name.')
+  console.log(`Then run: npx inbase propose-blueprint --session ${colorId} --description "${description}"`)
+  console.log('and pass the curated layer JSON on stdin (or a layer.json path). That writes the blueprint file. Pass --dont-write-to-file to skip the file.')
   console.log('VISUAL_CODER_PROPOSE_BLUEPRINT_INSTRUCTION_END')
+}
+
+function proposedLayerArg(args) {
+  const rest = []
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]
+    if (arg === '--session' || arg === '--description') {
+      index += 1
+      continue
+    }
+    if (arg === '--dont-write-to-file') continue
+    rest.push(arg)
+  }
+  if (rest.length > 1) {
+    console.error(`Unexpected arguments: ${rest.slice(1).join(' ')}`)
+    process.exit(1)
+  }
+  return rest[0] ?? null
+}
+
+function readProposedLayer(layerArg) {
+  if (layerArg && layerArg !== '-') return fs.readFileSync(layerArg, 'utf8')
+  if (layerArg === '-' || !process.stdin.isTTY) return fs.readFileSync(0, 'utf8')
+  return ''
 }
