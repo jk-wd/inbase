@@ -67,6 +67,18 @@ import {
 } from './scripts/explain-store.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
+
+function readInbaseVersion() {
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.resolve(here, '../../package.json'), 'utf8'),
+    ) as { version?: unknown }
+    return typeof pkg.version === 'string' && pkg.version ? pkg.version : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
 resetDataDir(dataDir)
 const isolation = isolatedViteConfig(dataDir)
 const userContextFile = userContextPath(dataDir)
@@ -754,6 +766,9 @@ function isDataDirPath(filePath: string) {
 
 export default defineConfig({
   ...isolation,
+  define: {
+    __INBASE_VERSION__: JSON.stringify(readInbaseVersion()),
+  },
   plugins: [react(), jsonFilePlugin()],
   resolve: {
     alias: {

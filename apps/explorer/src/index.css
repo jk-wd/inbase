@@ -849,8 +849,27 @@ button {
 
 .hud-icon-row {
   display: flex;
+  align-items: center;
   gap: 8px;
   flex: none;
+}
+
+.hud-version-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 10px;
+  flex: none;
+  color: inherit;
+  background: rgba(25, 28, 34, 0.86);
+  border: 1px solid var(--vc-border);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
 }
 
 .hud-icon-button {

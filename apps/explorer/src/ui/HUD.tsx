@@ -4917,6 +4917,27 @@ export function HUD({
                 document.body,
               )}
           </div>
+          <span
+            className="hud-version-badge"
+            title={`Inbase ${__INBASE_VERSION__}`}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 11v5" />
+              <path d="M12 8h.01" />
+            </svg>
+            <span>{__INBASE_VERSION__}</span>
+          </span>
           {!bottomBarInactive && (
           <div className="hud-actions-menu" ref={actionsMenuRef}>
             <button
