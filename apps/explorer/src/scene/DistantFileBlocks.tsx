@@ -29,7 +29,7 @@ export function DistantFileBlocks({
       <meshLambertMaterial />
       {items.map(({ file, placed, dimmed }) => {
         const color =
-          file.colorHex || file.userCreated ? '#ffffff' : fileColor(file.language)
+          file.colorHex || file.userCreated ? '#ffffff' : fileColor()
         return (
           <Instance
             key={file.id}

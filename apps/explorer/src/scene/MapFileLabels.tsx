@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { BLUEPRINT_OVERLAY, CONFIG, blueprintPalette } from '../theme'
 import { mapMarkIconWorld, mapMarkOffsetX, mapMarkRowWidth } from '../ui/EyeIcon'
+import { angleFromCamera } from './mapCamera'
 import { createCameraMotion, setLayerMoving } from './mapCameraMotion'
 import { type MapSheet, type SheetCover, projectSheets, underSheet } from './mapLabelOcclusion'
 import { mapViewRect, projectFootprint } from './mapProjection'
@@ -48,6 +49,7 @@ const MARK_CLEAR_PX = 6
 const FILE_LABEL_LEADER_BLOCK_PX = 80
 const FILE_LABEL_LEADER_SHIFT_PX = 14
 const FILE_LABEL_LEADER_MIN_PX = 18
+const MAP_ANGLED_EPSILON = 0.03
 
 function markScreenSpan(file: MapFileLabel, zoom: number) {
   const notes = file.noted ? Math.max(file.notedColors?.length ?? 1, 1) : 0
@@ -150,24 +152,30 @@ function labelsOverlap(
   return false
 }
 
-function fileLabelLeader(item: FileLabelCandidate): FileLabelLeader | null {
+function fileLabelLeader(
+  item: FileLabelCandidate,
+  angled: boolean,
+): FileLabelLeader | null {
   const labelX = Math.round(item.x)
   const labelY = Math.round(item.y)
   const labelW = Math.round(item.w)
   const box = fileLabelBounds(labelX, labelY, labelW, item.outer)
-  const blockL = item.anchorX - item.halfW
-  const blockT = item.anchorY - item.halfH
-  const blockR = item.anchorX + item.halfW
-  const blockB = item.anchorY + item.halfH
-  const offBlock =
-    box.r < blockL + 1 ||
-    box.l > blockR - 1 ||
-    box.b < blockT + 1 ||
-    box.t > blockB - 1
-  if (!offBlock) return null
-  const blockPx = Math.min(item.halfW, item.halfH) * 2
-  const shifted = Math.abs(labelY - item.anchorY) >= FILE_LABEL_LEADER_SHIFT_PX
-  if (blockPx < FILE_LABEL_LEADER_BLOCK_PX && !shifted) return null
+  // A tilted or rotated block no longer fills its screen box, so a label beside it always needs a leader.
+  if (!angled || item.outer === 0) {
+    const blockL = item.anchorX - item.halfW
+    const blockT = item.anchorY - item.halfH
+    const blockR = item.anchorX + item.halfW
+    const blockB = item.anchorY + item.halfH
+    const offBlock =
+      box.r < blockL + 1 ||
+      box.l > blockR - 1 ||
+      box.b < blockT + 1 ||
+      box.t > blockB - 1
+    if (!offBlock) return null
+    const blockPx = Math.min(item.halfW, item.halfH) * 2
+    const shifted = Math.abs(labelY - item.anchorY) >= FILE_LABEL_LEADER_SHIFT_PX
+    if (!angled && blockPx < FILE_LABEL_LEADER_BLOCK_PX && !shifted) return null
+  }
 
   const y1 = (box.t + box.b) / 2
   const x1 = item.outer === 1 ? box.l : item.outer === -1 ? box.r : item.anchorX
@@ -305,12 +313,13 @@ function paintFileLabelLeaders(
   svg: SVGSVGElement,
   visible: FileLabelCandidate[],
   opacities: number[],
+  angled: boolean,
 ) {
   const leaders: FileLabelLeader[] = []
   const dimmed: boolean[] = []
   const layerOpacity: number[] = []
   for (let i = 0; i < visible.length; i += 1) {
-    const leader = fileLabelLeader(visible[i])
+    const leader = fileLabelLeader(visible[i], angled)
     if (!leader) continue
     leaders.push(leader)
     dimmed.push(Boolean(visible[i].file.dimmed))
@@ -486,7 +495,10 @@ export function MapFileLabels({
     const opacities = visible.map((item) =>
       fileLabelOpacity(item, blueprintOpacityRef.current, cover),
     )
-    paintFileLabelLeaders(leaders, visible, opacities)
+    const angle = angleFromCamera(camera, null)
+    const angled =
+      angle.tilt > MAP_ANGLED_EPSILON || Math.abs(Math.sin(angle.heading)) > MAP_ANGLED_EPSILON
+    paintFileLabelLeaders(leaders, visible, opacities, angled)
 
     while (layer.children.length - 1 < visible.length) {
       const el = document.createElement('div')

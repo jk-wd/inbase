@@ -13,6 +13,7 @@ import {
 import {
   layoutWorld,
   markCreatedFolders,
+  withBlockHeights,
   withPreviewGraph,
   filterGraphToChangePaths,
   filterGraphAbsentFiles,
@@ -21,6 +22,7 @@ import {
   itemRegionBounds,
 } from './layout'
 import { filterGraphHiddenFiles } from '../scripts/hidden-files.mjs'
+import { FLY_TO_MIN_SPAN, type FlyToTarget } from './flyTo'
 import { World } from './scene/World'
 import { HUD } from './ui/HUD'
 import { ExplainAskCard } from './ui/ExplainAskCard'
@@ -96,6 +98,7 @@ import {
   llmIsMakingChanges,
   type AgentIntent,
   type AimedRelation,
+  type BlockHeightMode,
   type BlueprintNote,
   type BlueprintNoteKind,
   type BlueprintOption,
@@ -837,6 +840,7 @@ function Explorer({
     null,
   )
   const [showHiddenFiles, setShowHiddenFiles] = useState(false)
+  const [blockHeightMode, setBlockHeightMode] = useState<BlockHeightMode>('lines')
   const [hideChanges, setHideChanges] = useState(false)
   const [branchChanges, setBranchChanges] = useState(emptyBranchChanges)
   const intent =
@@ -1065,7 +1069,7 @@ function Explorer({
       visibleLayoutGraph,
     ],
   )
-  const layout = useMemo(() => {
+  const placedLayout = useMemo(() => {
     const world = layoutWorld(scannedLayoutGraph)
     const placed = withUserCreatedLayout(world, pendingBlocks, visibleIslands)
     if (previewing) markCreatedFolders(placed, changeSet.createFolders ?? [])
@@ -1077,6 +1081,10 @@ function Explorer({
     scannedLayoutGraph,
     visibleIslands,
   ])
+  const layout = useMemo(
+    () => withBlockHeights(placedLayout, displayGraph.files, blockHeightMode),
+    [blockHeightMode, displayGraph, placedLayout],
+  )
   const changeFileIds = useMemo(() => {
     const ids = new Set<string>()
     for (const id of changeSet.files) ids.add(id)
@@ -1141,11 +1149,13 @@ function Explorer({
     const world = layoutWorld(scannedChange)
     const placed = withUserCreatedLayout(world, pendingBlocks, visibleIslands)
     markCreatedFolders(placed, changeSet.createFolders ?? [])
-    return placed
+    return withBlockHeights(placed, displayGraph.files, blockHeightMode)
   }, [
+    blockHeightMode,
     changeFileIds,
     changeFolderPaths,
     changeSet.createFolders,
+    displayGraph,
     hasChangeSet,
     layout,
     pendingBlocks,
@@ -1193,6 +1203,7 @@ function Explorer({
     key: number
     fileId?: string
     folderPath?: string
+    zoom?: boolean
   } | null>(null)
   const [importPickFrom, setImportPickFrom] = useState<string | null>(null)
   const importPickFromRef = useRef<string | null>(null)
@@ -2404,6 +2415,10 @@ function Explorer({
     [],
   )
 
+  const toggleBlockHeightMode = useCallback(() => {
+    setBlockHeightMode((current) => (current === 'lines' ? 'relations' : 'lines'))
+  }, [])
+
   const toggleShowHiddenFiles = useCallback(() => {
     setShowHiddenFiles((current) => {
       const next = !current
@@ -2501,6 +2516,17 @@ function Explorer({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [toggleShowHiddenFiles])
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.repeat || event.code !== 'KeyL') return
+      if (shouldIgnoreShortcut(event)) return
+      event.preventDefault()
+      toggleBlockHeightMode()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [toggleBlockHeightMode])
 
   useEffect(() => {
     if (showHiddenFiles) return
@@ -2846,12 +2872,26 @@ function Explorer({
         if (!folders[path]) folders[path] = folder
       }
     }
-    return itemRegionBounds(
+    const bounds = itemRegionBounds(
       { ...placementLayout, files, folders },
       mapReveal.fileId ? [mapReveal.fileId] : [],
       mapReveal.folderPath ? [mapReveal.folderPath] : [],
     )
+    if (!bounds || !mapReveal.zoom) return bounds
+    return {
+      ...bounds,
+      width: Math.max(bounds.width * 1.4, FLY_TO_MIN_SPAN),
+      depth: Math.max(bounds.depth * 1.4, FLY_TO_MIN_SPAN),
+    }
   }, [explaining, mapReveal, overlayLayers, placementLayout])
+  const flyTo = useCallback(
+    (target: FlyToTarget) => {
+      if (target.fileId) selectFile(target.fileId)
+      else if (target.folderPath) selectFolder(target.folderPath)
+      setMapReveal({ key: Date.now(), ...target, zoom: true })
+    },
+    [selectFile, selectFolder],
+  )
   const explainBounds = useMemo(() => {
     if (!explaining || !explainView) return null
     if (
@@ -3539,6 +3579,7 @@ function Explorer({
             focusFlightKey={explaining ? explain.currentStep : 0}
             revealBounds={explaining ? null : addRevealBounds}
             revealFlightKey={mapReveal?.key ?? 0}
+            revealZoom={Boolean(mapReveal?.zoom)}
             landEnabled={!explaining}
             droppingWalk={Boolean(walkDrop)}
             onOpenFileNote={explaining ? undefined : openMapFileNote}
@@ -3616,6 +3657,8 @@ function Explorer({
         onToggleImportedBy={toggleImportedBy}
         relationMode={relationMode}
         onRelationModeChange={setRelationModeAndClearAim}
+        blockHeightMode={blockHeightMode}
+        onBlockHeightModeChange={setBlockHeightMode}
         changePathsOnly={changePathsOnly}
         hasChangeSet={hasChangeSet}
         onToggleChangePathsOnly={toggleChangePathsOnly}
@@ -3661,6 +3704,8 @@ function Explorer({
         onToggleBlueprintHidden={toggleActiveBlueprintHidden}
         hiddenBlueprintColors={hiddenBlueprintColors}
         onSetBlueprintColorsHidden={applyHiddenToColors}
+        flyToGraph={changePathsOnly && hasChangeSet ? changePathGraph : displayGraph}
+        onFlyTo={flyTo}
         onClearBlueprint={clearSharedBlueprint}
         onCleanupBlueprint={cleanupSharedBlueprint}
         savedBlueprint={savedBlueprint}

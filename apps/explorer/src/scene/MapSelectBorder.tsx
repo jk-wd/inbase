@@ -7,6 +7,8 @@ type MapSelectBorderProps = {
   depth: number
   y?: number
   stroke?: number
+  /** Distance from the footprint edge to the ring's outer edge; the ring always sits inside the footprint. */
+  inset?: number
   color?: string
   opacity?: number
   renderOrder?: number
@@ -19,17 +21,18 @@ export function MapSelectBorder({
   depth,
   y = 0.04,
   stroke = MAP_SELECTION.blockPad,
+  inset = 0,
   color = MAP_SELECTION.color,
   opacity = 1,
   renderOrder = 10,
-  depthTest = false,
+  depthTest = true,
   userData,
 }: MapSelectBorderProps) {
   const geometry = useMemo(() => {
-    const innerW = width
-    const innerD = depth
-    const outerW = width + stroke * 2
-    const outerD = depth + stroke * 2
+    const outerW = Math.max(width - inset * 2, 0.02)
+    const outerD = Math.max(depth - inset * 2, 0.02)
+    const innerW = Math.max(outerW - stroke * 2, 0.01)
+    const innerD = Math.max(outerD - stroke * 2, 0.01)
     const shape = new THREE.Shape()
     shape.moveTo(-outerW / 2, -outerD / 2)
     shape.lineTo(outerW / 2, -outerD / 2)
@@ -44,7 +47,7 @@ export function MapSelectBorder({
     hole.closePath()
     shape.holes.push(hole)
     return new THREE.ShapeGeometry(shape)
-  }, [depth, stroke, width])
+  }, [depth, inset, stroke, width])
 
   return (
     <mesh
@@ -62,6 +65,9 @@ export function MapSelectBorder({
         depthTest={depthTest}
         side={THREE.DoubleSide}
         depthWrite={false}
+        polygonOffset
+        polygonOffsetFactor={-2}
+        polygonOffsetUnits={-2}
       />
     </mesh>
   )

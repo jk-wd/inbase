@@ -37,18 +37,6 @@ export const WORLD_VOID = '#000000'
 
 export type ChangeKind = 'add' | 'edit' | 'remove'
 
-export const FILE_EMPHASIS_SCALE = 2
-
-export function fileEmphasisScale(
-  overlay: boolean,
-  changeKind: ChangeKind | null,
-  added = false,
-) {
-  if (overlay) return 1
-  if (added || changeKind) return FILE_EMPHASIS_SCALE
-  return 1
-}
-
 export const CHANGE_HIGHLIGHT: Record<
   ChangeKind,
   { color: string; emissive: string; floor: string; aisle: string }
@@ -83,12 +71,16 @@ export const FILE_SELECTION = {
 export const MAP_SELECTION = {
   color: '#ffffff',
   island: '#ffffff',
-  islandPad: 0.38,
-  blockPad: 0.1,
+  islandPad: 0.16,
+  /** Folder change / blueprint outline. */
+  islandOutline: 0.18,
+  blockPad: 0.08,
+  /** Added / updated / deleted ring on a file's top face. */
+  blockChange: 0.1,
   pointed: '#9ad8ff',
-  pointedPad: 0.22,
+  pointedPad: 0.12,
   explain: '#9ad8ff',
-  explainPad: 0.16,
+  explainPad: 0.08,
 }
 
 /** How strongly /explainit mode recedes everything outside the focused island. */
@@ -137,11 +129,20 @@ export function fileHeight(lines: number) {
   )
 }
 
-export {
-  DEFAULT_FILE_COLOR,
-  FILE_COLORS,
-  fileColor,
-} from './file-colors'
+/**
+ * A file linked to this many others reaches max block height.
+ * Fewer links grow on a log scale so one connection is visible and hubs still fit.
+ */
+export const RELATION_HEIGHT_CAP = 24
+
+export function relationHeight(relations: number) {
+  const count = Math.max(0, relations)
+  if (count === 0) return CONFIG.minHeight
+  const t = Math.min(1, Math.log(1 + count) / Math.log(1 + RELATION_HEIGHT_CAP))
+  return CONFIG.minHeight + (CONFIG.maxHeight - CONFIG.minHeight) * t
+}
+
+export { DEFAULT_FILE_COLOR, fileColor } from './file-colors'
 
 export function dimColor(hex: string, amount = 0.32) {
   const value = hex.replace('#', '')

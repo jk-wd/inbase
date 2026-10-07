@@ -32,7 +32,7 @@ import {
   explainHasFocus,
   type ExplainFocus,
 } from '../explain'
-import { BLUEPRINT_OVERLAY, EXPLAIN_FOCUS, WORLD_VOID, blueprintPalette, capMapPieceOpacity, explainItemOpacity, fileEmphasisScale } from '../theme'
+import { BLUEPRINT_OVERLAY, EXPLAIN_FOCUS, WORLD_VOID, blueprintPalette, capMapPieceOpacity, explainItemOpacity } from '../theme'
 import type {
   CodebaseGraph,
   FileNode,
@@ -107,6 +107,7 @@ type WorldProps = {
   focusFlightKey?: string | number
   revealBounds?: MapFocusBounds | null
   revealFlightKey?: string | number
+  revealZoom?: boolean
   landEnabled?: boolean
   droppingWalk?: boolean
   onOpenFileNote?: (fileId: string, color?: string) => void
@@ -162,6 +163,7 @@ export function World({
   focusFlightKey = 0,
   revealBounds = null,
   revealFlightKey = 0,
+  revealZoom = false,
   landEnabled = true,
   droppingWalk = false,
   onOpenFileNote,
@@ -431,8 +433,6 @@ export function World({
       seen.add(id)
       const colors = pointedFileColors[id]
       const noteColors = notedFileColors[id]
-      const kind = fileChangeKind(id, planned, created, deleted)
-      const scale = fileEmphasisScale(Boolean(extra?.overlay), kind)
       const groundTop = placed.position[1] + placed.size[1] / 2
       items.push({
         id,
@@ -440,8 +440,8 @@ export function World({
         x: placed.position[0],
         y: extra?.overlay ? (overlayFileTop.get(id) ?? groundTop) : groundTop,
         z: placed.position[2],
-        width: placed.size[0] * scale,
-        depth: placed.size[2] * scale,
+        width: placed.size[0],
+        depth: placed.size[2],
         outer: -placed.aisleFace as 1 | -1,
         selected: id === selectedId,
         pointed: pointed.has(id),
@@ -716,6 +716,7 @@ export function World({
         focusFlightKey={focusFlightKey}
         revealBounds={revealBounds}
         revealFlightKey={revealFlightKey}
+        revealZoom={revealZoom}
         hudReserve={88}
         topReserve={explainActive ? 24 : 28}
         landEnabled={landEnabled}
@@ -1007,8 +1008,8 @@ function DashedBlockOutline({
   const dashes = useMemo(() => {
     const across = dashOffsets(width)
     const down = dashOffsets(depth)
-    const hw = width / 2
-    const hd = depth / 2
+    const hw = width / 2 - COVER_STROKE / 2
+    const hd = depth / 2 - COVER_STROKE / 2
     const pieces: Array<{ x: number; z: number; length: number; horizontal: boolean }> = []
     for (const offset of across.offsets) {
       pieces.push({ x: offset, z: -hd, length: across.dash, horizontal: true })
@@ -1036,8 +1037,10 @@ function DashedBlockOutline({
             toneMapped={false}
             transparent
             opacity={opacity}
-            depthTest={false}
             depthWrite={false}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
           />
         </mesh>
       ))}

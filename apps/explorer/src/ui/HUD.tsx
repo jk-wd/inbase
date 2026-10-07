@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { BlueprintLoadDialog, BlueprintSaveDialog } from './BlueprintFileDialogs'
 import { InfoNameField, NameInput } from './NameInput'
@@ -17,6 +17,7 @@ import {
   type BlueprintOption,
   type BlueprintPointer,
   type BlueprintPointerKind,
+  type BlockHeightMode,
   type BranchChanges,
   type BranchCommit,
   type CodebaseGraph,
@@ -32,7 +33,7 @@ import {
 } from '../types'
 import { findBlueprintNote, findBlueprintPointer } from '../userCreated'
 import type { BlueprintOverlayLayer } from '../userCreated'
-import { folderOfFile, folderParent } from '../layout'
+import { fileRelationCounts, folderOfFile, folderParent } from '../layout'
 import {
   llmChangeNoteForPath,
   overlayPathChangeKind,
@@ -41,6 +42,8 @@ import { ColorPageIcon, EyeIcon, FileIcon, FolderIcon, MenuIcon, PanelToggleIcon
 import { WalkDrop } from './WalkDrop'
 import { MapAngleButton } from './MapAngleButton'
 import { BlueprintColorsMenu } from './BlueprintColorsMenu'
+import { MapFlyToMenu } from './MapFlyToMenu'
+import type { FlyToTarget } from '../flyTo'
 import { beginKeyboardIsolation, shouldIgnoreShortcut } from '../keyboard'
 import type { DevTargetsState } from '../devTargets'
 import { emptyIntent, fetchSavedBlueprints } from '../agentIntent'
@@ -51,6 +54,28 @@ const RELATION_MODE_OPTIONS: { id: RelationMode; label: string }[] = [
   { id: 'off', label: 'Off' },
   { id: 'changed', label: 'Changed' },
 ]
+
+const BLOCK_HEIGHT_OPTIONS: { id: BlockHeightMode; short: string; label: string }[] = [
+  { id: 'lines', short: 'Lines', label: 'Lines of code' },
+  { id: 'relations', short: 'Relations', label: 'File relations' },
+]
+
+const BLOCK_HEIGHT_LABEL: Record<BlockHeightMode, string> = {
+  lines: 'lines of code',
+  relations: 'file relations',
+}
+
+function fileInfoSubtitle(
+  file: { path: string; binary?: boolean; lines: number },
+  heightMode: BlockHeightMode,
+  relations: number,
+) {
+  if (file.binary) return `${file.path} (binary)`
+  const lines = `${file.lines} ${file.lines === 1 ? 'line' : 'lines'}`
+  if (heightMode !== 'relations') return `${file.path} (${lines})`
+  const relationLabel = `${relations} ${relations === 1 ? 'relation' : 'relations'}`
+  return `${file.path} (${lines} · ${relationLabel})`
+}
 
 function relationModesForView(mapping: boolean, current: RelationMode) {
   return RELATION_MODE_OPTIONS.filter(
@@ -2210,6 +2235,7 @@ function explorerInstructions({
   importedBy,
   canToggleImportedBy,
   relationMode,
+  blockHeightMode,
   showBranchChanges,
   canShowBranchChanges,
   showHiddenFiles,
@@ -2224,6 +2250,7 @@ function explorerInstructions({
   importedBy: boolean
   canToggleImportedBy: boolean
   relationMode: RelationMode
+  blockHeightMode: BlockHeightMode
   showBranchChanges: boolean
   canShowBranchChanges: boolean
   showHiddenFiles: boolean
@@ -2311,6 +2338,11 @@ function explorerInstructions({
             RELATION_MODE_OPTIONS.find((option) => option.id === relationMode)
               ?.label ?? 'Off'
           }`,
+        },
+        {
+          id: 'block-height',
+          keys: ['L'],
+          label: `Height: ${BLOCK_HEIGHT_LABEL[blockHeightMode]}`,
         },
         ...branch,
         ...hidden,
@@ -2429,6 +2461,11 @@ function explorerInstructions({
             RELATION_MODE_OPTIONS.find((option) => option.id === relationMode)
               ?.label ?? 'Off'
           }`,
+        },
+        {
+          id: 'block-height',
+          keys: ['L'],
+          label: `Height: ${BLOCK_HEIGHT_LABEL[blockHeightMode]}`,
         },
         ...(hasChangeSet
           ? [
@@ -2555,6 +2592,8 @@ type HUDProps = {
   onToggleImportedBy: () => void
   relationMode?: RelationMode
   onRelationModeChange?: (mode: RelationMode) => void
+  blockHeightMode?: BlockHeightMode
+  onBlockHeightModeChange?: (mode: BlockHeightMode) => void
   changePathsOnly?: boolean
   hasChangeSet?: boolean
   onToggleChangePathsOnly?: () => void
@@ -2618,6 +2657,9 @@ type HUDProps = {
   onToggleBlueprintHidden?: () => void
   hiddenBlueprintColors?: string[]
   onSetBlueprintColorsHidden?: (colors: string[], hidden: boolean) => void
+  /** Items the map currently places, searched by the fly-to menu. */
+  flyToGraph?: CodebaseGraph
+  onFlyTo?: (target: FlyToTarget) => void
   onClearBlueprint?: () => void
   onCleanupBlueprint?: () => void
   savedBlueprint?: SavedBlueprintInfo | null
@@ -2676,6 +2718,8 @@ export function HUD({
   onToggleImportedBy,
   relationMode = 'targeted',
   onRelationModeChange,
+  blockHeightMode = 'lines',
+  onBlockHeightModeChange,
   changePathsOnly = false,
   hasChangeSet = false,
   onToggleChangePathsOnly,
@@ -2720,6 +2764,8 @@ export function HUD({
   onToggleBlueprintHidden,
   hiddenBlueprintColors = [],
   onSetBlueprintColorsHidden,
+  flyToGraph,
+  onFlyTo,
   onClearBlueprint,
   onCleanupBlueprint,
   savedBlueprint = null,
@@ -2732,6 +2778,7 @@ export function HUD({
   onResumeExplain,
 }: HUDProps) {
   const selected = graph.files.find((file) => file.id === selectedId)
+  const relationCounts = useMemo(() => fileRelationCounts(graph.files), [graph])
   const selectedFolderNode = graph.folders.find(
     (folder) => folder.path === selectedFolder,
   )
@@ -2847,6 +2894,9 @@ export function HUD({
   const [relationsMenuOpen, setRelationsMenuOpen] = useState(false)
   const [relationsMenuPosition, setRelationsMenuPosition] = useState<CSSProperties>()
   const relationsMenuRef = useRef<HTMLDivElement>(null)
+  const [heightMenuOpen, setHeightMenuOpen] = useState(false)
+  const [heightMenuPosition, setHeightMenuPosition] = useState<CSSProperties>()
+  const heightMenuRef = useRef<HTMLDivElement>(null)
   const [branchMenuOpen, setBranchMenuOpen] = useState(false)
   const [branchMenuPosition, setBranchMenuPosition] = useState<CSSProperties>()
   const branchMenuRef = useRef<HTMLDivElement>(null)
@@ -3453,6 +3503,7 @@ export function HUD({
     document.exitPointerLock()
     setActionsMenuOpen(false)
     setRelationsMenuOpen(false)
+    setHeightMenuOpen(false)
     setBranchMenuOpen(false)
     const onKey = (event: KeyboardEvent) => {
       if (event.code !== 'Escape') return
@@ -3496,6 +3547,22 @@ export function HUD({
     window.addEventListener('resize', updatePosition)
     return () => window.removeEventListener('resize', updatePosition)
   }, [relationsMenuOpen])
+
+  useLayoutEffect(() => {
+    if (!heightMenuOpen) return
+    const updatePosition = () => {
+      const trigger = heightMenuRef.current
+      if (!trigger) return
+      const rect = trigger.getBoundingClientRect()
+      setHeightMenuPosition({
+        right: window.innerWidth - rect.right,
+        bottom: window.innerHeight - rect.top + 8,
+      })
+    }
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    return () => window.removeEventListener('resize', updatePosition)
+  }, [heightMenuOpen])
 
   useLayoutEffect(() => {
     if (!branchMenuOpen) return
@@ -3570,6 +3637,34 @@ export function HUD({
   }, [relationsMenuOpen])
 
   useEffect(() => {
+    if (!heightMenuOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code !== 'Escape') return
+      if (shouldIgnoreShortcut(event)) return
+      event.preventDefault()
+      event.stopPropagation()
+      setHeightMenuOpen(false)
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (
+        target instanceof Element &&
+        (heightMenuRef.current?.contains(target) ||
+          target.closest('[data-height-menu]'))
+      ) {
+        return
+      }
+      setHeightMenuOpen(false)
+    }
+    window.addEventListener('keydown', onKey, true)
+    window.addEventListener('pointerdown', onPointerDown, true)
+    return () => {
+      window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('pointerdown', onPointerDown, true)
+    }
+  }, [heightMenuOpen])
+
+  useEffect(() => {
     if (!branchMenuOpen) return
     const onKey = (event: KeyboardEvent) => {
       if (event.code !== 'Escape') return
@@ -3605,6 +3700,7 @@ export function HUD({
   useEffect(() => {
     if (!explainMode) return
     setActionsMenuOpen(false)
+    setHeightMenuOpen(false)
     setInstructionsOpen(false)
     setNoteEditor(null)
     setPointPicker(null)
@@ -3625,6 +3721,7 @@ export function HUD({
     importedBy,
     canToggleImportedBy,
     relationMode,
+    blockHeightMode,
     showBranchChanges,
     canShowBranchChanges,
     showHiddenFiles,
@@ -3860,13 +3957,11 @@ export function HUD({
                 )}
               </InfoKindTitle>
             }
-            subtitle={
-              selected.binary
-                ? `${selected.path} (binary)`
-                : `${selected.path} (${selected.lines} ${
-                    selected.lines === 1 ? 'line' : 'lines'
-                  })`
-            }
+            subtitle={fileInfoSubtitle(
+              selected,
+              blockHeightMode,
+              relationCounts.get(selected.id) ?? 0,
+            )}
             minimized={infoMinimized}
             onMinimize={() => setInfoMinimized((current) => !current)}
             menu={
@@ -4631,6 +4726,13 @@ export function HUD({
         </div>
         <div className="hud-icon-row">
           {mode === 'map' && <MapAngleButton />}
+          {mode === 'map' && onFlyTo && (
+            <MapFlyToMenu
+              graph={flyToGraph ?? graph}
+              disabled={bottomBarInactive}
+              onFlyTo={onFlyTo}
+            />
+          )}
           {onSetBlueprintColorsHidden && (
             <BlueprintColorsMenu
               options={blueprintOptions}
@@ -4666,6 +4768,7 @@ export function HUD({
                 onClick={() => {
                   setActionsMenuOpen(false)
                   setBranchMenuOpen(false)
+                  setHeightMenuOpen(false)
                   setRelationsMenuOpen((open) => !open)
                 }}
               >
@@ -4861,6 +4964,7 @@ export function HUD({
                 if (!canShowBranchChanges) return
                 setActionsMenuOpen(false)
                 setRelationsMenuOpen(false)
+                setHeightMenuOpen(false)
                 setBranchMenuOpen((open) => {
                   const next = !open
                   if (next && !wantBranchChanges) onToggleShowBranchChanges?.()
@@ -4917,6 +5021,56 @@ export function HUD({
                 document.body,
               )}
           </div>
+          {onBlockHeightModeChange && (
+            <div className="hud-actions-menu" ref={heightMenuRef}>
+              <button
+                className="hud-button hud-height-mode"
+                data-active={heightMenuOpen || blockHeightMode === 'relations'}
+                aria-label={`Block height, ${BLOCK_HEIGHT_LABEL[blockHeightMode]}`}
+                aria-keyshortcuts="L"
+                aria-haspopup="menu"
+                aria-expanded={heightMenuOpen}
+                type="button"
+                onClick={() => {
+                  setActionsMenuOpen(false)
+                  setRelationsMenuOpen(false)
+                  setBranchMenuOpen(false)
+                  setHeightMenuOpen((open) => !open)
+                }}
+              >
+                {BLOCK_HEIGHT_OPTIONS.find((option) => option.id === blockHeightMode)
+                  ?.short ?? 'Lines'}
+              </button>
+              {heightMenuOpen &&
+                heightMenuPosition &&
+                createPortal(
+                  <div
+                    className="hud-actions-menu-list"
+                    data-height-menu="true"
+                    role="menu"
+                    aria-label="Block height"
+                    style={heightMenuPosition}
+                  >
+                    {BLOCK_HEIGHT_OPTIONS.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={blockHeightMode === option.id}
+                        data-active={blockHeightMode === option.id}
+                        onClick={() => {
+                          onBlockHeightModeChange(option.id)
+                          setHeightMenuOpen(false)
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>,
+                  document.body,
+                )}
+            </div>
+          )}
           <span
             className="hud-version-badge"
             title={`Inbase ${__INBASE_VERSION__}`}
@@ -4950,6 +5104,7 @@ export function HUD({
               onClick={() => {
                 setRelationsMenuOpen(false)
                 setBranchMenuOpen(false)
+                setHeightMenuOpen(false)
                 setActionsMenuOpen((open) => !open)
               }}
             >

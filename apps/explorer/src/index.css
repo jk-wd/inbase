@@ -882,6 +882,14 @@ button {
   flex: none;
 }
 
+.hud-height-mode {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 1;
+  flex: none;
+}
+
 .hud-icon-button[data-active='true'] {
   border-color: var(--vc-border);
   color: inherit;
@@ -1067,6 +1075,68 @@ button {
 
 .hud-blueprint-colors-name {
   flex: 1;
+}
+
+.hud-fly-to-menu {
+  width: min(360px, calc(100vw - 40px));
+}
+
+.hud-fly-to-input {
+  margin-bottom: 4px;
+  padding: 8px 10px;
+  color: inherit;
+  font: inherit;
+  background: var(--vc-surface);
+  border: 1px solid var(--vc-border);
+  outline: none;
+}
+
+.hud-fly-to-input:focus {
+  border-color: #5d9ec4;
+}
+
+.hud-actions-menu-list .hud-fly-to-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.hud-actions-menu-list .hud-fly-to-item:disabled {
+  cursor: default;
+  opacity: 0.45;
+  background: transparent;
+}
+
+.hud-actions-menu-list .hud-fly-to-item[data-active='true']:not(:disabled) {
+  background: var(--vc-surface);
+  color: #d7eef8;
+}
+
+.hud-fly-to-kind {
+  flex: none;
+  width: 104px;
+}
+
+.hud-fly-to-match {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hud-fly-to-label,
+.hud-fly-to-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-fly-to-detail,
+.hud-fly-to-empty {
+  color: #7d8796;
+  font-size: 0.85em;
 }
 
 .hud-branch-menu-panel {

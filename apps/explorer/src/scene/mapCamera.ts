@@ -29,13 +29,16 @@ export type MapControlsHandle = {
   update: () => void
 }
 
+/**
+ * One continuous camera move. `lift` widens the view mid-flight (0 = none,
+ * 1 = twice the span at the halfway point) so long hops zoom out a little.
+ */
 export type MapFlight = {
   from: MapPose
-  via: MapPose
   to: MapPose
   start: number
   duration: number
-  split: number
+  lift: number
 }
 
 export const MAP_TOP_DOWN: MapAngle = { tilt: 0, heading: 0 }
@@ -184,15 +187,9 @@ function lerpAngle(a: number, b: number, t: number) {
   return a + wrapAngle(b - a) * t
 }
 
-function lerpPose(a: MapPose, b: MapPose, t: number): MapPose {
-  return {
-    cx: lerp(a.cx, b.cx, t),
-    cz: lerp(a.cz, b.cz, t),
-    width: lerp(a.width, b.width, t),
-    depth: lerp(a.depth, b.depth, t),
-    tilt: lerp(a.tilt, b.tilt, t),
-    heading: lerpAngle(a.heading, b.heading, t),
-  }
+/** Zoom feels even when the span changes by the same factor each frame. */
+function lerpSpan(a: number, b: number, t: number) {
+  return Math.exp(lerp(Math.log(Math.max(a, 1e-3)), Math.log(Math.max(b, 1e-3)), t))
 }
 
 function easeInOutCubic(t: number) {
@@ -201,15 +198,47 @@ function easeInOutCubic(t: number) {
 
 export function flightPose(flight: MapFlight, now: number) {
   const t = Math.min(1, (now - flight.start) / flight.duration)
-  const pose =
-    flight.split <= 0
-      ? lerpPose(flight.from, flight.to, easeInOutCubic(t))
-      : t < flight.split
-        ? lerpPose(flight.from, flight.via, easeInOutCubic(t / flight.split))
-        : lerpPose(
-            flight.via,
-            flight.to,
-            easeInOutCubic((t - flight.split) / (1 - flight.split)),
-          )
+  const e = easeInOutCubic(t)
+  const { from, to } = flight
+  const widen = 1 + flight.lift * Math.sin(Math.PI * e)
+  const pose: MapPose = {
+    cx: lerp(from.cx, to.cx, e),
+    cz: lerp(from.cz, to.cz, e),
+    width: lerpSpan(from.width, to.width, e) * widen,
+    depth: lerpSpan(from.depth, to.depth, e) * widen,
+    tilt: lerp(from.tilt, to.tilt, e),
+    heading: lerpAngle(from.heading, to.heading, e),
+  }
   return { t, pose }
+}
+
+/** How far the mid-flight view widens per unit of travel, relative to the view span. */
+const LIFT_PER_TRAVEL = 0.45
+const MIN_FLIGHT_MS = 700
+const MAX_FLIGHT_MS = 1700
+
+/**
+ * Plan a smooth hop from `from` to `to`. Nearby targets glide straight over;
+ * farther ones zoom out proportionally to the distance, never past `maxSpan`.
+ */
+export function planFlight(
+  from: MapPose,
+  to: MapPose,
+  maxSpan: number,
+  start = performance.now(),
+): MapFlight {
+  const span = Math.sqrt(
+    Math.max(from.width, from.depth) * Math.max(to.width, to.depth),
+  )
+  const travel = Math.hypot(to.cx - from.cx, to.cz - from.cz) / Math.max(span, 1)
+  const peak = Math.min(span * (1 + travel * LIFT_PER_TRAVEL), Math.max(maxSpan, span))
+  const lift = travel > 0.6 ? Math.max(0, peak / span - 1) : 0
+  const zoomChange = Math.abs(
+    Math.log2(Math.max(to.width, 1e-3) / Math.max(from.width, 1e-3)),
+  )
+  const duration = Math.min(
+    MAX_FLIGHT_MS,
+    Math.max(MIN_FLIGHT_MS, 650 + 320 * Math.log2(1 + travel) + 120 * zoomChange),
+  )
+  return { from, to, start, duration, lift }
 }

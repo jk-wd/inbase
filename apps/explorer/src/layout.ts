@@ -1,6 +1,7 @@
-import { CONFIG, fileHeight } from './theme'
+import { CONFIG, fileHeight, relationHeight } from './theme'
 import type { ChangeKind } from './theme'
 import type {
+  BlockHeightMode,
   CodebaseGraph,
   FileNode,
   FolderNode,
@@ -158,6 +159,56 @@ export function fileInfoMeta(file: FileNode) {
 
 export function filesImporting(files: FileNode[], id: string) {
   return files.filter((file) => file.imports.includes(id))
+}
+
+/** Distinct local files connected to each file, in either direction. */
+export function fileRelationCounts(files: FileNode[]) {
+  const neighbors = new Map<string, Set<string>>()
+  const ensure = (id: string) => {
+    let set = neighbors.get(id)
+    if (!set) {
+      set = new Set()
+      neighbors.set(id, set)
+    }
+    return set
+  }
+
+  for (const file of files) ensure(file.id)
+  for (const file of files) {
+    for (const imported of file.imports) {
+      if (!imported || imported === file.id) continue
+      ensure(file.id).add(imported)
+      ensure(imported).add(file.id)
+    }
+  }
+
+  const counts = new Map<string, number>()
+  for (const [id, set] of neighbors) counts.set(id, set.size)
+  return counts
+}
+
+/** Replace placed file heights. Folder footprints stay put. User-created blocks stay as placed. */
+export function withBlockHeights(
+  layout: WorldLayout,
+  files: FileNode[],
+  mode: BlockHeightMode,
+): WorldLayout {
+  if (mode === 'lines') return layout
+  const counts = fileRelationCounts(files)
+  const byId = new Map(files.map((file) => [file.id, file]))
+  let next: Record<string, PlacedFile> | null = null
+  for (const [id, placed] of Object.entries(layout.files)) {
+    const file = byId.get(id)
+    if (!file || file.userCreated) continue
+    const height = relationHeight(counts.get(id) ?? 0)
+    next ??= { ...layout.files }
+    next[id] = {
+      ...placed,
+      position: [placed.position[0], height / 2, placed.position[2]],
+      size: [placed.size[0], height, placed.size[2]],
+    }
+  }
+  return next ? { ...layout, files: next } : layout
 }
 
 export function folderOfFile(fileId: string) {

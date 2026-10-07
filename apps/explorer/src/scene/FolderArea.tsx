@@ -109,6 +109,7 @@ export function FolderArea({
     outline && faded && !overlay
       ? dimColor(outline, EXPLAIN_FOCUS.dimColorAmount)
       : outline
+  const outlineInset = outlineColor ? MAP_SELECTION.islandOutline : 0
   const floorMaterial = {
     transparent: faded,
     opacity: overlay ? wash : opacity,
@@ -124,30 +125,16 @@ export function FolderArea({
           : undefined
       }
     >
-      {outlineColor && overlay && sheetOpacity < 1 && (
+      {outlineColor && (
         <MapSelectBorder
           width={folder.width}
           depth={folder.depth}
-          y={0.02}
-          stroke={0.45}
+          y={overlay ? 0.04 : 0.03}
+          stroke={MAP_SELECTION.islandOutline}
           color={outlineColor}
-          opacity={opacity}
-          renderOrder={2}
-          depthTest
+          opacity={overlay ? opacity : floorMaterial.opacity}
+          renderOrder={overlay ? 3 : 1}
         />
-      )}
-      {outlineColor && !(overlay && sheetOpacity < 1) && (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, overlay ? 0.02 : -0.01, 0]}>
-          <planeGeometry args={[folder.width + 0.9, folder.depth + 0.9]} />
-          <meshBasicMaterial
-            color={outlineColor}
-            toneMapped={false}
-            transparent={faded}
-            opacity={overlay ? opacity : floorMaterial.opacity}
-            depthWrite={!faded}
-            side={overlay ? DoubleSide : undefined}
-          />
-        </mesh>
       )}
       <mesh rotation={[-Math.PI / 2, 0, 0]} renderOrder={overlay ? 2 : 0}>
         <planeGeometry args={[folder.width, folder.depth]} />
@@ -166,6 +153,7 @@ export function FolderArea({
           depth={folder.depth}
           y={overlay ? 0.08 : 0.06}
           stroke={MAP_SELECTION.islandPad}
+          inset={outlineInset}
           color={MAP_SELECTION.island}
           opacity={overlay ? opacity : 1}
         />
@@ -176,6 +164,7 @@ export function FolderArea({
           depth={folder.depth}
           y={selected && mapMode ? 0.09 : 0.05}
           stroke={MAP_SELECTION.pointedPad}
+          inset={outlineInset + (selected && mapMode ? MAP_SELECTION.islandPad : 0)}
           color={markColor ?? MAP_SELECTION.pointed}
         />
       )}

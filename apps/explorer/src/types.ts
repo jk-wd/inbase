@@ -75,6 +75,9 @@ export type ViewMode = 'map' | 'walk'
 
 export type RelationMode = 'all' | 'off' | 'changed' | 'targeted'
 
+/** What sets the height of a file block. */
+export type BlockHeightMode = 'lines' | 'relations'
+
 export type UserFileRef = {
   id: string
   name: string

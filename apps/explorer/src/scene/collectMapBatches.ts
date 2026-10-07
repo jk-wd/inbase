@@ -24,7 +24,7 @@ export type MapPlaneItem = {
 
 function mapFileInstanceColor(file: FileNode) {
   if (file.colorHex || file.userCreated) return blueprintPalette(file.colorHex).file
-  return fileColor(file.language)
+  return fileColor()
 }
 
 export function collectMapFileItems(

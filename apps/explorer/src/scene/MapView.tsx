@@ -10,12 +10,6 @@ import { MapFileLabels, type MapFileLabel } from './MapFileLabels'
 import { MapFolderLabels } from './MapFolderLabels'
 import type { MapSheet } from './mapLabelOcclusion'
 import {
-  holdOrbitPivot,
-  isOrbitGesture,
-  pivotSettled,
-  type OrbitPivot,
-} from './mapOrbitPivot'
-import {
   MAP_MAX_TILT,
   MAP_TOP_DOWN,
   angleFromCamera,
@@ -23,6 +17,7 @@ import {
   fitZoomFor,
   flightPose,
   mapCameraDistance,
+  planFlight,
   poseFromCamera,
   poseOf,
   type MapControlsHandle,
@@ -46,11 +41,7 @@ export type MapFocusBounds = {
   depth: number
 }
 
-const FOCUS_FLY_IN_MS = 900
-const FOCUS_FLY_OUT_IN_MS = 1500
-const FOCUS_FLY_SPLIT = 0.4
-
-/** Left drag pans; Shift/Cmd + left drag or middle drag tilts and rotates around the point under the mouse. Right click stays the context menu. */
+/** Left drag pans; Shift/Cmd + left drag or middle drag tilts and rotates. Right click stays the context menu. */
 const MAP_MOUSE_BUTTONS = {
   LEFT: THREE.MOUSE.PAN,
   MIDDLE: THREE.MOUSE.ROTATE,
@@ -119,6 +110,8 @@ type MapViewProps = {
   focusFlightKey?: string | number
   revealBounds?: MapFocusBounds | null
   revealFlightKey?: string | number
+  /** Fit the camera to `revealBounds` instead of only panning to it. */
+  revealZoom?: boolean
   hudReserve?: number
   topReserve?: number
   landEnabled?: boolean
@@ -155,6 +148,7 @@ export function MapView({
   focusFlightKey = 0,
   revealBounds = null,
   revealFlightKey = 0,
+  revealZoom = false,
   hudReserve = 88,
   topReserve = 28,
   landEnabled = true,
@@ -175,6 +169,7 @@ export function MapView({
   const invalidate = useThree((state) => state.invalidate)
   const scene = useThree((state) => state.scene)
   const world = useMemo(() => worldBounds(fitLayout), [fitLayout])
+  const worldSpan = Math.max(world.width, world.depth)
   const focusing = Boolean(focusBounds)
   const bounds = focusBounds ?? world
   const drag = useRef({ x: 0, y: 0, moved: false, active: false })
@@ -254,14 +249,7 @@ export function MapView({
     if (!focusing && wasFocusing) {
       const restore = preFocusPoseRef.current ?? poseOf(world, angle)
       preFocusPoseRef.current = null
-      flightRef.current = {
-        from: poseRef.current,
-        via: poseRef.current,
-        to: restore,
-        start: performance.now(),
-        duration: FOCUS_FLY_IN_MS,
-        split: 0,
-      }
+      flightRef.current = planFlight(poseRef.current, restore, worldSpan)
       setFlying(true)
       fittedRef.current = true
       invalidate()
@@ -269,14 +257,7 @@ export function MapView({
     }
 
     if (focusing && prevKey !== null && prevKey !== key) {
-      flightRef.current = {
-        from: poseRef.current,
-        via: wasFocusing ? poseOf(world, angle) : poseRef.current,
-        to: target,
-        start: performance.now(),
-        duration: wasFocusing ? FOCUS_FLY_OUT_IN_MS : FOCUS_FLY_IN_MS,
-        split: wasFocusing ? FOCUS_FLY_SPLIT : 0,
-      }
+      flightRef.current = planFlight(poseRef.current, target, worldSpan)
       setFlying(true)
       invalidate()
       return
@@ -301,20 +282,18 @@ export function MapView({
 
     if (revealBounds && revealKeyRef.current !== revealFlightKey) {
       revealKeyRef.current = revealFlightKey
-      flightRef.current = {
-        from: current,
-        via: current,
-        to: {
-          ...current,
-          cx: revealBounds.cx,
-          cz: revealBounds.cz,
-          width: Math.max(current.width, revealBounds.width),
-          depth: Math.max(current.depth, revealBounds.depth),
-        },
-        start: performance.now(),
-        duration: FOCUS_FLY_IN_MS,
-        split: 0,
+      const to: MapPose = {
+        ...current,
+        cx: revealBounds.cx,
+        cz: revealBounds.cz,
+        width: revealZoom
+          ? revealBounds.width
+          : Math.max(current.width, revealBounds.width),
+        depth: revealZoom
+          ? revealBounds.depth
+          : Math.max(current.depth, revealBounds.depth),
       }
+      flightRef.current = planFlight(current, to, worldSpan)
       setFlying(true)
       invalidate()
       return
@@ -349,12 +328,14 @@ export function MapView({
     revealBounds?.depth,
     revealBounds?.width,
     revealFlightKey,
+    revealZoom,
     sized,
     view,
     world.cx,
     world.cz,
     world.depth,
     world.width,
+    worldSpan,
   ])
 
   useFrame(() => {
@@ -382,11 +363,10 @@ export function MapView({
       const from = poseFromCamera(camera, view, controlsRef.current)
       flightRef.current = {
         from,
-        via: from,
         to: { ...from, ...MAP_TOP_DOWN },
         start: performance.now(),
         duration: MAP_VIEW.resetMs,
-        split: 0,
+        lift: 0,
       }
       setFlying(true)
       invalidate()
@@ -625,62 +605,6 @@ export function MapView({
     selectedFolder,
     droppingWalk,
   ])
-
-  useEffect(() => {
-    const controls = controlsRef.current
-    if (!enabled || !sized || flying || !controls) return
-    const element = gl.domElement
-    const raycaster = new THREE.Raycaster()
-    const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
-    let pivot: OrbitPivot | null = null
-
-    const mapPointAt = (ndc: THREE.Vector2) => {
-      raycaster.setFromCamera(ndc, camera)
-      for (const hit of raycaster.intersectObjects(scene.children, true)) {
-        if (fileIdFromHit(hit) || mapFolderFromHit(hit)) return hit.point.clone()
-      }
-      const point = new THREE.Vector3()
-      return raycaster.ray.intersectPlane(ground, point) ? point : null
-    }
-
-    const onDown = (event: PointerEvent) => {
-      pivot = null
-      if (!isOrbitGesture(event)) return
-      const rect = element.getBoundingClientRect()
-      if (rect.width < 2 || rect.height < 2) return
-      const ndc = new THREE.Vector2(
-        ((event.clientX - rect.left) / rect.width) * 2 - 1,
-        -((event.clientY - rect.top) / rect.height) * 2 + 1,
-      )
-      const point = mapPointAt(ndc)
-      if (point) pivot = { point, ndc, releasedAt: null }
-    }
-    const onUp = () => {
-      if (pivot && pivot.releasedAt === null) pivot.releasedAt = performance.now()
-    }
-    const onWheel = () => {
-      pivot = null
-    }
-    const onChange = () => {
-      if (!pivot) return
-      if (pivotSettled(pivot, performance.now())) {
-        pivot = null
-        return
-      }
-      holdOrbitPivot(camera, controls, pivot)
-    }
-
-    element.addEventListener('pointerdown', onDown, true)
-    window.addEventListener('pointerup', onUp)
-    window.addEventListener('wheel', onWheel, { capture: true, passive: true })
-    controls.addEventListener('change', onChange)
-    return () => {
-      element.removeEventListener('pointerdown', onDown, true)
-      window.removeEventListener('pointerup', onUp)
-      window.removeEventListener('wheel', onWheel, { capture: true })
-      controls.removeEventListener('change', onChange)
-    }
-  }, [camera, enabled, flying, gl.domElement, scene, sized])
 
   useEffect(() => {
     if (!enabled || !droppingWalk || !landEnabled) {
