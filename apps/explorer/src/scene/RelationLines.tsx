@@ -26,8 +26,11 @@ type RelationLinesProps = {
   fromAbove?: boolean
   importedBy?: boolean
   focusIds?: string[]
-  /** Draw every relation that touches one of these files, in both directions. */
-  groupIds?: string[]
+  /**
+   * Blueprint-declared imports. When set, these are the only relations drawn
+   * (plus explain edges). An empty list draws none of the scanned file imports.
+   */
+  blueprintEdges?: PatchImport[]
   drawPlanned?: boolean
   drawExisting?: boolean
 }
@@ -444,7 +447,7 @@ export function RelationLines({
   fromAbove = false,
   importedBy = false,
   focusIds = [],
-  groupIds,
+  blueprintEdges,
   drawPlanned = true,
   drawExisting = true,
 }: RelationLinesProps) {
@@ -489,21 +492,22 @@ export function RelationLines({
       )
     }
 
-    if (groupIds) {
-      const group = new Set(groupIds)
-      for (const edge of plannedEdges) {
-        if (!group.has(edge.from) && !group.has(edge.to)) continue
+    if (blueprintEdges) {
+      const limitToSelection = Boolean(selectedId) || focusIds.length > 0
+      const limitSet = new Set(
+        focusIds.length > 0 ? focusIds : selectedId ? [selectedId] : [],
+      )
+      for (const edge of blueprintEdges) {
+        if (limitToSelection) {
+          const include = importedBy
+            ? limitSet.has(edge.to)
+            : limitSet.has(edge.from)
+          if (!include) continue
+        }
         addLine(edge.from, edge.to, true, plannedRadius)
       }
       for (const edge of extraEdges) {
         addLine(edge.from, edge.to, false, selectedRadius)
-      }
-      for (const file of files) {
-        const fromIn = group.has(file.id)
-        for (const importId of file.imports) {
-          if (!fromIn && !group.has(importId)) continue
-          addLine(file.id, importId, false, selectedRadius)
-        }
       }
       return [
         ...lines.filter((line) => !line.planned),
@@ -557,9 +561,9 @@ export function RelationLines({
     drawPlanned,
     extras,
     extraEdges,
+    blueprintEdges,
     files,
     focusIds,
-    groupIds,
     fromAbove,
     importedBy,
     layout.files,

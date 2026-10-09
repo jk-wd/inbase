@@ -626,6 +626,7 @@ function collectMapBlueprints(input: {
     islands: UserCreatedIsland[]
     markedFolders: string[]
     stackOrder: number
+    imports: PatchImportAddition[]
   }> = []
   for (const source of sources) {
     const visible = visibleItemsForBlueprint(
@@ -648,6 +649,7 @@ function collectMapBlueprints(input: {
         ? []
         : blueprintMarkedFolders(source.pointers, source.notes),
       stackOrder: sessionColorOrder(source.id),
+      imports: source.hidden ? [] : source.imports,
     })
     for (const block of visible.blocks) {
       blocks.set(block.id, { ...block, colorHex: source.hex })

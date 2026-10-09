@@ -38,6 +38,7 @@ import type {
   FileNode,
   AimedRelation,
   PatchImport,
+  PatchImportAddition,
   PlacedBridge,
   PlacedFile,
   PlacedFolder,
@@ -306,30 +307,41 @@ export function World({
     viewGraph.files,
     viewGraph.folders,
   ])
-  const blueprintGroupIds = useMemo(() => {
-    if (relationMode !== 'blueprint' || !activeBlueprintId) return [] as string[]
-    const layer = overlayLayers.find((item) => item.id === activeBlueprintId)
-    if (!layer) return [] as string[]
-    return filesOnBlueprintLayer(
-      layer,
-      groundLayout,
-      namingIslandId,
-      pointedFileColors,
-      notedFileColors,
+  const blueprintRelationLayer = useMemo(() => {
+    if (relationMode === 'blueprint') {
+      if (!activeBlueprintId) return null
+      return overlayLayers.find((layer) => layer.id === activeBlueprintId) ?? null
+    }
+    if (relationMode !== 'targeted') return null
+    return blueprintLayerForSelection(
+      overlayLayers,
+      activeBlueprintId,
+      selectedId,
+      selectedFolder,
+      selectedFolderLayer,
     )
   }, [
     activeBlueprintId,
-    groundLayout,
-    namingIslandId,
-    notedFileColors,
     overlayLayers,
-    pointedFileColors,
     relationMode,
+    selectedFolder,
+    selectedFolderLayer,
+    selectedId,
   ])
+  const blueprintEdges = useMemo(() => {
+    if (relationMode === 'blueprint') {
+      return blueprintImportEdges(blueprintRelationLayer?.imports)
+    }
+    if (relationMode === 'targeted' && blueprintRelationLayer) {
+      return blueprintImportEdges(blueprintRelationLayer.imports)
+    }
+    return undefined
+  }, [blueprintRelationLayer, relationMode])
   const selectionFocus = Boolean(selectedId || folderFocusIds.length > 0)
   const hideRelations = relationMode === 'off'
   const showExistingRelations =
-    relationMode === 'all' || (relationMode === 'targeted' && selectionFocus)
+    relationMode === 'all' ||
+    (relationMode === 'targeted' && selectionFocus && !blueprintEdges)
   const showAllPlanned =
     relationMode === 'all' || relationMode === 'changed'
   const explainEdges = hideRelations ? [] : (explainFocus?.relations ?? [])
@@ -352,13 +364,22 @@ export function World({
   for (const edge of plannedImports) {
     patchLinked.add(edge.from)
     patchLinked.add(edge.to)
-    if (hideRelations) continue
+    if (hideRelations || blueprintEdges) continue
     if (relationMode === 'targeted') {
       const focus = selectedId ? [selectedId] : folderFocusIds
       if (!focus.includes(edge.from) && !focus.includes(edge.to)) continue
     }
     if (!planned.has(edge.to) && !deleted.has(edge.to)) related.add(edge.to)
     if (!planned.has(edge.from) && !deleted.has(edge.from)) related.add(edge.from)
+  }
+  if (relationMode === 'targeted' && blueprintEdges && selectionFocus) {
+    const focus = new Set(selectedId ? [selectedId] : folderFocusIds)
+    for (const edge of blueprintEdges) {
+      const include = fileImportedBy ? focus.has(edge.to) : focus.has(edge.from)
+      if (!include) continue
+      if (!focus.has(edge.to)) related.add(edge.to)
+      if (!focus.has(edge.from)) related.add(edge.from)
+    }
   }
   const highlightedFolders = folderChangeHighlights(
     planned,
@@ -966,8 +987,8 @@ export function World({
           extraEdges={explainEdges}
           fromAbove={mapping}
           importedBy={fileImportedBy}
-          focusIds={folderFocusIds}
-          groupIds={relationMode === 'blueprint' ? blueprintGroupIds : undefined}
+          focusIds={relationMode === 'blueprint' ? [] : folderFocusIds}
+          blueprintEdges={blueprintEdges}
           drawPlanned={showAllPlanned}
           drawExisting={showExistingRelations}
         />
@@ -1077,43 +1098,44 @@ function DashedBlockOutline({
   )
 }
 
-function markedOnLayer(
-  layer: BlueprintOverlayLayer,
-  colors: Record<string, string[]>,
-) {
-  const hex = layer.colorHex.toLowerCase()
-  const ids: string[] = []
-  for (const [id, list] of Object.entries(colors)) {
-    if (list.some((color) => color.toLowerCase() === hex)) ids.push(id)
-  }
-  return ids
+function layerClaimsFile(layer: BlueprintOverlayLayer, fileId: string) {
+  if (layer.files[fileId]) return true
+  return layer.imports.some(
+    (item) => item.file === fileId || item.from === fileId,
+  )
 }
 
-/** Files drawn on a blueprint: its blocks, covered map files, and files it points at or notes. */
-function filesOnBlueprintLayer(
-  layer: BlueprintOverlayLayer,
-  layout: WorldLayout,
-  namingIslandId: string | null,
-  pointedFileColors: Record<string, string[]>,
-  notedFileColors: Record<string, string[]>,
+/** The blueprint that owns the current selection, preferring the active color. */
+function blueprintLayerForSelection(
+  layers: BlueprintOverlayLayer[],
+  activeBlueprintId: string | null,
+  selectedId: string | null,
+  selectedFolder: string | null,
+  selectedFolderLayer: string | null,
 ) {
-  const ids = new Set<string>([
-    ...Object.keys(layer.files),
-    ...markedOnLayer(layer, pointedFileColors),
-    ...markedOnLayer(layer, notedFileColors),
-  ])
-  for (const folder of Object.values(layer.folders)) {
-    const bounds = overlayFolderBounds(
-      folder,
-      layout.folders,
-      folder.path === namingIslandId,
-    )
-    if (!bounds) continue
-    for (const file of Object.values(layout.files)) {
-      if (fileInsideFolder(file, bounds)) ids.add(file.id)
-    }
+  if (selectedFolder && selectedFolderLayer) {
+    return layers.find((layer) => layer.id === selectedFolderLayer) ?? null
   }
-  return [...ids]
+  if (!selectedId) return null
+  const active = activeBlueprintId
+    ? layers.find((layer) => layer.id === activeBlueprintId)
+    : undefined
+  if (active && layerClaimsFile(active, selectedId)) return active
+  return layers.find((layer) => layerClaimsFile(layer, selectedId)) ?? null
+}
+
+/** One line per file pair declared in the blueprint's import list. */
+function blueprintImportEdges(imports: PatchImportAddition[] | undefined): PatchImport[] {
+  const edges: PatchImport[] = []
+  const seen = new Set<string>()
+  for (const item of imports ?? []) {
+    if (!item.file || !item.from || item.file === item.from) continue
+    const key = `${item.file}->${item.from}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    edges.push({ from: item.file, to: item.from })
+  }
+  return edges
 }
 
 function fileInsideFolder(file: PlacedFile, folder: PlacedFolder) {

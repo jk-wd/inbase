@@ -26,6 +26,8 @@ export type BlueprintLayerSource = {
   markedFolders?: string[]
   /** Raised floor order; lower stacks closer to the map. */
   stackOrder?: number
+  /** Imports declared by this blueprint, not the scanned file graph. */
+  imports?: PatchImportAddition[]
 }
 
 export type BlueprintOverlayLayer = {
@@ -39,6 +41,8 @@ export type BlueprintOverlayLayer = {
   fileLift: number
   /** A blueprint is one sheet: raised to `folderY` when any folder overlaps the map, else on the ground. */
   folderHeights: Record<string, number>
+  /** Imports declared by this blueprint. */
+  imports: PatchImportAddition[]
 }
 
 export function overlayFolderY(layer: BlueprintOverlayLayer, folderPath: string) {
@@ -1008,6 +1012,7 @@ export function layoutBlueprintLayers(
       folderY,
       fileLift,
       folderHeights,
+      imports: source.imports ?? [],
     }
   })
 }
