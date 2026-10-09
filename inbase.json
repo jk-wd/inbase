@@ -1,5 +1,5 @@
 {
-  "target": "apps/example-csharp",
+  "target": "apps/example-target",
   "port": 5173,
   "ignore": [],
   "maxSubagents": 4,
