@@ -35,6 +35,7 @@ export function extractPatchImports(
     hunks: unknown[]
   }>,
   knownFileIds?: string[],
+  aliases?: Array<{ dir: string; rules: unknown[] }>,
 ): PatchImport[]
 
 export function extractPatchAdditions(

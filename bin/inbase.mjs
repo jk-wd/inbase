@@ -13,6 +13,7 @@ import {
   instanceFile,
   isPidAlive,
   findLiveVisualizer,
+  instanceBlocksPort,
   readInstanceFile,
   readRunningInstance,
   removeGitignoreEntry,
@@ -182,7 +183,7 @@ async function runServer(args) {
   }
 
   const running = readRunningInstance(cwd)
-  if (running && isPidAlive(running.pid)) {
+  if (running && instanceBlocksPort(running, port) && isPidAlive(running.pid)) {
     console.log(
       `Inbase is already running (pid ${running.pid}) at ${visualizerOrigin(running.port)}.`,
     )

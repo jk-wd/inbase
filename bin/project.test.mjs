@@ -325,6 +325,8 @@ test('findLiveVisualizer finds a reachable map', async () => {
     })
     const live = await findLiveVisualizer(root, port)
     assert.equal(live.port, port)
+    assert.equal(live.targetRoot, path.resolve(root))
+    assert.equal(await findLiveVisualizer(root, port === 59999 ? 59998 : 59999), null)
     assert.equal(await probeVisualizer(port), true)
   } finally {
     await new Promise((resolve) => server.close(resolve))

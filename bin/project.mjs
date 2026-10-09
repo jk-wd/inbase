@@ -157,20 +157,29 @@ export async function probeVisualizer(port, timeoutMs = 800) {
   }
 }
 
+/** A recorded map only blocks a new run when it is bound to `port`. */
+export function instanceBlocksPort(instance, port) {
+  if (!instance) return false
+  if (instance.port == null) return true
+  return Number(instance.port) === Number(port)
+}
+
 export async function findLiveVisualizer(cwd = process.cwd(), portHint = null) {
   const running = readRunningInstance(cwd)
-  const ports = []
   const hinted = Number(portHint)
-  if (running?.port) ports.push(running.port)
-  if (Number.isInteger(hinted) && hinted > 0 && !ports.includes(hinted)) {
-    ports.push(hinted)
-  }
+  const hasHint = Number.isInteger(hinted) && hinted > 0
+  // A changed inbase.json port is a different server. Only the requested
+  // port counts; a map still listening on the previous port does not.
+  const ports = []
+  if (hasHint) ports.push(hinted)
+  else if (running?.port) ports.push(running.port)
   for (const port of ports) {
     if (!(await probeVisualizer(port))) continue
+    const same = instanceBlocksPort(running, port)
     return {
-      dataDir: running?.dataDir ?? null,
-      targetRoot: running?.targetRoot ?? null,
-      pid: running?.pid ?? null,
+      dataDir: same ? (running?.dataDir ?? null) : null,
+      targetRoot: same ? (running?.targetRoot ?? null) : null,
+      pid: same ? (running?.pid ?? null) : null,
       port,
     }
   }

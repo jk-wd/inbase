@@ -80,4 +80,5 @@ export function dropMassKnownCreates(
 export function overlayFromPatchText(
   patchText: string,
   knownFileIds?: string[],
+  aliases?: Array<{ dir: string; rules: unknown[] }>,
 ): ChangeOverlay

@@ -1353,7 +1353,7 @@ test('inbase run tells the user when a map is already running', async () => {
     })
     fs.writeFileSync(
       path.join(second.root, 'inbase.json'),
-      `${JSON.stringify({ target: '.' }, null, 2)}\n`,
+      `${JSON.stringify({ target: '.', port }, null, 2)}\n`,
     )
     process.chdir(second.root)
     await main(['run'])
@@ -1363,6 +1363,73 @@ test('inbase run tells the user when a map is already running', async () => {
     assert.doesNotMatch(output, /Now mapping/)
   } finally {
     console.log = log
+    process.chdir(previousCwd)
+    await new Promise((resolve) => server.close(resolve))
+    restoreEnv(env)
+    first.cleanup()
+    second.cleanup()
+  }
+})
+
+test('inbase run ignores a map whose port is not the inbase.json port', async () => {
+  const first = tempProject()
+  const second = tempProject()
+  const env = snapshotEnv(
+    'VISUAL_CODER_TARGET',
+    'INBASE_DATA_DIR',
+    'INBASE_CONFIG',
+    'INBASE_HOME',
+  )
+  process.env.INBASE_HOME = path.join(first.root, 'home')
+  delete process.env.VISUAL_CODER_TARGET
+  delete process.env.INBASE_DATA_DIR
+  delete process.env.INBASE_CONFIG
+  const server = http.createServer((req, res) => {
+    if (req.url === '/api/dev-targets' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ enabled: false, currentId: null, targets: [] }))
+      return
+    }
+    res.statusCode = 404
+    res.end()
+  })
+  const previousCwd = process.cwd()
+  let output = ''
+  let errors = ''
+  const log = console.log
+  const errorLog = console.error
+  const exit = process.exit
+  console.log = (message) => {
+    output += `${message}\n`
+  }
+  console.error = (message) => {
+    errors += `${message}\n`
+  }
+  process.exit = ((code) => {
+    throw new Error(`exit:${code ?? 0}`)
+  })
+  try {
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const port = server.address().port
+    const requested = port === 59999 ? 59998 : 59999
+    writeRunningInstance({
+      dataDir: path.join(first.root, '.inbase'),
+      targetRoot: first.root,
+      port,
+      extraDirs: [globalInbaseDir()],
+    })
+    fs.writeFileSync(
+      path.join(second.root, 'inbase.json'),
+      `${JSON.stringify({ target: 'missing-app', port: requested }, null, 2)}\n`,
+    )
+    process.chdir(second.root)
+    await assert.rejects(() => main(['run']), /exit:1/)
+    assert.doesNotMatch(output, /already running/)
+    assert.match(errors, /Target not found/)
+  } finally {
+    console.log = log
+    console.error = errorLog
+    process.exit = exit
     process.chdir(previousCwd)
     await new Promise((resolve) => server.close(resolve))
     restoreEnv(env)

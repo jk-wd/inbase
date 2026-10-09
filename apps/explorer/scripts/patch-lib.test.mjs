@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import test from 'node:test'
 import {
   accumulatePatchAdditions,
@@ -7,6 +10,7 @@ import {
   extractPatchImports,
   parseUnifiedPatch,
 } from './patch-lib.mjs'
+import { loadImportAliases } from './relations/aliases.mjs'
 
 const newApi = `--- /dev/null
 +++ b/src/mocked-api/weeklyVisitors.ts
@@ -165,6 +169,49 @@ test('treats added classes as functions in patch previews', () => {
   assert.deepEqual(additions.addedFunctions, [
     { name: 'AppComponent', file: 'src/app.component.ts' },
   ])
+})
+
+test('links @/ patch imports to src files and tsconfig mappings', () => {
+  const parsed = parseUnifiedPatch(`--- a/src/features/CurrentUser.ts
++++ b/src/features/CurrentUser.ts
+@@ -1,0 +1,3 @@
++import { getMe } from '@/core/generated/mdpApi';
++import transformCurrentUser from '@/core/services/transformers/transformCurrentUser';
++import queryKeys from '@/core/utils/queryKeys';
+`)
+  assert.deepEqual(
+    extractPatchImports(parsed.entries, [
+      'src/core/generated/mdpApi.ts',
+      'src/core/services/transformers/transformCurrentUser.ts',
+      'src/core/utils/queryKeys.ts',
+    ]).sort((a, b) => a.to.localeCompare(b.to)),
+    [
+      { from: 'src/features/CurrentUser.ts', to: 'src/core/generated/mdpApi.ts' },
+      {
+        from: 'src/features/CurrentUser.ts',
+        to: 'src/core/services/transformers/transformCurrentUser.ts',
+      },
+      { from: 'src/features/CurrentUser.ts', to: 'src/core/utils/queryKeys.ts' },
+    ],
+  )
+
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'visual-coder-alias-patch-'))
+  try {
+    fs.mkdirSync(path.join(root, 'lib/core'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, 'tsconfig.json'),
+      JSON.stringify({
+        compilerOptions: { baseUrl: '.', paths: { '@/*': ['lib/*'] } },
+      }),
+    )
+    const aliases = loadImportAliases(root)
+    assert.deepEqual(
+      extractPatchImports(parsed.entries, ['lib/core/generated/mdpApi.ts', 'src/core/generated/mdpApi.ts'], aliases),
+      [{ from: 'src/features/CurrentUser.ts', to: 'lib/core/generated/mdpApi.ts' }],
+    )
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
 })
 
 test('extracts require() bindings and relative edges', () => {

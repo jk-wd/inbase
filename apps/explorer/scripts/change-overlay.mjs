@@ -175,7 +175,7 @@ export function dropMassKnownCreates(preview, knownFileIds = []) {
   })
 }
 
-export function overlayFromPatchText(patchText, knownFileIds = []) {
+export function overlayFromPatchText(patchText, knownFileIds = [], aliases = []) {
   const parsed = parseUnifiedPatch(patchText ?? '')
   return dropMassKnownCreates(
     {
@@ -187,7 +187,7 @@ export function overlayFromPatchText(patchText, knownFileIds = []) {
         foldersFromFileIds(knownFileIds.filter((id) => !parsed.creates.includes(id))),
       ),
       createLines: parsed.createLines,
-      imports: extractPatchImports(parsed.entries, knownFileIds),
+      imports: extractPatchImports(parsed.entries, knownFileIds, aliases),
       ...extractPatchAdditions(parsed.entries),
     },
     knownFileIds,

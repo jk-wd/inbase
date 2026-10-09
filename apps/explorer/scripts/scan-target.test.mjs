@@ -373,6 +373,144 @@ test('honours nested gitignore files in a monorepo', () => {
   }
 })
 
+test('links @/ imports through tsconfig paths and the src alias', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'visual-coder-alias-'))
+  const dest = path.join(root, 'codebase.json')
+  try {
+    fs.mkdirSync(path.join(root, 'src/core/generated'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'src/core/services/transformers'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'src/core/utils'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'src/features'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, 'tsconfig.json'),
+      `{
+        // path alias
+        "compilerOptions": {
+          "baseUrl": ".",
+          "paths": {
+            "@/*": ["src/*"],
+          },
+        },
+      }
+`,
+    )
+    fs.writeFileSync(path.join(root, 'src/core/generated/mdpApi.ts'), 'export function getMe() {}\n')
+    fs.writeFileSync(
+      path.join(root, 'src/core/services/transformers/transformCurrentUser.ts'),
+      'export default function transformCurrentUser() {}\n',
+    )
+    fs.writeFileSync(path.join(root, 'src/core/utils/queryKeys.ts'), 'const queryKeys = {}\nexport default queryKeys\n')
+    fs.writeFileSync(
+      path.join(root, 'src/features/CurrentUser.ts'),
+      `import { getMe } from '@/core/generated/mdpApi';
+import transformCurrentUser from '@/core/services/transformers/transformCurrentUser';
+import queryKeys from '@/core/utils/queryKeys';
+import { useState } from 'react';
+`,
+    )
+    const graph = scanQuiet({ root, dest })
+    const byId = Object.fromEntries(graph.files.map((file) => [file.id, file]))
+    assert.deepEqual(byId['src/features/CurrentUser.ts'].imports.sort(), [
+      'src/core/generated/mdpApi.ts',
+      'src/core/services/transformers/transformCurrentUser.ts',
+      'src/core/utils/queryKeys.ts',
+    ])
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('uses the nearest package tsconfig and keeps package imports unresolved', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'visual-coder-alias-pkg-'))
+  const dest = path.join(root, 'codebase.json')
+  try {
+    fs.mkdirSync(path.join(root, 'src/core'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'apps/web/src/core'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'apps/web/src/features'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, 'tsconfig.json'),
+      JSON.stringify({
+        files: [],
+        references: [{ path: './tsconfig.app.json' }],
+      }),
+    )
+    fs.writeFileSync(
+      path.join(root, 'tsconfig.app.json'),
+      JSON.stringify({
+        compilerOptions: { baseUrl: '.', paths: { '@/*': ['src/*'] } },
+      }),
+    )
+    fs.writeFileSync(
+      path.join(root, 'apps/web/tsconfig.json'),
+      JSON.stringify({
+        compilerOptions: { baseUrl: '.', paths: { '@/*': ['src/*'] } },
+      }),
+    )
+    fs.writeFileSync(path.join(root, 'src/core/mdpApi.ts'), 'export function getMe() {}\n')
+    fs.writeFileSync(path.join(root, 'apps/web/src/core/mdpApi.ts'), 'export function getMe() {}\n')
+    fs.writeFileSync(
+      path.join(root, 'apps/web/src/features/CurrentUser.ts'),
+      "import { getMe } from '@/core/mdpApi'\nimport core from '@angular/core'\n",
+    )
+    const graph = scanQuiet({ root, dest })
+    const byId = Object.fromEntries(graph.files.map((file) => [file.id, file]))
+    assert.deepEqual(byId['apps/web/src/features/CurrentUser.ts'].imports, [
+      'apps/web/src/core/mdpApi.ts',
+    ])
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('lets tsconfig.json override paths inherited from tsconfig.base.json', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'visual-coder-alias-override-'))
+  const dest = path.join(root, 'codebase.json')
+  try {
+    fs.mkdirSync(path.join(root, 'src/core'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'lib/core'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, 'tsconfig.base.json'),
+      JSON.stringify({ compilerOptions: { baseUrl: '.', paths: { '@/*': ['lib/*'] } } }),
+    )
+    fs.writeFileSync(
+      path.join(root, 'tsconfig.json'),
+      JSON.stringify({
+        extends: './tsconfig.base.json',
+        compilerOptions: { baseUrl: '.', paths: { '@/*': ['src/*'] } },
+      }),
+    )
+    fs.writeFileSync(path.join(root, 'lib/core/mdpApi.ts'), 'export function getMe() {}\n')
+    fs.writeFileSync(path.join(root, 'src/core/mdpApi.ts'), 'export function getMe() {}\n')
+    fs.writeFileSync(path.join(root, 'src/App.ts'), "import { getMe } from '@/core/mdpApi'\n")
+    const graph = scanQuiet({ root, dest })
+    const byId = Object.fromEntries(graph.files.map((file) => [file.id, file]))
+    assert.deepEqual(byId['src/App.ts'].imports, ['src/core/mdpApi.ts'])
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('falls back to the enclosing src directory when no path mapping matches', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'visual-coder-alias-src-'))
+  const dest = path.join(root, 'codebase.json')
+  try {
+    fs.mkdirSync(path.join(root, 'apps/web/src/core'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'apps/web/src/features'), { recursive: true })
+    fs.writeFileSync(path.join(root, 'apps/web/src/core/queryKeys.ts'), 'export default {}\n')
+    fs.writeFileSync(
+      path.join(root, 'apps/web/src/features/CurrentUser.ts'),
+      "import queryKeys from '@/core/queryKeys'\n",
+    )
+    const graph = scanQuiet({ root, dest })
+    const byId = Object.fromEntries(graph.files.map((file) => [file.id, file]))
+    assert.deepEqual(byId['apps/web/src/features/CurrentUser.ts'].imports, [
+      'apps/web/src/core/queryKeys.ts',
+    ])
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('skips the explorer data directory when it lives inside the scan root', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'visual-coder-data-skip-'))
   const dataDir = path.join(root, 'apps/explorer/src/data')

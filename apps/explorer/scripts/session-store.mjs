@@ -3,6 +3,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { applyUnifiedPatch } from './patch-lib.mjs'
+import { loadImportAliases } from './relations/aliases.mjs'
 import {
   attachChangeNotes,
   dropMassKnownCreates,
@@ -1253,7 +1254,7 @@ function captureChangeOverlay(dataDir, sessionId, targetRoot, knownFileIds) {
     if (overlayHasChanges(git)) return git
   }
   const patch = readLiveDiff(dataDir, sessionId, targetRoot)
-  return overlayFromPatchText(patch, knownFileIds)
+  return overlayFromPatchText(patch, knownFileIds, loadImportAliases(targetRoot))
 }
 
 function overlayWithAbsentFiles(overlay, targetRoot, knownFileIds) {
@@ -2313,7 +2314,11 @@ export function appendDiff(dataDir, targetRoot, input) {
   if (input.overlay) {
     overlay = normalizeChangeOverlay(input.overlay)
   } else if (input.patchText) {
-    overlay = overlayFromPatchText(input.patchText, knownFileIds)
+    overlay = overlayFromPatchText(
+      input.patchText,
+      knownFileIds,
+      loadImportAliases(targetRoot),
+    )
     captureBaseline(dataDir, sessionId, originRoot, overlayFileIds(overlay))
     applyUnifiedPatch(input.patchText, targetRoot)
   } else {

@@ -6,6 +6,7 @@ import {
   extractSymbols as extractLanguageSymbols,
   resolveSpecifierAgainst,
 } from './js-source.mjs'
+import { specifierCandidates } from './relations/aliases.mjs'
 import { targetPathPrefix } from './target-config.mjs'
 
 export function toFileId(input) {
@@ -397,7 +398,7 @@ function posixJoin(fromDir, specifier) {
   return parts.join('/')
 }
 
-export function extractPatchImports(entries, knownFileIds = []) {
+export function extractPatchImports(entries, knownFileIds = [], aliases = []) {
   const known = new Set(knownFileIds)
   for (const entry of entries) known.add(entry.id)
   const edges = []
@@ -407,13 +408,19 @@ export function extractPatchImports(entries, knownFileIds = []) {
     if (entry.kind === 'delete') continue
     const fromDir = folderOfFileId(entry.id)
     for (const specifier of collectImportSpecifiers(addedSource(entry), entry.id)) {
-      if (!specifier.startsWith('.')) continue
-      const to = resolveSpecifierAgainst(posixJoin(fromDir, specifier), known)
-      if (!to || to === entry.id) continue
-      const key = `${entry.id}->${to}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      edges.push({ from: entry.id, to })
+      const candidates = specifier.startsWith('.')
+        ? [posixJoin(fromDir, specifier)]
+        : specifierCandidates(specifier, entry.id, aliases)
+      for (const candidate of candidates) {
+        const to = resolveSpecifierAgainst(candidate, known)
+        if (!to || to === entry.id) continue
+        const key = `${entry.id}->${to}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          edges.push({ from: entry.id, to })
+        }
+        break
+      }
     }
   }
 

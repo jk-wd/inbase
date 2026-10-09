@@ -6,6 +6,7 @@ import {
   collectImportSpecifiers,
   extractSymbols,
 } from './js-source.mjs'
+import { loadImportAliases, specifierCandidates } from './relations/aliases.mjs'
 import { applyCSharpImports } from './relations/csharp.mjs'
 import {
   collectGitignoreSets,
@@ -165,15 +166,19 @@ function resolveExisting(candidate) {
   return null
 }
 
-function resolveImport(fromFile, specifier, root) {
-  if (!specifier.startsWith('.')) return null
-  const fromDir = path.dirname(fromFile)
-  const candidate = path.resolve(fromDir, specifier)
-  const resolved = resolveExisting(candidate)
-  if (!resolved) return null
-  const relative = toPosix(path.relative(root, resolved))
-  if (relative.startsWith('..')) return null
-  return relative
+function resolveImport(fromFile, specifier, root, aliases) {
+  const relativeFile = toPosix(path.relative(root, fromFile))
+  const candidates = specifier.startsWith('.')
+    ? [path.resolve(path.dirname(fromFile), specifier)]
+    : specifierCandidates(specifier, relativeFile, aliases).map((id) => path.resolve(root, id))
+  for (const candidate of candidates) {
+    const resolved = resolveExisting(candidate)
+    if (!resolved) continue
+    const relative = toPosix(path.relative(root, resolved))
+    if (!relative || relative.startsWith('..')) continue
+    return relative
+  }
+  return null
 }
 
 function ensureFolder(folders, folderPath, rootName) {
@@ -223,6 +228,7 @@ export function buildScanGraph({
 
   const extraPatterns = resolveScanIgnore(root, ignore)
   const absoluteFiles = listSourceAbsolutes(root, skipRoot, extraPatterns)
+  const aliases = loadImportAliases(root)
   const folders = new Map()
   const sources = new Map()
   ensureFolder(folders, '.', name)
@@ -258,7 +264,7 @@ export function buildScanGraph({
       language: languageOf(relative),
       symbols: extractSymbols(source, relative),
       imports: collectImportSpecifiers(source, relative)
-        .map((specifier) => resolveImport(absolutePath, specifier, root))
+        .map((specifier) => resolveImport(absolutePath, specifier, root, aliases))
         .filter(Boolean),
     }
   })

@@ -14,6 +14,7 @@ import {
   emptyChangeOverlay,
   normalizeChangeOverlay,
 } from './change-overlay.mjs'
+import { loadImportAliases } from './relations/aliases.mjs'
 import { shouldIgnoreRelativePath, toPosix } from './scan-ignore.mjs'
 
 const BINARY_PROBE_BYTES = 8000
@@ -354,6 +355,7 @@ function collectDiff(targetRoot, knownFileIds, diffArgs, includeUntracked) {
     .join('\n')
   const parsed = parseUnifiedPatch(patchText)
   const known = unique([...knownFileIds, ...creates, ...files])
+  const aliases = loadImportAliases(targetRoot)
   return withAbsentMappedFiles(
     {
       files,
@@ -364,7 +366,7 @@ function collectDiff(targetRoot, knownFileIds, diffArgs, includeUntracked) {
         foldersFromFileIds(knownFileIds.filter((id) => !creates.includes(id))),
       ),
       createLines: { ...parsed.createLines, ...untracked.createLines },
-      imports: extractPatchImports(parsed.entries, known),
+      imports: extractPatchImports(parsed.entries, known, aliases),
       ...extractPatchAdditions(parsed.entries),
     },
     targetRoot,
