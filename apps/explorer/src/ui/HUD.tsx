@@ -51,6 +51,7 @@ import { emptyIntent, fetchSavedBlueprints, persistBlueprintSteps } from '../age
 const RELATION_MODE_OPTIONS: { id: RelationMode; label: string }[] = [
   { id: 'targeted', label: 'Targeted' },
   { id: 'all', label: 'All' },
+  { id: 'blueprint', label: 'All blueprint' },
   { id: 'off', label: 'Off' },
   { id: 'changed', label: 'Changed' },
 ]

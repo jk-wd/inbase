@@ -84,6 +84,8 @@ type WorldProps = {
   onAimRelation: (aim: AimedRelation | null) => void
   importedBy?: boolean
   relationMode?: RelationMode
+  /** Color id of the blueprint whose relations "All blueprint" draws. */
+  activeBlueprintId?: string | null
   namingId?: string | null
   onBlueprintMenu?: (menu: MapBlueprintMenu) => void
   userCreatedBlocks?: UserCreatedBlock[]
@@ -140,6 +142,7 @@ export function World({
   onAimRelation,
   importedBy = false,
   relationMode = 'targeted',
+  activeBlueprintId = null,
   namingId = null,
   namingIslandId = null,
   onBlueprintMenu,
@@ -278,7 +281,6 @@ export function World({
       for (const id of Object.keys(overlay.files)) {
         if (folderOfFile(id) === selectedFolder) ids.add(id)
       }
-      return [...ids]
     }
     const folderNode = viewGraph.folders.find(
       (folder) => folder.path === selectedFolder,
@@ -303,6 +305,26 @@ export function World({
     selectedId,
     viewGraph.files,
     viewGraph.folders,
+  ])
+  const blueprintGroupIds = useMemo(() => {
+    if (relationMode !== 'blueprint' || !activeBlueprintId) return [] as string[]
+    const layer = overlayLayers.find((item) => item.id === activeBlueprintId)
+    if (!layer) return [] as string[]
+    return filesOnBlueprintLayer(
+      layer,
+      groundLayout,
+      namingIslandId,
+      pointedFileColors,
+      notedFileColors,
+    )
+  }, [
+    activeBlueprintId,
+    groundLayout,
+    namingIslandId,
+    notedFileColors,
+    overlayLayers,
+    pointedFileColors,
+    relationMode,
   ])
   const selectionFocus = Boolean(selectedId || folderFocusIds.length > 0)
   const hideRelations = relationMode === 'off'
@@ -872,6 +894,7 @@ export function World({
             planned={planned}
             created={created}
             deleted={deleted}
+            related={related}
             bridges={viewLayout.bridges.filter((bridge) => {
               const child = bridge.id.split('→').pop()
               return (
@@ -925,9 +948,14 @@ export function World({
       {(explainEdges.length > 0 ||
         relationMode === 'all' ||
         relationMode === 'changed' ||
+        relationMode === 'blueprint' ||
         (relationMode === 'targeted' && selectionFocus)) && (
         <RelationLines
-          selectedId={relationMode === 'changed' ? null : selectedId}
+          selectedId={
+            relationMode === 'changed' || relationMode === 'blueprint'
+              ? null
+              : selectedId
+          }
           aimedRelation={aimedRelation}
           onAimRelation={mapping ? onAimRelation : undefined}
           files={viewGraph.files}
@@ -939,6 +967,7 @@ export function World({
           fromAbove={mapping}
           importedBy={fileImportedBy}
           focusIds={folderFocusIds}
+          groupIds={relationMode === 'blueprint' ? blueprintGroupIds : undefined}
           drawPlanned={showAllPlanned}
           drawExisting={showExistingRelations}
         />
@@ -1046,6 +1075,45 @@ function DashedBlockOutline({
       ))}
     </group>
   )
+}
+
+function markedOnLayer(
+  layer: BlueprintOverlayLayer,
+  colors: Record<string, string[]>,
+) {
+  const hex = layer.colorHex.toLowerCase()
+  const ids: string[] = []
+  for (const [id, list] of Object.entries(colors)) {
+    if (list.some((color) => color.toLowerCase() === hex)) ids.push(id)
+  }
+  return ids
+}
+
+/** Files drawn on a blueprint: its blocks, covered map files, and files it points at or notes. */
+function filesOnBlueprintLayer(
+  layer: BlueprintOverlayLayer,
+  layout: WorldLayout,
+  namingIslandId: string | null,
+  pointedFileColors: Record<string, string[]>,
+  notedFileColors: Record<string, string[]>,
+) {
+  const ids = new Set<string>([
+    ...Object.keys(layer.files),
+    ...markedOnLayer(layer, pointedFileColors),
+    ...markedOnLayer(layer, notedFileColors),
+  ])
+  for (const folder of Object.values(layer.folders)) {
+    const bounds = overlayFolderBounds(
+      folder,
+      layout.folders,
+      folder.path === namingIslandId,
+    )
+    if (!bounds) continue
+    for (const file of Object.values(layout.files)) {
+      if (fileInsideFolder(file, bounds)) ids.add(file.id)
+    }
+  }
+  return [...ids]
 }
 
 function fileInsideFolder(file: PlacedFile, folder: PlacedFolder) {
@@ -1222,6 +1290,7 @@ function BlueprintOverlay({
   planned,
   created,
   deleted,
+  related,
   bridges = [],
 }: {
   layer: BlueprintOverlayLayer
@@ -1243,6 +1312,7 @@ function BlueprintOverlay({
   planned: Set<string>
   created: Set<string>
   deleted: Set<string>
+  related: Set<string>
   bridges?: PlacedBridge[]
 }) {
   const filled = new Set(layer.filledIds)
@@ -1336,7 +1406,7 @@ function BlueprintOverlay({
             file={{ ...file, colorHex: layer.colorHex, userCreated: true }}
             placed={overlayPlaced}
             selected={id === selectedId}
-            related={false}
+            related={related.has(id)}
             planned={false}
             changeKind={
               fileChangeKind(id, planned, created, deleted) ??
@@ -1408,6 +1478,7 @@ function BlueprintOverlay({
             !explainFileFocused(explainFocus, file.id, folderOfFile(file.id)),
           overlayOpacity,
         )
+        const selected = file.id === selectedId
         return (
           <group
             key={`covered-file:${layer.id}:${file.id}`}
@@ -1418,10 +1489,25 @@ function BlueprintOverlay({
             ]}
             visible={opacity > 0}
           >
+            <mesh
+              rotation={[-Math.PI / 2, 0, 0]}
+              userData={{ fileId: file.id }}
+              renderOrder={4}
+            >
+              <planeGeometry
+                args={[Math.max(file.size[0], 0.4), Math.max(file.size[2], 0.4)]}
+              />
+              <meshBasicMaterial
+                transparent
+                opacity={0}
+                depthWrite={false}
+                toneMapped={false}
+              />
+            </mesh>
             <DashedBlockOutline
               width={file.size[0]}
               depth={file.size[2]}
-              color="#f4f7fb"
+              color={selected || related.has(file.id) ? '#ffffff' : '#f4f7fb'}
               opacity={opacity}
             />
           </group>

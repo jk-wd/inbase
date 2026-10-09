@@ -74,7 +74,7 @@ export type WorldLayout = {
 
 export type ViewMode = 'map' | 'walk'
 
-export type RelationMode = 'all' | 'off' | 'changed' | 'targeted'
+export type RelationMode = 'all' | 'blueprint' | 'off' | 'changed' | 'targeted'
 
 /** What sets the height of a file block. */
 export type BlockHeightMode = 'lines' | 'relations'

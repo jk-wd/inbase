@@ -2642,8 +2642,8 @@ function Explorer({
     setRelationMode((current) => {
       const order: RelationMode[] =
         mode === 'map'
-          ? ['targeted', 'all', 'off', 'changed']
-          : ['targeted', 'all', 'off']
+          ? ['targeted', 'all', 'blueprint', 'off', 'changed']
+          : ['targeted', 'all', 'blueprint', 'off']
       const index = order.indexOf(current)
       return order[index < 0 ? 0 : (index + 1) % order.length]
     })
@@ -3724,6 +3724,7 @@ function Explorer({
             onAimRelation={setAimedRelation}
             importedBy={mapImportedBy}
             relationMode={relationMode}
+            activeBlueprintId={blueprintColor}
             namingId={namingId}
             namingIslandId={namingIslandId}
             onBlueprintMenu={

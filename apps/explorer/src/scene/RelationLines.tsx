@@ -26,6 +26,8 @@ type RelationLinesProps = {
   fromAbove?: boolean
   importedBy?: boolean
   focusIds?: string[]
+  /** Draw every relation that touches one of these files, in both directions. */
+  groupIds?: string[]
   drawPlanned?: boolean
   drawExisting?: boolean
 }
@@ -442,6 +444,7 @@ export function RelationLines({
   fromAbove = false,
   importedBy = false,
   focusIds = [],
+  groupIds,
   drawPlanned = true,
   drawExisting = true,
 }: RelationLinesProps) {
@@ -484,6 +487,28 @@ export function RelationLines({
           false,
         ),
       )
+    }
+
+    if (groupIds) {
+      const group = new Set(groupIds)
+      for (const edge of plannedEdges) {
+        if (!group.has(edge.from) && !group.has(edge.to)) continue
+        addLine(edge.from, edge.to, true, plannedRadius)
+      }
+      for (const edge of extraEdges) {
+        addLine(edge.from, edge.to, false, selectedRadius)
+      }
+      for (const file of files) {
+        const fromIn = group.has(file.id)
+        for (const importId of file.imports) {
+          if (!fromIn && !group.has(importId)) continue
+          addLine(file.id, importId, false, selectedRadius)
+        }
+      }
+      return [
+        ...lines.filter((line) => !line.planned),
+        ...lines.filter((line) => line.planned),
+      ]
     }
 
     if (drawPlanned) {
@@ -534,6 +559,7 @@ export function RelationLines({
     extraEdges,
     files,
     focusIds,
+    groupIds,
     fromAbove,
     importedBy,
     layout.files,
