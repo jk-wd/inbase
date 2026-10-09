@@ -1685,6 +1685,8 @@ test('propose-blueprint writes files, symbols, relations, notes, pointers, and d
     assert.match(instruction.stdout, /VISUAL_CODER_PROPOSE_BLUEPRINT_INSTRUCTION_START/)
     assert.match(instruction.stdout, /interpreting-blueprints\.md/)
     assert.match(instruction.stdout, /imports: An import is a relation/)
+    assert.match(instruction.stdout, /"from":"src\/timer\/Timer\.tsx"/)
+    assert.doesNotMatch(instruction.stdout, /\.\/timer\/Timer/)
     assert.match(instruction.stdout, /pointers: A pointer is a reference/)
     assert.match(instruction.stdout, /"kind":"variable"/)
     assert.match(instruction.stdout, /deleted: A deleted entry is an existing file path/)

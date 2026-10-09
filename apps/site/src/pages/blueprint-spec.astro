@@ -454,7 +454,11 @@ const stepsSnippet = { steps: todoApp.steps };
         <tr>
           <td><code>from</code></td>
           <td>string</td>
-          <td>Path of the file that exports the symbol.</td>
+          <td>
+            Project path of the file that exports the symbol, the same kind of path as
+            <code>file</code>. The two files may be in different folders. Not a symbol
+            name, a package name, or a relative specifier.
+          </td>
         </tr>
         <tr>
           <td><code>file</code></td>
@@ -465,13 +469,22 @@ const stepsSnippet = { steps: todoApp.steps };
     </table>
     <p>
       All three fields are required. Import one symbol per entry. <code>Todo</code> and
-      <code>FilterId</code> come from the same file, so they are two entries.
+      <code>FilterId</code> come from the same file, so they are two entries. The files
+      do not have to share a folder: <code>src/App.tsx</code> and
+      <code>src/todo/TodoApp.tsx</code> are in different folders, and the relation is
+      still <code>from</code> set to the exporting file's project path. A package name
+      such as <code>msal</code> is not a <code>from</code>.
     </p>
     <p class="instruction-label">LLM instruction example</p>
     <blockquote>
       <p>
-        An import is a relation between two files: <code>file</code> imports
-        <code>name</code> from <code>from</code>. One symbol is one entry.
+        An import is a relation between two files. <code>file</code> is the project path
+        of the file that imports. <code>from</code> is the project path of the file that
+        exports the symbol, the same kind of path as <code>files</code> and
+        <code>pointers</code>, including when the two files are in different folders.
+        <code>from</code> is never a symbol name, a package name, or a relative specifier
+        such as <code>./useAuth</code> or <code>msal</code>. <code>name</code> is the
+        imported symbol. One symbol is one entry. Both paths are required.
       </p>
     </blockquote>
 

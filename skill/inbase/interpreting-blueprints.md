@@ -24,7 +24,7 @@ A variable is a constant, a piece of shared state, a config value, or a field th
 
 ## imports
 
-An import is a relation between two files: `file` imports `name` from `from`. One symbol is one entry.
+An import is a relation between two files. `file` is the project path of the file that imports. `from` is the project path of the file that exports the symbol, the same kind of path as `files` and `pointers`, including when the two files are in different folders. `from` is never a symbol name, a package name, or a relative specifier such as `./useAuth` or `msal`. `name` is the imported symbol. One symbol is one entry. Both paths are required.
 
 ## notes
 

@@ -32,7 +32,7 @@ This prints `VISUAL_CODER_PROPOSE_BLUEPRINT` with the description and an instruc
 
 4. Read `interpreting-blueprints.md` beside the inbase `SKILL.md`. Interpret every blueprint entity that way. Then read the codebase if needed. Look at the target folder structure to understand what already exists. Curate a layer JSON. Paths are relative to the target root. Use every blueprint construct the description needs. Leave a field empty only when the plan does not need it.
 
-   Put new modules in `files` and `folders`, with their functions, vars, relations, and notes. Point at the existing entry point you will edit. Start from the current blueprint steps if any: keep the useful ones, reword, merge, or drop the rest, and add missing ones. Omit `steps` to keep the current steps unchanged.
+   Put new modules in `files` and `folders`, with their functions, vars, relations, and notes. Point at the existing entry point you will edit. Each import's `file` and `from` are project file paths, even when those files sit in different folders. `from` is the exporting file's path, never a symbol name, a package name, or a relative specifier. Start from the current blueprint steps if any: keep the useful ones, reword, merge, or drop the rest, and add missing ones. Omit `steps` to keep the current steps unchanged.
 
    Drop:
    - Generated files, lockfiles, dist/build/coverage, snapshots, editor/tooling noise
@@ -50,7 +50,7 @@ This prints `VISUAL_CODER_PROPOSE_BLUEPRINT` with the description and an instruc
      "folders": [{ "path": "src/timer" }],
      "functions": [{ "name": "Timer", "file": "src/timer/Timer.tsx" }],
      "variables": [{ "name": "WORK_SECONDS", "file": "src/timer/types.ts" }],
-     "imports": [{ "name": "Timer", "from": "./timer/Timer", "file": "src/App.tsx" }],
+     "imports": [{ "name": "Timer", "from": "src/timer/Timer.tsx", "file": "src/App.tsx" }],
      "notes": [
        { "file": "src/timer", "kind": "folder", "note": "Timer feature. No extra packages." },
        { "file": "src/timer/Timer.tsx", "kind": "file", "note": "Wire the hook to the view." },
