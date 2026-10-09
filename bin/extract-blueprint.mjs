@@ -4,19 +4,7 @@ import { pathToFileURL } from 'node:url'
 import { explorerRoot } from './project.mjs'
 import { toPosix } from '../apps/explorer/scripts/scan-ignore.mjs'
 
-const SESSION_COLORS = [
-  { id: 'blue', name: 'Blue', hex: '#38bdf8' },
-  { id: 'coral', name: 'Coral', hex: '#f87171' },
-  { id: 'amber', name: 'Amber', hex: '#fbbf24' },
-  { id: 'lime', name: 'Lime', hex: '#a3e635' },
-  { id: 'orange', name: 'Orange', hex: '#fb923c' },
-  { id: 'violet', name: 'Violet', hex: '#c084fc' },
-  { id: 'teal', name: 'Teal', hex: '#2dd4bf' },
-  { id: 'crimson', name: 'Crimson', hex: '#dc2626' },
-  { id: 'forest', name: 'Forest', hex: '#15803d' },
-  { id: 'grey', name: 'Grey', hex: '#4b5563' },
-  { id: 'white', name: 'White', hex: '#f4f4f5' },
-]
+const EXTRACT_COLOR = 'blue'
 
 export const EXTRACT_INSTRUCTION = `Extract a valuable Inbase blueprint, not a dump of the tree.
 
@@ -50,7 +38,9 @@ export function resolveExtractOutputPath(targetRoot, outputArg) {
   const resolved = path.isAbsolute(raw)
     ? path.normalize(raw)
     : path.resolve(targetRoot, raw)
-  return resolved.toLowerCase().endsWith('.json') ? resolved : `${resolved}.json`
+  const base = path.basename(resolved)
+  if (/(-wrapper|\.blueprint)\.json$/i.test(base)) return path.dirname(resolved)
+  return resolved.replace(/\.json$/i, '')
 }
 
 async function loadBlueprintFiles() {
@@ -59,7 +49,7 @@ async function loadBlueprintFiles() {
 
 function usage() {
   console.error(
-    'Usage: inbase extract-blueprint <folder> <output-file> [--write [layer.json|-]]',
+    'Usage: inbase extract-blueprint <folder> <output-folder> [--write [layer.json|-]]',
   )
   process.exit(1)
 }
@@ -227,6 +217,20 @@ function normalizeDeleted(value) {
   return deleted
 }
 
+function normalizeSteps(value) {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    const raw =
+      typeof item === 'string'
+        ? item
+        : typeof item?.title === 'string'
+          ? item.title
+          : ''
+    const step = raw.trim()
+    return step ? [step] : []
+  })
+}
+
 export function normalizeExtractLayer(layer = {}) {
   const files = []
   const seenFiles = new Set()
@@ -260,13 +264,31 @@ export function normalizeExtractLayer(layer = {}) {
     ensureFolderChain(folders, folder.parent)
   }
 
-  const addedFunctions = (Array.isArray(layer.addedFunctions) ? layer.addedFunctions : [])
+  const functions = (
+    Array.isArray(layer.functions)
+      ? layer.functions
+      : Array.isArray(layer.addedFunctions)
+        ? layer.addedFunctions
+        : []
+  )
     .map(normalizeSymbol)
     .filter(Boolean)
-  const addedVariables = (Array.isArray(layer.addedVariables) ? layer.addedVariables : [])
+  const variables = (
+    Array.isArray(layer.variables)
+      ? layer.variables
+      : Array.isArray(layer.addedVariables)
+        ? layer.addedVariables
+        : []
+  )
     .map(normalizeSymbol)
     .filter(Boolean)
-  const addedImports = (Array.isArray(layer.addedImports) ? layer.addedImports : [])
+  const imports = (
+    Array.isArray(layer.imports)
+      ? layer.imports
+      : Array.isArray(layer.addedImports)
+        ? layer.addedImports
+        : []
+  )
     .map(normalizeImport)
     .filter(Boolean)
   const notes = (Array.isArray(layer.notes) ? layer.notes : [])
@@ -276,6 +298,7 @@ export function normalizeExtractLayer(layer = {}) {
     .map(normalizePointer)
     .filter(Boolean)
   const deleted = normalizeDeleted(layer.deleted)
+  const steps = normalizeSteps(layer.steps)
 
   return {
     hidden: false,
@@ -283,33 +306,21 @@ export function normalizeExtractLayer(layer = {}) {
     folders: [...folders.values()].sort((left, right) =>
       left.path.localeCompare(right.path),
     ),
-    addedFunctions,
-    addedVariables,
-    addedImports,
+    functions,
+    variables,
+    imports,
     notes,
     pointers,
     deleted,
+    steps,
   }
 }
 
-function emptyLocals() {
-  return SESSION_COLORS.map((color) => ({
-    color: color.id,
-    colorName: color.name,
-    colorHex: color.hex,
-    hidden: false,
-    files: [],
-    folders: [],
-    addedFunctions: [],
-    addedVariables: [],
-    addedImports: [],
-    notes: [],
-    pointers: [],
-  }))
-}
-
 export function blueprintNameFromOutput(outputPath, folderPath) {
-  const base = path.basename(outputPath, path.extname(outputPath)).trim()
+  const base = path
+    .basename(outputPath)
+    .replace(/(-wrapper|\.blueprint)?\.json$/i, '')
+    .trim()
   if (base) return base
   return path.basename(folderPath) || 'Blueprint'
 }
@@ -322,13 +333,10 @@ export async function writeExtractedBlueprint({
 }) {
   const { saveBlueprintDocument } = await loadBlueprintFiles()
   const extracted = normalizeExtractLayer(layer)
-  const blueprints = emptyLocals().map((local) =>
-    local.color === 'blue' ? { ...local, ...extracted } : local,
-  )
   return saveBlueprintDocument(targetRoot, {
     name,
     filePath: outputPath,
-    blueprints,
+    blueprints: [{ color: EXTRACT_COLOR, ...extracted }],
   })
 }
 
@@ -376,7 +384,7 @@ function printInventory(inventory, folderPath, outputPath) {
     'VISUAL_CODER_EXTRACT Curate the inventory (do not copy everything). Then run:',
   )
   console.log(
-    'npx inbase extract-blueprint <folder> <output-file> --write',
+    'npx inbase extract-blueprint <folder> <output-folder> --write',
   )
   console.log('and pass the curated layer JSON on stdin (or --write layer.json).')
 }
@@ -410,9 +418,10 @@ export async function extractBlueprint(args = [], host = {}) {
       layer,
     })
     const written = normalizeExtractLayer(layer)
-    console.log(`VISUAL_CODER_EXTRACT_SAVED ${saved.path}`)
+    console.log(`VISUAL_CODER_EXTRACT_SAVED ${saved.blueprintFiles[0]?.path ?? saved.path}`)
+    console.log(`VISUAL_CODER_EXTRACT_WRAPPER ${saved.path}`)
     console.log(
-      `Wrote blueprint ${saved.name} (${saved.relativePath}) with ${written.files.length} files, ${written.folders.length} folders, ${written.addedFunctions.length} functions, ${written.addedVariables.length} vars, ${written.notes.length} notes.`,
+      `Wrote blueprint ${saved.name} (${saved.folder}/) with ${written.files.length} files, ${written.folders.length} folders, ${written.functions.length} functions, ${written.variables.length} vars, ${written.notes.length} notes.`,
     )
     return saved
   }

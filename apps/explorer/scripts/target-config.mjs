@@ -80,6 +80,7 @@ function samePath(left, right) {
 
 function labelFromFolderName(name) {
   if (name === 'example-target') return 'Example target'
+  if (name === 'example-csharp') return 'Example C#'
   return name
     .split(/[-_]/)
     .filter(Boolean)

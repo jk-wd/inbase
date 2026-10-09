@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "kind": "inbase-wrapper",
+  "name": "counter",
+  "savedAt": "2026-09-20T06:00:00.000Z",
+  "blueprints": [
+    {
+      "color": "blue",
+      "file": "counter.blueprint.json",
+      "hidden": false,
+      "dependsOn": []
+    }
+  ]
+}

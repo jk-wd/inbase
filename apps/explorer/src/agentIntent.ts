@@ -312,12 +312,23 @@ export const emptyIntent: AgentIntent = {
   userCreatedBlocks: [],
   userCreatedIslands: [],
   blueprintFunctions: [],
+  blueprintClasses: [],
   blueprintVariables: [],
   blueprintImports: [],
   blueprintNotes: [],
   blueprintPointers: [],
   blueprintDeleted: [],
+  blueprintSteps: [],
   dependsOn: [],
+}
+
+function normalizeBlueprintSteps(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    if (typeof item !== 'string') return []
+    const step = item.trim()
+    return step ? [step] : []
+  })
 }
 
 function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
@@ -404,6 +415,7 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     userCreatedBlocks: parseUserCreatedBlocks(data?.userCreatedBlocks),
     userCreatedIslands: parseUserCreatedIslands(data?.userCreatedIslands),
     blueprintFunctions: normalizeSymbolAdditions(data?.blueprintFunctions),
+    blueprintClasses: normalizeSymbolAdditions(data?.blueprintClasses),
     blueprintVariables: normalizeSymbolAdditions(data?.blueprintVariables),
     blueprintImports: normalizeImportAdditions(data?.blueprintImports),
     blueprintNotes: parseBlueprintNotes(data?.blueprintNotes),
@@ -411,6 +423,7 @@ function normalize(data: Partial<AgentIntent> | null | undefined): AgentIntent {
     blueprintDeleted: Array.isArray(data?.blueprintDeleted)
       ? data.blueprintDeleted.filter((item): item is string => typeof item === 'string')
       : [],
+    blueprintSteps: normalizeBlueprintSteps(data?.blueprintSteps),
     dependsOn: normalizeDependsOn(data?.dependsOn, data?.color),
   }
 }
@@ -420,6 +433,9 @@ function normalizeBlueprint(
     | (Partial<AgentIntentBundle['blueprint']> & {
         userCreatedBlocks?: unknown
         userCreatedIslands?: unknown
+        addedFunctions?: unknown
+        addedVariables?: unknown
+        addedImports?: unknown
       })
     | null
     | undefined,
@@ -430,14 +446,16 @@ function normalizeBlueprint(
     enabled: Boolean(data?.enabled),
     files: parseUserCreatedBlocks(data?.files ?? data?.userCreatedBlocks),
     folders: parseUserCreatedIslands(data?.folders ?? data?.userCreatedIslands),
-    addedFunctions: normalizeSymbolAdditions(data?.addedFunctions),
-    addedVariables: normalizeSymbolAdditions(data?.addedVariables),
-    addedImports: normalizeImportAdditions(data?.addedImports),
+    functions: normalizeSymbolAdditions(data?.functions ?? data?.addedFunctions),
+    classes: normalizeSymbolAdditions(data?.classes),
+    variables: normalizeSymbolAdditions(data?.variables ?? data?.addedVariables),
+    imports: normalizeImportAdditions(data?.imports ?? data?.addedImports),
     notes: parseBlueprintNotes(data?.notes),
     pointers: parseBlueprintPointers(data?.pointers),
     deleted: Array.isArray(data?.deleted)
       ? data.deleted.filter((item): item is string => typeof item === 'string')
       : [],
+    steps: normalizeBlueprintSteps(data?.steps),
     dependsOn: normalizeDependsOn(
       data?.dependsOn,
       (data as { color?: unknown } | null | undefined)?.color as string | undefined,
@@ -524,19 +542,23 @@ export async function fetchAgentIntents(): Promise<AgentIntentBundle> {
         intent.userCreatedBlocks.length > 0 ||
         intent.userCreatedIslands.length > 0 ||
         intent.blueprintFunctions.length > 0 ||
+        intent.blueprintClasses.length > 0 ||
         intent.blueprintVariables.length > 0 ||
         intent.blueprintImports.length > 0 ||
         intent.blueprintNotes.length > 0 ||
         intent.blueprintPointers.length > 0 ||
-        intent.blueprintDeleted.length > 0,
+        intent.blueprintDeleted.length > 0 ||
+        intent.blueprintSteps.length > 0,
       files: intent.userCreatedBlocks,
       folders: intent.userCreatedIslands,
-      addedFunctions: intent.blueprintFunctions,
-      addedVariables: intent.blueprintVariables,
-      addedImports: intent.blueprintImports,
+      functions: intent.blueprintFunctions,
+      classes: intent.blueprintClasses,
+      variables: intent.blueprintVariables,
+      imports: intent.blueprintImports,
       notes: intent.blueprintNotes,
       pointers: intent.blueprintPointers,
       deleted: intent.blueprintDeleted,
+      steps: intent.blueprintSteps,
     }),
   }
 }
@@ -563,9 +585,9 @@ export async function performAgentAction(
     step?: number
     userCreatedBlocks?: UserCreatedBlock[]
     userCreatedIslands?: UserCreatedIsland[]
-    addedFunctions?: PatchSymbolAddition[]
-    addedVariables?: PatchSymbolAddition[]
-    addedImports?: PatchImportAddition[]
+    functions?: PatchSymbolAddition[]
+    variables?: PatchSymbolAddition[]
+    imports?: PatchImportAddition[]
     notes?: BlueprintNote[]
     pointers?: BlueprintPointer[]
   } = {},
@@ -588,9 +610,10 @@ export function persistSessionBlueprint(
     color?: string | null
     files: UserCreatedBlock[]
     folders: UserCreatedIsland[]
-    addedFunctions?: PatchSymbolAddition[]
-    addedVariables?: PatchSymbolAddition[]
-    addedImports?: PatchImportAddition[]
+    functions?: PatchSymbolAddition[]
+    classes?: PatchSymbolAddition[]
+    variables?: PatchSymbolAddition[]
+    imports?: PatchImportAddition[]
     notes?: BlueprintNote[]
     pointers?: BlueprintPointer[]
     deleted?: string[]
@@ -623,6 +646,21 @@ export function persistBlueprintDependsOn(color: string, dependsOn: string[]) {
   }).catch(() => {
     // Keep the picker selection if the visualizer could not save it.
   })
+}
+
+export async function persistBlueprintSteps(color: string, steps: string[]) {
+  const response = await fetch('/api/agent-intent', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'blueprint_update',
+      color,
+      steps,
+    }),
+  })
+  if (!response.ok) {
+    throw new Error((await response.text()) || 'Could not save blueprint steps')
+  }
 }
 
 export function persistBlueprintHidden(

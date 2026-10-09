@@ -8,6 +8,8 @@ If this conversation already printed `VISUAL_CODER_SESSION`, stay. Do not attach
 
 After `read-blueprint`, look at this color's blueprint only. Plan sequential steps (`1`, `2`, `3`). This chat implements each invoked step itself, then `propose-patch --session <this color> --step <id>`. Do not spawn subagents.
 
+Read `interpreting-blueprints.md` beside the inbase `SKILL.md`. Interpret every blueprint entity that way.
+
 ```bash
 npx inbase attach
 ```

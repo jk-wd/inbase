@@ -6,6 +6,7 @@ export type PatchImport = {
 export type PatchSymbolAddition = {
   name: string
   file: string
+  class?: string
 }
 
 export type PatchImportAddition = {
@@ -122,10 +123,12 @@ export const emptyIntent: {
   userCreatedBlocks: unknown[]
   userCreatedIslands: unknown[]
   blueprintFunctions: unknown[]
+  blueprintClasses: unknown[]
   blueprintVariables: unknown[]
   blueprintImports: unknown[]
   blueprintNotes: unknown[]
   blueprintPointers: unknown[]
+  blueprintSteps: string[]
 }
 
 export function isLastStep(intent: {

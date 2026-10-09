@@ -15,7 +15,7 @@ The map is top-down.
 Reading the map:
 
 - Each **file** is a block. Taller blocks have more lines of code.
-- Click a block (or press **I**) to open the **info panel** — functions, variables, and imports live there, not on the block itself.
+- Click a block (or press **I**) to open the **info panel**. Classes, functions, variables, and imports live there, not on the block itself. A class’s functions and variables are indented under that class.
 - Each **folder** is an area with a center path.
 - At the far end of an area, **bridges** lead into child folders. The folder name hangs above the bridge.
 - Click a block to see **import relations**. Connected files stay lit and arcs draw to them. Press **K** to flip between imports and imported-by.
@@ -44,5 +44,6 @@ Reading the map:
 | Explain | `/explainit` in chat, or `?` then `/explainit` |
 | Extract a blueprint | `/extract-blueprint` |
 | Load an example React app | More → Load (`apps/example-target/blueprints/`) |
+| Switch the mapped project | **Look at** — Example target, Example C# (`apps/example-csharp`), Site, or the complete repo |
 
 The in-app **Instructions** overlay (bottom of the HUD) lists the same controls for the view you are in.

@@ -1,10 +1,11 @@
 import path from 'node:path'
+import * as csharp from './csharp.mjs'
 import * as esm from './esm.mjs'
 import * as html from './html.mjs'
 import * as cjsRequire from './require.mjs'
 
 /** Ordered relation analyzers. Add a module here for a new import style or language. */
-export const relationAnalyzers = [esm, cjsRequire, html]
+export const relationAnalyzers = [esm, cjsRequire, html, csharp]
 
 export function analyzerApplies(analyzer, filePath) {
   if (!analyzer.extensions || analyzer.extensions.size === 0) return true

@@ -12,6 +12,6 @@ The HUD hides and an **X** exits. The LLM publishes an explanation you step thro
 
 ![Explain mode stepping through a folder on the map](images/explain-mode-result-1.png)
 
-A later step can open the file **info panel**, highlight functions and vars, and draw arrows to the symbols it names:
+A later step can open the file **info panel**, highlight classes, functions, and vars, and draw arrows to the symbols it names:
 
 ![Explain mode highlighting functions in the info panel](images/explain-mode-result-2.png)

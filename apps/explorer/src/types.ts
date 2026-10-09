@@ -3,6 +3,7 @@ export type SymbolKind = 'function' | 'variable' | 'class'
 export type CodeSymbol = {
   name: string
   kind: SymbolKind
+  class?: string
   intended?: boolean
 }
 
@@ -231,6 +232,7 @@ export type PatchImport = {
 export type PatchSymbolAddition = {
   name: string
   file: string
+  class?: string
 }
 
 export type PatchImportAddition = {
@@ -239,7 +241,7 @@ export type PatchImportAddition = {
   file: string
 }
 
-export type BlueprintNoteKind = 'file' | 'folder' | 'function' | 'variable'
+export type BlueprintNoteKind = 'file' | 'folder' | 'class' | 'function' | 'variable'
 
 export type BlueprintNote = {
   file: string
@@ -248,7 +250,7 @@ export type BlueprintNote = {
   note: string
 }
 
-export type BlueprintPointerKind = 'file' | 'folder' | 'function' | 'variable'
+export type BlueprintPointerKind = 'file' | 'folder' | 'class' | 'function' | 'variable'
 
 export type BlueprintPointer = {
   kind: BlueprintPointerKind
@@ -315,12 +317,14 @@ export type SharedBlueprint = {
   enabled: boolean
   files: UserCreatedBlock[]
   folders: UserCreatedIsland[]
-  addedFunctions: PatchSymbolAddition[]
-  addedVariables: PatchSymbolAddition[]
-  addedImports: PatchImportAddition[]
+  functions: PatchSymbolAddition[]
+  classes: PatchSymbolAddition[]
+  variables: PatchSymbolAddition[]
+  imports: PatchImportAddition[]
   notes: BlueprintNote[]
   pointers: BlueprintPointer[]
   deleted: string[]
+  steps: string[]
   dependsOn: string[]
 }
 
@@ -462,6 +466,7 @@ export type LoadBlueprintInput = {
   name?: string
   filePath?: string
   document?: unknown
+  documents?: Array<{ fileName: string; document: unknown }>
 }
 
 export type BlueprintOption = {
@@ -609,10 +614,12 @@ export type AgentIntent = {
   userCreatedBlocks: UserCreatedBlock[]
   userCreatedIslands: UserCreatedIsland[]
   blueprintFunctions: PatchSymbolAddition[]
+  blueprintClasses: PatchSymbolAddition[]
   blueprintVariables: PatchSymbolAddition[]
   blueprintImports: PatchImportAddition[]
   blueprintNotes: BlueprintNote[]
   blueprintPointers: BlueprintPointer[]
   blueprintDeleted: string[]
+  blueprintSteps: string[]
   dependsOn: string[]
 }

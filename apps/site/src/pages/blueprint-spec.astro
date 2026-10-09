@@ -1,0 +1,666 @@
+---
+import fs from "node:fs";
+import path from "node:path";
+import JsonViewer from "../components/JsonViewer.astro";
+import DocsLayout from "../layouts/DocsLayout.astro";
+
+const SECTIONS = [
+  { id: "how-it-is-used", title: "How it is used" },
+  { id: "example", title: "Example" },
+  { id: "overview", title: "Overview" },
+  { id: "blueprint-file", title: "Blueprint file" },
+  { id: "files", title: "files" },
+  { id: "folders", title: "folders" },
+  { id: "classes", title: "classes" },
+  { id: "functions", title: "functions" },
+  { id: "variables", title: "variables" },
+  { id: "imports", title: "imports (relations)" },
+  { id: "notes", title: "notes" },
+  { id: "pointers", title: "pointers" },
+  { id: "deleted", title: "deleted" },
+  { id: "steps", title: "steps" },
+  { id: "full-example", title: "Full example" },
+];
+
+const todoApp = JSON.parse(
+  fs.readFileSync(
+    path.resolve(process.cwd(), "../example-target/blueprints/todo-app/todo-app.blueprint.json"),
+    "utf8",
+  ),
+);
+
+function find(list, match) {
+  const found = list.find(match);
+  if (!found) throw new Error("Blueprint spec example is missing a value from todo-app.blueprint.json");
+  return found;
+}
+
+const todoFile = find(todoApp.files, (item) => item.path === "src/todo/TodoApp.tsx");
+const todoFolder = find(todoApp.folders, (item) => item.path === "src/todo");
+const componentsFolder = find(todoApp.folders, (item) => item.path === "src/todo/components");
+const addTodo = find(todoApp.functions, (item) => item.name === "addTodo");
+const todoItemFn = find(todoApp.functions, (item) => item.name === "TodoItem");
+const todoAppFn = find(todoApp.functions, (item) => item.name === "TodoApp");
+const filtersVar = find(todoApp.variables, (item) => item.name === "FILTERS");
+const todosVar = find(todoApp.variables, (item) => item.name === "todos");
+const importTodo = find(
+  todoApp.imports,
+  (item) => item.name === "Todo" && item.file === "src/todo/utils/filters.ts",
+);
+const importFilterId = find(
+  todoApp.imports,
+  (item) => item.name === "FilterId" && item.file === "src/todo/utils/filters.ts",
+);
+const importTodoApp = find(
+  todoApp.imports,
+  (item) => item.name === "TodoApp" && item.file === "src/App.tsx",
+);
+const folderNote = find(todoApp.notes, (item) => item.kind === "folder" && item.file === "src/todo");
+const todoItemNote = find(
+  todoApp.notes,
+  (item) => item.file === "src/todo/components/TodoItem.tsx",
+);
+const appNote = find(todoApp.notes, (item) => item.file === "src/App.tsx");
+const appPointer = find(todoApp.pointers, (item) => item.path === "src/App.tsx");
+
+const structureExample = {
+  version: todoApp.version,
+  kind: todoApp.kind,
+  name: todoApp.name,
+  files: [todoFile],
+  folders: [todoFolder, componentsFolder],
+  functions: [addTodo, todoItemFn],
+  variables: [filtersVar, todosVar],
+  imports: [importTodo, importFilterId, importTodoApp],
+  notes: [folderNote, todoItemNote],
+  pointers: [appPointer],
+  deleted: [],
+  steps: [],
+};
+
+const pathExample = {
+  files: [todoFile],
+  functions: [todoAppFn],
+};
+
+const fileSnippet = {
+  version: todoApp.version,
+  kind: todoApp.kind,
+  name: todoApp.name,
+};
+
+const classShape = {
+  classes: [
+    {
+      name: "TodoStore",
+      file: "src/todo/store/todos.ts",
+      extends: "Store",
+      implements: ["Persistable"],
+    },
+  ],
+  functions: [
+    {
+      name: "addTodo",
+      file: "src/todo/store/todos.ts",
+      class: "TodoStore",
+      overrides: true,
+    },
+  ],
+  variables: [{ name: "todos", file: "src/todo/store/todos.ts", class: "TodoStore" }],
+};
+
+const filesSnippet = { files: [todoFile] };
+const foldersSnippet = { folders: [todoFolder, componentsFolder] };
+const functionsSnippet = { functions: [addTodo, todoItemFn] };
+const variablesSnippet = { variables: [filtersVar, todosVar] };
+const importsSnippet = { imports: [importTodo, importFilterId, importTodoApp] };
+const notesSnippet = { notes: [folderNote, todoItemNote, appNote] };
+const pointersSnippet = { pointers: [appPointer] };
+const deletedSnippet = { deleted: todoApp.deleted };
+const stepsSnippet = { steps: todoApp.steps };
+
+---
+
+<DocsLayout
+  title="Blueprint spec"
+  brand={null}
+  section="blueprint-spec"
+  menuLabel="Blueprint spec"
+  menu={SECTIONS.map((section) => ({ href: `#${section.id}`, title: section.title }))}
+>
+  <article class="docs spec">
+    <h1>Blueprint spec</h1>
+    <p>
+      A blueprint is a structure that describes code to be built, in the abstract: the files,
+      folders, classes, functions, variables, and relations, rather than the source itself. An LLM uses
+      that structure to write working code. A person uses it to instruct the LLM at that same
+      level, and to see what the LLM intends to build.
+    </p>
+
+    <h2 id="how-it-is-used">How it is used</h2>
+    <p>
+      <strong>On top of existing code.</strong> The project is already there. The blueprint
+      adds files and folders, and points at the existing files, folders, functions, or
+      variables it reaches into. Imports and notes can name those existing paths.
+    </p>
+    <p>
+      <strong>Without existing code.</strong> The project is empty. The blueprint describes
+      only what it adds: files, folders, functions, variables, and the imports between them.
+      <code>pointers</code> and <code>deleted</code> are empty.
+    </p>
+    <p>
+      <strong>In between.</strong> Some paths are new and some already exist. The todo app
+      below is this case. <code>src/todo</code> and the files under it are added, and
+      <code>src/App.tsx</code> is a pointer to a file already in the project, with
+      <code>TodoApp</code> imported into it.
+    </p>
+
+    <h2 id="example">Example</h2>
+    <p>
+      Entries taken from <code>todo-app.blueprint.json</code>. <code>deleted</code> and
+      <code>steps</code> are empty in that file. The sections below explain each list.
+    </p>
+    <JsonViewer title="todo-app.blueprint.json" data={structureExample} />
+
+    <h2 id="overview">Overview</h2>
+    <p>
+      One blueprint is one file with the extension <code>.blueprint.json</code>, for example
+      <code>todo-app.blueprint.json</code>.
+    </p>
+    <p>
+      All paths are relative to the project root and use forward slashes.
+      <code>src/todo/TodoApp.tsx</code> names its folder <code>src/todo</code>. The function
+      <code>TodoApp</code> names that same path as its <code>file</code>.
+    </p>
+    <JsonViewer title="todo-app.blueprint.json" data={pathExample} />
+
+    <h2 id="blueprint-file">Blueprint file</h2>
+    <JsonViewer title="todo-app.blueprint.json" data={fileSnippet} />
+    <p>
+      These three fields identify the file. <code>version</code> is <code>1</code>,
+      <code>kind</code> is <code>"blueprint"</code>, and <code>name</code> is
+      <code>todo-app</code>, the file name without <code>.blueprint.json</code>. The lists
+      in the sections below sit on this same object.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>version</code></td>
+          <td>number</td>
+          <td>Format version. Always <code>1</code>.</td>
+        </tr>
+        <tr>
+          <td><code>kind</code></td>
+          <td>string</td>
+          <td>
+            Always <code>"blueprint"</code>.
+          </td>
+        </tr>
+        <tr>
+          <td><code>name</code></td>
+          <td>string</td>
+          <td>Name of the blueprint. Usually the file name without the extension.</td>
+        </tr>
+        <tr>
+          <td><code>files</code> … <code>steps</code></td>
+          <td>arrays</td>
+          <td>
+            The entities described in the sections below. Every list is optional and defaults
+            to empty.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="files">files</h2>
+    <JsonViewer title="todo-app.blueprint.json → files" data={filesSnippet} />
+    <p>
+      Files the blueprint adds. This one is <code>src/todo/TodoApp.tsx</code>: its
+      <code>id</code> and <code>path</code> are that path, its <code>name</code> is
+      <code>TodoApp.tsx</code>, and its <code>folder</code> is <code>src/todo</code>. A file
+      that already exists belongs in <a href="#pointers">pointers</a> instead.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>id</code></td>
+          <td>string</td>
+          <td>Unique id. The same value as <code>path</code>.</td>
+        </tr>
+        <tr>
+          <td><code>name</code></td>
+          <td>string</td>
+          <td>File name with extension, such as <code>TodoApp.tsx</code>.</td>
+        </tr>
+        <tr>
+          <td><code>path</code></td>
+          <td>string</td>
+          <td>Full path from the project root.</td>
+        </tr>
+        <tr>
+          <td><code>folder</code></td>
+          <td>string</td>
+          <td>Path of the folder the file sits in.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>All four fields are required strings.</p>
+    <p class="instruction-label">LLM instruction example</p>
+    <blockquote>
+      <p>
+        A file is a new file the plan creates. A file that already exists is a pointer,
+        not a file.
+      </p>
+    </blockquote>
+
+    <h2 id="folders">folders</h2>
+    <JsonViewer title="todo-app.blueprint.json → folders" data={foldersSnippet} />
+    <p>
+      Folders the blueprint adds. Each level is its own entry:
+      <code>src/todo/components</code> sits next to <code>src/todo</code>, and its
+      <code>parent</code> is <code>src/todo</code>.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>id</code></td>
+          <td>string</td>
+          <td>Unique id. The same value as <code>path</code>.</td>
+        </tr>
+        <tr>
+          <td><code>name</code></td>
+          <td>string</td>
+          <td>Last segment of the path, such as <code>todo</code>.</td>
+        </tr>
+        <tr>
+          <td><code>path</code></td>
+          <td>string</td>
+          <td>Full path from the project root.</td>
+        </tr>
+        <tr>
+          <td><code>parent</code></td>
+          <td>string</td>
+          <td>
+            Path of the parent folder. <code>"."</code> means the project root.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p>All four fields are required strings.</p>
+    <p class="instruction-label">LLM instruction example</p>
+    <blockquote>
+      <p>
+        A folder is part of the folder skeleton the plan creates. Each level is its own
+        entry.
+      </p>
+    </blockquote>
+
+    <h2 id="classes">classes</h2>
+    <JsonViewer title="class shape" data={classShape} />
+    <p>
+      A class the blueprint adds, in a file. <code>TodoStore</code> is defined in
+      <code>src/todo/store/todos.ts</code>. A method is a
+      <a href="#functions">function</a> with <code>class</code> set to that name:
+      <code>addTodo</code>. A field is a <a href="#variables">variable</a> with
+      <code>class</code> set to that name: <code>todos</code>. The constructor is one of
+      those functions, using the name that language uses. <code>extends</code> names its
+      one parent class, <code>Store</code>. <code>implements</code> names the interfaces
+      it fulfills, <code>Persistable</code>. <code>addTodo</code> sets
+      <code>overrides</code> because it replaces a method on that parent. The todo
+      blueprint has no classes; this snippet is only the shape.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>name</code></td>
+          <td>string</td>
+          <td>Identifier of the class. Required.</td>
+        </tr>
+        <tr>
+          <td><code>file</code></td>
+          <td>string</td>
+          <td>Path of the file that defines it. Required. Several classes may share one file.</td>
+        </tr>
+        <tr>
+          <td><code>extends</code></td>
+          <td>string</td>
+          <td>Name of the one parent class. Omit it when the class has no parent.</td>
+        </tr>
+        <tr>
+          <td><code>implements</code></td>
+          <td>string[]</td>
+          <td>
+            Names of the interfaces or protocols it fulfills. Omit it when there are none.
+            One name per entry.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Static members and visibility stay in a <a href="#notes">note</a>. The structure
+      does not give them their own fields.
+    </p>
+    <p class="instruction-label">LLM instruction example</p>
+    <blockquote>
+      <p>
+        A class is a class the plan adds, in a file. <code>extends</code> is its one parent
+        class. <code>implements</code> names the interfaces or protocols it fulfills. Its
+        methods are functions with <code>class</code> set to its name. Its fields are
+        variables with <code>class</code> set to its name. The constructor is one of those
+        functions.
+      </p>
+    </blockquote>
+
+    <h2 id="functions">functions</h2>
+    <JsonViewer title="todo-app.blueprint.json → functions" data={functionsSnippet} />
+    <p>
+      Functions, methods, components, and hooks the blueprint adds.
+      <code>addTodo</code> is defined in <code>src/todo/store/todos.ts</code>.
+      <code>TodoItem</code> is defined in <code>src/todo/components/TodoItem.tsx</code>.
+      <code>file</code> is that path. These two omit <code>class</code> because they are not
+      methods. A method includes <code>class</code>, as <code>addTodo</code> does on
+      <code>TodoStore</code> in <a href="#classes">classes</a>.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>name</code></td>
+          <td>string</td>
+          <td>Identifier of the function.</td>
+        </tr>
+        <tr>
+          <td><code>file</code></td>
+          <td>string</td>
+          <td>Path of the file that defines it. Required.</td>
+        </tr>
+        <tr>
+          <td><code>class</code></td>
+          <td>string</td>
+          <td>
+            Name of the <a href="#classes">class</a> the function belongs to. Omit it when
+            the function is not a method.
+          </td>
+        </tr>
+        <tr>
+          <td><code>overrides</code></td>
+          <td>boolean</td>
+          <td>
+            True when this method replaces a method on the parent class. Omit it otherwise.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="instruction-label">LLM instruction example</p>
+    <blockquote>
+      <p>
+        A function is a function, method, component, or hook the plan adds. A method
+        includes <code>class</code>, the class it belongs to. A method that replaces a
+        parent method sets <code>overrides</code>.
+      </p>
+    </blockquote>
+
+    <h2 id="variables">variables</h2>
+    <JsonViewer title="todo-app.blueprint.json → variables" data={variablesSnippet} />
+    <p>
+      Constants, shared module state, and config values the blueprint adds.
+      <code>FILTERS</code> is declared in <code>src/todo/constants.ts</code>.
+      <code>todos</code> is declared in <code>src/todo/store/todos.ts</code>. Same fields as
+      <code>functions</code>: <code>name</code>, <code>file</code>, and an optional
+      <code>class</code>. These two omit <code>class</code>. A field includes it, as
+      <code>todos</code> does on <code>TodoStore</code> in <a href="#classes">classes</a>.
+    </p>
+    <p class="instruction-label">LLM instruction example</p>
+    <blockquote>
+      <p>
+        A variable is a constant, a piece of shared state, a config value, or a field the
+        plan adds. A field includes <code>class</code>, the class it belongs to.
+      </p>
+    </blockquote>
+
+    <h2 id="imports">imports (relations)</h2>
+    <JsonViewer title="todo-app.blueprint.json → imports" data={importsSnippet} />
+    <p>
+      Relations between files. Each entry says that <code>file</code> imports <code>name</code>
+      from <code>from</code>. <code>src/todo/utils/filters.ts</code> imports <code>Todo</code>
+      and <code>FilterId</code> from <code>src/todo/types.ts</code>, one entry each.
+      <code>src/App.tsx</code> imports <code>TodoApp</code> from
+      <code>src/todo/TodoApp.tsx</code>.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>name</code></td>
+          <td>string</td>
+          <td>The imported symbol.</td>
+        </tr>
+        <tr>
+          <td><code>from</code></td>
+          <td>string</td>
+          <td>Path of the file that exports the symbol.</td>
+        </tr>
+        <tr>
+          <td><code>file</code></td>
+          <td>string</td>
+          <td>Path of the file that imports the symbol.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      All three fields are required. Import one symbol per entry. <code>Todo</code> and
+      <code>FilterId</code> come from the same file, so they are two entries.
+    </p>
+    <p class="instruction-label">LLM instruction example</p>
+    <blockquote>
+      <p>
+        An import is a relation between two files: <code>file</code> imports
+        <code>name</code> from <code>from</code>. One symbol is one entry.
+      </p>
+    </blockquote>
+
+    <h2 id="notes">notes</h2>
+    <JsonViewer title="todo-app.blueprint.json → notes" data={notesSnippet} />
+    <p>
+      Text attached to a folder, file, class, function, or variable. The folder
+      <code>src/todo</code> has a note. The file
+      <code>src/todo/components/TodoItem.tsx</code> has a note. The existing file
+      <code>src/App.tsx</code> has a note too.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>file</code></td>
+          <td>string</td>
+          <td>
+            Path of the file or folder the note belongs to. For class, function, and variable
+            notes, the file that defines the symbol.
+          </td>
+        </tr>
+        <tr>
+          <td><code>kind</code></td>
+          <td>string</td>
+          <td>
+            <code>"file"</code>, <code>"folder"</code>, <code>"class"</code>,
+            <code>"function"</code>, or <code>"variable"</code>. <code>"file"</code> when
+            missing.
+          </td>
+        </tr>
+        <tr>
+          <td><code>name</code></td>
+          <td>string</td>
+          <td>
+            Symbol name. Required for <code>class</code>, <code>function</code>, and
+            <code>variable</code> notes.
+          </td>
+        </tr>
+        <tr>
+          <td><code>class</code></td>
+          <td>string</td>
+          <td>
+            Class name. Set it when the note is on a method or field, so the symbol is not
+            confused with another of the same name.
+          </td>
+        </tr>
+        <tr>
+          <td><code>note</code></td>
+          <td>string</td>
+          <td>The text.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>One note per folder, file, or symbol.</p>
+    <p class="instruction-label">LLM instruction example</p>
+    <blockquote>
+      <p>
+        A note is an instruction on a file, folder, class, function, or variable. It states
+        the contract or a non-obvious invariant the plan must keep. A note on a method or
+        field includes <code>class</code>.
+      </p>
+    </blockquote>
+
+    <h2 id="pointers">pointers</h2>
+    <JsonViewer title="todo-app.blueprint.json → pointers" data={pointersSnippet} />
+    <p>
+      References to a file, folder, class, function, or variable that already exists. This blueprint
+      has one: the file <code>src/App.tsx</code>. Its note is in <code>notes</code>, and the
+      <code>TodoApp</code> import into it is in <code>imports</code>.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>kind</code></td>
+          <td>string</td>
+          <td>
+            <code>"file"</code>, <code>"folder"</code>, <code>"class"</code>,
+            <code>"function"</code>, or <code>"variable"</code>. Required.
+          </td>
+        </tr>
+        <tr>
+          <td><code>path</code></td>
+          <td>string</td>
+          <td>
+            Path of the file or folder. For a class, function, or variable, the file that
+            defines the symbol.
+          </td>
+        </tr>
+        <tr>
+          <td><code>name</code></td>
+          <td>string</td>
+          <td>
+            Symbol name. Required for <code>class</code>, <code>function</code>, and
+            <code>variable</code> pointers.
+          </td>
+        </tr>
+        <tr>
+          <td><code>class</code></td>
+          <td>string</td>
+          <td>Class name. Set it when the pointer is a method or field.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Pointers use <code>path</code>. Notes use <code>file</code> for the same role.</p>
+    <p class="instruction-label">LLM instruction example</p>
+    <blockquote>
+      <p>
+        A pointer is a reference to a file, folder, class, function, or variable that
+        already exists. Pay attention to it when setting up the plan, and usually edit it.
+        It does not also go in <code>files</code>, <code>folders</code>, or
+        <code>classes</code>. A method or field pointer includes <code>class</code>.
+      </p>
+    </blockquote>
+
+    <h2 id="deleted">deleted</h2>
+    <JsonViewer title="todo-app.blueprint.json → deleted" data={deletedSnippet} />
+    <p>
+      Paths of files to remove. This blueprint removes none, so the list is empty. An entry
+      is a path string, the same shape as <code>src/todo/TodoApp.tsx</code>.
+    </p>
+    <p class="instruction-label">LLM instruction example</p>
+    <blockquote>
+      <p>
+        A deleted entry is an existing file path the plan removes, including its imports,
+        references, and usages.
+      </p>
+    </blockquote>
+
+    <h2 id="steps">steps</h2>
+    <JsonViewer title="todo-app.blueprint.json → steps" data={stepsSnippet} />
+    <p>
+      Ordered steps for building the blueprint. This blueprint has none, so the list is
+      empty. An entry is a string.
+    </p>
+    <p class="instruction-label">LLM instruction example</p>
+    <blockquote>
+      <p>
+        A step is a suggested sentence for the plan. Decide which are useful and in what
+        order. Keep, merge, split, reword, reorder, or drop them, and add missing ones.
+        They are suggestions, not the plan itself.
+      </p>
+    </blockquote>
+
+    <h2 id="full-example">Full example</h2>
+    <JsonViewer
+      title="apps/example-target/blueprints/todo-app/todo-app.blueprint.json"
+      data={todoApp}
+      openDepth={2}
+    />
+    <p>
+      A complete todo app blueprint: the <code>src/todo</code> folder with its store, utils,
+      and components, the functions and constants in them, the imports between them, a note
+      per file, and a pointer at <code>src/App.tsx</code>. The lists start collapsed.
+    </p>
+  </article>
+</DocsLayout>
+
+<style>
+  .spec h2 {
+    scroll-margin-top: 5.5rem;
+  }
+
+  .spec .instruction-label {
+    margin-bottom: 0.35rem;
+    font-size: 0.78rem;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .spec blockquote {
+    margin: 0 0 1rem;
+    padding: 0.75rem 1rem;
+    border-left: 3px solid rgba(0, 0, 0, 0.2);
+    background: rgba(0, 0, 0, 0.04);
+  }
+
+  .spec blockquote p:last-child {
+    margin-bottom: 0;
+  }
+
+  html[data-theme="dark"] .spec blockquote {
+    border-left-color: rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.05);
+  }
+</style>

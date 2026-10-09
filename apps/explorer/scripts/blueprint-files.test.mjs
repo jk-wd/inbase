@@ -7,48 +7,58 @@ import { fileURLToPath } from 'node:url'
 import {
   applyBlueprintDocument,
   BLUEPRINTS_DIR_NAME,
-  blueprintFileName,
+  blueprintSetName,
   blueprintSubjectSlug,
   defaultBlueprintsDir,
-  nextNumberedBlueprintFile,
+  nextNumberedBlueprintSet,
   listSavedBlueprints,
   loadBlueprintDocument,
   parseBlueprintDocument,
-  resolveBlueprintSavePath,
+  parseBlueprintDocuments,
+  readBlueprintSetFromPath,
+  resolveBlueprintSetFolder,
   saveBlueprintDocument,
 } from './blueprint-files.mjs'
 import {
   ensureSessionPool,
-  readBlueprint,
   readBlueprintByColor,
   updateBlueprint,
 } from './session-store.mjs'
 
-test('numbered blueprint files use subject-num and skip taken numbers', () => {
+test('numbered blueprint sets use subject-num and skip taken numbers', () => {
   const env = fixture()
   try {
     assert.equal(blueprintSubjectSlug('Timer App!'), 'timer-app')
-    const first = nextNumberedBlueprintFile(env.targetRoot, 'Timer App!')
+    const first = nextNumberedBlueprintSet(env.targetRoot, 'Timer App!')
     assert.deepEqual(first, {
       subject: 'timer-app',
       number: 1,
-      fileName: 'timer-app-1.json',
-      filePath: 'blueprints/timer-app-1.json',
+      name: 'timer-app-1',
+      folderPath: 'blueprints/timer-app-1',
     })
-    fs.mkdirSync(path.join(env.targetRoot, 'blueprints'), { recursive: true })
-    fs.writeFileSync(path.join(env.targetRoot, 'blueprints', 'timer-app-1.json'), '{}')
-    fs.writeFileSync(path.join(env.targetRoot, 'blueprints', 'timer-app-4.json'), '{}')
-    fs.writeFileSync(path.join(env.targetRoot, 'blueprints', 'other-1.json'), '{}')
-    const next = nextNumberedBlueprintFile(env.targetRoot, 'timer-app')
-    assert.equal(next.fileName, 'timer-app-5.json')
-    assert.equal(next.number, 5)
+    const dir = path.join(env.targetRoot, 'blueprints')
+    fs.mkdirSync(path.join(dir, 'timer-app-1'), { recursive: true })
+    fs.mkdirSync(path.join(dir, 'timer-app-4'), { recursive: true })
+    fs.writeFileSync(path.join(dir, 'timer-app-6.json'), '{}')
+    fs.mkdirSync(path.join(dir, 'other-9'), { recursive: true })
+    const next = nextNumberedBlueprintSet(env.targetRoot, 'timer-app')
+    assert.equal(next.name, 'timer-app-7')
+    assert.equal(next.number, 7)
   } finally {
     env.cleanup()
   }
 })
 
-function blueBlueprint(document) {
-  return document.blueprints.find((item) => item.color === 'blue')
+function blueBlueprint(set) {
+  return set.blueprints.find((item) => item.color === 'blue')
+}
+
+function readSet(saved) {
+  return readBlueprintSetFromPath(saved.path).set
+}
+
+function readJson(filePath) {
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'))
 }
 
 function fixture() {
@@ -87,13 +97,15 @@ const globalFolder = {
   parent: 'src',
 }
 
-test('names blueprint files after the given title', () => {
-  assert.equal(blueprintFileName('Login page'), 'Login page.json')
-  assert.equal(blueprintFileName('login-page.json'), 'login-page.json')
-  assert.throws(() => blueprintFileName('   '), /name is required/)
+test('names blueprint sets after the given title', () => {
+  assert.equal(blueprintSetName('Login page'), 'Login page')
+  assert.equal(blueprintSetName('login-page.json'), 'login-page')
+  assert.equal(blueprintSetName('login-page-wrapper.json'), 'login-page')
+  assert.equal(blueprintSetName('login-page.blueprint.json'), 'login-page')
+  assert.throws(() => blueprintSetName('   '), /name is required/)
 })
 
-test('saves into a blueprints folder on the target root', () => {
+test('saves a set folder with a wrapper and one blueprint file per color', () => {
   const env = fixture()
   try {
     const saved = saveBlueprintDocument(env.targetRoot, {
@@ -101,24 +113,93 @@ test('saves into a blueprints folder on the target root', () => {
       global: { files: [globalFile] },
       locals: [{ color: 'coral', files: [coralFile] }],
     })
-    const expected = path.join(
-      env.targetRoot,
-      BLUEPRINTS_DIR_NAME,
-      'Login page.json',
-    )
-    assert.equal(saved.path, expected)
-    assert.equal(saved.relativePath, `${BLUEPRINTS_DIR_NAME}/Login page.json`)
-    assert.equal(fs.existsSync(expected), true)
+    const folder = path.join(env.targetRoot, BLUEPRINTS_DIR_NAME, 'Login page')
+    assert.equal(saved.path, path.join(folder, 'Login page-wrapper.json'))
+    assert.equal(saved.relativePath, `${BLUEPRINTS_DIR_NAME}/Login page/Login page-wrapper.json`)
+    assert.equal(saved.folder, `${BLUEPRINTS_DIR_NAME}/Login page`)
+    assert.deepEqual(fs.readdirSync(folder).sort(), [
+      'Login page-blue.blueprint.json',
+      'Login page-coral.blueprint.json',
+      'Login page-wrapper.json',
+    ])
+    const wrapper = readJson(saved.path)
+    assert.equal(wrapper.kind, 'inbase-wrapper')
+    assert.deepEqual(wrapper.blueprints, [
+      { color: 'blue', file: 'Login page-blue.blueprint.json', hidden: false, dependsOn: [] },
+      { color: 'coral', file: 'Login page-coral.blueprint.json', hidden: false, dependsOn: [] },
+    ])
+    const coral = readJson(path.join(folder, 'Login page-coral.blueprint.json'))
+    assert.equal(coral.kind, 'blueprint')
+    assert.equal(coral.name, 'Login page-coral')
+    assert.deepEqual(coral.files, [coralFile])
+    for (const key of ['color', 'colorName', 'colorHex', 'hidden', 'dependsOn']) {
+      assert.equal(key in coral, false, key)
+    }
     const listed = listSavedBlueprints(env.targetRoot)
     assert.equal(listed.directory, defaultBlueprintsDir(env.targetRoot))
     assert.equal(listed.items.length, 1)
     assert.equal(listed.items[0].name, 'Login page')
+    assert.equal(listed.items[0].fileName, 'Login page-wrapper.json')
   } finally {
     env.cleanup()
   }
 })
 
-test('saved documents use files and folders without positions', () => {
+test('a set with one blueprint has no color in the file name', () => {
+  const env = fixture()
+  try {
+    const saved = saveBlueprintDocument(env.targetRoot, {
+      name: 'solo',
+      blueprints: [{ color: 'amber', files: [globalFile] }],
+    })
+    assert.deepEqual(saved.blueprintFiles.map((file) => file.relativePath), [
+      'blueprints/solo/solo.blueprint.json',
+    ])
+    assert.equal(readJson(saved.path).blueprints[0].color, 'amber')
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('saving again removes blueprint files the set no longer uses', () => {
+  const env = fixture()
+  try {
+    saveBlueprintDocument(env.targetRoot, {
+      name: 'grow',
+      blueprints: [{ color: 'blue', files: [globalFile] }],
+    })
+    const folder = path.join(env.targetRoot, BLUEPRINTS_DIR_NAME, 'grow')
+    fs.writeFileSync(path.join(folder, 'README.md'), 'keep me\n')
+    const saved = saveBlueprintDocument(env.targetRoot, {
+      name: 'grow',
+      filePath: path.join(folder, 'grow-wrapper.json'),
+      blueprints: [
+        { color: 'blue', files: [globalFile] },
+        { color: 'coral', files: [coralFile] },
+      ],
+    })
+    assert.deepEqual(fs.readdirSync(folder).sort(), [
+      'README.md',
+      'grow-blue.blueprint.json',
+      'grow-coral.blueprint.json',
+      'grow-wrapper.json',
+    ])
+    saveBlueprintDocument(env.targetRoot, {
+      name: 'grow',
+      filePath: saved.path,
+      blueprints: [{ color: 'coral', files: [coralFile] }],
+    })
+    assert.deepEqual(fs.readdirSync(folder).sort(), [
+      'README.md',
+      'grow-wrapper.json',
+      'grow.blueprint.json',
+    ])
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('saved blueprints use files and folders without positions', () => {
   const env = fixture()
   try {
     const saved = saveBlueprintDocument(env.targetRoot, {
@@ -128,20 +209,20 @@ test('saved documents use files and folders without positions', () => {
         folders: [globalFolder],
       },
     })
-    const document = JSON.parse(fs.readFileSync(saved.path, 'utf8'))
-    assert.equal(document.kind, 'inbase-blueprint')
-    assert.deepEqual(blueBlueprint(document).files, [globalFile])
-    assert.deepEqual(blueBlueprint(document).folders, [globalFolder])
-    assert.equal(blueBlueprint(document).userCreatedBlocks, undefined)
-    assert.equal(blueBlueprint(document).userCreatedIslands, undefined)
-    assert.equal('x' in blueBlueprint(document).files[0], false)
-    assert.equal('z' in blueBlueprint(document).files[0], false)
+    const document = readJson(saved.blueprintFiles[0].path)
+    assert.equal(document.kind, 'blueprint')
+    assert.deepEqual(document.files, [globalFile])
+    assert.deepEqual(document.folders, [globalFolder])
+    assert.equal(document.userCreatedBlocks, undefined)
+    assert.equal(document.userCreatedIslands, undefined)
+    assert.equal('x' in document.files[0], false)
+    assert.equal('z' in document.files[0], false)
   } finally {
     env.cleanup()
   }
 })
 
-test('save as writes to another folder', () => {
+test('save as writes the set folder into another parent folder', () => {
   const env = fixture()
   try {
     const elsewhere = path.join(env.root, 'exports')
@@ -150,7 +231,7 @@ test('save as writes to another folder', () => {
       directory: elsewhere,
       global: { files: [globalFile] },
     })
-    assert.equal(saved.path, path.join(elsewhere, 'auth.json'))
+    assert.equal(saved.path, path.join(elsewhere, 'auth', 'auth-wrapper.json'))
     assert.equal(fs.existsSync(saved.path), true)
     assert.equal(
       listSavedBlueprints(env.targetRoot).items.length,
@@ -226,7 +307,7 @@ test('load restores notes and pointers', () => {
       name: 'noted',
       global: {
         files: [globalFile],
-        addedFunctions: [{ name: 'Clock', file: 'src/Global.tsx' }],
+        functions: [{ name: 'Clock', file: 'src/Global.tsx' }],
         notes: globalNotes,
         pointers: globalPointers,
       },
@@ -243,23 +324,20 @@ test('load restores notes and pointers', () => {
     })
     assert.deepEqual(loaded.global.notes, globalNotes)
     assert.deepEqual(loaded.global.pointers, globalPointers)
-    assert.deepEqual(loaded.global.addedFunctions, [
+    assert.deepEqual(loaded.global.functions, [
       { name: 'Clock', file: 'src/Global.tsx' },
     ])
     assert.deepEqual(readBlueprintByColor(env.dataDir, 'coral').notes, coralNotes)
-    const document = JSON.parse(
-      fs.readFileSync(
-        path.join(env.targetRoot, BLUEPRINTS_DIR_NAME, 'noted.json'),
-        'utf8',
-      ),
+    const document = readJson(
+      path.join(env.targetRoot, BLUEPRINTS_DIR_NAME, 'noted', 'noted-blue.blueprint.json'),
     )
-    assert.deepEqual(blueBlueprint(document).notes, globalNotes)
+    assert.deepEqual(document.notes, globalNotes)
   } finally {
     env.cleanup()
   }
 })
 
-test('save and load restore color depends-on relations', () => {
+test('save and load keep color depends-on relations in the wrapper', () => {
   const env = fixture()
   try {
     ensureSessionPool(env.dataDir)
@@ -287,17 +365,14 @@ test('save and load restore color depends-on relations', () => {
       'blue',
       'coral',
     ])
-    const document = JSON.parse(
-      fs.readFileSync(
-        path.join(env.targetRoot, BLUEPRINTS_DIR_NAME, 'deps.json'),
-        'utf8',
-      ),
-    )
-    assert.deepEqual(blueBlueprint(document).dependsOn, [])
+    const folder = path.join(env.targetRoot, BLUEPRINTS_DIR_NAME, 'deps')
+    const wrapper = readJson(path.join(folder, 'deps-wrapper.json'))
+    assert.deepEqual(blueBlueprint(wrapper).dependsOn, [])
     assert.deepEqual(
-      document.blueprints.find((item) => item.color === 'crimson').dependsOn,
+      wrapper.blueprints.find((item) => item.color === 'crimson').dependsOn,
       ['blue', 'coral'],
     )
+    assert.equal('dependsOn' in readJson(path.join(folder, 'deps-crimson.blueprint.json')), false)
   } finally {
     env.cleanup()
   }
@@ -317,8 +392,7 @@ test('save keeps notes even when those files are not on disk', () => {
       name: 'saved-notes',
       global: { notes },
     })
-    const document = JSON.parse(fs.readFileSync(saved.path, 'utf8'))
-    assert.deepEqual(blueBlueprint(document).notes, notes)
+    assert.deepEqual(blueBlueprint(readSet(saved)).notes, notes)
   } finally {
     env.cleanup()
   }
@@ -484,24 +558,101 @@ test('reads legacy block and island keys', () => {
   assert.deepEqual(blueBlueprint(parsed).folders, [globalFolder])
 })
 
-test('saved documents list blueprints without a global layer', () => {
+test('wrappers list only colors with content and keep hidden', () => {
   const env = fixture()
   try {
     const saved = saveBlueprintDocument(env.targetRoot, {
       name: 'shape',
       blueprints: [
         { color: 'blue', files: [globalFile] },
-        { color: 'coral', files: [coralFile] },
+        { color: 'coral', files: [coralFile], hidden: true },
         { color: 'amber', hidden: true },
       ],
     })
-    const document = JSON.parse(fs.readFileSync(saved.path, 'utf8'))
-    assert.equal('global' in document, false)
-    assert.equal('locals' in document, false)
+    const wrapper = readJson(saved.path)
+    assert.equal('global' in wrapper, false)
+    assert.equal('locals' in wrapper, false)
     assert.deepEqual(
-      document.blueprints.map((item) => item.color),
-      ['blue', 'coral'],
+      wrapper.blueprints.map((item) => [item.color, item.hidden]),
+      [
+        ['blue', false],
+        ['coral', true],
+      ],
     )
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('loads an older single-file document from the blueprints folder', () => {
+  const env = fixture()
+  try {
+    ensureSessionPool(env.dataDir)
+    const dir = path.join(env.targetRoot, BLUEPRINTS_DIR_NAME)
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(
+      path.join(dir, 'old.json'),
+      JSON.stringify({
+        version: 1,
+        kind: 'inbase-blueprint',
+        name: 'old',
+        savedAt: '2026-01-01T00:00:00.000Z',
+        blueprints: [{ color: 'coral', files: [coralFile] }],
+      }),
+    )
+    assert.deepEqual(
+      listSavedBlueprints(env.targetRoot).items.map((item) => item.name),
+      ['old'],
+    )
+    loadBlueprintDocument(env.targetRoot, env.dataDir, { name: 'old' })
+    assert.deepEqual(readBlueprintByColor(env.dataDir, 'coral').files, [coralFile])
+    const resaved = saveBlueprintDocument(env.targetRoot, {
+      name: 'old',
+      filePath: path.join(dir, 'old.json'),
+      blueprints: [{ color: 'coral', files: [coralFile] }],
+    })
+    assert.equal(resaved.relativePath, 'blueprints/old/old-wrapper.json')
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('a single blueprint file loads into the first color', () => {
+  const set = parseBlueprintDocument({
+    version: 1,
+    kind: 'inbase-blueprint',
+    name: 'loose',
+    files: [coralFile],
+  })
+  assert.equal(set.name, 'loose')
+  assert.deepEqual(set.blueprints.map((item) => item.color), ['blue'])
+  assert.deepEqual(blueBlueprint(set).files, [coralFile])
+})
+
+test('uploaded wrapper and blueprint files load together', () => {
+  const env = fixture()
+  try {
+    const saved = saveBlueprintDocument(env.targetRoot, {
+      name: 'upload',
+      blueprints: [
+        { color: 'blue', files: [globalFile] },
+        { color: 'teal', files: [coralFile], dependsOn: ['blue'] },
+      ],
+    })
+    const documents = [saved.path, ...saved.blueprintFiles.map((file) => file.path)].map(
+      (filePath) => ({ fileName: path.basename(filePath), document: readJson(filePath) }),
+    )
+    const set = parseBlueprintDocuments(documents)
+    assert.equal(set.name, 'upload')
+    const teal = set.blueprints.find((item) => item.color === 'teal')
+    assert.deepEqual(teal.files, [coralFile])
+    assert.deepEqual(teal.dependsOn, ['blue'])
+
+    assert.throws(
+      () => parseBlueprintDocuments(documents.slice(0, 2)),
+      /Blueprint file not found: upload-teal\.blueprint\.json/,
+    )
+    assert.throws(() => parseBlueprintDocument(documents[0].document), /wrapper file/)
   } finally {
     env.cleanup()
   }
@@ -571,7 +722,7 @@ test('example-target ships four React app blueprints', () => {
     loadBlueprintDocument(targetRoot, env.dataDir, { name: 'todo-app' })
     const blue = readBlueprintByColor(env.dataDir, 'blue')
     assert.equal(blue.files.length, 13)
-    assert.ok(blue.addedImports.length >= 20)
+    assert.ok(blue.imports.length >= 20)
     assert.equal(blue.dependsOn.length, 0)
     assert.equal(readBlueprintByColor(env.dataDir, 'coral').files.length, 0)
     assert.ok(blue.files.every((item) => item.path.startsWith('src/todo/')))
@@ -579,8 +730,8 @@ test('example-target ships four React app blueprints', () => {
     loadBlueprintDocument(targetRoot, env.dataDir, { name: 'sticky-notes' })
     const notes = readBlueprintByColor(env.dataDir, 'blue')
     assert.equal(notes.files.length, 13)
-    assert.ok(notes.addedFunctions.some((item) => item.name === 'togglePin'))
-    assert.ok(notes.addedFunctions.some((item) => item.name === 'visibleNotes'))
+    assert.ok(notes.functions.some((item) => item.name === 'togglePin'))
+    assert.ok(notes.functions.some((item) => item.name === 'visibleNotes'))
     assert.ok(notes.files.every((item) => item.path.startsWith('src/notes/')))
   } finally {
     env.cleanup()
@@ -591,9 +742,10 @@ test('rejects files that are not blueprints', () => {
   assert.throws(() => parseBlueprintDocument({ kind: 'other' }), /Not a blueprint/)
   const env = fixture()
   try {
-    const filePath = resolveBlueprintSavePath(env.targetRoot, { name: 'nope' })
-    fs.mkdirSync(path.dirname(filePath), { recursive: true })
-    fs.writeFileSync(filePath, '{"hello":true}\n')
+    const folder = resolveBlueprintSetFolder(env.targetRoot, { name: 'nope' })
+    fs.mkdirSync(folder, { recursive: true })
+    fs.writeFileSync(path.join(folder, 'nope-wrapper.json'), '{"hello":true}\n')
+    fs.writeFileSync(path.join(path.dirname(folder), 'stray.json'), '{"hello":true}\n')
     assert.equal(listSavedBlueprints(env.targetRoot).items.length, 0)
   } finally {
     env.cleanup()

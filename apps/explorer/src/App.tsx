@@ -134,12 +134,14 @@ function emptySharedBlueprint(): SharedBlueprint {
     enabled: false,
     files: [],
     folders: [],
-    addedFunctions: [],
-    addedVariables: [],
-    addedImports: [],
+    functions: [],
+    classes: [],
+    variables: [],
+    imports: [],
     notes: [],
     pointers: [],
     deleted: [],
+    steps: [],
     dependsOn: [],
   }
 }
@@ -193,6 +195,7 @@ function blueprintLiveEnabled(
   blocks: UserCreatedBlock[],
   islands: UserCreatedIsland[],
   functions: PatchSymbolAddition[],
+  classes: PatchSymbolAddition[],
   variables: PatchSymbolAddition[],
   imports: PatchImportAddition[],
   notes: BlueprintNote[],
@@ -203,6 +206,7 @@ function blueprintLiveEnabled(
     namedCreatedBlocks(blocks).length > 0 ||
     namedCreatedIslands(islands).length > 0 ||
     functions.length > 0 ||
+    classes.length > 0 ||
     variables.length > 0 ||
     imports.length > 0 ||
     notes.length > 0 ||
@@ -241,6 +245,7 @@ function capturedBlueprintContents(
     blocks: UserCreatedBlock[]
     islands: UserCreatedIsland[]
     functions: PatchSymbolAddition[]
+    classes: PatchSymbolAddition[]
     variables: PatchSymbolAddition[]
     imports: PatchImportAddition[]
     notes: BlueprintNote[]
@@ -255,6 +260,7 @@ function capturedBlueprintContents(
       capture.blocks,
       capture.islands,
       capture.functions,
+      capture.classes,
       capture.variables,
       capture.imports,
       capture.notes,
@@ -263,9 +269,10 @@ function capturedBlueprintContents(
     ),
     files: capture.blocks,
     folders: capture.islands,
-    addedFunctions: capture.functions,
-    addedVariables: capture.variables,
-    addedImports: capture.imports,
+    functions: capture.functions,
+    classes: capture.classes,
+    variables: capture.variables,
+    imports: capture.imports,
     notes: capture.notes,
     pointers: capture.pointers,
     deleted: capture.deleted,
@@ -280,6 +287,7 @@ function withCapturedBlueprint(
     blocks: UserCreatedBlock[]
     islands: UserCreatedIsland[]
     functions: PatchSymbolAddition[]
+    classes: PatchSymbolAddition[]
     variables: PatchSymbolAddition[]
     imports: PatchImportAddition[]
     notes: BlueprintNote[]
@@ -293,6 +301,7 @@ function withCapturedBlueprint(
     blocks: capture.blocks,
     islands: capture.islands,
     functions: capture.functions,
+    classes: capture.classes,
     variables: capture.variables,
     imports: capture.imports,
     notes: capture.notes,
@@ -387,12 +396,14 @@ function emptiedBlueprint<T extends SharedBlueprint>(current: T): T {
     enabled: false,
     files: [],
     folders: [],
-    addedFunctions: [],
-    addedVariables: [],
-    addedImports: [],
+    functions: [],
+    classes: [],
+    variables: [],
+    imports: [],
     notes: [],
     pointers: [],
     deleted: [],
+    steps: [],
     dependsOn: [],
   }
 }
@@ -413,13 +424,16 @@ function cleanedBlueprint<T extends SharedBlueprint>(
       .filter((block) => !block.naming && files.has(block.id))
       .map((block) => block.id),
   )
-  const nextFunctions = current.addedFunctions.filter(
+  const nextFunctions = current.functions.filter(
     (item) => !removed.has(item.file),
   )
-  const nextVariables = current.addedVariables.filter(
+  const nextClasses = (current.classes ?? []).filter(
     (item) => !removed.has(item.file),
   )
-  const nextImports = current.addedImports.filter(
+  const nextVariables = current.variables.filter(
+    (item) => !removed.has(item.file),
+  )
+  const nextImports = current.imports.filter(
     (item) => !removed.has(item.file),
   )
   const removedFolders = new Set(
@@ -434,6 +448,7 @@ function cleanedBlueprint<T extends SharedBlueprint>(
       nextBlocks,
       nextIslands,
       nextFunctions,
+      nextClasses,
       nextVariables,
       nextImports,
       notes,
@@ -442,9 +457,10 @@ function cleanedBlueprint<T extends SharedBlueprint>(
     ),
     files: nextBlocks,
     folders: nextIslands,
-    addedFunctions: nextFunctions,
-    addedVariables: nextVariables,
-    addedImports: nextImports,
+    functions: nextFunctions,
+    classes: nextClasses,
+    variables: nextVariables,
+    imports: nextImports,
     notes,
     deleted: current.deleted.filter((id) => !removed.has(id)),
   }
@@ -499,6 +515,7 @@ function collectMapBlueprints(input: {
   selectedBlocks: UserCreatedBlock[]
   selectedIslands: UserCreatedIsland[]
   selectedFunctions: PatchSymbolAddition[]
+  selectedClasses: PatchSymbolAddition[]
   selectedVariables: PatchSymbolAddition[]
   selectedImports: PatchImportAddition[]
   selectedNotes: BlueprintNote[]
@@ -509,6 +526,7 @@ function collectMapBlueprints(input: {
   const blocks = new Map<string, UserCreatedBlock>()
   const islands = new Map<string, UserCreatedIsland>()
   const functions: PatchSymbolAddition[] = []
+  const classes: PatchSymbolAddition[] = []
   const variables: PatchSymbolAddition[] = []
   const imports: PatchImportAddition[] = []
   const notesByKey = new Map<string, BlueprintNote>()
@@ -525,6 +543,7 @@ function collectMapBlueprints(input: {
     blocks: UserCreatedBlock[]
     islands: UserCreatedIsland[]
     functions: PatchSymbolAddition[]
+    classes: PatchSymbolAddition[]
     variables: PatchSymbolAddition[]
     imports: PatchImportAddition[]
     notes: BlueprintNote[]
@@ -550,15 +569,19 @@ function collectMapBlueprints(input: {
       functions:
         input.selectedColor === local.color
           ? input.selectedFunctions
-          : local.addedFunctions,
+          : local.functions,
+      classes:
+        input.selectedColor === local.color
+          ? input.selectedClasses
+          : local.classes,
       variables:
         input.selectedColor === local.color
           ? input.selectedVariables
-          : local.addedVariables,
+          : local.variables,
       imports:
         input.selectedColor === local.color
           ? input.selectedImports
-          : local.addedImports,
+          : local.imports,
       notes:
         input.selectedColor === local.color
           ? input.selectedNotes
@@ -586,6 +609,7 @@ function collectMapBlueprints(input: {
       blocks: input.selectedBlocks,
       islands: input.selectedIslands,
       functions: input.selectedFunctions,
+      classes: input.selectedClasses,
       variables: input.selectedVariables,
       imports: input.selectedImports,
       notes: input.selectedNotes,
@@ -633,6 +657,7 @@ function collectMapBlueprints(input: {
     }
     if (!source.hidden) {
       functions.push(...source.functions)
+      classes.push(...source.classes)
       variables.push(...source.variables)
       imports.push(...source.imports)
       for (const id of source.deleted) deletedIds.add(id)
@@ -655,6 +680,7 @@ function collectMapBlueprints(input: {
     islands: [...islands.values()],
     layers,
     functions,
+    classes,
     variables,
     imports,
     notes: [...notesByKey.values()],
@@ -885,6 +911,9 @@ function Explorer({
   const [blueprintFunctions, setBlueprintFunctions] = useState<
     PatchSymbolAddition[]
   >([])
+  const [blueprintClasses, setBlueprintClasses] = useState<
+    PatchSymbolAddition[]
+  >([])
   const [blueprintVariables, setBlueprintVariables] = useState<
     PatchSymbolAddition[]
   >([])
@@ -929,6 +958,7 @@ function Explorer({
   const userBlocksRef = useRef(userBlocks)
   const userIslandsRef = useRef(userIslands)
   const blueprintFunctionsRef = useRef(blueprintFunctions)
+  const blueprintClassesRef = useRef(blueprintClasses)
   const blueprintVariablesRef = useRef(blueprintVariables)
   const blueprintImportsRef = useRef(blueprintImports)
   const blueprintNotesRef = useRef(blueprintNotes)
@@ -942,6 +972,7 @@ function Explorer({
   userBlocksRef.current = userBlocks
   userIslandsRef.current = userIslands
   blueprintFunctionsRef.current = blueprintFunctions
+  blueprintClassesRef.current = blueprintClasses
   blueprintVariablesRef.current = blueprintVariables
   blueprintImportsRef.current = blueprintImports
   blueprintNotesRef.current = blueprintNotes
@@ -982,6 +1013,7 @@ function Explorer({
         selectedBlocks: userBlocks,
         selectedIslands: userIslands,
         selectedFunctions: blueprintFunctions,
+        selectedClasses: blueprintClasses,
         selectedVariables: blueprintVariables,
         selectedImports: blueprintImports,
         selectedNotes: blueprintNotes,
@@ -993,6 +1025,7 @@ function Explorer({
       blueprintColor,
       blueprintHidden,
       blueprintFunctions,
+      blueprintClasses,
       blueprintImports,
       blueprintNotes,
       blueprintPointers,
@@ -1061,8 +1094,10 @@ function Explorer({
         mapBlueprint.functions,
         mapBlueprint.variables,
         mapBlueprint.imports,
+        mapBlueprint.classes,
       ),
     [
+      mapBlueprint.classes,
       mapBlueprint.functions,
       mapBlueprint.imports,
       mapBlueprint.variables,
@@ -1633,6 +1668,7 @@ function Explorer({
         blocks?: UserCreatedBlock[]
         islands?: UserCreatedIsland[]
         functions?: PatchSymbolAddition[]
+        classes?: PatchSymbolAddition[]
         variables?: PatchSymbolAddition[]
         imports?: PatchImportAddition[]
         notes?: BlueprintNote[]
@@ -1646,6 +1682,7 @@ function Explorer({
         blocks: snapshot.blocks ?? userBlocksRef.current,
         islands: snapshot.islands ?? userIslandsRef.current,
         functions: snapshot.functions ?? blueprintFunctionsRef.current,
+        classes: snapshot.classes ?? blueprintClassesRef.current,
         variables: snapshot.variables ?? blueprintVariablesRef.current,
         imports: snapshot.imports ?? blueprintImportsRef.current,
         notes: snapshot.notes ?? blueprintNotesRef.current,
@@ -1665,6 +1702,7 @@ function Explorer({
       blocks: UserCreatedBlock[] = userBlocksRef.current,
       islands: UserCreatedIsland[] = userIslandsRef.current,
       functions: PatchSymbolAddition[] = blueprintFunctionsRef.current,
+      classes: PatchSymbolAddition[] = blueprintClassesRef.current,
       variables: PatchSymbolAddition[] = blueprintVariablesRef.current,
       imports: PatchImportAddition[] = blueprintImportsRef.current,
       notes: BlueprintNote[] = blueprintNotesRef.current,
@@ -1676,6 +1714,7 @@ function Explorer({
         blocks,
         islands,
         functions,
+        classes,
         variables,
         imports,
         notes,
@@ -1692,9 +1731,10 @@ function Explorer({
         color,
         files: namedCreatedBlocks(blocks).map(toBlueprintFile),
         folders: namedCreatedIslands(islands).map(toBlueprintFolder),
-        addedFunctions: functions,
-        addedVariables: variables,
-        addedImports: imports,
+        functions,
+        classes,
+        variables,
+        imports,
         notes,
         pointers,
         deleted,
@@ -1729,9 +1769,10 @@ function Explorer({
         color: blueprintColorRef.current,
         files: namedCreatedBlocks(userBlocksRef.current).map(toBlueprintFile),
         folders: namedCreatedIslands(userIslandsRef.current).map(toBlueprintFolder),
-        addedFunctions: blueprintFunctionsRef.current,
-        addedVariables: blueprintVariablesRef.current,
-        addedImports: blueprintImportsRef.current,
+        functions: blueprintFunctionsRef.current,
+        classes: blueprintClassesRef.current,
+        variables: blueprintVariablesRef.current,
+        imports: blueprintImportsRef.current,
         notes: blueprintNotesRef.current,
         pointers: blueprintPointersRef.current,
         deleted: blueprintDeletedRef.current,
@@ -1773,6 +1814,7 @@ function Explorer({
         userBlocksRef.current,
         userIslandsRef.current,
         blueprintFunctionsRef.current,
+        blueprintClassesRef.current,
         blueprintVariablesRef.current,
         blueprintImportsRef.current,
         blueprintNotesRef.current,
@@ -1826,6 +1868,7 @@ function Explorer({
         blocks: userBlocksRef.current,
         islands: userIslandsRef.current,
         functions: blueprintFunctionsRef.current,
+        classes: blueprintClassesRef.current,
         variables: blueprintVariablesRef.current,
         imports: blueprintImportsRef.current,
         notes: blueprintNotesRef.current,
@@ -1840,9 +1883,10 @@ function Explorer({
     return {
       blocks: stored.files,
       islands: stored.folders,
-      functions: stored.addedFunctions,
-      variables: stored.addedVariables,
-      imports: stored.addedImports,
+      functions: stored.functions,
+      classes: stored.classes,
+      variables: stored.variables,
+      imports: stored.imports,
       notes: stored.notes,
       pointers: stored.pointers,
       deleted: stored.deleted ?? [],
@@ -1887,6 +1931,7 @@ function Explorer({
         source.blocks,
         source.islands,
         source.functions,
+        source.classes,
         source.variables,
         source.imports,
         notes,
@@ -1918,6 +1963,7 @@ function Explorer({
         setUserBlocks(next.blocks)
         setUserIslands(next.islands)
         setBlueprintFunctions(next.functions)
+        setBlueprintClasses(next.classes ?? [])
         setBlueprintVariables(next.variables)
         setBlueprintImports(next.imports)
         setBlueprintNotes(next.notes)
@@ -1928,6 +1974,7 @@ function Explorer({
         next.blocks,
         next.islands,
         next.functions,
+        next.classes,
         next.variables,
         next.imports,
         next.notes,
@@ -2100,6 +2147,49 @@ function Explorer({
   ])
 
   const addBlueprintFunction = useCallback(
+    (fileId: string, rawName: string, className?: string) => {
+      if (!canPlace || fileId.startsWith('draft:')) return false
+      const name = rawName.trim()
+      const owner = className?.trim() || undefined
+      if (!isBlueprintSymbolName(name)) return false
+      const exists =
+        displayGraph.files
+          .find((file) => file.id === fileId)
+          ?.symbols.some(
+            (symbol) =>
+              symbol.kind === 'function' &&
+              symbol.name === name &&
+              (symbol.class ?? '') === (owner ?? ''),
+          ) ||
+        blueprintFunctions.some(
+          (item) =>
+            item.file === fileId &&
+            item.name === name &&
+            (item.class ?? '') === (owner ?? ''),
+        )
+      if (exists) return false
+      const next = [
+        ...blueprintFunctions,
+        { name, file: fileId, ...(owner ? { class: owner } : {}) },
+      ]
+      setBlueprintFunctions(next)
+      persistBlueprint(userBlocks, userIslands, next, blueprintClasses, blueprintVariables, blueprintImports)
+      return true
+    },
+    [
+      blueprintClasses,
+      blueprintFunctions,
+      blueprintImports,
+      blueprintVariables,
+      displayGraph.files,
+      canPlace,
+      persistBlueprint,
+      userBlocks,
+      userIslands,
+    ],
+  )
+
+  const addBlueprintClass = useCallback(
     (fileId: string, rawName: string) => {
       if (!canPlace || fileId.startsWith('draft:')) return false
       const name = rawName.trim()
@@ -2108,18 +2198,19 @@ function Explorer({
         displayGraph.files
           .find((file) => file.id === fileId)
           ?.symbols.some(
-            (symbol) => symbol.kind === 'function' && symbol.name === name,
+            (symbol) => symbol.kind === 'class' && symbol.name === name,
           ) ||
-        blueprintFunctions.some(
+        blueprintClasses.some(
           (item) => item.file === fileId && item.name === name,
         )
       if (exists) return false
-      const next = [...blueprintFunctions, { name, file: fileId }]
-      setBlueprintFunctions(next)
-      persistBlueprint(userBlocks, userIslands, next, blueprintVariables, blueprintImports)
+      const next = [...blueprintClasses, { name, file: fileId }]
+      setBlueprintClasses(next)
+      persistBlueprint(userBlocks, userIslands, blueprintFunctions, next, blueprintVariables, blueprintImports)
       return true
     },
     [
+      blueprintClasses,
       blueprintFunctions,
       blueprintImports,
       blueprintVariables,
@@ -2132,23 +2223,33 @@ function Explorer({
   )
 
   const addBlueprintVariable = useCallback(
-    (fileId: string, rawName: string) => {
+    (fileId: string, rawName: string, className?: string) => {
       if (!canPlace || fileId.startsWith('draft:')) return false
       const name = rawName.trim()
+      const owner = className?.trim() || undefined
       if (!isBlueprintSymbolName(name)) return false
       const exists =
         displayGraph.files
           .find((file) => file.id === fileId)
           ?.symbols.some(
-            (symbol) => symbol.kind === 'variable' && symbol.name === name,
+            (symbol) =>
+              symbol.kind === 'variable' &&
+              symbol.name === name &&
+              (symbol.class ?? '') === (owner ?? ''),
           ) ||
         blueprintVariables.some(
-          (item) => item.file === fileId && item.name === name,
+          (item) =>
+            item.file === fileId &&
+            item.name === name &&
+            (item.class ?? '') === (owner ?? ''),
         )
       if (exists) return false
-      const next = [...blueprintVariables, { name, file: fileId }]
+      const next = [
+        ...blueprintVariables,
+        { name, file: fileId, ...(owner ? { class: owner } : {}) },
+      ]
       setBlueprintVariables(next)
-      persistBlueprint(userBlocks, userIslands, blueprintFunctions, next, blueprintImports)
+      persistBlueprint(userBlocks, userIslands, blueprintFunctions, blueprintClasses, next, blueprintImports)
       return true
     },
     [
@@ -2185,6 +2286,7 @@ function Explorer({
         userBlocks,
         userIslands,
         blueprintFunctions,
+        blueprintClasses,
         blueprintVariables,
         next,
       )
@@ -2220,10 +2322,16 @@ function Explorer({
   }, [selectedId])
 
   const removeBlueprintFunction = useCallback(
-    (fileId: string, name: string) => {
+    (fileId: string, name: string, className?: string) => {
       if (!canPlace) return
+      const owner = className ?? ''
       const next = blueprintFunctions.filter(
-        (item) => !(item.file === fileId && item.name === name),
+        (item) =>
+          !(
+            item.file === fileId &&
+            item.name === name &&
+            (item.class ?? '') === owner
+          ),
       )
       const notes = dropBlueprintSymbolNote(
         blueprintNotesRef.current,
@@ -2246,6 +2354,7 @@ function Explorer({
         userBlocks,
         userIslands,
         next,
+        blueprintClasses,
         blueprintVariables,
         blueprintImports,
         notes,
@@ -2253,6 +2362,61 @@ function Explorer({
       )
     },
     [
+      blueprintClasses,
+      blueprintFunctions,
+      blueprintImports,
+      blueprintVariables,
+      canPlace,
+      persistBlueprint,
+      userBlocks,
+      userIslands,
+    ],
+  )
+
+  const removeBlueprintClass = useCallback(
+    (fileId: string, name: string) => {
+      if (!canPlace) return
+      const next = blueprintClasses.filter(
+        (item) => !(item.file === fileId && item.name === name),
+      )
+      const nextFunctions = blueprintFunctions.filter(
+        (item) => !(item.file === fileId && item.class === name),
+      )
+      const nextVariables = blueprintVariables.filter(
+        (item) => !(item.file === fileId && item.class === name),
+      )
+      const notes = dropBlueprintSymbolNote(
+        blueprintNotesRef.current,
+        fileId,
+        'class',
+        name,
+      )
+      const pointers = dropBlueprintSymbolPointer(
+        blueprintPointersRef.current,
+        fileId,
+        'class',
+        name,
+      )
+      blueprintNotesRef.current = notes
+      blueprintPointersRef.current = pointers
+      setBlueprintClasses(next)
+      setBlueprintFunctions(nextFunctions)
+      setBlueprintVariables(nextVariables)
+      setBlueprintNotes(notes)
+      setBlueprintPointers(pointers)
+      persistBlueprint(
+        userBlocks,
+        userIslands,
+        nextFunctions,
+        next,
+        nextVariables,
+        blueprintImports,
+        notes,
+        pointers,
+      )
+    },
+    [
+      blueprintClasses,
       blueprintFunctions,
       blueprintImports,
       blueprintVariables,
@@ -2264,10 +2428,16 @@ function Explorer({
   )
 
   const removeBlueprintVariable = useCallback(
-    (fileId: string, name: string) => {
+    (fileId: string, name: string, className?: string) => {
       if (!canPlace) return
+      const owner = className ?? ''
       const next = blueprintVariables.filter(
-        (item) => !(item.file === fileId && item.name === name),
+        (item) =>
+          !(
+            item.file === fileId &&
+            item.name === name &&
+            (item.class ?? '') === owner
+          ),
       )
       const notes = dropBlueprintSymbolNote(
         blueprintNotesRef.current,
@@ -2290,6 +2460,7 @@ function Explorer({
         userBlocks,
         userIslands,
         blueprintFunctions,
+        blueprintClasses,
         next,
         blueprintImports,
         notes,
@@ -2319,12 +2490,14 @@ function Explorer({
         userBlocks,
         userIslands,
         blueprintFunctions,
+        blueprintClasses,
         blueprintVariables,
         next,
       )
     },
     [
       blueprintFunctions,
+      blueprintClasses,
       blueprintImports,
       blueprintVariables,
       canPlace,
@@ -2617,9 +2790,10 @@ function Explorer({
         const namedIds = new Set(drafts.map((island) => island.id))
         return [...nextIslands.filter((island) => !namedIds.has(island.id)), ...drafts]
       })
-      setBlueprintFunctions(blueprint.addedFunctions)
-      setBlueprintVariables(blueprint.addedVariables)
-      setBlueprintImports(blueprint.addedImports)
+      setBlueprintFunctions(blueprint.functions)
+      setBlueprintClasses(blueprint.classes ?? [])
+      setBlueprintVariables(blueprint.variables)
+      setBlueprintImports(blueprint.imports)
       if (!keepDrafts || !notesDirty.current) {
         const nextPointers = parseBlueprintPointers(blueprint.pointers)
         blueprintPointersRef.current = nextPointers
@@ -2803,6 +2977,7 @@ function Explorer({
       contents.blocks,
       contents.islands,
       contents.functions,
+      contents.classes ?? [],
       contents.variables,
       contents.imports,
       contents.notes,
@@ -3114,6 +3289,7 @@ function Explorer({
         blocks: UserCreatedBlock[]
         islands: UserCreatedIsland[]
         functions: PatchSymbolAddition[]
+        classes?: PatchSymbolAddition[]
         variables: PatchSymbolAddition[]
         imports: PatchImportAddition[]
         notes: BlueprintNote[]
@@ -3122,10 +3298,12 @@ function Explorer({
       },
     ) => {
       const nextDeleted = next.deleted ?? []
+      const nextClasses = next.classes ?? []
       if (color === blueprintColorRef.current) {
         userBlocksRef.current = next.blocks
         userIslandsRef.current = next.islands
         blueprintFunctionsRef.current = next.functions
+        blueprintClassesRef.current = nextClasses
         blueprintVariablesRef.current = next.variables
         blueprintImportsRef.current = next.imports
         blueprintNotesRef.current = next.notes
@@ -3134,6 +3312,7 @@ function Explorer({
         setUserBlocks(next.blocks)
         setUserIslands(next.islands)
         setBlueprintFunctions(next.functions)
+        setBlueprintClasses(nextClasses)
         setBlueprintVariables(next.variables)
         setBlueprintImports(next.imports)
         setBlueprintNotes(next.notes)
@@ -3144,6 +3323,7 @@ function Explorer({
         next.blocks,
         next.islands,
         next.functions,
+        nextClasses,
         next.variables,
         next.imports,
         next.notes,
@@ -3388,6 +3568,7 @@ function Explorer({
         setUserBlocks([])
         setUserIslands([])
         setBlueprintFunctions([])
+        setBlueprintClasses([])
         setBlueprintVariables([])
         setBlueprintImports([])
         blueprintNotesRef.current = []
@@ -3398,6 +3579,7 @@ function Explorer({
           blocks: [],
           islands: [],
           functions: [],
+          classes: [],
           variables: [],
           imports: [],
           notes: [],
@@ -3439,6 +3621,9 @@ function Explorer({
         const nextFunctions = source.functions.filter(
           (item) => !removed.has(item.file),
         )
+        const nextClasses = (source.classes ?? []).filter(
+          (item) => !removed.has(item.file),
+        )
         const nextVariables = source.variables.filter(
           (item) => !removed.has(item.file),
         )
@@ -3457,6 +3642,7 @@ function Explorer({
         setUserBlocks(nextBlocks)
         setUserIslands(nextIslands)
         setBlueprintFunctions(nextFunctions)
+        setBlueprintClasses(nextClasses)
         setBlueprintVariables(nextVariables)
         setBlueprintImports(nextImports)
         setBlueprintNotes(notes)
@@ -3465,6 +3651,7 @@ function Explorer({
           blocks: nextBlocks,
           islands: nextIslands,
           functions: nextFunctions,
+          classes: nextClasses,
           variables: nextVariables,
           imports: nextImports,
           notes,
@@ -3670,17 +3857,20 @@ function Explorer({
         onCommitAdd={commitAddItem}
         onCancelAdd={() => setAddingItem(null)}
         blueprintFunctions={blueprintFunctions}
+        blueprintClasses={blueprintClasses}
         blueprintVariables={blueprintVariables}
         blueprintImports={blueprintImports}
         blueprintNotes={mapBlueprint.notes}
         blueprintPointers={blueprintPointers}
         onAddBlueprintFunction={addBlueprintFunction}
+        onAddBlueprintClass={addBlueprintClass}
         onAddBlueprintVariable={addBlueprintVariable}
         onAddBlueprintImport={addBlueprintImport}
         importPickActive={Boolean(importPickFrom)}
         onToggleImportPick={toggleImportPick}
         onCancelImportPick={cancelImportPick}
         onRemoveBlueprintFunction={removeBlueprintFunction}
+        onRemoveBlueprintClass={removeBlueprintClass}
         onRemoveBlueprintVariable={removeBlueprintVariable}
         onRemoveBlueprintImport={removeBlueprintImport}
         onSetBlueprintNote={applyBlueprintNote}

@@ -74,11 +74,15 @@ Right-click a folder and choose **Add file**. For example, `RandomColorGenerator
 
 ![Planned file on the map with info panel](images/creating-a-file-result.png)
 
-### Add function and vars
+### Add classes, functions, and vars
 
-In the info panel, add the **functions** and **vars** the file should contain. Type a name and click **Add** — the LLM treats those symbols as part of the blueprint:
+In the info panel, add the **classes**, **functions**, and **vars** the file should contain. The LLM treats those symbols as part of the blueprint.
+
+On a file with no classes, type a function or variable name and click **Add**:
 
 ![Add functions and vars in the info panel](images/add-functions-and-vars.png)
+
+On a class file, type a name in **Class name** and click **Add**. Under that class, **add func** and **add var** open a name field for a method or field. Those members stay indented under the class.
 
 You can also add **imports**, or a note on a symbol for extra instructions or pseudo code.
 

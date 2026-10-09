@@ -238,11 +238,13 @@ export type SessionSubagentPlan = {
     dependsOn: string[]
     files: unknown[]
     folders: unknown[]
-    addedFunctions: unknown[]
-    addedVariables: unknown[]
-    addedImports: unknown[]
+    functions: unknown[]
+    classes: unknown[]
+    variables: unknown[]
+    imports: unknown[]
     notes: unknown[]
     pointers: unknown[]
+    steps: string[]
   }>
   maxSubagents: number
 }
@@ -304,13 +306,17 @@ export type SessionBlueprint = {
   sent: boolean
   files: unknown[]
   folders: unknown[]
-  addedFunctions: unknown[]
-  addedVariables: unknown[]
-  addedImports: unknown[]
+  functions: unknown[]
+  classes: unknown[]
+  variables: unknown[]
+  imports: unknown[]
   notes: unknown[]
   pointers: unknown[]
+  steps: string[]
   dependsOn: string[]
 }
+export const BLUEPRINT_STEP_MAX_LENGTH: number
+export function namedBlueprintSteps(value: unknown): string[]
 export function emptyBlueprint(): SessionBlueprint
 export function readBlueprint(dataDir: string, sessionId?: string): SessionBlueprint
 export function readLocalBlueprint(dataDir: string, sessionId?: string | null): SessionBlueprint
@@ -379,11 +385,18 @@ export function updateBlueprint(
     folders?: unknown[]
     userCreatedBlocks?: unknown[]
     userCreatedIslands?: unknown[]
+    functions?: unknown[]
+    variables?: unknown[]
+    imports?: unknown[]
+    /** @deprecated use `functions` */
     addedFunctions?: unknown[]
+    /** @deprecated use `variables` */
     addedVariables?: unknown[]
+    /** @deprecated use `imports` */
     addedImports?: unknown[]
     notes?: unknown[]
     pointers?: unknown[]
+    steps?: unknown[]
     dependsOn?: string[]
   },
 ): SessionBlueprint

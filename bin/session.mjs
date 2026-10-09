@@ -375,15 +375,25 @@ function printBlueprintDump(blueprint, options = {}) {
   const files = blueprint.files ?? []
   const folders = blueprint.folders ?? []
   const deleted = blueprint.deleted ?? []
+  const steps = blueprint.steps ?? []
   const colorName = options.colorName || 'session'
   if (blueprint.enabled) {
     const deletedHint =
       deleted.length > 0
         ? ` Delete the ${deleted.length} file(s) in the deleted list (they are file paths or ids: remove them and drop imports, references, and usages of them).`
         : ''
+    const stepsHint =
+      steps.length > 0
+        ? ' The steps list is the exception: it holds suggestions, not requirements.'
+        : ''
     console.log(
-      `VISUAL_CODER_BLUEPRINT_READY The ${colorName} blueprint has ${files.length} file(s), ${folders.length} folder(s), and ${deleted.length} deleted file(s). This blueprint is only for this ${colorName} chat and is leading: follow it as closely as possible. Create those paths and honor addedFunctions, addedVariables, addedImports, and notes even if they are not on disk.${deletedHint} Do not omit, rename, relocate, or replace them. Extra new files not in this blueprint are allowed when needed if the blueprint does not cover them.`,
+      `VISUAL_CODER_BLUEPRINT_READY The ${colorName} blueprint has ${files.length} file(s), ${folders.length} folder(s), ${deleted.length} deleted file(s), and ${steps.length} suggested step(s). This blueprint is only for this ${colorName} chat and is leading: follow it as closely as possible. Create those paths and honor classes, functions, variables, imports, and notes even if they are not on disk.${deletedHint} Do not omit, rename, relocate, or replace them. Extra new files not in this blueprint are allowed when needed if the blueprint does not cover them.${stepsHint}`,
     )
+    if (steps.length > 0) {
+      console.log(
+        `VISUAL_CODER_BLUEPRINT_STEPS The ${colorName} blueprint suggests ${steps.length} step(s) in "steps". They are suggestions from the user or an earlier proposal, not the plan. Decide yourself which ones are useful and relevant for this blueprint and request, and in what order. Keep, merge, split, reword, reorder, or drop them, and add missing steps. Then report-plan your own sequential steps (1, 2, 3).`,
+      )
+    }
   } else {
     console.log(
       `VISUAL_CODER_BLUEPRINT_READY The ${colorName} blueprint is empty. The user can still place files and folders on this color; re-read the blueprint when it is printed again. Continue without user-placed files until that dump has content.`,
@@ -418,7 +428,7 @@ function printSessionBlueprints(store, dataDir, sessionId) {
   printBlueprintDump(local, { colorName })
   printSessionScope(store, dataDir, sessionId)
   console.log(
-    'VISUAL_CODER_SAY_BLUEPRINT Reply in chat now. Start with "I see on the blueprint" and name every file, folder, function, variable, import, note, pointer, and deleted file from this color\'s dump. This confirms you interpreted the blueprint correctly. Then, unless you were told to stop and wait, you MUST run report-plan with --steps for the full implementation, using sequential steps (1, 2, 3). Do not spawn subagents. Do not edit files yet. Do not list steps in chat — report-plan is the plan. If the dump is empty, say "I see nothing on the blueprint yet."',
+    'VISUAL_CODER_SAY_BLUEPRINT Reply in chat now. Start with "I see on the blueprint" and name every file, folder, class, function, variable, import, note, pointer, deleted file, and suggested step from this color\'s dump. This confirms you interpreted the blueprint correctly. Then, unless you were told to stop and wait, you MUST run report-plan with --steps for the full implementation, using sequential steps (1, 2, 3). Do not spawn subagents. Do not edit files yet. Do not list steps in chat — report-plan is the plan. If the dump is empty, say "I see nothing on the blueprint yet."',
   )
   store.markBlueprintSeen(dataDir, sessionId, local.revision, local.revision)
   return {
@@ -869,29 +879,26 @@ export async function proposeBlueprint(args) {
       import(pathToFileURL(path.join(explorerRoot, 'scripts/blueprint-files.mjs')).href),
     ])
     const normalized = normalizeExtractLayer(layer)
+    if (!Array.isArray(layer.steps)) {
+      normalized.steps = store.readBlueprintByColor(dataDir, colorId).steps ?? []
+    }
     const subjectSource =
       typeof layer.subject === 'string' && layer.subject.trim()
         ? layer.subject
         : description
-    const numbered = blueprintFiles.nextNumberedBlueprintFile(
+    const numbered = blueprintFiles.nextNumberedBlueprintSet(
       config.targetRoot,
       subjectSource,
     )
-    const color = store.resolveSessionColor(colorId)
     if (!dontWriteToFile) {
       const saved = blueprintFiles.saveBlueprintDocument(config.targetRoot, {
-        name: `${numbered.subject}-${numbered.number}`,
-        filePath: numbered.filePath,
-        blueprints: [
-          {
-            color: colorId,
-            colorName: color?.name || colorName,
-            colorHex: color?.hex || '',
-            ...normalized,
-          },
-        ],
+        name: numbered.name,
+        folder: numbered.folderPath,
+        blueprints: [{ color: colorId, ...normalized }],
       })
-      console.log(`VISUAL_CODER_BLUEPRINT_FILE ${saved.relativePath}`)
+      const blueprintFile = saved.blueprintFiles[0]?.relativePath ?? saved.folder
+      console.log(`VISUAL_CODER_BLUEPRINT_FILE ${blueprintFile}`)
+      console.log(`VISUAL_CODER_BLUEPRINT_WRAPPER ${saved.relativePath}`)
     } else {
       console.log('VISUAL_CODER_BLUEPRINT_FILE skipped')
     }
@@ -900,7 +907,7 @@ export async function proposeBlueprint(args) {
       ...normalized,
     })
     console.log(
-      `VISUAL_CODER_BLUEPRINT_PROPOSED Session ${colorId} blueprint: ${normalized.files.length} file(s), ${normalized.folders.length} folder(s), ${normalized.addedFunctions.length} function(s), ${normalized.addedVariables.length} var(s), ${normalized.addedImports.length} relation(s), ${normalized.notes.length} note(s), ${normalized.pointers.length} pointer(s), ${normalized.deleted.length} deleted file(s).`,
+      `VISUAL_CODER_BLUEPRINT_PROPOSED Session ${colorId} blueprint: ${normalized.files.length} file(s), ${normalized.folders.length} folder(s), ${normalized.functions.length} function(s), ${normalized.variables.length} var(s), ${normalized.imports.length} relation(s), ${normalized.notes.length} note(s), ${normalized.pointers.length} pointer(s), ${normalized.deleted.length} deleted file(s), ${normalized.steps.length} suggested step(s).`,
     )
     console.log('The blueprint is now visible on the map. The user can refine it by drawing on the map or by invoking the session color again with a more specific request.')
     console.log('To start implementing, invoke the session color (e.g., /coral) or run: npx inbase attach --color <color>')
@@ -911,25 +918,37 @@ export async function proposeBlueprint(args) {
   console.log(`Propose a blueprint for the ${colorName} session from this description. It is a spatial plan that another LLM will follow.`)
   console.log(`VISUAL_CODER_PROPOSE_BLUEPRINT Session ${colorId} (${colorName})`)
   console.log(`Description: ${description}`)
+  const currentSteps = store.readBlueprintByColor(dataDir, colorId).steps ?? []
+  if (currentSteps.length > 0) {
+    console.log(
+      `VISUAL_CODER_BLUEPRINT_STEPS The ${colorName} blueprint already has ${currentSteps.length} suggested step(s) from the user. Weigh them against the description: keep the useful and relevant ones, reword, merge, or drop the rest, and add missing ones.`,
+    )
+    console.log('VISUAL_CODER_BLUEPRINT_STEPS_START')
+    console.log(JSON.stringify(currentSteps, null, 2))
+    console.log('VISUAL_CODER_BLUEPRINT_STEPS_END')
+  }
   console.log('VISUAL_CODER_PROPOSE_BLUEPRINT_INSTRUCTION_START')
+  console.log('Read interpreting-blueprints.md beside the inbase SKILL.md. Interpret every blueprint entity that way.')
   console.log('Read the codebase if needed, then curate a layer JSON. Paths are relative to the target root. Use every blueprint construct the description needs. Leave a field empty only when the plan does not need it.')
-  console.log('Include "subject": a short kebab-case name for this plan, such as "timer". Saving writes blueprints/<subject>-<num>.json in the target. The number is the next free one for that subject. Pass --dont-write-to-file to update the map without writing that file.')
-  console.log('files: new files to create. [{"path":"src/timer/Timer.tsx"}]')
-  console.log('folders: the folder skeleton to create. [{"path":"src/timer"}]')
-  console.log('addedFunctions: functions and classes to add. [{"name":"Timer","file":"src/timer/Timer.tsx"}]')
-  console.log('addedVariables: constants, shared state, and config vars. [{"name":"WORK_SECONDS","file":"src/timer/types.ts"}]')
-  console.log('addedImports: import relations, the arcs between files. [{"name":"Timer","from":"./timer/Timer","file":"src/App.tsx"}]')
-  console.log('notes: instructions on a file, folder, function, or variable. kind is file, folder, function, or variable. Function and variable notes include name. A note states the contract or a non-obvious invariant.')
+  console.log('Include "subject": a short kebab-case name for this plan, such as "timer". Saving writes the folder blueprints/<subject>-<num>/ in the target, with <subject>-<num>.blueprint.json and <subject>-<num>-wrapper.json. The number is the next free one for that subject. Pass --dont-write-to-file to update the map without writing that file.')
+  console.log('files: A file is a new file the plan creates. A file that already exists is a pointer, not a file. [{"path":"src/timer/Timer.tsx"}]')
+  console.log('folders: A folder is part of the folder skeleton the plan creates. Each level is its own entry. [{"path":"src/timer"}]')
+  console.log('classes: A class is a class the plan adds, in a file. extends is its one parent class. implements names the interfaces or protocols it fulfills. Its methods are functions with class set to its name. Its fields are variables with class set to its name. The constructor is one of those functions. [{"name":"Timer","file":"src/timer/Timer.tsx","extends":"Clock","implements":["Tickable"]}]')
+  console.log('functions: A function is a function, method, component, or hook the plan adds. A method includes class, the class it belongs to. A method that replaces a parent method sets overrides. [{"name":"start","file":"src/timer/Timer.tsx","class":"Timer","overrides":true}]')
+  console.log('variables: A variable is a constant, a piece of shared state, a config value, or a field the plan adds. A field includes class, the class it belongs to. [{"name":"WORK_SECONDS","file":"src/timer/types.ts"}]')
+  console.log('imports: An import is a relation between two files: file imports name from from. One symbol is one entry. [{"name":"Timer","from":"./timer/Timer","file":"src/App.tsx"}]')
+  console.log('notes: A note is an instruction on a file, folder, class, function, or variable. It states the contract or a non-obvious invariant the plan must keep. A note on a method or field includes class.')
   console.log('  {"file":"src/timer","kind":"folder","note":"Timer feature. No extra packages."}')
   console.log('  {"file":"src/timer/Timer.tsx","kind":"file","note":"Wire the hook to the view."}')
   console.log('  {"file":"src/timer/Timer.tsx","kind":"function","name":"Timer","note":"Top-level component. Props only."}')
   console.log('  {"file":"src/timer/types.ts","kind":"variable","name":"WORK_SECONDS","note":"25 * 60. Do not read this from props."}')
-  console.log('pointers: point at an existing file, folder, function, or variable the next chat must keep in view and usually edit. An existing path you will edit goes here, with a note and any new imports into it. It does not also go in files or folders.')
+  console.log('pointers: A pointer is a reference to a file, folder, class, function, or variable that already exists. Pay attention to it when setting up the plan, and usually edit it. It does not also go in files, folders, or classes. A method or field pointer includes class.')
   console.log('  {"kind":"file","path":"src/App.tsx"}')
   console.log('  {"kind":"folder","path":"src"}')
   console.log('  {"kind":"function","path":"src/App.tsx","name":"App"}')
   console.log('  {"kind":"variable","path":"src/theme.ts","name":"theme"}')
-  console.log('deleted: existing file paths this plan removes. ["src/legacy/OldTimer.tsx"]')
+  console.log('deleted: A deleted entry is an existing file path the plan removes, including its imports, references, and usages. ["src/legacy/OldTimer.tsx"]')
+  console.log('steps: A step is a suggested sentence for the plan. Decide which are useful and in what order. Keep, merge, split, reword, reorder, or drop them, and add missing ones. They are suggestions, not the plan itself. Start from the current blueprint steps if any. Omit steps to keep the current steps unchanged. ["Add the timer types and constants","Build the usePomodoro hook","Render Pomodoro in App"]')
   console.log('Put new modules in files and folders, with their functions, vars, relations, and notes. Point at the existing entry point you will edit.')
   console.log('Drop: generated files, lockfiles, dist/build/coverage, snapshots, editor/tooling noise, tests unless they are the contract, trivial re-export barrels, every helper/getter/loop var/one-off local, and notes that only restate the name.')
   console.log(`Then run: npx inbase propose-blueprint --session ${colorId} --description "${description}"`)

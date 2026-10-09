@@ -1,6 +1,6 @@
 {
   "name": "@jkwd/inbase",
-  "version": "0.1.87",
+  "version": "0.1.88",
   "description": "Visual map of your codebase with blueprint-driven AI coding for Cursor, Claude Code, Codex, Zed, Copilot, Cline, OpenCode, LM Studio, and Bionic.",
   "license": "MIT",
   "author": "Joris Kuijper",

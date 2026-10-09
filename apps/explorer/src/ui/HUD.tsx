@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { Children, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { BlueprintLoadDialog, BlueprintSaveDialog } from './BlueprintFileDialogs'
 import { InfoNameField, NameInput } from './NameInput'
@@ -38,7 +38,7 @@ import {
   llmChangeNoteForPath,
   overlayPathChangeKind,
 } from '../../scripts/change-notes.mjs'
-import { ColorPageIcon, EyeIcon, FileIcon, FolderIcon, MenuIcon, PanelToggleIcon } from './EyeIcon'
+import { ColorPageIcon, EyeIcon, FileIcon, FolderIcon, MenuIcon, NoteIcon, PanelToggleIcon, TrashIcon } from './EyeIcon'
 import { WalkDrop } from './WalkDrop'
 import { MapAngleButton } from './MapAngleButton'
 import { BlueprintColorsMenu } from './BlueprintColorsMenu'
@@ -46,7 +46,7 @@ import { MapFlyToMenu } from './MapFlyToMenu'
 import type { FlyToTarget } from '../flyTo'
 import { beginKeyboardIsolation, shouldIgnoreShortcut } from '../keyboard'
 import type { DevTargetsState } from '../devTargets'
-import { emptyIntent, fetchSavedBlueprints } from '../agentIntent'
+import { emptyIntent, fetchSavedBlueprints, persistBlueprintSteps } from '../agentIntent'
 
 const RELATION_MODE_OPTIONS: { id: RelationMode; label: string }[] = [
   { id: 'targeted', label: 'Targeted' },
@@ -741,12 +741,16 @@ function AddIntentRow({
   pickLabel,
   pickActive = false,
   onTogglePick,
+  autoFocus = false,
+  onCancel,
 }: {
   placeholder: string
   onAdd: (value: string) => boolean
   pickLabel?: string
   pickActive?: boolean
   onTogglePick?: () => void
+  autoFocus?: boolean
+  onCancel?: () => void
 }) {
   const [value, setValue] = useState('')
   return (
@@ -764,7 +768,16 @@ function AddIntentRow({
         aria-label={placeholder}
         autoComplete="off"
         spellCheck={false}
-        onKeyDown={(event) => event.stopPropagation()}
+        autoFocus={autoFocus}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && onCancel) {
+            event.preventDefault()
+            event.stopPropagation()
+            onCancel()
+            return
+          }
+          event.stopPropagation()
+        }}
       />
       <button className="hud-button" type="submit">
         Add
@@ -781,6 +794,55 @@ function AddIntentRow({
         </button>
       )}
     </form>
+  )
+}
+
+function ClassMemberGroup({
+  title,
+  addLabel,
+  placeholder,
+  canAdd,
+  onAdd,
+  children,
+}: {
+  title: string
+  addLabel: string
+  placeholder: string
+  canAdd: boolean
+  onAdd?: (name: string) => boolean
+  children?: ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  if (!canAdd && Children.count(children) === 0) return null
+  return (
+    <>
+      <li className="hud-class-kind">{title}</li>
+      {children}
+      {canAdd && onAdd && (
+        <li className="hud-class-add">
+          {open ? (
+            <AddIntentRow
+              autoFocus
+              placeholder={placeholder}
+              onCancel={() => setOpen(false)}
+              onAdd={(name) => {
+                const added = onAdd(name)
+                if (added) setOpen(false)
+                return added
+              }}
+            />
+          ) : (
+            <button
+              className="hud-class-add-toggle"
+              type="button"
+              onClick={() => setOpen(true)}
+            >
+              {addLabel}
+            </button>
+          )}
+        </li>
+      )}
+    </>
   )
 }
 
@@ -874,6 +936,7 @@ function BlueprintNoteModal({
 
 function BlueprintSymbolRow({
   name,
+  owner,
   className,
   hasNote,
   noteOpen,
@@ -885,8 +948,10 @@ function BlueprintSymbolRow({
   colorPointers,
   currentColorId,
   onTogglePoint,
+  children,
 }: {
   name: string
+  owner?: string
   className?: string
   hasNote: boolean
   noteOpen?: boolean
@@ -902,17 +967,26 @@ function BlueprintSymbolRow({
   colorPointers?: BlueprintColorOption[]
   currentColorId?: string | null
   onTogglePoint?: (color?: string) => void
+  children?: ReactNode
 }) {
+  const blockClass = children ? 'hud-class-block' : undefined
   if (!canEdit) {
     return (
-      <li>
-        <span className={className}>{name}</span>
+      <li className={blockClass}>
+        <span className={className}>
+          {name}
+          {owner ? <span className="hud-symbol-owner">{owner}</span> : null}
+        </span>
+        {children}
       </li>
     )
   }
   return (
-    <li>
-      <span className={className}>{name}</span>
+    <li className={blockClass}>
+      <span className={className}>
+        {name}
+        {owner ? <span className="hud-symbol-owner">{owner}</span> : null}
+      </span>
       <div className="hud-item-actions">
         {onTogglePoint && pointerTarget && (
           <PointColorControl
@@ -930,10 +1004,10 @@ function BlueprintSymbolRow({
           type="button"
           data-has-note={hasNote ? 'true' : 'false'}
           data-open={noteOpen ? 'true' : 'false'}
-          aria-label={`Edit note for ${name}`}
+          aria-label={`${hasNote ? 'Edit' : 'Add'} note for ${name}`}
           onClick={onOpenNote}
         >
-          Note
+          <NoteIcon size={13} />
         </button>
         {canRemove && (
           <button
@@ -946,6 +1020,7 @@ function BlueprintSymbolRow({
           </button>
         )}
       </div>
+      {children}
     </li>
   )
 }
@@ -1397,72 +1472,70 @@ function PanelChrome({
   )
 }
 
-function blueprintIsDefined(intent: AgentIntent) {
-  return (
-    Boolean(intent.localBlueprintEnabled) ||
-    (intent.userCreatedBlocks?.length ?? 0) > 0 ||
-    (intent.userCreatedIslands?.length ?? 0) > 0 ||
-    (intent.blueprintFunctions?.length ?? 0) > 0 ||
-    (intent.blueprintVariables?.length ?? 0) > 0 ||
-    (intent.blueprintImports?.length ?? 0) > 0 ||
-    (intent.blueprintNotes?.length ?? 0) > 0 ||
-    (intent.blueprintPointers?.length ?? 0) > 0
-  )
-}
-
-function HandshakeSetup({
-  blueprintDefined,
-  awaitingAttach,
-  nextAttachLabel,
-  colorCommand,
+function BlueprintStepsEditor({
+  color,
+  steps,
 }: {
-  blueprintDefined: boolean
-  awaitingAttach: boolean
-  nextAttachLabel: string | null
-  colorCommand?: string | null
+  color: string
+  steps: string[]
 }) {
+  const [draft, setDraft] = useState(steps)
+  const awaitingKey = useRef<string | null>(null)
+  const stepsKey = JSON.stringify(steps)
+
+  useEffect(() => {
+    if (awaitingKey.current !== null) {
+      if (awaitingKey.current !== stepsKey) return
+      awaitingKey.current = null
+    }
+    setDraft(steps)
+  }, [stepsKey])
+
+  const save = (next: string[]) => {
+    setDraft(next)
+    const key = JSON.stringify(next)
+    awaitingKey.current = key
+    persistBlueprintSteps(color, next).catch(() => {
+      if (awaitingKey.current !== key) return
+      awaitingKey.current = null
+      setDraft(steps)
+    })
+  }
+
   return (
-    <div className="hud-setup">
-      <section className="hud-setup-section">
-        <h2 className="hud-setup-heading">
-          Blueprint
-          <span
-            className="hud-setup-tag"
-            data-ready={blueprintDefined ? 'true' : 'false'}
-          >
-            {blueprintDefined ? 'blueprint defined' : 'no blueprint'}
-          </span>
-        </h2>
-        <p>
-          Right-click to create files and folders. Open a file's
-          info panel to add functions, vars, and notes (instructions or
-          pseudo code). Every chat receives the global (blue) blueprint plus
-          this session's color.
-        </p>
-      </section>
-      <section className="hud-setup-section">
-        <h2 className="hud-setup-heading">Start</h2>
-        {awaitingAttach && nextAttachLabel ? (
-          <>
-            <p>
-              The next <kbd>/inbase</kbd> chat connects to {nextAttachLabel}{' '}
-              first. This session stays in the queue.
-            </p>
-            <ColorConnectHint colorCommand={colorCommand} queued />
-          </>
-        ) : awaitingAttach ? (
-          <>
-            <p>
-              Open a chat with <kbd>/inbase</kbd> for the next empty slot, or
-              a color command to connect here.
-            </p>
-            <ColorConnectHint colorCommand={colorCommand} />
-          </>
-        ) : (
-          <p>This window is attached. Starting from the chat…</p>
-        )}
-      </section>
-    </div>
+    <section className="hud-blueprint-steps">
+      <div className="hud-section-title">Steps</div>
+      {draft.length > 0 && (
+        <ol className="hud-steps">
+          {draft.map((step, index) => (
+            <li key={`${index}:${step}`}>
+              <div className="hud-step-row hud-blueprint-step-row">
+                <span className="hud-step-index">{index + 1}.</span>
+                <span className="hud-step-title">{step}</span>
+                <button
+                  className="hud-item-remove hud-blueprint-step-remove"
+                  type="button"
+                  aria-label={`Delete step ${index + 1}`}
+                  title="Delete step"
+                  onClick={() => save(draft.filter((_, at) => at !== index))}
+                >
+                  <TrashIcon />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+      <AddIntentRow
+        placeholder="Suggest a step for the LLM"
+        onAdd={(value) => {
+          const step = value.trim()
+          if (!step) return false
+          save([...draft, step])
+          return true
+        }}
+      />
+    </section>
   )
 }
 
@@ -1846,6 +1919,10 @@ function SessionPanel({
     nextAttachSession.sessionId !== sessionId
       ? sessionDisplayName(nextAttachSession) || 'an earlier session'
       : null
+  const canEditBlueprintSteps =
+    Boolean(intent.color) &&
+    !panelDone &&
+    (!llmConnected || llmDisconnected || askingBlueprint || sendingBlueprint)
 
   const act = (
     action: WorkflowAction,
@@ -1915,14 +1992,7 @@ function SessionPanel({
               )}
             </>
           )}
-          {handshakeSetup ? (
-            <HandshakeSetup
-              blueprintDefined={blueprintIsDefined(intent)}
-              awaitingAttach={Boolean(intent.awaitingAttach)}
-              nextAttachLabel={queuedBehind}
-              colorCommand={sessionSlashCommand(intent)}
-            />
-          ) : intent.awaitingAttach ? (
+          {handshakeSetup ? null : intent.awaitingAttach ? (
             queuedBehind ? (
               <div className="hud-mode-hint">
                 <p>
@@ -1954,6 +2024,13 @@ function SessionPanel({
             intent.feature.trim() !== sessionLabel(intent) && (
               <p className="hud-feature">{intent.feature}</p>
             )}
+          {canEditBlueprintSteps && intent.color && (
+            <BlueprintStepsEditor
+              key={intent.color}
+              color={intent.color}
+              steps={intent.blueprintSteps}
+            />
+          )}
           {askingBlueprint && !handshakeSetup && !showConnectedProgress && !llmDisconnected ? (
             <>
               <p>
@@ -2605,18 +2682,21 @@ type HUDProps = {
   onCommitAdd?: (name: string, color: string) => boolean
   onCancelAdd?: () => void
   blueprintFunctions?: PatchSymbolAddition[]
+  blueprintClasses?: PatchSymbolAddition[]
   blueprintVariables?: PatchSymbolAddition[]
   blueprintImports?: PatchImportAddition[]
   blueprintNotes?: BlueprintNote[]
   blueprintPointers?: BlueprintPointer[]
-  onAddBlueprintFunction?: (fileId: string, name: string) => boolean
-  onAddBlueprintVariable?: (fileId: string, name: string) => boolean
+  onAddBlueprintFunction?: (fileId: string, name: string, className?: string) => boolean
+  onAddBlueprintClass?: (fileId: string, name: string) => boolean
+  onAddBlueprintVariable?: (fileId: string, name: string, className?: string) => boolean
   onAddBlueprintImport?: (fileId: string, raw: string) => boolean
   importPickActive?: boolean
   onToggleImportPick?: () => void
   onCancelImportPick?: () => void
-  onRemoveBlueprintFunction?: (fileId: string, name: string) => void
-  onRemoveBlueprintVariable?: (fileId: string, name: string) => void
+  onRemoveBlueprintFunction?: (fileId: string, name: string, className?: string) => void
+  onRemoveBlueprintClass?: (fileId: string, name: string) => void
+  onRemoveBlueprintVariable?: (fileId: string, name: string, className?: string) => void
   onRemoveBlueprintImport?: (
     fileId: string,
     name: string,
@@ -2731,16 +2811,19 @@ export function HUD({
   onCommitAdd,
   onCancelAdd,
   blueprintFunctions = [],
+  blueprintClasses = [],
   blueprintVariables = [],
   blueprintImports = [],
   blueprintNotes = [],
   onAddBlueprintFunction,
+  onAddBlueprintClass,
   onAddBlueprintVariable,
   onAddBlueprintImport,
   importPickActive = false,
   onToggleImportPick,
   onCancelImportPick,
   onRemoveBlueprintFunction,
+  onRemoveBlueprintClass,
   onRemoveBlueprintVariable,
   onRemoveBlueprintImport,
   onSetBlueprintNote,
@@ -3071,11 +3154,35 @@ export function HUD({
     selectedVariables,
     selectedAddedVariables,
   )
+  const classNames = new Set(selectedClasses.map((symbol) => symbol.name))
+  const memberFunctions = selectedFunctions.filter(
+    (symbol) => symbol.class && classNames.has(symbol.class),
+  )
+  const freeFunctions = selectedFunctions.filter(
+    (symbol) => !symbol.class || !classNames.has(symbol.class),
+  )
+  const memberVariables = selectedVariables.filter(
+    (symbol) => symbol.class && classNames.has(symbol.class),
+  )
+  const freeVariables = selectedVariables.filter(
+    (symbol) => !symbol.class || !classNames.has(symbol.class),
+  )
+  const selectedBlueprintClasses = selected
+    ? blueprintClasses.filter((item) => item.file === selected.id)
+    : []
   const selectedBlueprintFunctions = selected
-    ? blueprintFunctions.filter((item) => item.file === selected.id)
+    ? blueprintFunctions.filter(
+        (item) =>
+          item.file === selected.id &&
+          (!item.class || !classNames.has(item.class)),
+      )
     : []
   const selectedBlueprintVariables = selected
-    ? blueprintVariables.filter((item) => item.file === selected.id)
+    ? blueprintVariables.filter(
+        (item) =>
+          item.file === selected.id &&
+          (!item.class || !classNames.has(item.class)),
+      )
     : []
   const selectedBlueprintImports = selected
     ? blueprintImports.filter((item) => item.file === selected.id)
@@ -3234,7 +3341,7 @@ export function HUD({
     })
   }
   const openSymbolNote = (
-    kind: 'function' | 'variable',
+    kind: 'class' | 'function' | 'variable',
     name: string,
   ) => {
     if (!selected || !onSetBlueprintNote) return
@@ -3774,6 +3881,54 @@ export function HUD({
       </div>
     )
   }
+  const renderClassMember = (
+    symbol: (typeof memberFunctions)[number],
+    kind: 'function' | 'variable',
+  ) => (
+    <BlueprintSymbolRow
+      key={`${kind}-${symbol.class ?? ''}-${symbol.name}`}
+      name={symbol.name}
+      className={
+        symbolChangeClass(
+          (kind === 'function' ? functionChange : variableChange).get(symbol.name),
+        ) ?? (symbol.intended ? 'hud-intended' : undefined)
+      }
+      hasNote={Boolean(
+        findBlueprintNote(blueprintNotes, selected?.id ?? '', kind, symbol.name),
+      )}
+      noteOpen={
+        noteEditor?.kind === kind &&
+        noteEditor.file === selected?.id &&
+        noteEditor.name === symbol.name
+      }
+      canEdit={Boolean(canEditBlueprint && onSetBlueprintNote && selected)}
+      canRemove={Boolean(canEditBlueprint && symbol.intended)}
+      pointerTarget={
+        selected
+          ? { kind, path: selected.id, name: symbol.name }
+          : undefined
+      }
+      colorPointers={blueprintColorPointers}
+      currentColorId={blueprintColor}
+      onRemove={() => {
+        if (!selected) return
+        if (kind === 'function') onRemoveBlueprintFunction?.(selected.id, symbol.name, symbol.class)
+        else onRemoveBlueprintVariable?.(selected.id, symbol.name, symbol.class)
+      }}
+      onOpenNote={() => openSymbolNote(kind, symbol.name)}
+      onTogglePoint={
+        selected && onToggleBlueprintPointer
+          ? (color) =>
+              onToggleBlueprintPointer({
+                kind,
+                path: selected.id,
+                name: symbol.name,
+                color,
+              })
+          : undefined
+      }
+    />
+  )
   const bottomBarInactive = explainMode
   return (
     <div className="hud">
@@ -4016,38 +4171,140 @@ export function HUD({
                 />
               </>
             )}
-          {!selected.binary && selectedClasses.length > 0 && (
-            <>
-              <div className="hud-section-title">Classes</div>
-              <ul>
-                {selectedClasses.map((symbol) => (
-                  <li key={`class-${symbol.name}`}>
-                    <span
-                      className={
-                        symbolChangeClass(functionChange.get(symbol.name)) ??
-                        (symbol.intended ? 'hud-intended' : undefined)
-                      }
-                    >
-                      {symbol.name}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
           {!selected.binary && (
             <>
+          <div className="hud-section-title">Classes</div>
+          {selectedClasses.length === 0 && selectedBlueprintClasses.length === 0 ? (
+            <p>No classes</p>
+          ) : (
+            <ul>
+              {selectedClasses.map((symbol) => {
+                const functions = memberFunctions.filter(
+                  (item) => item.class === symbol.name,
+                )
+                const variables = memberVariables.filter(
+                  (item) => item.class === symbol.name,
+                )
+                return (
+                  <BlueprintSymbolRow
+                    key={`class-${symbol.name}`}
+                    name={symbol.name}
+                    className={
+                      symbol.intended ? 'hud-class-name hud-intended' : 'hud-class-name'
+                    }
+                    hasNote={Boolean(
+                      findBlueprintNote(
+                        blueprintNotes,
+                        selected.id,
+                        'class',
+                        symbol.name,
+                      ),
+                    )}
+                    noteOpen={
+                      noteEditor?.kind === 'class' &&
+                      noteEditor.file === selected.id &&
+                      noteEditor.name === symbol.name
+                    }
+                    canEdit={Boolean(canEditBlueprint && onSetBlueprintNote)}
+                    canRemove={Boolean(canEditBlueprint && symbol.intended)}
+                    pointerTarget={{
+                      kind: 'class',
+                      path: selected.id,
+                      name: symbol.name,
+                    }}
+                    colorPointers={blueprintColorPointers}
+                    currentColorId={blueprintColor}
+                    onRemove={() =>
+                      onRemoveBlueprintClass?.(selected.id, symbol.name)
+                    }
+                    onOpenNote={() => openSymbolNote('class', symbol.name)}
+                    onTogglePoint={
+                      onToggleBlueprintPointer
+                        ? (color) =>
+                            onToggleBlueprintPointer({
+                              kind: 'class',
+                              path: selected.id,
+                              name: symbol.name,
+                              color,
+                            })
+                        : undefined
+                    }
+                  >
+                    {functions.length > 0 ||
+                    variables.length > 0 ||
+                    (canEditBlueprint &&
+                      (onAddBlueprintFunction || onAddBlueprintVariable)) ? (
+                      <ul className="hud-class-members">
+                        <ClassMemberGroup
+                          title="Functions"
+                          addLabel="add func"
+                          placeholder="Function name"
+                          canAdd={Boolean(canEditBlueprint && onAddBlueprintFunction)}
+                          onAdd={
+                            onAddBlueprintFunction
+                              ? (name) =>
+                                  onAddBlueprintFunction(
+                                    selected.id,
+                                    name,
+                                    symbol.name,
+                                  )
+                              : undefined
+                          }
+                        >
+                          {functions.map((item) =>
+                            renderClassMember(item, 'function'),
+                          )}
+                        </ClassMemberGroup>
+                        <ClassMemberGroup
+                          title="Vars"
+                          addLabel="add var"
+                          placeholder="Variable name"
+                          canAdd={Boolean(canEditBlueprint && onAddBlueprintVariable)}
+                          onAdd={
+                            onAddBlueprintVariable
+                              ? (name) =>
+                                  onAddBlueprintVariable(
+                                    selected.id,
+                                    name,
+                                    symbol.name,
+                                  )
+                              : undefined
+                          }
+                        >
+                          {variables.map((item) =>
+                            renderClassMember(item, 'variable'),
+                          )}
+                        </ClassMemberGroup>
+                      </ul>
+                    ) : null}
+                  </BlueprintSymbolRow>
+                )
+              })}
+            </ul>
+          )}
+          {canEditBlueprint && onAddBlueprintClass && (
+            <AddIntentRow
+              placeholder="Class name"
+              onAdd={(name) => onAddBlueprintClass(selected.id, name)}
+            />
+          )}
+          {(freeFunctions.length > 0 ||
+            extraAddedFunctions.length > 0 ||
+            selectedBlueprintFunctions.length > 0 ||
+            selectedClasses.length === 0) && (
+          <>
           <div className="hud-section-title">Functions</div>
-          {selectedFunctions.length === 0 &&
+          {freeFunctions.length === 0 &&
           extraAddedFunctions.length === 0 &&
           selectedBlueprintFunctions.length === 0 ? (
             <p>No functions</p>
           ) : (
             <ul>
-              {selectedFunctions.map((symbol) => (
+              {freeFunctions.map((symbol) => (
                 <BlueprintSymbolRow
-                  key={`fn-${symbol.name}`}
+                  key={`fn-${symbol.class ?? ''}-${symbol.name}`}
                   name={symbol.name}
+                  owner={symbol.class}
                   className={
                     symbolChangeClass(functionChange.get(symbol.name)) ??
                     (symbol.intended ? 'hud-intended' : undefined)
@@ -4075,7 +4332,7 @@ export function HUD({
                   colorPointers={blueprintColorPointers}
                   currentColorId={blueprintColor}
                   onRemove={() =>
-                    onRemoveBlueprintFunction?.(selected.id, symbol.name)
+                    onRemoveBlueprintFunction?.(selected.id, symbol.name, symbol.class)
                   }
                   onOpenNote={() => openSymbolNote('function', symbol.name)}
                   onTogglePoint={
@@ -4139,17 +4396,25 @@ export function HUD({
               onAdd={(name) => onAddBlueprintFunction(selected.id, name)}
             />
           )}
+          </>
+          )}
+          {(freeVariables.length > 0 ||
+            extraAddedVariables.length > 0 ||
+            selectedBlueprintVariables.length > 0 ||
+            selectedClasses.length === 0) && (
+          <>
           <div className="hud-section-title">Vars</div>
-          {selectedVariables.length === 0 &&
+          {freeVariables.length === 0 &&
           extraAddedVariables.length === 0 &&
           selectedBlueprintVariables.length === 0 ? (
             <p>No vars</p>
           ) : (
             <ul>
-              {selectedVariables.map((symbol) => (
+              {freeVariables.map((symbol) => (
                 <BlueprintSymbolRow
-                  key={`var-${symbol.name}`}
+                  key={`var-${symbol.class ?? ''}-${symbol.name}`}
                   name={symbol.name}
+                  owner={symbol.class}
                   className={
                     symbolChangeClass(variableChange.get(symbol.name)) ??
                     (symbol.intended ? 'hud-intended' : undefined)
@@ -4177,7 +4442,7 @@ export function HUD({
                   colorPointers={blueprintColorPointers}
                   currentColorId={blueprintColor}
                   onRemove={() =>
-                    onRemoveBlueprintVariable?.(selected.id, symbol.name)
+                    onRemoveBlueprintVariable?.(selected.id, symbol.name, symbol.class)
                   }
                   onOpenNote={() => openSymbolNote('variable', symbol.name)}
                   onTogglePoint={
@@ -4240,6 +4505,8 @@ export function HUD({
               placeholder="Variable name"
               onAdd={(name) => onAddBlueprintVariable(selected.id, name)}
             />
+          )}
+          </>
           )}
             </>
           )}
@@ -4566,7 +4833,7 @@ export function HUD({
               filePath: item.path,
             })
           }
-          onLoadDocument={(document) => void runLoadBlueprint({ document })}
+          onLoadDocuments={(documents) => void runLoadBlueprint({ documents })}
           onClose={closeBlueprintFileDialog}
         />
       )}

@@ -13,7 +13,7 @@ import {
   writeExtractedBlueprint,
   extractBlueprint,
 } from './extract-blueprint.mjs'
-import { parseBlueprintDocument } from '../apps/explorer/scripts/blueprint-files.mjs'
+import { readBlueprintSetFromPath } from '../apps/explorer/scripts/blueprint-files.mjs'
 import { buildScanGraph } from '../apps/explorer/scripts/scan-target.mjs'
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -77,7 +77,7 @@ test('file and folder entries fill ids from paths', () => {
 test('normalizeExtractLayer infers parent folders for kept files', () => {
   const layer = normalizeExtractLayer({
     files: [{ path: 'src/widgets/Clock.tsx' }],
-    addedFunctions: [{ name: 'Clock', file: 'src/widgets/Clock.tsx' }],
+    functions: [{ name: 'Clock', file: 'src/widgets/Clock.tsx' }],
     notes: [
       {
         file: 'src/widgets/Clock.tsx',
@@ -91,7 +91,7 @@ test('normalizeExtractLayer infers parent folders for kept files', () => {
     ['src', 'src/widgets'],
   )
   assert.equal(layer.files[0].name, 'Clock.tsx')
-  assert.equal(layer.addedFunctions[0].name, 'Clock')
+  assert.equal(layer.functions[0].name, 'Clock')
   assert.equal(layer.notes[0].kind, 'file')
 })
 
@@ -170,7 +170,7 @@ test('compact inventory skips binaries and marks tests', () => {
 test('extract-blueprint prints inventory and instruction without writing', async () => {
   const env = fixture()
   try {
-    const outputPath = path.join(env.root, 'blueprints', 'demo.json')
+    const outputPath = path.join(env.root, 'blueprints', 'demo')
     const { result, output } = await capture(() =>
       extractBlueprint(['src', 'blueprints/demo.json'], {
         cwd: env.root,
@@ -196,7 +196,7 @@ test('extract-blueprint --write saves a curated document', async () => {
       layerPath,
       JSON.stringify({
         files: [{ path: 'App.tsx' }],
-        addedFunctions: [{ name: 'App', file: 'App.tsx' }],
+        functions: [{ name: 'App', file: 'App.tsx' }],
         notes: [
           {
             file: 'App.tsx',
@@ -212,18 +212,22 @@ test('extract-blueprint --write saves a curated document', async () => {
         { cwd: env.root, targetRoot: env.root },
       ),
     )
-    const savedPath = path.join(env.root, 'blueprints', 'demo.json')
-    assert.match(output, /VISUAL_CODER_EXTRACT_SAVED/)
-    assert.equal(fs.existsSync(savedPath), true)
-    const document = parseBlueprintDocument(JSON.parse(fs.readFileSync(savedPath, 'utf8')))
+    const folder = path.join(env.root, 'blueprints', 'demo')
+    const savedPath = path.join(folder, 'demo.blueprint.json')
+    assert.match(output, /VISUAL_CODER_EXTRACT_SAVED .*demo\.blueprint\.json/)
+    assert.match(output, /VISUAL_CODER_EXTRACT_WRAPPER .*demo-wrapper\.json/)
+    assert.deepEqual(fs.readdirSync(folder).sort(), ['demo-wrapper.json', 'demo.blueprint.json'])
+    const document = JSON.parse(fs.readFileSync(savedPath, 'utf8'))
     assert.equal(document.name, 'demo')
-    assert.deepEqual(document.blueprints.find((item) => item.color === 'blue').files, [
+    assert.equal('color' in document, false)
+    assert.deepEqual(document.files, [
       { id: 'App.tsx', name: 'App.tsx', path: 'App.tsx', folder: '.' },
     ])
-    assert.equal(document.blueprints.find((item) => item.color === 'blue').addedFunctions[0].name, 'App')
-    assert.equal(document.blueprints.find((item) => item.color === 'blue').notes[0].note.includes('data fetching'), true)
+    assert.equal(document.functions[0].name, 'App')
+    assert.equal(document.notes[0].note.includes('data fetching'), true)
+    const set = readBlueprintSetFromPath(folder).set
     assert.deepEqual(
-      document.blueprints.map((item) => item.color),
+      set.blueprints.map((item) => item.color),
       ['blue'],
     )
   } finally {
@@ -240,16 +244,17 @@ test('writeExtractedBlueprint keeps only curated symbols', async () => {
       name: 'slice',
       layer: {
         files: ['src/theme.ts'],
-        addedVariables: [{ name: 'theme', file: 'src/theme.ts' }],
+        variables: [{ name: 'theme', file: 'src/theme.ts' }],
       },
     })
-    const document = parseBlueprintDocument(JSON.parse(fs.readFileSync(saved.path, 'utf8')))
-    assert.equal(document.blueprints.find((item) => item.color === 'blue').files.length, 1)
-    assert.equal(document.blueprints.find((item) => item.color === 'blue').addedFunctions.length, 0)
-    assert.deepEqual(document.blueprints.find((item) => item.color === 'blue').addedVariables, [
+    assert.equal(saved.relativePath, 'out/slice-wrapper.json')
+    const document = JSON.parse(fs.readFileSync(saved.blueprintFiles[0].path, 'utf8'))
+    assert.equal(document.files.length, 1)
+    assert.equal(document.functions.length, 0)
+    assert.deepEqual(document.variables, [
       { name: 'theme', file: 'src/theme.ts' },
     ])
-    assert.deepEqual(document.blueprints.find((item) => item.color === 'blue').folders, [
+    assert.deepEqual(document.folders, [
       { id: 'src', name: 'src', path: 'src', parent: '.' },
     ])
   } finally {
@@ -262,7 +267,7 @@ test('cli extract-blueprint writes from stdin', () => {
   try {
     const layer = JSON.stringify({
       files: [{ path: 'src/theme.ts' }],
-      addedVariables: [{ name: 'theme', file: 'src/theme.ts' }],
+      variables: [{ name: 'theme', file: 'src/theme.ts' }],
     })
     const result = spawnSync(
       process.execPath,
@@ -282,7 +287,14 @@ test('cli extract-blueprint writes from stdin', () => {
     )
     assert.equal(result.status, 0, result.stderr)
     assert.match(result.stdout, /VISUAL_CODER_EXTRACT_SAVED/)
-    assert.equal(fs.existsSync(path.join(env.root, 'blueprints/from-cli.json')), true)
+    assert.equal(
+      fs.existsSync(path.join(env.root, 'blueprints/from-cli/from-cli.blueprint.json')),
+      true,
+    )
+    assert.equal(
+      fs.existsSync(path.join(env.root, 'blueprints/from-cli/from-cli-wrapper.json')),
+      true,
+    )
   } finally {
     env.cleanup()
   }

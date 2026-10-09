@@ -250,8 +250,8 @@ npx inbase read-blueprint --session <color>
 3. Read the handshake output between `VISUAL_CODER_BLUEPRINT_START` and
    `VISUAL_CODER_BLUEPRINT_END`.
    If that dump has `enabled` true, **that blueprint is leading**. Follow it
-   as closely as possible. Treat `files`, `folders`, `addedFunctions`,
-   `addedVariables`, and `addedImports` as the source of truth for this chat.
+   as closely as possible. Treat `files`, `folders`, `functions`,
+   `variables`, and `imports` as the source of truth for this chat.
    Create those paths and add those symbols even if they are not on disk.
    Honor this session's blueprint. Do not use another session's blueprint.
    Do not omit, rename, relocate, or replace a blueprint file, folder, symbol,

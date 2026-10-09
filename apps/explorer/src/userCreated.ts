@@ -1076,7 +1076,7 @@ function parseBlueprintNote(value: unknown): BlueprintNote | null {
   if (item.kind === 'folder') {
     return { file, kind: 'folder', note }
   }
-  if (item.kind !== 'function' && item.kind !== 'variable') return null
+  if (item.kind !== 'class' && item.kind !== 'function' && item.kind !== 'variable') return null
   const name = typeof item.name === 'string' ? item.name.trim() : ''
   if (!name) return null
   return { file, kind: item.kind, name, note }
@@ -1154,7 +1154,7 @@ export function dropBlueprintFileNotes(
 export function dropBlueprintSymbolNote(
   notes: BlueprintNote[],
   file: string,
-  kind: 'function' | 'variable',
+  kind: 'class' | 'function' | 'variable',
   name: string,
 ) {
   return notes.filter(
@@ -1179,7 +1179,7 @@ function parseBlueprintPointer(value: unknown): BlueprintPointer | null {
   if (item.kind === 'file' || item.kind === 'folder') {
     return { kind: item.kind, path }
   }
-  if (item.kind !== 'function' && item.kind !== 'variable') return null
+  if (item.kind !== 'class' && item.kind !== 'function' && item.kind !== 'variable') return null
   const name = typeof item.name === 'string' ? item.name.trim() : ''
   if (!name) return null
   return { kind: item.kind, path, name }
@@ -1250,6 +1250,7 @@ export type CreatedContents = {
   blocks: UserCreatedBlock[]
   islands: UserCreatedIsland[]
   functions: PatchSymbolAddition[]
+  classes?: PatchSymbolAddition[]
   variables: PatchSymbolAddition[]
   imports: PatchImportAddition[]
   notes: BlueprintNote[]
@@ -1257,7 +1258,7 @@ export type CreatedContents = {
 }
 
 function symbolAdditionKey(item: PatchSymbolAddition) {
-  return `${item.file}:${item.name}`
+  return `${item.file}:${item.class ?? ''}:${item.name}`
 }
 
 function importAdditionKey(item: PatchImportAddition) {
@@ -1278,6 +1279,7 @@ export function omitCreatedItems<T extends CreatedContents>(
       (island) => !folders.has(createdIslandKey(island)),
     ),
     functions: current.functions.filter((item) => !files.has(item.file)),
+    classes: (current.classes ?? []).filter((item) => !files.has(item.file)),
     variables: current.variables.filter((item) => !files.has(item.file)),
     imports: current.imports.filter((item) => !files.has(item.file)),
     notes: dropBlueprintFileNotes(current.notes, files, folders),
@@ -1301,6 +1303,7 @@ export function takeCreatedItems<T extends CreatedContents>(
         folders.has(createdIslandKey(island)),
       ),
       functions: current.functions.filter((item) => files.has(item.file)),
+      classes: (current.classes ?? []).filter((item) => files.has(item.file)),
       variables: current.variables.filter((item) => files.has(item.file)),
       imports: current.imports.filter((item) => files.has(item.file)),
       notes: current.notes.filter((item) =>
@@ -1320,6 +1323,7 @@ export function mergeCreatedItems<T extends CreatedContents>(
   const fileIds = new Set(current.blocks.map((block) => block.id))
   const folderKeys = new Set(current.islands.map((island) => createdIslandKey(island)))
   const functionKeys = new Set(current.functions.map(symbolAdditionKey))
+  const classKeys = new Set((current.classes ?? []).map(symbolAdditionKey))
   const variableKeys = new Set(current.variables.map(symbolAdditionKey))
   const importKeys = new Set(current.imports.map(importAdditionKey))
   const noteKeys = new Set(current.notes.map((item) => blueprintNoteKey(item)))
@@ -1341,6 +1345,10 @@ export function mergeCreatedItems<T extends CreatedContents>(
     functions: [
       ...current.functions,
       ...extra.functions.filter((item) => !functionKeys.has(symbolAdditionKey(item))),
+    ],
+    classes: [
+      ...(current.classes ?? []),
+      ...(extra.classes ?? []).filter((item) => !classKeys.has(symbolAdditionKey(item))),
     ],
     variables: [
       ...current.variables,
@@ -1383,7 +1391,7 @@ export function moveCreatedItems<T extends CreatedContents>(
 export function dropBlueprintSymbolPointer(
   pointers: BlueprintPointer[],
   path: string,
-  kind: 'function' | 'variable',
+  kind: 'class' | 'function' | 'variable',
   name: string,
 ) {
   return pointers.filter(
@@ -1397,6 +1405,7 @@ export function remapBlueprintFileId(
   toId: string,
   data: {
     functions: PatchSymbolAddition[]
+    classes?: PatchSymbolAddition[]
     variables: PatchSymbolAddition[]
     imports: PatchImportAddition[]
     notes: BlueprintNote[]
@@ -1406,6 +1415,9 @@ export function remapBlueprintFileId(
   if (!fromId || fromId === toId) return data
   return {
     functions: data.functions.map((item) =>
+      item.file === fromId ? { ...item, file: toId } : item,
+    ),
+    classes: (data.classes ?? []).map((item) =>
       item.file === fromId ? { ...item, file: toId } : item,
     ),
     variables: data.variables.map((item) =>
@@ -1471,6 +1483,10 @@ export function remapCreatedFolderPath<T extends CreatedContents>(
       }
     }),
     functions: data.functions.map((item) => {
+      const file = mapPath(item.file)
+      return file === item.file ? item : { ...item, file }
+    }),
+    classes: (data.classes ?? []).map((item) => {
       const file = mapPath(item.file)
       return file === item.file ? item : { ...item, file }
     }),
@@ -1547,8 +1563,14 @@ export function withBlueprintIntent(
   functions: PatchSymbolAddition[] = [],
   variables: PatchSymbolAddition[] = [],
   imports: PatchImportAddition[] = [],
+  classes: PatchSymbolAddition[] = [],
 ): CodebaseGraph {
-  if (functions.length === 0 && variables.length === 0 && imports.length === 0) {
+  if (
+    functions.length === 0 &&
+    variables.length === 0 &&
+    imports.length === 0 &&
+    classes.length === 0
+  ) {
     return graph
   }
   const files = graph.files.map((file) => ({
@@ -1559,21 +1581,53 @@ export function withBlueprintIntent(
   const byId = new Map(files.map((file) => [file.id, file]))
   const known = new Set(byId.keys())
 
+  for (const item of classes) {
+    const file = byId.get(item.file)
+    if (!file) continue
+    if (file.symbols.some((symbol) => symbol.kind === 'class' && symbol.name === item.name)) {
+      continue
+    }
+    file.symbols.push({ name: item.name, kind: 'class', intended: true })
+  }
   for (const item of functions) {
     const file = byId.get(item.file)
     if (!file) continue
-    if (file.symbols.some((symbol) => symbol.kind === 'function' && symbol.name === item.name)) {
+    if (
+      file.symbols.some(
+        (symbol) =>
+          symbol.kind === 'function' &&
+          symbol.name === item.name &&
+          (symbol.class ?? '') === (item.class ?? ''),
+      )
+    ) {
       continue
     }
-    file.symbols.push({ name: item.name, kind: 'function', intended: true })
+    file.symbols.push({
+      name: item.name,
+      kind: 'function',
+      intended: true,
+      ...(item.class ? { class: item.class } : {}),
+    })
   }
   for (const item of variables) {
     const file = byId.get(item.file)
     if (!file) continue
-    if (file.symbols.some((symbol) => symbol.kind === 'variable' && symbol.name === item.name)) {
+    if (
+      file.symbols.some(
+        (symbol) =>
+          symbol.kind === 'variable' &&
+          symbol.name === item.name &&
+          (symbol.class ?? '') === (item.class ?? ''),
+      )
+    ) {
       continue
     }
-    file.symbols.push({ name: item.name, kind: 'variable', intended: true })
+    file.symbols.push({
+      name: item.name,
+      kind: 'variable',
+      intended: true,
+      ...(item.class ? { class: item.class } : {}),
+    })
   }
   for (const item of imports) {
     const file = byId.get(item.file)

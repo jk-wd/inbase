@@ -155,11 +155,13 @@ function blueprintIntentFields() {
     blueprintRevision: blueprint.revision,
     userCreatedBlocks: blueprint.files,
     userCreatedIslands: blueprint.folders,
-    blueprintFunctions: blueprint.addedFunctions,
-    blueprintVariables: blueprint.addedVariables,
-    blueprintImports: blueprint.addedImports,
+    blueprintFunctions: blueprint.functions,
+    blueprintClasses: blueprint.classes,
+    blueprintVariables: blueprint.variables,
+    blueprintImports: blueprint.imports,
     blueprintNotes: blueprint.notes,
     blueprintPointers: blueprint.pointers,
+    blueprintSteps: blueprint.steps,
   }
 }
 
@@ -458,6 +460,7 @@ async function decideBlueprints(req: IncomingMessage, res: ServerResponse) {
       directory?: string
       filePath?: string
       document?: unknown
+      documents?: Array<{ fileName?: string; document: unknown }>
       blueprints?: unknown
       global?: unknown
       locals?: unknown
@@ -478,6 +481,7 @@ async function decideBlueprints(req: IncomingMessage, res: ServerResponse) {
         name: body.name,
         filePath: body.filePath,
         document: body.document,
+        documents: body.documents,
       })
       sendJson(res, 200, loaded)
       return
@@ -532,11 +536,16 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
       folders?: unknown[]
       userCreatedBlocks?: unknown[]
       userCreatedIslands?: unknown[]
+      functions?: unknown[]
+      variables?: unknown[]
+      imports?: unknown[]
       addedFunctions?: unknown[]
       addedVariables?: unknown[]
       addedImports?: unknown[]
       notes?: unknown[]
       pointers?: unknown[]
+      deleted?: unknown[]
+      steps?: unknown[]
       dependsOn?: unknown[]
       fileId?: string
     }
@@ -617,12 +626,14 @@ async function decideIntent(req: IncomingMessage, res: ServerResponse) {
         color: body.color,
         files: body.files ?? body.userCreatedBlocks,
         folders: body.folders ?? body.userCreatedIslands,
-        addedFunctions: body.addedFunctions,
-        addedVariables: body.addedVariables,
-        addedImports: body.addedImports,
+        functions: body.functions ?? body.addedFunctions,
+        classes: body.classes,
+        variables: body.variables ?? body.addedVariables,
+        imports: body.imports ?? body.addedImports,
         notes: body.notes,
         pointers: body.pointers,
         deleted: body.deleted,
+        steps: body.steps,
         dependsOn: body.dependsOn,
       })
     } else if (action === 'blueprint_clear') {

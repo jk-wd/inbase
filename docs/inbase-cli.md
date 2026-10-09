@@ -12,5 +12,5 @@ The command name is `inbase` (via `npx inbase` or a global install). Run `inbase
 | `inbase run` | Scan the project and start the local map. Maps `target` from `inbase.json`, else the current directory. If a map is already running, prints the URL and exits |
 | `inbase run --target <dir>` | Map another folder for this run |
 | `inbase run --port <number>` | Start on another port (default: `inbase.json` port, else 5173) |
-| `inbase extract-blueprint <folder> <file>` | Scan a folder and print an inventory for `/extract-blueprint`. `--write` saves the curated blueprint |
+| `inbase extract-blueprint <folder> <output-folder>` | Scan a folder and print an inventory for `/extract-blueprint`. `--write` saves the curated blueprint as `<name>.blueprint.json` plus `<name>-wrapper.json` in the output folder |
 | `inbase help` | Show CLI help |

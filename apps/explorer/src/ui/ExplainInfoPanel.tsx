@@ -73,14 +73,29 @@ export function ExplainInfoPanel({
   onOpenFile?: (fileId: string) => void
 }) {
   const bodyRef = useRef<HTMLDivElement | null>(null)
-  const classes = file.symbols
-    .filter((symbol) => symbol.kind === 'class')
-    .map((symbol) => symbol.name)
+  const classes = file.symbols.filter((symbol) => symbol.kind === 'class')
+  const classNames = new Set(classes.map((symbol) => symbol.name))
+  const memberFunctions = file.symbols.filter(
+    (symbol) =>
+      symbol.kind === 'function' && symbol.class && classNames.has(symbol.class),
+  )
+  const memberVariables = file.symbols.filter(
+    (symbol) =>
+      symbol.kind === 'variable' && symbol.class && classNames.has(symbol.class),
+  )
   const functions = file.symbols
-    .filter((symbol) => symbol.kind === 'function')
+    .filter(
+      (symbol) =>
+        symbol.kind === 'function' &&
+        (!symbol.class || !classNames.has(symbol.class)),
+    )
     .map((symbol) => symbol.name)
   const variables = file.symbols
-    .filter((symbol) => symbol.kind === 'variable')
+    .filter(
+      (symbol) =>
+        symbol.kind === 'variable' &&
+        (!symbol.class || !classNames.has(symbol.class)),
+    )
     .map((symbol) => symbol.name)
   const pointFile = explainMatchesSymbol(point, 'file', file.id)
   const highlightFile =
@@ -139,31 +154,115 @@ export function ExplainInfoPanel({
             {!file.binary && (
               <>
                 {classes.length > 0 && (
+                  <>
+                    <div className="hud-section-title">{kindLabel('class')}</div>
+                    <ul>
+                      {classes.map((symbol) => {
+                        const functionsForClass = memberFunctions.filter(
+                          (item) => item.class === symbol.name,
+                        )
+                        const variablesForClass = memberVariables.filter(
+                          (item) => item.class === symbol.name,
+                        )
+                        const pointed = explainMatchesSymbol(point, 'class', symbol.name)
+                        const highlighted =
+                          pointed || explainHitsSymbol(highlights, 'class', symbol.name)
+                        return (
+                          <li
+                            key={`class-${symbol.name}`}
+                            className={
+                              functionsForClass.length > 0 || variablesForClass.length > 0
+                                ? 'hud-class-block'
+                                : undefined
+                            }
+                            data-explain-target={pointed ? 'true' : undefined}
+                            data-explain-highlight={
+                              highlighted && !pointed ? 'true' : undefined
+                            }
+                          >
+                            <span className="hud-class-name">{symbol.name}</span>
+                            {functionsForClass.length > 0 || variablesForClass.length > 0 ? (
+                              <ul className="hud-class-members">
+                                {functionsForClass.length > 0 && (
+                                  <>
+                                    <li className="hud-class-kind">Functions</li>
+                                    {functionsForClass.map((item) => {
+                                      const itemPointed = explainMatchesSymbol(
+                                        point,
+                                        'function',
+                                        item.name,
+                                      )
+                                      const itemHighlighted =
+                                        itemPointed ||
+                                        explainHitsSymbol(highlights, 'function', item.name)
+                                      return (
+                                        <li
+                                          key={`fn-${item.name}`}
+                                          data-explain-target={itemPointed ? 'true' : undefined}
+                                          data-explain-highlight={
+                                            itemHighlighted && !itemPointed ? 'true' : undefined
+                                          }
+                                        >
+                                          <span>{item.name}</span>
+                                        </li>
+                                      )
+                                    })}
+                                  </>
+                                )}
+                                {variablesForClass.length > 0 && (
+                                  <>
+                                    <li className="hud-class-kind">Vars</li>
+                                    {variablesForClass.map((item) => {
+                                      const itemPointed = explainMatchesSymbol(
+                                        point,
+                                        'variable',
+                                        item.name,
+                                      )
+                                      const itemHighlighted =
+                                        itemPointed ||
+                                        explainHitsSymbol(highlights, 'variable', item.name)
+                                      return (
+                                        <li
+                                          key={`var-${item.name}`}
+                                          data-explain-target={itemPointed ? 'true' : undefined}
+                                          data-explain-highlight={
+                                            itemHighlighted && !itemPointed ? 'true' : undefined
+                                          }
+                                        >
+                                          <span>{item.name}</span>
+                                        </li>
+                                      )
+                                    })}
+                                  </>
+                                )}
+                              </ul>
+                            ) : null}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </>
+                )}
+                {(functions.length > 0 || classes.length === 0) && (
                   <SymbolList
-                    title={kindLabel('class')}
-                    kind="class"
-                    names={classes}
+                    title={kindLabel('function')}
+                    kind="function"
+                    names={functions}
                     highlights={highlights}
                     point={point}
-                    empty="No classes"
+                    empty="No functions"
                   />
                 )}
-                <SymbolList
-                  title={kindLabel('function')}
-                  kind="function"
-                  names={functions}
-                  highlights={highlights}
-                  point={point}
-                  empty="No functions"
-                />
-                <SymbolList
-                  title={kindLabel('variable')}
-                  kind="variable"
-                  names={variables}
-                  highlights={highlights}
-                  point={point}
-                  empty="No vars"
-                />
+                {(variables.length > 0 || classes.length === 0) && (
+                  <SymbolList
+                    title={kindLabel('variable')}
+                    kind="variable"
+                    names={variables}
+                    highlights={highlights}
+                    point={point}
+                    empty="No vars"
+                  />
+                )}
                 <div className="hud-section-title">Imports</div>
                 {file.imports.length === 0 ? (
                   <p>No local imports</p>

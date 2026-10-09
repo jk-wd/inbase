@@ -1,0 +1,86 @@
+---
+interface Props {
+  value: unknown;
+  name?: string;
+  depth: number;
+  openDepth: number;
+  last: boolean;
+}
+
+const { value, name, depth, openDepth, last } = Astro.props;
+
+const isArray = Array.isArray(value);
+const isObject = value !== null && typeof value === "object";
+const entries: Array<[string | undefined, unknown]> = isArray
+  ? (value as unknown[]).map((item) => [undefined, item])
+  : isObject
+    ? Object.entries(value as Record<string, unknown>)
+    : [];
+const [open, close] = isArray ? ["[", "]"] : ["{", "}"];
+const comma = last ? "" : ",";
+const count = entries.length;
+const countLabel = isArray
+  ? `${count} ${count === 1 ? "item" : "items"}`
+  : `${count} ${count === 1 ? "key" : "keys"}`;
+
+const primitiveType =
+  value === null ? "null" : typeof value === "string" ? "string" : typeof value;
+---
+
+{
+  isObject && count > 0 ? (
+    <details class="jv-node" open={depth < openDepth}>
+      <summary class="jv-line">
+        {name !== undefined && (
+          <>
+            <span class="jv-key">"{name}"</span>
+            <span class="jv-punct">: </span>
+          </>
+        )}
+        <span class="jv-punct">{open}</span>
+        <span class="jv-preview">
+          <span class="jv-count">{countLabel}</span>
+          <span class="jv-punct">
+            {close}
+            {comma}
+          </span>
+        </span>
+      </summary>
+      <div class="jv-children">
+        {entries.map(([childName, child], index) => (
+          <Astro.self
+            value={child}
+            name={childName}
+            depth={depth + 1}
+            openDepth={openDepth}
+            last={index === count - 1}
+          />
+        ))}
+      </div>
+      <div class="jv-line jv-close">
+        <span class="jv-punct">
+          {close}
+          {comma}
+        </span>
+      </div>
+    </details>
+  ) : (
+    <div class="jv-line">
+      {name !== undefined && (
+        <>
+          <span class="jv-key">"{name}"</span>
+          <span class="jv-punct">: </span>
+        </>
+      )}
+      {isObject ? (
+        <span class="jv-punct">
+          {open}
+          {close}
+        </span>
+      ) : (
+        <span class={`jv-${primitiveType}`}>{JSON.stringify(value)}</span>
+      )}
+      <span class="jv-punct">{comma}</span>
+    </div>
+  )
+}

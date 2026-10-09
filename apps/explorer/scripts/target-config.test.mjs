@@ -51,14 +51,16 @@ test('lists example apps and the complete repo, skipping explorer', () => {
   const targets = listWorkspaceTargets()
   assert.deepEqual(
     targets.map((target) => target.id),
-    ['example-target', 'site', 'repo'],
+    ['example-target', 'example-csharp', 'site', 'repo'],
   )
   assert.equal(targets[0].label, 'Example target')
   assert.equal(targets[0].root, defaultTarget)
-  assert.equal(targets[1].label, 'Site')
-  assert.equal(targets[1].root, path.resolve(explorerRoot, '../site'))
-  assert.equal(targets[2].label, 'Complete repo')
-  assert.equal(targets[2].root, repoRoot)
+  assert.equal(targets[1].label, 'Example C#')
+  assert.equal(targets[1].root, path.resolve(explorerRoot, '../example-csharp'))
+  assert.equal(targets[2].label, 'Site')
+  assert.equal(targets[2].root, path.resolve(explorerRoot, '../site'))
+  assert.equal(targets[3].label, 'Complete repo')
+  assert.equal(targets[3].root, repoRoot)
 })
 
 test('discovers later example apps under apps/', () => {

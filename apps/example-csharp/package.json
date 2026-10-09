@@ -1,0 +1,6 @@
+{
+  "name": "@visual-coder/example-csharp",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Small C# class demo for the Inbase map."
+}

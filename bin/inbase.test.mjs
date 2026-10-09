@@ -1541,8 +1541,53 @@ test('read-blueprint prints deleted files and marks deleted-only blueprints enab
     assert.match(dumped.stdout, /1 deleted file\(s\)/)
     assert.match(dumped.stdout, /Delete the 1 file\(s\) in the deleted list/)
     assert.match(dumped.stdout, /\"deleted\":\s*\[\s*\n\s*"src\/Legacy\.ts"\s*\n\s*\]/m)
-    assert.match(dumped.stdout, /deleted file from this color/)
+    assert.match(dumped.stdout, /deleted file, and suggested step from this color/)
+    assert.doesNotMatch(dumped.stdout, /VISUAL_CODER_BLUEPRINT_STEPS/)
     assert.doesNotMatch(dumped.stdout, /VISUAL_CODER_NO_REQUEST/)
+  } finally {
+    cleanup()
+  }
+})
+
+test('read-blueprint prints suggested steps for the LLM to weigh', async () => {
+  const { root, cleanup } = tempProject()
+  const dataDir = path.join(root, '.inbase')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: root,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    const started = runCli(
+      ['start-session', '--session', 'steps-blueprint', '--name', 'Steps only'],
+      { cwd: root, env },
+    )
+    assert.equal(started.status, 0, started.stderr)
+
+    const store = await import(
+      pathToFileURL(path.join(packageRoot, 'apps/explorer/scripts/session-store.mjs')).href
+    )
+    store.updateBlueprint(dataDir, 'steps-blueprint', {
+      steps: ['  Add the timer types  ', '', 42, 'Render the timer'],
+    })
+    const local = store.readLocalBlueprint(dataDir, 'steps-blueprint')
+    assert.deepEqual(local.steps, ['Add the timer types', 'Render the timer'])
+    assert.equal(local.enabled, true)
+
+    store.updateBlueprint(dataDir, 'steps-blueprint', { notes: [] })
+    assert.deepEqual(
+      store.readLocalBlueprint(dataDir, 'steps-blueprint').steps,
+      ['Add the timer types', 'Render the timer'],
+    )
+
+    const dumped = runCli(
+      ['read-blueprint', '--session', 'steps-blueprint'],
+      { cwd: root, env },
+    )
+    assert.equal(dumped.status, 0, dumped.stderr)
+    assert.match(dumped.stdout, /2 suggested step\(s\)/)
+    assert.match(dumped.stdout, /VISUAL_CODER_BLUEPRINT_STEPS .*suggestions .*not the plan/)
+    assert.match(dumped.stdout, /"steps":\s*\[\s*\n\s*"Add the timer types",/m)
   } finally {
     cleanup()
   }
@@ -1571,10 +1616,13 @@ test('propose-blueprint writes files, symbols, relations, notes, pointers, and d
     )
     assert.equal(instruction.status, 0, instruction.stderr)
     assert.match(instruction.stdout, /VISUAL_CODER_PROPOSE_BLUEPRINT_INSTRUCTION_START/)
-    assert.match(instruction.stdout, /addedImports: import relations/)
-    assert.match(instruction.stdout, /pointers: point at an existing file/)
+    assert.match(instruction.stdout, /interpreting-blueprints\.md/)
+    assert.match(instruction.stdout, /imports: An import is a relation/)
+    assert.match(instruction.stdout, /pointers: A pointer is a reference/)
     assert.match(instruction.stdout, /"kind":"variable"/)
-    assert.match(instruction.stdout, /deleted: existing file paths/)
+    assert.match(instruction.stdout, /deleted: A deleted entry is an existing file path/)
+    assert.match(instruction.stdout, /steps: A step is a suggested sentence/)
+    assert.doesNotMatch(instruction.stdout, /VISUAL_CODER_BLUEPRINT_STEPS_START/)
     assert.match(instruction.stdout, /--dont-write-to-file/)
     assert.doesNotMatch(instruction.stdout, /--write/)
     assert.doesNotMatch(instruction.stdout, /pointers unless/)
@@ -1583,9 +1631,9 @@ test('propose-blueprint writes files, symbols, relations, notes, pointers, and d
       subject: 'Timer',
       files: [{ path: 'src/timer/Timer.tsx' }],
       folders: [{ path: 'src/timer' }],
-      addedFunctions: [{ name: 'Timer', file: 'src/timer/Timer.tsx' }],
-      addedVariables: [{ name: 'WORK_SECONDS', file: 'src/timer/types.ts' }],
-      addedImports: [{ name: 'Timer', from: './timer/Timer', file: 'src/App.tsx' }],
+      functions: [{ name: 'Timer', file: 'src/timer/Timer.tsx' }],
+      variables: [{ name: 'WORK_SECONDS', file: 'src/timer/types.ts' }],
+      imports: [{ name: 'Timer', from: './timer/Timer', file: 'src/App.tsx' }],
       notes: [
         { file: 'src/timer', kind: 'folder', note: 'Timer feature.' },
         { file: 'src/timer/Timer.tsx', kind: 'function', name: 'Timer', note: 'Top-level component.' },
@@ -1598,6 +1646,7 @@ test('propose-blueprint writes files, symbols, relations, notes, pointers, and d
         { kind: 'variable', path: 'src/theme.ts', name: 'theme' },
       ],
       deleted: ['src/legacy/OldTimer.tsx'],
+      steps: ['Add the timer types', 'Render Timer in App'],
     }
     const written = runCli(
       [
@@ -1610,14 +1659,33 @@ test('propose-blueprint writes files, symbols, relations, notes, pointers, and d
       { cwd: root, env, input: JSON.stringify(layer) },
     )
     assert.equal(written.status, 0, written.stderr)
-    assert.match(written.stdout, /VISUAL_CODER_BLUEPRINT_FILE blueprints\/timer-1\.json/)
-    assert.match(written.stdout, /1 file\(s\), 2 folder\(s\), 1 function\(s\), 1 var\(s\), 1 relation\(s\), 3 note\(s\), 4 pointer\(s\), 1 deleted file/)
-    const savedPath = path.join(root, 'blueprints', 'timer-1.json')
-    assert.equal(fs.existsSync(savedPath), true)
-    const document = JSON.parse(fs.readFileSync(savedPath, 'utf8'))
+    assert.match(written.stdout, /VISUAL_CODER_BLUEPRINT_FILE blueprints\/timer-1\/timer-1\.blueprint\.json/)
+    assert.match(written.stdout, /VISUAL_CODER_BLUEPRINT_WRAPPER blueprints\/timer-1\/timer-1-wrapper\.json/)
+    assert.match(written.stdout, /1 file\(s\), 2 folder\(s\), 1 function\(s\), 1 var\(s\), 1 relation\(s\), 3 note\(s\), 4 pointer\(s\), 1 deleted file\(s\), 2 suggested step\(s\)/)
+    const setFolder = path.join(root, 'blueprints', 'timer-1')
+    const document = JSON.parse(
+      fs.readFileSync(path.join(setFolder, 'timer-1.blueprint.json'), 'utf8'),
+    )
     assert.equal(document.name, 'timer-1')
-    assert.equal(document.blueprints[0].color, 'coral')
-    assert.equal(document.blueprints[0].files[0].path, 'src/timer/Timer.tsx')
+    assert.equal('color' in document, false)
+    assert.equal(document.files[0].path, 'src/timer/Timer.tsx')
+    assert.deepEqual(document.steps, [
+      'Add the timer types',
+      'Render Timer in App',
+    ])
+    const wrapper = JSON.parse(
+      fs.readFileSync(path.join(setFolder, 'timer-1-wrapper.json'), 'utf8'),
+    )
+    assert.deepEqual(wrapper.blueprints, [
+      { color: 'coral', file: 'timer-1.blueprint.json', hidden: false, dependsOn: [] },
+    ])
+
+    const withSteps = runCli(
+      ['propose-blueprint', '--session', 'coral', '--description', 'Add a timer'],
+      { cwd: root, env },
+    )
+    assert.equal(withSteps.status, 0, withSteps.stderr)
+    assert.match(withSteps.stdout, /VISUAL_CODER_BLUEPRINT_STEPS_START\n\[\n\s*"Add the timer types"/)
 
     const again = runCli(
       [
@@ -1630,8 +1698,8 @@ test('propose-blueprint writes files, symbols, relations, notes, pointers, and d
       { cwd: root, env, input: JSON.stringify(layer) },
     )
     assert.equal(again.status, 0, again.stderr)
-    assert.match(again.stdout, /VISUAL_CODER_BLUEPRINT_FILE blueprints\/timer-2\.json/)
-    assert.equal(fs.existsSync(path.join(root, 'blueprints', 'timer-2.json')), true)
+    assert.match(again.stdout, /VISUAL_CODER_BLUEPRINT_FILE blueprints\/timer-2\/timer-2\.blueprint\.json/)
+    assert.equal(fs.existsSync(path.join(root, 'blueprints', 'timer-2', 'timer-2-wrapper.json')), true)
 
     const skipped = runCli(
       [
@@ -1646,7 +1714,7 @@ test('propose-blueprint writes files, symbols, relations, notes, pointers, and d
     )
     assert.equal(skipped.status, 0, skipped.stderr)
     assert.match(skipped.stdout, /VISUAL_CODER_BLUEPRINT_FILE skipped/)
-    assert.equal(fs.existsSync(path.join(root, 'blueprints', 'timer-3.json')), false)
+    assert.equal(fs.existsSync(path.join(root, 'blueprints', 'timer-3')), false)
 
     const rejected = runCli(
       [
@@ -1671,9 +1739,9 @@ test('propose-blueprint writes files, symbols, relations, notes, pointers, and d
       saved.folders.map((folder) => folder.path),
       ['src', 'src/timer'],
     )
-    assert.equal(saved.addedFunctions[0].name, 'Timer')
-    assert.equal(saved.addedVariables[0].name, 'WORK_SECONDS')
-    assert.equal(saved.addedImports[0].name, 'Timer')
+    assert.equal(saved.functions[0].name, 'Timer')
+    assert.equal(saved.variables[0].name, 'WORK_SECONDS')
+    assert.equal(saved.imports[0].name, 'Timer')
     assert.deepEqual(
       saved.notes.map((note) => note.kind),
       ['folder', 'function', 'variable'],
@@ -1683,7 +1751,26 @@ test('propose-blueprint writes files, symbols, relations, notes, pointers, and d
       ['file', 'folder', 'function', 'variable'],
     )
     assert.deepEqual(saved.deleted, ['src/legacy/OldTimer.tsx'])
+    assert.deepEqual(saved.steps, ['Add the timer types', 'Render Timer in App'])
     assert.equal(saved.enabled, true)
+
+    const { steps: _steps, ...withoutSteps } = layer
+    const keptSteps = runCli(
+      [
+        'propose-blueprint',
+        '--session',
+        'coral',
+        '--description',
+        'Add a timer',
+        '--dont-write-to-file',
+      ],
+      { cwd: root, env, input: JSON.stringify(withoutSteps) },
+    )
+    assert.equal(keptSteps.status, 0, keptSteps.stderr)
+    assert.deepEqual(
+      store.readBlueprintByColor(dataDir, 'coral').steps,
+      ['Add the timer types', 'Render Timer in App'],
+    )
   } finally {
     cleanup()
   }

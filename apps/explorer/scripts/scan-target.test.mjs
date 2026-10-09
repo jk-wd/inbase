@@ -3,10 +3,12 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import {
   collectImportSpecifiers,
   extractImportBindings,
   extractJsSymbols,
+  extractSymbols,
   resolveSpecifierAgainst,
 } from './js-source.mjs'
 import { relationAnalyzers } from './relations/index.mjs'
@@ -34,7 +36,7 @@ test('resolves specifiers to any known file, not only JS extensions', () => {
 test('registers a JavaScript structure analyzer', () => {
   assert.deepEqual(
     structureAnalyzers.map((analyzer) => analyzer.id),
-    ['javascript'],
+    ['javascript', 'csharp'],
   )
 })
 
@@ -69,7 +71,7 @@ test('collects relative require() specifiers', () => {
 test('registers ESM, require, and HTML relation analyzers', () => {
   assert.deepEqual(
     relationAnalyzers.map((analyzer) => analyzer.id),
-    ['esm', 'require', 'html'],
+    ['esm', 'require', 'html', 'csharp'],
   )
 })
 
@@ -98,6 +100,117 @@ test('extracts CommonJS require bindings', () => {
       { name: './side-effect', from: './side-effect' },
     ],
   )
+})
+
+test('extracts C# classes, methods, and fields', () => {
+  const symbols = extractSymbols(
+    `
+      namespace TodoApp.Store;
+
+      public class TodoStore : Store, IPersistable
+      {
+          private readonly List<string> items = new();
+          public string Title { get; set; }
+          public TodoStore() { }
+          public void Add(string title) { items.Add(title); }
+      }
+    `,
+    'TodoStore.cs',
+  )
+  assert.deepEqual(symbols, [
+    { name: 'TodoStore', kind: 'class' },
+    { name: 'items', kind: 'variable', class: 'TodoStore' },
+    { name: 'Title', kind: 'variable', class: 'TodoStore' },
+    { name: 'TodoStore', kind: 'function', class: 'TodoStore' },
+    { name: 'Add', kind: 'function', class: 'TodoStore' },
+  ])
+})
+
+test('collects C# using directives as import specifiers', () => {
+  const source = `
+    global using TodoApp.Models;
+    using TodoApp.Store;
+    using static TodoApp.Store.TodoStore;
+    using Log = TodoApp.Log.Logger;
+    using var reader = new StreamReader(path);
+  `
+  assert.deepEqual(collectImportSpecifiers(source, 'Page.cs'), [
+    'TodoApp.Models',
+    'TodoApp.Store',
+    'TodoApp.Store.TodoStore',
+    'TodoApp.Log.Logger',
+  ])
+  assert.deepEqual(collectImportSpecifiers(source, 'Page.ts'), [])
+  assert.deepEqual(extractImportBindings(source, 'Page.cs'), [
+    { name: 'Models', from: 'TodoApp.Models' },
+    { name: 'Store', from: 'TodoApp.Store' },
+    { name: 'TodoStore', from: 'TodoApp.Store.TodoStore' },
+    { name: 'Logger', from: 'TodoApp.Log.Logger' },
+  ])
+})
+
+test('links C# usings to local files that declare the namespace or type', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'visual-coder-csharp-'))
+  const dest = path.join(root, 'codebase.json')
+  try {
+    fs.mkdirSync(path.join(root, 'Store'))
+    fs.writeFileSync(
+      path.join(root, 'Store/TodoStore.cs'),
+      'namespace TodoApp.Store;\npublic class TodoStore { public void Add(string title) {} }\n',
+    )
+    fs.writeFileSync(
+      path.join(root, 'Page.cs'),
+      'using TodoApp.Store;\nusing static TodoApp.Store.TodoStore;\nnamespace TodoApp.UI;\npublic class TodoPage { }\n',
+    )
+    fs.writeFileSync(
+      path.join(root, 'Other.cs'),
+      'namespace TodoApp.Other;\npublic class Other { }\n',
+    )
+    const graph = scanQuiet({ root, dest })
+    const byId = Object.fromEntries(graph.files.map((file) => [file.id, file]))
+    assert.deepEqual(byId['Page.cs'].imports, ['Store/TodoStore.cs'])
+    assert.deepEqual(byId['Store/TodoStore.cs'].imports, [])
+    assert.equal(
+      byId['Store/TodoStore.cs'].symbols.some(
+        (symbol) => symbol.kind === 'class' && symbol.name === 'TodoStore',
+      ),
+      true,
+    )
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('scans the C# example app classes and usings', () => {
+  const root = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../../example-csharp',
+  )
+  const dest = path.join(os.tmpdir(), `example-csharp-scan-${process.pid}.json`)
+  try {
+    const graph = scanQuiet({ root, dest })
+    const byId = Object.fromEntries(graph.files.map((file) => [file.id, file]))
+    const classNames = (id) =>
+      byId[id].symbols.filter((symbol) => symbol.kind === 'class').map((symbol) => symbol.name)
+    assert.deepEqual(classNames('src/Models/Todo.cs'), ['Todo'])
+    assert.deepEqual(classNames('src/Store/TodoStore.cs').sort(), ['Store', 'TodoStore'])
+    assert.deepEqual(classNames('src/Store/LoggingStore.cs'), ['LoggingStore'])
+    assert.deepEqual(classNames('src/UI/TodoPage.cs'), ['TodoPage'])
+    assert.deepEqual(classNames('src/Program.cs'), ['App'])
+    assert.deepEqual(byId['src/Store/TodoStore.cs'].imports, ['src/Models/Todo.cs'])
+    assert.deepEqual(byId['src/Store/LoggingStore.cs'].imports, ['src/Store/TodoStore.cs'])
+    assert.deepEqual(byId['src/UI/TodoPage.cs'].imports.sort(), [
+      'src/Store/LoggingStore.cs',
+      'src/Store/TodoStore.cs',
+    ])
+    assert.ok(
+      byId['src/Store/TodoStore.cs'].symbols.some(
+        (symbol) => symbol.kind === 'function' && symbol.name === 'Add' && symbol.class === 'TodoStore',
+      ),
+    )
+  } finally {
+    fs.rmSync(dest, { force: true })
+  }
 })
 
 test('scans text files, binaries, and hidden files', () => {

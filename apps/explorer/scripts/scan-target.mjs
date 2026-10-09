@@ -6,6 +6,7 @@ import {
   collectImportSpecifiers,
   extractSymbols,
 } from './js-source.mjs'
+import { applyCSharpImports } from './relations/csharp.mjs'
 import {
   collectGitignoreSets,
   extraIgnoreSets,
@@ -223,6 +224,7 @@ export function buildScanGraph({
   const extraPatterns = resolveScanIgnore(root, ignore)
   const absoluteFiles = listSourceAbsolutes(root, skipRoot, extraPatterns)
   const folders = new Map()
+  const sources = new Map()
   ensureFolder(folders, '.', name)
 
   const files = absoluteFiles.map((absolutePath) => {
@@ -246,6 +248,7 @@ export function buildScanGraph({
     }
 
     const source = fs.readFileSync(absolutePath, 'utf8')
+    sources.set(relative, source)
     return {
       id: relative,
       name: path.posix.basename(relative),
@@ -264,6 +267,7 @@ export function buildScanGraph({
   for (const file of files) {
     file.imports = [...new Set(file.imports.filter((id) => fileIds.has(id)))]
   }
+  applyCSharpImports(files, sources)
 
   for (const file of files) {
     folders.get(file.folder).files.push(file.id)

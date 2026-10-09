@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "kind": "inbase-wrapper",
+  "name": "sticky-notes",
+  "savedAt": "2026-09-20T06:30:00.000Z",
+  "blueprints": [
+    {
+      "color": "blue",
+      "file": "sticky-notes.blueprint.json",
+      "hidden": false,
+      "dependsOn": []
+    }
+  ]
+}

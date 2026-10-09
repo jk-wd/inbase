@@ -16,7 +16,8 @@ npm run dev
 
 `npm run dev` maps `apps/example-target` by default and stores runtime data in
 repo-root `inbase-dev/` (gitignored, visible for debugging). Use **Look at** in
-the map to switch to the complete repository. Set `INBASE_LOOK_AT=false` in a
+the map to switch to `apps/example-csharp` (a small C# class project) or the
+complete repository. Set `INBASE_LOOK_AT=false` in a
 repo-root `.env` (or the shell) to hide that control. To map another project:
 
 ```bash
@@ -29,7 +30,8 @@ To run the example React app itself:
 npm run dev:target
 ```
 
-`apps/example-target/blueprints/` has four sample React app blueprints.
+`apps/example-target/blueprints/` has four sample React app blueprints, one
+folder each with a `.blueprint.json` and its `-wrapper.json`.
 Load one from **More → Load** on the map. `todo-app` is a single Blue layer
 you can run with `/blue` or `/connect`.
 

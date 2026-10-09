@@ -17,7 +17,7 @@
 
 When an LLM writes code, it takes over the mental map of the codebase. You lose track of what went where — you lose the mental map of the codebase.
 
-Inbase puts that map in front of you. You draw the intended change as a **blueprint** on a visualization of the real code — planned files, folders, functions, variables, imports, and notes. The LLM must follow that layout. Every step updates the map, so you see the new structure as it lands.
+Inbase puts that map in front of you. You draw the intended change as a **blueprint** on a visualization of the real code — planned files, folders, classes, functions, variables, imports, and notes. The LLM must follow that layout. Every step updates the map, so you see the new structure as it lands.
 
 
 
@@ -28,13 +28,15 @@ Inbase puts that map in front of you. You draw the intended change as a **bluepr
 | | Today | Fallback | Add more |
 | --- | --- | --- | --- |
 | Colors | Dark grey for every file | | |
-| Relations | ESM `import`, `require()`, HTML `<script src>` | Packages and remote URLs | `apps/explorer/scripts/relations/` |
-| Structure | Functions, classes, vars in JS/TS (info panel) | No symbols listed | `apps/explorer/scripts/structure/` |
+| Relations | ESM `import`, `require()`, HTML `<script src>`, C# `using` | Packages and remote URLs | `apps/explorer/scripts/relations/` |
+| Structure | Functions, classes, and vars in JS/TS and C# (info panel). Methods and fields sit under their class | No symbols listed | `apps/explorer/scripts/structure/` |
 | Editors | Cursor, Claude Code, Codex, Zed, Copilot, Cline, OpenCode, LM Studio, Bionic (`inbase init <editor>`) | Map still runs in the browser | `bin/editors/` |
 
 ---
 
 ## Manual
+
+Guides are published at [in-base.dev/docs](https://in-base.dev/docs). The blueprint file format is the [blueprint spec](https://in-base.dev/blueprint-spec).
 
 Keep `inbase run` open while you work.
 

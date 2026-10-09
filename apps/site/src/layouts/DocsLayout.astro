@@ -1,12 +1,38 @@
 ---
 import { DOC_PAGES } from "../docPages";
 
-interface Props {
-  currentSlug: string;
+interface MenuItem {
+  href: string;
   title: string;
+  current?: boolean;
 }
 
-const { currentSlug, title } = Astro.props;
+interface Props {
+  currentSlug?: string;
+  title: string;
+  section?: "docs" | "blueprint-spec";
+  menu?: MenuItem[];
+  menuLabel?: string;
+  brand?: string | null;
+}
+
+const {
+  currentSlug,
+  title,
+  section = "docs",
+  menuLabel = "Manual",
+  brand = "Inbase",
+} = Astro.props;
+
+const documentTitle = brand ? `${title} · ${brand}` : title;
+
+const menu: MenuItem[] =
+  Astro.props.menu ??
+  DOC_PAGES.map((page) => ({
+    href: page.slug === DOC_PAGES[0].slug ? "/docs" : `/docs/${page.slug}`,
+    title: page.title,
+    current: page.slug === currentSlug,
+  }));
 ---
 
 <html lang="en">
@@ -17,12 +43,12 @@ const { currentSlug, title } = Astro.props;
       name="description"
       content="Visual map of your codebase with blueprint-driven AI coding for Cursor, Claude Code, Codex, and other LLM editors."
     />
-    <meta property="og:title" content={`${title} · Inbase`} />
+    <meta property="og:title" content={documentTitle} />
     <meta
       property="og:description"
       content="Draw blueprints on a live map of your code. LLMs follow the layout step by step."
     />
-    <title>{title} · Inbase</title>
+    <title>{documentTitle}</title>
     <script is:inline>
       (() => {
         const stored = localStorage.getItem("theme");
@@ -194,9 +220,14 @@ const { currentSlug, title } = Astro.props;
         margin: 5.5rem auto 3rem;
       }
 
-      .docs-menu {
+      .docs-shell > nav {
         position: sticky;
         top: 5.5rem;
+        max-height: calc(100vh - 6.5rem);
+        overflow-y: auto;
+      }
+
+      .docs-menu {
         margin: 0;
         padding: 0.45rem;
         list-style: none;
@@ -256,8 +287,12 @@ const { currentSlug, title } = Astro.props;
           grid-template-columns: 1fr;
         }
 
-        .docs-menu {
+        .docs-shell > nav {
           position: static;
+          max-height: none;
+        }
+
+        .docs-menu {
           display: flex;
           flex-wrap: wrap;
           gap: 0.2rem;
@@ -373,7 +408,13 @@ const { currentSlug, title } = Astro.props;
           <a href="/">Home</a>
         </li>
         <li>
-          <a href="/docs" aria-current="page">Docs</a>
+          <a href="/docs" aria-current={section === "docs" ? "page" : undefined}>Docs</a>
+        </li>
+        <li>
+          <a
+            href="/blueprint-spec"
+            aria-current={section === "blueprint-spec" ? "page" : undefined}
+          >Blueprint spec</a>
         </li>
       </ul>
       <button
@@ -403,15 +444,14 @@ const { currentSlug, title } = Astro.props;
     </nav>
 
     <div class="docs-shell">
-      <nav aria-label="Manual">
+      <nav aria-label={menuLabel}>
         <ul class="docs-menu">
           {
-            DOC_PAGES.map((page) => (
+            menu.map((item) => (
               <li>
-                <a
-                  href={page.slug === DOC_PAGES[0].slug ? "/docs" : `/docs/${page.slug}`}
-                  aria-current={page.slug === currentSlug ? "page" : undefined}
-                >{page.title}</a>
+                <a href={item.href} aria-current={item.current ? "page" : undefined}>
+                  {item.title}
+                </a>
               </li>
             ))
           }

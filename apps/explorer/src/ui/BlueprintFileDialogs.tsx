@@ -76,8 +76,8 @@ export function BlueprintSaveDialog({
             <h1 id="hud-blueprint-file-title">{title}</h1>
             <p className="hud-note-subtitle">
               {mode === 'save-as'
-                ? 'Choose a name and folder. Leave the folder as blueprints to use the project default.'
-                : 'Saved in the project blueprints folder. Use Save as to pick another folder.'}
+                ? 'Choose a name and a parent folder. The blueprint is saved in its own folder named after it.'
+                : 'Saved as its own folder in the project blueprints folder. Use Save as to pick another parent folder.'}
             </p>
           </div>
           <button className="hud-button" type="button" onClick={onClose}>
@@ -98,14 +98,14 @@ export function BlueprintSaveDialog({
         </label>
         {mode === 'save-as' ? (
           <label className="hud-blueprint-file-field">
-            <span>Folder</span>
+            <span>Parent folder</span>
             <input
               value={directory}
               onChange={(event) => setDirectory(event.target.value)}
               placeholder={defaultDirectory}
               autoComplete="off"
               spellCheck={false}
-              aria-label="Blueprint folder"
+              aria-label="Blueprint parent folder"
             />
           </label>
         ) : null}
@@ -129,7 +129,7 @@ export function BlueprintLoadDialog({
   busy,
   error,
   onLoad,
-  onLoadDocument,
+  onLoadDocuments,
   onClose,
 }: {
   directory: string
@@ -137,7 +137,7 @@ export function BlueprintLoadDialog({
   busy: boolean
   error: string | null
   onLoad: (item: SavedBlueprintListItem) => void
-  onLoadDocument: (document: unknown) => void
+  onLoadDocuments: (documents: Array<{ fileName: string; document: unknown }>) => void
   onClose: () => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
@@ -167,7 +167,8 @@ export function BlueprintLoadDialog({
         </div>
         {items.length === 0 ? (
           <p className="hud-blueprint-file-empty">
-            No blueprints in the project folder yet. Save one, or choose a file.
+            No blueprints in the project folder yet. Save one, or choose the wrapper and
+            .blueprint.json files of a blueprint folder.
           </p>
         ) : (
           <ul className="hud-blueprint-file-list">
@@ -195,18 +196,26 @@ export function BlueprintLoadDialog({
             className="hud-blueprint-file-hidden"
             type="file"
             accept="application/json,.json"
-            aria-label="Choose blueprint file"
+            multiple
+            aria-label="Choose blueprint files"
             onChange={(event) => {
-              const file = event.target.files?.[0]
+              const files = [...(event.target.files ?? [])]
               event.target.value = ''
-              if (!file) return
-              void file.text().then((text) => {
-                try {
-                  setParseError(null)
-                  onLoadDocument(JSON.parse(text))
-                } catch {
-                  setParseError('That file is not valid JSON.')
+              if (files.length === 0) return
+              void Promise.all(
+                files.map(async (file) => ({ fileName: file.name, text: await file.text() })),
+              ).then((read) => {
+                const documents: Array<{ fileName: string; document: unknown }> = []
+                for (const item of read) {
+                  try {
+                    documents.push({ fileName: item.fileName, document: JSON.parse(item.text) })
+                  } catch {
+                    setParseError(`${item.fileName} is not valid JSON.`)
+                    return
+                  }
                 }
+                setParseError(null)
+                onLoadDocuments(documents)
               })
             }}
           />
@@ -216,7 +225,7 @@ export function BlueprintLoadDialog({
             disabled={busy}
             onClick={() => fileRef.current?.click()}
           >
-            Choose file…
+            Choose files…
           </button>
           <button className="hud-button" type="button" onClick={onClose}>
             Cancel

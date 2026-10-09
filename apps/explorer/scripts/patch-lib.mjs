@@ -553,10 +553,12 @@ export const emptyIntent = {
   userCreatedBlocks: [],
   userCreatedIslands: [],
   blueprintFunctions: [],
+  blueprintClasses: [],
   blueprintVariables: [],
   blueprintImports: [],
   blueprintNotes: [],
   blueprintPointers: [],
+  blueprintSteps: [],
 }
 
 export function isLastStep(intent) {

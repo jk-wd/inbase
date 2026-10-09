@@ -1192,9 +1192,9 @@ test('shares user-placed files with the chat after Send blueprint', () => {
     updateBlueprint(env.dataDir, 'blue-chat', {
       userCreatedBlocks: [block],
       folders: [island],
-      addedFunctions: [{ name: 'Clock', file: 'src/New.tsx' }],
-      addedVariables: [{ name: 'tick', file: 'src/a.ts' }],
-      addedImports: [
+      functions: [{ name: 'Clock', file: 'src/New.tsx' }],
+      variables: [{ name: 'tick', file: 'src/a.ts' }],
+      imports: [
         { name: 'Clock', from: 'src/New.tsx', file: 'src/a.ts' },
       ],
     })
@@ -1435,7 +1435,7 @@ test('blueprint on a color can be cleaned up', () => {
     updateBlueprint(env.dataDir, null, {
       userCreatedBlocks: [block, pending],
       folders: [island],
-      addedFunctions: [
+      functions: [
         { name: 'Clock', file: 'src/New.tsx' },
         { name: 'value', file: 'src/a.ts' },
       ],
@@ -1446,7 +1446,7 @@ test('blueprint on a color can be cleaned up', () => {
       ['src/New.tsx'],
     )
     assert.deepEqual(cleaned.folders, [])
-    assert.deepEqual(cleaned.addedFunctions, [
+    assert.deepEqual(cleaned.functions, [
       { name: 'Clock', file: 'src/New.tsx' },
     ])
     assert.equal(cleaned.hidden, false)
@@ -2367,7 +2367,7 @@ test('accepting the last proposal does not clear the session', () => {
     }
     updateBlueprint(env.dataDir, 'finish-blue', {
       userCreatedBlocks: [block],
-      addedFunctions: [{ name: 'Draft', file: 'src/Draft.tsx' }],
+      functions: [{ name: 'Draft', file: 'src/Draft.tsx' }],
     })
     sendBlueprint(env.dataDir, 'finish-blue')
     reportPlan(env.dataDir, {

@@ -8,6 +8,8 @@ If this chat already attached, stay. Do not attach. Treat a later request as a c
 
 After `read-blueprint`, look at this color's blueprint only. Plan sequential steps (`1`, `2`, `3`). This chat implements each invoked step itself, then `propose-patch --session purple --step <id>`. Do not spawn subagents. The blueprint may list `deleted` files (paths or ids): delete those files as part of the plan, including their imports and references.
 
+Read `interpreting-blueprints.md` beside the inbase `SKILL.md`. Interpret every blueprint entity that way.
+
 ```bash
 npx inbase attach --color purple
 ```

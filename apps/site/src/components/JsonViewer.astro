@@ -1,0 +1,225 @@
+---
+import JsonNode from "./JsonNode.astro";
+
+interface Props {
+  data: unknown;
+  title?: string;
+  openDepth?: number;
+}
+
+const { data, title = "JSON", openDepth = Infinity } = Astro.props;
+const source = JSON.stringify(data, null, 2);
+---
+
+<figure class="jv" data-json-viewer data-json={source}>
+  <figcaption class="jv-bar">
+    <span class="jv-title">{title}</span>
+    <span class="jv-actions">
+      <button type="button" data-jv-action="expand">Expand all</button>
+      <button type="button" data-jv-action="collapse">Collapse all</button>
+      <button type="button" data-jv-action="copy">Copy</button>
+    </span>
+  </figcaption>
+  <div class="jv-body">
+    <JsonNode value={data} depth={0} openDepth={openDepth} last />
+  </div>
+</figure>
+
+<script>
+  document.addEventListener("click", async (event) => {
+    const button =
+      event.target instanceof Element
+        ? event.target.closest<HTMLButtonElement>("[data-jv-action]")
+        : null;
+    const viewer = button?.closest<HTMLElement>("[data-json-viewer]");
+    if (!button || !viewer) return;
+    const action = button.dataset.jvAction;
+    if (action === "expand" || action === "collapse") {
+      for (const node of viewer.querySelectorAll("details")) {
+        node.open = action === "expand";
+      }
+      if (action === "collapse") {
+        viewer.querySelector("details")?.setAttribute("open", "");
+      }
+      return;
+    }
+    if (action === "copy") {
+      try {
+        await navigator.clipboard.writeText(viewer.dataset.json ?? "");
+        button.textContent = "Copied";
+      } catch {
+        button.textContent = "Copy failed";
+      }
+      setTimeout(() => {
+        button.textContent = "Copy";
+      }, 1400);
+    }
+  });
+</script>
+
+<style is:global>
+  .jv {
+    margin: 1.25rem 0 0.9rem;
+    overflow: hidden;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 0.85rem;
+    background: #fafafa;
+    --jv-key: #7c3aed;
+    --jv-string: #0f7b3e;
+    --jv-number: #b45309;
+    --jv-boolean: #0369a1;
+    --jv-null: #6b7280;
+    --jv-punct: #6b7280;
+    --jv-muted: rgba(0, 0, 0, 0.45);
+  }
+
+  html[data-theme="dark"] .jv {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: #121212;
+    --jv-key: #c4b5fd;
+    --jv-string: #86efac;
+    --jv-number: #fcd34d;
+    --jv-boolean: #7dd3fc;
+    --jv-null: #9ca3af;
+    --jv-punct: #9ca3af;
+    --jv-muted: rgba(255, 255, 255, 0.45);
+  }
+
+  .jv-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.45rem 0.6rem 0.45rem 0.9rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    font: 500 0.8rem/1.2 system-ui, sans-serif;
+  }
+
+  html[data-theme="dark"] .jv-bar {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .jv-title {
+    overflow: hidden;
+    color: var(--jv-muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .jv-actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 0.25rem;
+  }
+
+  .jv-actions button {
+    padding: 0.3rem 0.6rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .jv-actions button:hover {
+    border-color: rgba(0, 0, 0, 0.12);
+    background: rgba(0, 0, 0, 0.05);
+  }
+
+  html[data-theme="dark"] .jv-actions button:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .jv-body {
+    overflow-x: auto;
+    padding: 0.75rem 0.9rem 0.85rem 0.4rem;
+    font: 0.84rem/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  .jv-line {
+    position: relative;
+    padding-left: 1.1rem;
+    white-space: pre;
+  }
+
+  .jv-node > summary {
+    display: block;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .jv-node > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .jv-node > summary::before {
+    content: "";
+    position: absolute;
+    top: 0.62em;
+    left: 0.3rem;
+    border-top: 0.28rem solid transparent;
+    border-bottom: 0.28rem solid transparent;
+    border-left: 0.36rem solid var(--jv-punct);
+    transition: transform 150ms ease;
+  }
+
+  .jv-node[open] > summary::before {
+    transform: rotate(90deg);
+  }
+
+  .jv-node > summary:hover {
+    background: rgba(0, 0, 0, 0.04);
+  }
+
+  html[data-theme="dark"] .jv-node > summary:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .jv-node[open] > summary .jv-preview {
+    display: none;
+  }
+
+  .jv-count {
+    margin: 0 0.35rem;
+    padding: 0 0.4rem;
+    border-radius: 0.3rem;
+    background: rgba(127, 127, 127, 0.14);
+    color: var(--jv-muted);
+    font-size: 0.85em;
+  }
+
+  .jv-children {
+    margin-left: 0.55rem;
+    padding-left: 0.6rem;
+    border-left: 1px dashed rgba(127, 127, 127, 0.3);
+  }
+
+  .jv-key {
+    color: var(--jv-key);
+  }
+
+  .jv-string {
+    color: var(--jv-string);
+  }
+
+  .jv-number,
+  .jv-bigint {
+    color: var(--jv-number);
+  }
+
+  .jv-boolean {
+    color: var(--jv-boolean);
+  }
+
+  .jv-null {
+    color: var(--jv-null);
+    font-style: italic;
+  }
+
+  .jv-punct {
+    color: var(--jv-punct);
+  }
+</style>

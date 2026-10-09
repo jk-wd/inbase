@@ -5,13 +5,24 @@ import {
   emptyBlueprint,
   findSessionIdByColor,
   namedBlueprintDependsOn,
+  namedBlueprintSteps,
+  resolveSessionColor,
   SESSION_COLORS,
   writeBlueprintByColor,
 } from './session-store.mjs'
 
 export const BLUEPRINTS_DIR_NAME = 'blueprints'
-export const BLUEPRINT_DOCUMENT_KIND = 'inbase-blueprint'
-export const BLUEPRINT_DOCUMENT_VERSION = 1
+export const BLUEPRINT_KIND = 'blueprint'
+const LEGACY_BLUEPRINT_KIND = 'inbase-blueprint'
+
+function isBlueprintKind(kind) {
+  return kind === BLUEPRINT_KIND || kind === LEGACY_BLUEPRINT_KIND
+}
+export const BLUEPRINT_VERSION = 1
+export const WRAPPER_KIND = 'inbase-wrapper'
+export const WRAPPER_VERSION = 1
+export const BLUEPRINT_FILE_SUFFIX = '.blueprint.json'
+export const WRAPPER_FILE_SUFFIX = '-wrapper.json'
 
 export function defaultBlueprintsDir(targetRoot) {
   return path.join(path.resolve(targetRoot), BLUEPRINTS_DIR_NAME)
@@ -27,59 +38,83 @@ export function blueprintSubjectSlug(value) {
   return slug || 'blueprint'
 }
 
-export function nextNumberedBlueprintFile(targetRoot, subject) {
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+export function nextNumberedBlueprintSet(targetRoot, subject) {
   const slug = blueprintSubjectSlug(subject)
   const directory = defaultBlueprintsDir(targetRoot)
+  const pattern = new RegExp(`^${escapeRegExp(slug)}-(\\d+)(?:\\.json)?$`, 'i')
   let max = 0
   if (fs.existsSync(directory)) {
-    const pattern = new RegExp(`^${slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)\\.json$`, 'i')
-    for (const fileName of fs.readdirSync(directory)) {
-      const match = pattern.exec(fileName)
+    for (const entry of fs.readdirSync(directory)) {
+      const match = pattern.exec(entry)
       if (!match) continue
       const num = Number(match[1])
       if (Number.isInteger(num) && num > max) max = num
     }
   }
   const number = max + 1
+  const name = `${slug}-${number}`
   return {
     subject: slug,
     number,
-    fileName: `${slug}-${number}.json`,
-    filePath: `blueprints/${slug}-${number}.json`,
+    name,
+    folderPath: `${BLUEPRINTS_DIR_NAME}/${name}`,
   }
 }
 
-export function blueprintFileName(name) {
+function stripBlueprintSuffix(value) {
+  return value
+    .replace(/-wrapper\.json$/i, '')
+    .replace(/\.blueprint\.json$/i, '')
+    .replace(/\.json$/i, '')
+}
+
+export function blueprintSetName(name) {
   const trimmed = typeof name === 'string' ? name.trim() : ''
   if (!trimmed) throw new Error('Blueprint name is required')
-  const base = path.basename(trimmed).replace(/\.json$/i, '')
-  const safe = base
+  const safe = stripBlueprintSuffix(path.basename(trimmed))
     .replace(/[\\/]/g, '-')
     .replace(/[?%*:|"<>]/g, '-')
     .replace(/\s+/g, ' ')
     .trim()
   if (!safe) throw new Error('Blueprint name is required')
-  return `${safe}.json`
+  return safe
 }
 
-function withJsonExtension(filePath) {
-  return filePath.toLowerCase().endsWith('.json') ? filePath : `${filePath}.json`
+export function wrapperFileName(setName) {
+  return `${setName}${WRAPPER_FILE_SUFFIX}`
 }
 
-export function resolveBlueprintSavePath(targetRoot, input = {}) {
-  const target = path.resolve(targetRoot)
-  const filePath = typeof input.filePath === 'string' ? input.filePath.trim() : ''
-  if (filePath) return withJsonExtension(resolveAgainst(target, filePath))
-  const fileName = blueprintFileName(input.name)
-  const directory = typeof input.directory === 'string' ? input.directory.trim() : ''
-  const dir = directory
-    ? resolveAgainst(target, directory)
-    : defaultBlueprintsDir(target)
-  return path.join(dir, fileName)
+export function blueprintFileNameFor(setName, color, single) {
+  return single
+    ? `${setName}${BLUEPRINT_FILE_SUFFIX}`
+    : `${setName}-${color}${BLUEPRINT_FILE_SUFFIX}`
 }
 
 function resolveAgainst(targetRoot, value) {
   return path.isAbsolute(value) ? path.normalize(value) : path.resolve(targetRoot, value)
+}
+
+function folderFromPath(filePath) {
+  const base = path.basename(filePath)
+  if (/-wrapper\.json$/i.test(base) || /\.blueprint\.json$/i.test(base)) {
+    return path.dirname(filePath)
+  }
+  return path.join(path.dirname(filePath), stripBlueprintSuffix(base))
+}
+
+export function resolveBlueprintSetFolder(targetRoot, input = {}) {
+  const target = path.resolve(targetRoot)
+  const folder = typeof input.folder === 'string' ? input.folder.trim() : ''
+  if (folder) return resolveAgainst(target, folder)
+  const filePath = typeof input.filePath === 'string' ? input.filePath.trim() : ''
+  if (filePath) return folderFromPath(resolveAgainst(target, filePath))
+  const directory = typeof input.directory === 'string' ? input.directory.trim() : ''
+  const parent = directory ? resolveAgainst(target, directory) : defaultBlueprintsDir(target)
+  return path.join(parent, blueprintSetName(input.name))
 }
 
 function describePath(targetRoot, filePath) {
@@ -252,123 +287,286 @@ function withApplicableNotes(layer, existingFileIds, targetRoot) {
   }
 }
 
-function layerFields(value, colorId = null) {
+const CONTENT_KEYS = [
+  'files',
+  'folders',
+  'functions',
+  'classes',
+  'variables',
+  'imports',
+  'notes',
+  'pointers',
+  'deleted',
+  'steps',
+]
+
+function arrayField(value, key, legacyKey) {
+  if (Array.isArray(value?.[key])) return value[key]
+  if (Array.isArray(value?.[legacyKey])) return value[legacyKey]
+  return []
+}
+
+function blueprintContent(value) {
   return {
-    hidden: Boolean(value?.hidden),
     files: layerList(value, 'files', 'userCreatedBlocks', blueprintFileEntry),
     folders: layerList(value, 'folders', 'userCreatedIslands', blueprintFolderEntry),
-    addedFunctions: Array.isArray(value?.addedFunctions) ? value.addedFunctions : [],
-    addedVariables: Array.isArray(value?.addedVariables) ? value.addedVariables : [],
-    addedImports: Array.isArray(value?.addedImports) ? value.addedImports : [],
+    functions: arrayField(value, 'functions', 'addedFunctions'),
+    classes: arrayField(value, 'classes'),
+    variables: arrayField(value, 'variables', 'addedVariables'),
+    imports: arrayField(value, 'imports', 'addedImports'),
     notes: blueprintNotes(value?.notes),
     pointers: Array.isArray(value?.pointers) ? value.pointers : [],
     deleted: Array.isArray(value?.deleted)
       ? [...new Set(value.deleted.filter((item) => typeof item === 'string' && item.trim()))]
       : [],
-    dependsOn: namedBlueprintDependsOn(colorId ?? value?.color, value?.dependsOn),
+    steps: namedBlueprintSteps(value?.steps),
   }
 }
 
-function localLayer(value) {
-  const color = typeof value?.color === 'string' ? value.color.trim() : ''
-  if (!color || color === 'global') return null
+function colorLayer(value) {
+  const color = resolveSessionColor(typeof value?.color === 'string' ? value.color.trim() : '')
+  if (!color) return null
   return {
-    color,
-    colorName: typeof value?.colorName === 'string' ? value.colorName : color,
-    colorHex: typeof value?.colorHex === 'string' ? value.colorHex : '',
-    ...layerFields(value, color),
+    color: color.id,
+    colorName: color.name,
+    colorHex: color.hex,
+    hidden: Boolean(value?.hidden),
+    ...blueprintContent(value),
+    dependsOn: namedBlueprintDependsOn(color.id, value?.dependsOn),
   }
 }
 
-function documentBlueprints(input) {
+function hasContent(layer) {
+  return (
+    CONTENT_KEYS.some((key) => layer[key].length > 0) || layer.dependsOn.length > 0
+  )
+}
+
+function setLayers(input) {
   const raw = Array.isArray(input.blueprints)
     ? input.blueprints
     : Array.isArray(input.locals)
       ? input.locals
       : []
-  const blueprints = raw.map(localLayer).filter(Boolean)
-  const defaultColor = SESSION_COLORS[0]
-  if (
-    input.global != null &&
-    defaultColor &&
-    !blueprints.some((item) => item.color === defaultColor.id)
-  ) {
-    blueprints.unshift(
-      localLayer({
-        ...input.global,
-        color: defaultColor.id,
-        colorName: defaultColor.name,
-        colorHex: defaultColor.hex,
-      }),
-    )
+  const seen = new Set()
+  const layers = []
+  for (const item of raw) {
+    const layer = colorLayer(item)
+    if (!layer || seen.has(layer.color)) continue
+    seen.add(layer.color)
+    layers.push(layer)
   }
-  return blueprints.filter(hasContent)
+  const defaultColor = SESSION_COLORS[0]
+  if (input.global != null && defaultColor && !seen.has(defaultColor.id)) {
+    layers.unshift(colorLayer({ ...input.global, color: defaultColor.id }))
+  }
+  const order = SESSION_COLORS.map((color) => color.id)
+  return layers
+    .filter(hasContent)
+    .sort((left, right) => order.indexOf(left.color) - order.indexOf(right.color))
 }
 
-const CONTENT_KEYS = [
-  'files',
-  'folders',
-  'addedFunctions',
-  'addedVariables',
-  'addedImports',
-  'notes',
-  'pointers',
-  'deleted',
-  'dependsOn',
-]
-
-function hasContent(blueprint) {
-  return CONTENT_KEYS.some((key) => blueprint[key].length > 0)
-}
-
-export function serializeBlueprintDocument(input = {}) {
+/**
+ * In-memory blueprint set: the set name plus one layer per session color.
+ * On disk this becomes a wrapper and one `.blueprint.json` per layer.
+ */
+export function normalizeBlueprintSet(input = {}) {
   const name =
-    typeof input.name === 'string' && input.name.trim()
-      ? input.name.trim()
-      : 'Blueprint'
+    typeof input.name === 'string' && input.name.trim() ? input.name.trim() : 'Blueprint'
   return {
-    version: BLUEPRINT_DOCUMENT_VERSION,
-    kind: BLUEPRINT_DOCUMENT_KIND,
     name,
     savedAt:
       typeof input.savedAt === 'string' && input.savedAt
         ? input.savedAt
         : new Date().toISOString(),
-    blueprints: documentBlueprints(input),
+    blueprints: setLayers(input),
   }
 }
 
-export function parseBlueprintDocument(value) {
-  if (!value || typeof value !== 'object') {
+export function serializeBlueprintFile(name, layer) {
+  return {
+    version: BLUEPRINT_VERSION,
+    kind: BLUEPRINT_KIND,
+    name,
+    ...blueprintContent(layer),
+  }
+}
+
+export function serializeBlueprintSet(input = {}) {
+  const set = normalizeBlueprintSet(input)
+  const setName = blueprintSetName(set.name)
+  const single = set.blueprints.length === 1
+  const files = set.blueprints.map((layer) => {
+    const fileName = blueprintFileNameFor(setName, layer.color, single)
+    return {
+      color: layer.color,
+      fileName,
+      document: serializeBlueprintFile(stripBlueprintSuffix(fileName), layer),
+    }
+  })
+  return {
+    name: set.name,
+    savedAt: set.savedAt,
+    wrapperFileName: wrapperFileName(setName),
+    wrapper: {
+      version: WRAPPER_VERSION,
+      kind: WRAPPER_KIND,
+      name: set.name,
+      savedAt: set.savedAt,
+      blueprints: set.blueprints.map((layer, index) => ({
+        color: layer.color,
+        file: files[index].fileName,
+        hidden: layer.hidden,
+        dependsOn: layer.dependsOn,
+      })),
+    },
+    files,
+  }
+}
+
+function isObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isWrapper(value) {
+  return isObject(value) && value.kind === WRAPPER_KIND
+}
+
+function isLegacyDocument(value) {
+  return (
+    isObject(value) &&
+    (Array.isArray(value.blueprints) || Array.isArray(value.locals) || value.global != null)
+  )
+}
+
+export function parseBlueprintFile(value) {
+  if (!isObject(value) || isWrapper(value) || isLegacyDocument(value)) {
     throw new Error('Not a blueprint file')
   }
-  if (value.kind != null && value.kind !== BLUEPRINT_DOCUMENT_KIND) {
+  if (value.kind != null && !isBlueprintKind(value.kind)) {
     throw new Error('Not a blueprint file')
   }
-  if (
-    value.version != null &&
-    value.version !== BLUEPRINT_DOCUMENT_VERSION
-  ) {
+  if (value.version != null && value.version !== BLUEPRINT_VERSION) {
     throw new Error(`Unsupported blueprint version ${value.version}`)
   }
-  const flatLayer =
-    value.files != null ||
-    value.folders != null ||
-    value.userCreatedBlocks != null ||
-    value.userCreatedIslands != null
-  if (
-    value.kind == null &&
-    value.blueprints == null &&
-    value.global == null &&
-    !flatLayer
-  ) {
+  const hasLayer = [...CONTENT_KEYS, 'userCreatedBlocks', 'userCreatedIslands'].some(
+    (key) => value[key] != null,
+  )
+  if (value.kind == null && !hasLayer) {
     throw new Error('Not a blueprint file')
   }
-  return serializeBlueprintDocument({
+  return {
+    name: typeof value.name === 'string' && value.name.trim() ? value.name.trim() : null,
+    ...blueprintContent(value),
+  }
+}
+
+export function parseWrapper(value) {
+  if (!isWrapper(value)) throw new Error('Not a blueprint wrapper')
+  if (value.version != null && value.version !== WRAPPER_VERSION) {
+    throw new Error(`Unsupported wrapper version ${value.version}`)
+  }
+  const entries = []
+  for (const item of Array.isArray(value.blueprints) ? value.blueprints : []) {
+    const color = resolveSessionColor(typeof item?.color === 'string' ? item.color : '')
+    const file = typeof item?.file === 'string' ? item.file.trim() : ''
+    if (!color || !file) continue
+    entries.push({
+      color: color.id,
+      file,
+      hidden: Boolean(item.hidden),
+      dependsOn: Array.isArray(item.dependsOn) ? item.dependsOn : [],
+    })
+  }
+  return {
+    name: typeof value.name === 'string' && value.name.trim() ? value.name.trim() : 'Blueprint',
+    savedAt: typeof value.savedAt === 'string' ? value.savedAt : '',
+    blueprints: entries,
+  }
+}
+
+function parseLegacyDocument(value) {
+  if (value.kind != null && !isBlueprintKind(value.kind)) {
+    throw new Error('Not a blueprint file')
+  }
+  if (value.version != null && value.version !== 1) {
+    throw new Error(`Unsupported blueprint version ${value.version}`)
+  }
+  return normalizeBlueprintSet({
     name: value.name,
     savedAt: value.savedAt,
     blueprints: value.blueprints ?? value.locals,
-    global: value.global ?? (flatLayer ? value : null),
+    global: value.global,
+  })
+}
+
+/** Builds a set from a wrapper; `readFile(name)` returns the parsed JSON of a referenced file. */
+export function parseBlueprintSet(wrapperValue, readFile) {
+  const wrapper = parseWrapper(wrapperValue)
+  return normalizeBlueprintSet({
+    name: wrapper.name,
+    savedAt: wrapper.savedAt || undefined,
+    blueprints: wrapper.blueprints.map((entry) => {
+      const document = readFile(entry.file)
+      if (document == null) {
+        throw new Error(`Blueprint file not found: ${entry.file}`)
+      }
+      return {
+        ...parseBlueprintFile(document),
+        color: entry.color,
+        hidden: entry.hidden,
+        dependsOn: entry.dependsOn,
+      }
+    }),
+  })
+}
+
+function singleBlueprintSet(value, fallbackName) {
+  const parsed = parseBlueprintFile(value)
+  return normalizeBlueprintSet({
+    name: parsed.name ?? fallbackName,
+    blueprints: [{ ...parsed, color: SESSION_COLORS[0].id }],
+  })
+}
+
+/**
+ * Parses one JSON value: a `.blueprint.json` (loaded into the first color) or an
+ * older single-file document with session colors inside. A wrapper alone is
+ * rejected because its blueprint files are not available.
+ */
+export function parseBlueprintDocument(value) {
+  if (!isObject(value)) throw new Error('Not a blueprint file')
+  if (isWrapper(value)) {
+    throw new Error(
+      'This is a wrapper file. Choose it together with its .blueprint.json files.',
+    )
+  }
+  if (isLegacyDocument(value)) return parseLegacyDocument(value)
+  return singleBlueprintSet(value, 'Blueprint')
+}
+
+/** Parses several uploaded files at once: a wrapper with its blueprint files, or loose blueprint files. */
+export function parseBlueprintDocuments(documents) {
+  const items = (Array.isArray(documents) ? documents : []).filter(
+    (item) => item && isObject(item.document),
+  )
+  if (items.length === 0) throw new Error('Not a blueprint file')
+  const wrapper = items.find((item) => isWrapper(item.document))
+  if (wrapper) {
+    const byName = new Map(
+      items.map((item) => [path.basename(String(item.fileName ?? '')), item.document]),
+    )
+    return parseBlueprintSet(wrapper.document, (file) => byName.get(path.basename(file)))
+  }
+  if (items.length === 1) return parseBlueprintDocument(items[0].document)
+  const layers = items.map((item, index) => {
+    const color = SESSION_COLORS[index]
+    if (!color) throw new Error(`At most ${SESSION_COLORS.length} blueprint files at once`)
+    return { ...parseBlueprintFile(item.document), color: color.id }
+  })
+  return normalizeBlueprintSet({
+    name: stripBlueprintSuffix(path.basename(String(items[0].fileName ?? 'Blueprint'))),
+    blueprints: layers,
   })
 }
 
@@ -376,7 +574,63 @@ function readJsonFile(filePath) {
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf8'))
   } catch {
-    throw new Error('Could not read blueprint file')
+    throw new Error(`Could not read blueprint file ${path.basename(filePath)}`)
+  }
+}
+
+function isFile(filePath) {
+  try {
+    return fs.statSync(filePath).isFile()
+  } catch {
+    return false
+  }
+}
+
+function isDirectory(filePath) {
+  try {
+    return fs.statSync(filePath).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+function findWrapperIn(folder) {
+  const preferred = path.join(folder, wrapperFileName(path.basename(folder)))
+  if (isFile(preferred)) return preferred
+  const match = fs
+    .readdirSync(folder)
+    .filter((entry) => entry.toLowerCase().endsWith(WRAPPER_FILE_SUFFIX))
+    .sort()[0]
+  return match ? path.join(folder, match) : null
+}
+
+function readWrapperSet(wrapperPath) {
+  const folder = path.dirname(wrapperPath)
+  return parseBlueprintSet(readJsonFile(wrapperPath), (file) => {
+    const resolved = path.resolve(folder, file)
+    const relative = path.relative(folder, resolved)
+    if (relative.startsWith('..') || path.isAbsolute(relative) || !isFile(resolved)) {
+      return null
+    }
+    return readJsonFile(resolved)
+  })
+}
+
+/** Reads a wrapper, a set folder, a single `.blueprint.json`, or an older single-file document. */
+export function readBlueprintSetFromPath(filePath) {
+  const resolved = path.resolve(filePath)
+  if (isDirectory(resolved)) {
+    const wrapperPath = findWrapperIn(resolved)
+    if (!wrapperPath) throw new Error('No wrapper file in that blueprint folder')
+    return { set: readWrapperSet(wrapperPath), path: wrapperPath }
+  }
+  if (!isFile(resolved)) throw new Error('Blueprint file not found')
+  const value = readJsonFile(resolved)
+  if (isWrapper(value)) return { set: readWrapperSet(resolved), path: resolved }
+  if (isLegacyDocument(value)) return { set: parseLegacyDocument(value), path: resolved }
+  return {
+    set: singleBlueprintSet(value, stripBlueprintSuffix(path.basename(resolved))),
+    path: resolved,
   }
 }
 
@@ -386,72 +640,119 @@ export function listSavedBlueprints(targetRoot) {
     return { directory, items: [] }
   }
   const items = []
-  for (const fileName of fs.readdirSync(directory)) {
-    if (!fileName.toLowerCase().endsWith('.json')) continue
-    const filePath = path.join(directory, fileName)
-    let stat
+  for (const entry of fs.readdirSync(directory)) {
+    const entryPath = path.join(directory, entry)
+    let candidate = null
+    if (isDirectory(entryPath)) {
+      candidate = findWrapperIn(entryPath)
+    } else if (entry.toLowerCase().endsWith('.json') && isFile(entryPath)) {
+      candidate = entryPath
+    }
+    if (!candidate) continue
+    let read
     try {
-      stat = fs.statSync(filePath)
+      read = readBlueprintSetFromPath(candidate)
     } catch {
       continue
     }
-    if (!stat.isFile()) continue
-    let parsed = null
-    try {
-      parsed = parseBlueprintDocument(JSON.parse(fs.readFileSync(filePath, 'utf8')))
-    } catch {
-      continue
-    }
-    const described = describePath(targetRoot, filePath)
     items.push({
-      name: parsed.name,
-      fileName,
-      savedAt: parsed.savedAt,
-      ...described,
+      name: read.set.name,
+      fileName: path.basename(read.path),
+      savedAt: read.set.savedAt,
+      ...describePath(targetRoot, read.path),
     })
   }
   items.sort((left, right) => right.savedAt.localeCompare(left.savedAt))
   return { directory, items }
 }
 
-export function saveBlueprintDocument(targetRoot, input = {}) {
-  const document = serializeBlueprintDocument(input)
-  const filePath = resolveBlueprintSavePath(targetRoot, {
-    name: input.name ?? document.name,
-    directory: input.directory,
-    filePath: input.filePath,
-  })
-  fs.mkdirSync(path.dirname(filePath), { recursive: true })
+function writeJsonAtomic(filePath, value) {
   const temporary = `${filePath}.${process.pid}.tmp`
-  fs.writeFileSync(temporary, `${JSON.stringify(document, null, 2)}\n`)
+  fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`)
   fs.renameSync(temporary, filePath)
-  const described = describePath(targetRoot, filePath)
+}
+
+function previousBlueprintFiles(folder) {
+  const wrapperPath = isDirectory(folder) ? findWrapperIn(folder) : null
+  if (!wrapperPath) return { wrapperPath: null, files: [] }
+  try {
+    const wrapper = parseWrapper(readJsonFile(wrapperPath))
+    return { wrapperPath, files: wrapper.blueprints.map((entry) => entry.file) }
+  } catch {
+    return { wrapperPath, files: [] }
+  }
+}
+
+/**
+ * Writes a blueprint set folder: `<name>-wrapper.json` plus one
+ * `<name>.blueprint.json` (or `<name>-<color>.blueprint.json` when there are
+ * several). Blueprint files the previous wrapper listed but this save no
+ * longer needs are removed.
+ */
+export function saveBlueprintDocument(targetRoot, input = {}) {
+  const folder = resolveBlueprintSetFolder(targetRoot, input)
+  const serialized = serializeBlueprintSet({
+    ...input,
+    name: input.name ?? path.basename(folder),
+  })
+  const previous = previousBlueprintFiles(folder)
+  fs.mkdirSync(folder, { recursive: true })
+  for (const file of serialized.files) {
+    writeJsonAtomic(path.join(folder, file.fileName), file.document)
+  }
+  const wrapperPath = path.join(folder, serialized.wrapperFileName)
+  writeJsonAtomic(wrapperPath, serialized.wrapper)
+
+  const kept = new Set(serialized.files.map((file) => file.fileName))
+  for (const file of previous.files) {
+    const stale = path.resolve(folder, file)
+    if (
+      kept.has(path.basename(stale)) ||
+      path.dirname(stale) !== folder ||
+      !stale.toLowerCase().endsWith(BLUEPRINT_FILE_SUFFIX)
+    ) {
+      continue
+    }
+    fs.rmSync(stale, { force: true })
+  }
+  if (previous.wrapperPath && path.resolve(previous.wrapperPath) !== wrapperPath) {
+    fs.rmSync(previous.wrapperPath, { force: true })
+  }
+
   return {
-    name: document.name,
-    fileName: path.basename(filePath),
-    savedAt: document.savedAt,
-    ...described,
+    name: serialized.name,
+    fileName: serialized.wrapperFileName,
+    savedAt: serialized.savedAt,
+    ...describePath(targetRoot, wrapperPath),
+    folder: describePath(targetRoot, folder).relativePath,
+    blueprintFiles: serialized.files.map((file) => ({
+      color: file.color,
+      ...describePath(targetRoot, path.join(folder, file.fileName)),
+    })),
   }
 }
 
 export function readBlueprintDocument(targetRoot, input = {}) {
-  const filePath = input.filePath
-    ? resolveAgainst(path.resolve(targetRoot), String(input.filePath).trim())
-    : path.join(
-        defaultBlueprintsDir(targetRoot),
-        blueprintFileName(input.name),
-      )
-  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+  const target = path.resolve(targetRoot)
+  let filePath
+  if (input.filePath) {
+    filePath = resolveAgainst(target, String(input.filePath).trim())
+  } else {
+    const setName = blueprintSetName(input.name)
+    const folder = path.join(defaultBlueprintsDir(target), setName)
+    const legacy = path.join(defaultBlueprintsDir(target), `${setName}.json`)
+    filePath = isDirectory(folder) ? folder : legacy
+  }
+  if (!fs.existsSync(filePath)) {
     throw new Error('Blueprint file not found')
   }
-  const document = parseBlueprintDocument(readJsonFile(filePath))
-  const described = describePath(targetRoot, filePath)
+  const read = readBlueprintSetFromPath(filePath)
   return {
-    document,
-    name: document.name,
-    fileName: path.basename(filePath),
-    savedAt: document.savedAt,
-    ...described,
+    document: read.set,
+    name: read.set.name,
+    fileName: path.basename(read.path),
+    savedAt: read.set.savedAt,
+    ...describePath(target, read.path),
   }
 }
 
@@ -498,21 +799,30 @@ export function applyBlueprintDocument(dataDir, document, options = {}) {
 }
 
 export function loadBlueprintDocument(targetRoot, dataDir, input = {}) {
-  const loaded =
-    input.document != null
-      ? {
-          document: parseBlueprintDocument(input.document),
-          name:
-            typeof input.document?.name === 'string'
-              ? input.document.name
-              : 'Blueprint',
-          fileName: null,
-          savedAt: null,
-          path: typeof input.filePath === 'string' ? input.filePath : null,
-          relativePath:
-            typeof input.filePath === 'string' ? input.filePath : null,
-        }
-      : readBlueprintDocument(targetRoot, input)
+  let loaded
+  if (Array.isArray(input.documents) && input.documents.length > 0) {
+    const set = parseBlueprintDocuments(input.documents)
+    loaded = {
+      document: set,
+      name: set.name,
+      fileName: null,
+      savedAt: null,
+      path: null,
+      relativePath: null,
+    }
+  } else if (input.document != null) {
+    const set = parseBlueprintDocument(input.document)
+    loaded = {
+      document: set,
+      name: set.name,
+      fileName: null,
+      savedAt: null,
+      path: typeof input.filePath === 'string' ? input.filePath : null,
+      relativePath: typeof input.filePath === 'string' ? input.filePath : null,
+    }
+  } else {
+    loaded = readBlueprintDocument(targetRoot, input)
+  }
   const applied = applyBlueprintDocument(dataDir, loaded.document, {
     targetRoot,
   })

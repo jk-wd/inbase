@@ -826,12 +826,14 @@ function compactConnectedLayer(layer, attached) {
     dependsOn: Array.isArray(layer.dependsOn) ? [...layer.dependsOn] : [],
     files: layer.files ?? [],
     folders: layer.folders ?? [],
-    addedFunctions: layer.addedFunctions ?? [],
-    addedVariables: layer.addedVariables ?? [],
-    addedImports: layer.addedImports ?? [],
+    functions: layer.functions ?? [],
+    classes: layer.classes ?? [],
+    variables: layer.variables ?? [],
+    imports: layer.imports ?? [],
     notes: layer.notes ?? [],
     pointers: layer.pointers ?? [],
     deleted: layer.deleted ?? [],
+    steps: layer.steps ?? [],
   }
 }
 
@@ -992,12 +994,14 @@ function blueprintHasContent(blueprint) {
   return (
     (blueprint.files?.length ?? 0) > 0 ||
     (blueprint.folders?.length ?? 0) > 0 ||
-    (blueprint.addedFunctions?.length ?? 0) > 0 ||
-    (blueprint.addedVariables?.length ?? 0) > 0 ||
-    (blueprint.addedImports?.length ?? 0) > 0 ||
+    (blueprint.functions?.length ?? 0) > 0 ||
+    (blueprint.classes?.length ?? 0) > 0 ||
+    (blueprint.variables?.length ?? 0) > 0 ||
+    (blueprint.imports?.length ?? 0) > 0 ||
     (blueprint.notes?.length ?? 0) > 0 ||
     (blueprint.pointers?.length ?? 0) > 0 ||
-    (blueprint.deleted?.length ?? 0) > 0
+    (blueprint.deleted?.length ?? 0) > 0 ||
+    (blueprint.steps?.length ?? 0) > 0
   )
 }
 
@@ -1420,12 +1424,14 @@ export function sessionIntent(
     userCreatedBlocks: blueprint.files,
     userCreatedIslands: blueprint.folders,
     ...preview,
-    blueprintFunctions: blueprint.addedFunctions,
-    blueprintVariables: blueprint.addedVariables,
-    blueprintImports: blueprint.addedImports,
+    blueprintFunctions: blueprint.functions,
+    blueprintClasses: blueprint.classes,
+    blueprintVariables: blueprint.variables,
+    blueprintImports: blueprint.imports,
     blueprintNotes: blueprint.notes,
     blueprintPointers: blueprint.pointers,
     blueprintDeleted: blueprint.deleted,
+    blueprintSteps: blueprint.steps,
     dependsOn: blueprint.dependsOn,
   }
 }
@@ -2022,12 +2028,14 @@ export function updateBlueprint(dataDir, sessionId, input = {}) {
     ...current,
     files: fields.files ?? fields.userCreatedBlocks ?? current.files,
     folders: fields.folders ?? fields.userCreatedIslands ?? current.folders,
-    addedFunctions: fields.addedFunctions ?? current.addedFunctions,
-    addedVariables: fields.addedVariables ?? current.addedVariables,
-    addedImports: fields.addedImports ?? current.addedImports,
+    functions: fields.functions ?? fields.addedFunctions ?? current.functions,
+    classes: fields.classes ?? current.classes,
+    variables: fields.variables ?? fields.addedVariables ?? current.variables,
+    imports: fields.imports ?? fields.addedImports ?? current.imports,
     notes: fields.notes ?? current.notes,
     pointers: fields.pointers ?? current.pointers,
     deleted: fields.deleted ?? current.deleted,
+    steps: fields.steps ?? current.steps,
     dependsOn:
       fields.dependsOn !== undefined ? fields.dependsOn : current.dependsOn,
   }
@@ -2768,14 +2776,27 @@ export function emptyBlueprint() {
     sent: true,
     files: [],
     folders: [],
-    addedFunctions: [],
-    addedVariables: [],
-    addedImports: [],
+    functions: [],
+    classes: [],
+    variables: [],
+    imports: [],
     notes: [],
     pointers: [],
     deleted: [],
+    steps: [],
     dependsOn: [],
   }
+}
+
+export const BLUEPRINT_STEP_MAX_LENGTH = 500
+
+export function namedBlueprintSteps(value) {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    if (typeof item !== 'string') return []
+    const step = item.trim().slice(0, BLUEPRINT_STEP_MAX_LENGTH)
+    return step ? [step] : []
+  })
 }
 
 function namedBlueprintFiles(value) {
@@ -2871,7 +2892,7 @@ function namedBlueprintNotes(value) {
     } else if (item.kind === 'folder') {
       stored = { file, kind: 'folder', note }
     } else if (
-      (item.kind === 'function' || item.kind === 'variable') &&
+      (item.kind === 'class' || item.kind === 'function' || item.kind === 'variable') &&
       typeof item.name === 'string' &&
       item.name.trim() !== ''
     ) {
@@ -2901,7 +2922,7 @@ function namedBlueprintPointers(value) {
     if (item.kind === 'file' || item.kind === 'folder') {
       stored = { kind: item.kind, path }
     } else if (
-      (item.kind === 'function' || item.kind === 'variable') &&
+      (item.kind === 'class' || item.kind === 'function' || item.kind === 'variable') &&
       typeof item.name === 'string' &&
       item.name.trim() !== ''
     ) {
@@ -2938,23 +2959,27 @@ function blueprintContentEqual(left, right) {
     JSON.stringify({
       files: left.files,
       folders: left.folders,
-      addedFunctions: left.addedFunctions,
-      addedVariables: left.addedVariables,
-      addedImports: left.addedImports,
+      functions: left.functions,
+      classes: left.classes,
+      variables: left.variables,
+      imports: left.imports,
       notes: left.notes,
       pointers: left.pointers,
       deleted: left.deleted,
+      steps: left.steps,
       dependsOn: left.dependsOn,
     }) ===
     JSON.stringify({
       files: right.files,
       folders: right.folders,
-      addedFunctions: right.addedFunctions,
-      addedVariables: right.addedVariables,
-      addedImports: right.addedImports,
+      functions: right.functions,
+      classes: right.classes,
+      variables: right.variables,
+      imports: right.imports,
       notes: right.notes,
       pointers: right.pointers,
       deleted: right.deleted,
+      steps: right.steps,
       dependsOn: right.dependsOn,
     })
   )
@@ -2963,12 +2988,14 @@ function blueprintContentEqual(left, right) {
 function normalizeBlueprint(value, colorId = null, graph = null) {
   const files = namedBlueprintFiles(value?.files ?? value?.userCreatedBlocks)
   const folders = namedBlueprintFolders(value?.folders ?? value?.userCreatedIslands)
-  const addedFunctions = namedBlueprintSymbols(value?.addedFunctions)
-  const addedVariables = namedBlueprintSymbols(value?.addedVariables)
-  const addedImports = namedBlueprintImportAdditions(value?.addedImports)
+  const functions = namedBlueprintSymbols(value?.functions ?? value?.addedFunctions)
+  const classes = namedBlueprintSymbols(value?.classes)
+  const variables = namedBlueprintSymbols(value?.variables ?? value?.addedVariables)
+  const imports = namedBlueprintImportAdditions(value?.imports ?? value?.addedImports)
   const notes = namedBlueprintNotes(value?.notes)
   const pointers = namedBlueprintPointers(value?.pointers)
   const deleted = namedBlueprintDeleted(value?.deleted)
+  const steps = namedBlueprintSteps(value?.steps)
   const dependsOn = namedBlueprintDependsOn(colorId, value?.dependsOn, graph)
   const revision =
     Number.isInteger(value?.revision) && value.revision >= 0 ? value.revision : 0
@@ -2978,22 +3005,26 @@ function normalizeBlueprint(value, colorId = null, graph = null) {
     enabled: blueprintHasContent({
       files,
       folders,
-      addedFunctions,
-      addedVariables,
-      addedImports,
+      functions,
+      classes,
+      variables,
+      imports,
       notes,
       pointers,
       deleted,
+      steps,
     }),
     sent: true,
     files,
     folders,
-    addedFunctions,
-    addedVariables,
-    addedImports,
+    functions,
+    classes,
+    variables,
+    imports,
     notes,
     pointers,
     deleted,
+    steps,
     dependsOn,
   }
 }
@@ -3006,6 +3037,7 @@ function persistBlueprintFile(file, incoming, current, colorId = null, graph = n
       files: incoming?.files ?? incoming?.userCreatedBlocks ?? current.files,
       folders: incoming?.folders ?? incoming?.userCreatedIslands ?? current.folders,
       deleted: incoming?.deleted ?? current.deleted,
+      steps: incoming?.steps ?? current.steps,
       dependsOn:
         incoming?.dependsOn !== undefined ? incoming.dependsOn : current.dependsOn,
       hidden:
@@ -3040,12 +3072,14 @@ function persistBlueprintFile(file, incoming, current, colorId = null, graph = n
         sent: true,
         files: namedBlueprintFiles(next.files),
         folders: namedBlueprintFolders(next.folders),
-        addedFunctions: namedBlueprintSymbols(next.addedFunctions),
-        addedVariables: namedBlueprintSymbols(next.addedVariables),
-        addedImports: namedBlueprintImportAdditions(next.addedImports),
+        functions: namedBlueprintSymbols(next.functions),
+        classes: namedBlueprintSymbols(next.classes),
+        variables: namedBlueprintSymbols(next.variables),
+        imports: namedBlueprintImportAdditions(next.imports),
         notes: namedBlueprintNotes(next.notes),
         pointers: namedBlueprintPointers(next.pointers),
         deleted: namedBlueprintDeleted(next.deleted),
+        steps: namedBlueprintSteps(next.steps),
         dependsOn: next.dependsOn,
       },
       null,
@@ -3176,9 +3210,10 @@ export function cleanupBlueprint(
     ...current,
     files: current.files.filter((file) => !knownFiles.has(file.id)),
     folders: current.folders.filter((folder) => !knownFolders.has(folder.path)),
-    addedFunctions: current.addedFunctions.filter((item) => !removedFiles.has(item.file)),
-    addedVariables: current.addedVariables.filter((item) => !removedFiles.has(item.file)),
-    addedImports: current.addedImports.filter((item) => !removedFiles.has(item.file)),
+    functions: current.functions.filter((item) => !removedFiles.has(item.file)),
+    classes: current.classes.filter((item) => !removedFiles.has(item.file)),
+    variables: current.variables.filter((item) => !removedFiles.has(item.file)),
+    imports: current.imports.filter((item) => !removedFiles.has(item.file)),
     notes: current.notes.filter((item) =>
       item.kind === 'folder'
         ? !removedFolders.has(item.file)
