@@ -305,6 +305,7 @@ export function scanTarget({
   name = path.basename(root),
   dest = defaultOutPath,
   ignore,
+  quiet = false,
 } = {}) {
   const graph = buildScanGraph({
     root,
@@ -315,7 +316,9 @@ export function scanTarget({
 
   fs.mkdirSync(path.dirname(dest), { recursive: true })
   fs.writeFileSync(dest, `${JSON.stringify(graph, null, 2)}\n`)
-  console.log(`Scanned ${graph.files.length} files -> ${path.relative(process.cwd(), dest)}`)
+  if (!quiet) {
+    console.log(`Scanned ${graph.files.length} files -> ${path.relative(process.cwd(), dest)}`)
+  }
   return graph
 }
 

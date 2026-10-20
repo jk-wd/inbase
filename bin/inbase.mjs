@@ -63,6 +63,9 @@ Usage:
                            (also removes .inbase/ and inbase.json)
   inbase run               Empty .inbase/, scan this repo, and start the map
   inbase extract-blueprint <folder> <output-file>
+  inbase propose-blueprint --description "<text>" [--session <color>] [--execute]
+                           Propose a blueprint. No --session writes only the blueprint file.
+                           --execute writes that file and implements it immediately
   inbase help              Show this help
 
 Options for run:

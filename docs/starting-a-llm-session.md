@@ -1,6 +1,8 @@
 # Starting a LLM session
 
-When you start an LLM session — for example `/coral build a random color generator component` — the chat attaches to that color and the session window opens on the map. `/inbase` does the same for the next empty slot. `/connect` does the same for the first enabled blueprint:
+When you start an LLM session — for example `/coral build a random color generator component` — the chat attaches to that color and the session window opens on the map. `/inbase` does the same for the next empty slot. `/connect` does the same for the first enabled blueprint.
+
+`/propose-blueprint Add a timer coral` proposes that blueprint onto Coral and waits. Add `--execute` (`/propose-blueprint Add a timer coral --execute`) to implement it in the same chat. With no color, `/propose-blueprint` only writes the blueprint file unless `--execute` is present:
 
 ![LLM session working through a plan](images/llm-working.png)
 

@@ -6,7 +6,8 @@ description: >-
   the other session colors), or when this conversation already printed
   VISUAL_CODER_SESSION. Do not use for a regular chat that did not invoke those
   commands, or for files outside that target from inbase.json, sibling apps, CLI,
-  map tooling, git, docs-only, lockfiles, questions, or `/extract-blueprint`.
+  map tooling, git, docs-only, lockfiles, questions, `/extract-blueprint`, or
+  colorless `/propose-blueprint`.
   /inbase connects to the next empty session; a color command picks that slot;
   /connect picks the first enabled blueprint. After attach, read this color's
   blueprint and plan sequential steps (1, 2, 3). Never attach again later. MUST
@@ -32,7 +33,8 @@ and do **not** follow this skill. Continue as a normal coding task.
 
 Skip it for git, lockfiles, `.inbase`, `.cursor`, `.claude`, `.agents`,
 `.zed`, `.rules`, `.cline`, `.clinerules`, `.github/skills`, `.opencode`,
-`.lmstudio`, questions with no code changes, or `/extract-blueprint`.
+`.lmstudio`, questions with no code changes, `/extract-blueprint`, or
+`/propose-blueprint` with no color.
 
 `npx inbase run` creates 11 empty chat slots. Connect with `/inbase` (next
 unconnected slot), a color command, or `/connect` (first enabled blueprint).
@@ -60,6 +62,7 @@ subagents.
 - **`/explainit [question]`**: do not edit. Explain a waiting proposal, git
   diff (`VISUAL_CODER_DIFF`), map `?` click, or follow-up sub-steps.
 - **`/extract-blueprint`**: do not attach. Follow that command.
+- **`/propose-blueprint [description] [color] [--execute]`**: follow that command. The description comes first. A trailing color is optional. No color writes the blueprint file only and does not attach. A color attaches and also shows the blueprint on that session. `--execute` writes the file and implements it immediately.
 - **A later file-change request in an attached chat**: if this conversation
   already has `VISUAL_CODER_SESSION`, stay in that session. Do **not** attach.
   A regular chat that never invoked `/inbase`, `/connect`, or a color command
@@ -220,6 +223,13 @@ npx inbase read-blueprint --session <color>
    They are not project files to create. Instruction does not override an
    enabled blueprint; if they conflict, ask. No instruction is not a conflict.
 
+   Before this prompt starts, `attach` and `read-blueprint` generate
+   `codebase.json`. `VISUAL_CODER_CODEBASE_MAP` is that path, the extracted
+   map of files and folders that already exist. Read that file first and use
+   its file ids and folder paths to find existing files and folders. Scan the
+   target tree only when that map does not already name the file or folder you
+   need. The blueprint still decides which paths to create, edit, or delete.
+
 3. Read `interpreting-blueprints.md` beside this file. Interpret every blueprint
    entity that way. Then read the dump between `VISUAL_CODER_BLUEPRINT_START`/`END`.
    If that dump is `enabled` true, that blueprint is leading: follow it as closely
@@ -304,6 +314,7 @@ npx inbase read-blueprint --session <color>
   blueprint; follow it as closely as possible. Extra files are allowed only
   when the blueprint does not cover them
 - Read global `user-context.json` for placed files; implement another color's blueprint in this chat; use camera viewpoint to choose files
+- Scan the target tree for existing files or folders before reading `codebase.json` from `VISUAL_CODER_CODEBASE_MAP`
 - Edit before `VISUAL_CODER_EXECUTE` on a first plan or a change request
 - Implement two or more plan steps before `propose-patch`, or skip
   `propose-patch` after a finished step
@@ -313,5 +324,5 @@ npx inbase read-blueprint --session <color>
 - Ask the user to close the session when they asked for changes
 - Stay silent before a `VISUAL_CODER_ACK`; propose another patch after `VISUAL_CODER_FINISHED`; restore files after Done or `finish`
 - Use this flow for a regular chat that did not invoke `/inbase`, `/connect`,
-  or a color command, or for git, lockfiles, files outside `target`, or
-  `/extract-blueprint`
+  or a color command, or for git, lockfiles, files outside `target`,
+  `/extract-blueprint`, or `/propose-blueprint` with no color

@@ -132,10 +132,47 @@ function readProposalInfo(store, dataDir, sessionId = null) {
   return proposalInfo(store.readManifest(dataDir, id))
 }
 
+const CODEBASE_MAP_INSTRUCTION =
+  'codebase.json was generated before this prompt. Find the correct files and folders in that file first, at the path above. File ids and folder paths in it are the extracted map of the target. Read it before you scan. Scan the target tree only when that map does not already name the file or folder you need. The blueprint still decides which paths to create, edit, or delete.'
+
+function codebaseMapFile(dataDir) {
+  return path.join(dataDir, 'codebase.json')
+}
+
+async function generateCodebaseMap(config) {
+  const dest = codebaseMapFile(config.dataDir)
+  try {
+    const { scanTarget } = await import(
+      pathToFileURL(path.join(explorerRoot, 'scripts/scan-target.mjs')).href
+    )
+    scanTarget({
+      root: config.targetRoot,
+      name: config.targetName,
+      dest,
+      quiet: true,
+    })
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error)
+  }
+  return dest
+}
+
+function printCodebaseMapReference(dataDir) {
+  const mapFile = codebaseMapFile(dataDir)
+  if (fs.existsSync(mapFile)) {
+    console.log(`VISUAL_CODER_CODEBASE_MAP ${mapFile}`)
+    console.log(CODEBASE_MAP_INSTRUCTION)
+    return
+  }
+  console.log(
+    `VISUAL_CODER_CODEBASE_MAP missing ${mapFile}. No extracted map is available yet. Scan the target tree to find files and folders.`,
+  )
+}
+
 function readKnownFileIds(dataDir) {
   try {
     const parsed = JSON.parse(
-      fs.readFileSync(path.join(dataDir, 'codebase.json'), 'utf8'),
+      fs.readFileSync(codebaseMapFile(dataDir), 'utf8'),
     )
     return Array.isArray(parsed?.files)
       ? parsed.files
@@ -344,6 +381,7 @@ export async function attachSession(args) {
   const sessionId = takeFlagValue(args, '--session')
   const colorQuery = takeFlagValue(args, '--color')
   const first = args.includes('--first')
+  await generateCodebaseMap(config)
   const before = sessionId ? store.readManifest(config.dataDir, sessionId) : null
   const alreadyAttached = Boolean(before) && before.awaitingAttach === false
   const manifest = store.attachSession(config.dataDir, sessionId, {
@@ -461,6 +499,7 @@ export async function readBlueprint(args) {
     emitStopped(store, config.dataDir, sessionId)
   }
 
+  await generateCodebaseMap(config)
   const dumped = printSessionBlueprints(store, config.dataDir, sessionId)
   signalAck(
     store,
@@ -503,6 +542,7 @@ export async function readBlueprint(args) {
       console.log('VISUAL_CODER_CONTEXT_FILE_END')
     }
   }
+  printCodebaseMapReference(config.dataDir)
   process.exit(0)
 }
 
@@ -823,114 +863,38 @@ export async function runExplain(args) {
   )
 }
 
-export async function proposeBlueprint(args) {
-  const { store, config } = await loadExplorer()
-  const sessionParsed = takeFlagValue(args, '--session')
-  const descriptionParsed = takeFlagValue(args, '--description')
+const PROPOSE_BLUEPRINT_USAGE =
+  '--description "<description>" [--session <color>] [--execute] [layer.json|-] [--dont-write-to-file]'
 
-  if (!sessionParsed) {
-    usage(
-      'propose-blueprint',
-      '--session <color> --description "<description>" [layer.json|-] [--dont-write-to-file]',
-    )
-  }
+function writeColorlessBlueprintFile(targetRoot, numbered, layer, blueprintFiles) {
+  const folder = path.resolve(targetRoot, numbered.folderPath)
+  fs.mkdirSync(folder, { recursive: true })
+  const fileName = `${numbered.name}.blueprint.json`
+  const document = blueprintFiles.serializeBlueprintFile(numbered.name, layer)
+  fs.writeFileSync(path.join(folder, fileName), `${JSON.stringify(document, null, 2)}\n`)
+  return `${numbered.folderPath}/${fileName}`
+}
 
-  if (!descriptionParsed) {
-    usage(
-      'propose-blueprint',
-      '--session <color> --description "<description>" [layer.json|-] [--dont-write-to-file]',
-    )
-  }
-
-  if (args.includes('--write')) {
-    console.error(
-      'propose-blueprint writes the blueprint file unless you pass --dont-write-to-file. Omit --write.',
-    )
-    process.exit(1)
-  }
-
-  const sessionId = resolveFlagSession(store, sessionParsed)
-  const dataDir = config.dataDir
-  requireVisualizer(store, config)
-
-  const manifest = store.readManifest(dataDir, sessionId)
-  if (!manifest) {
-    console.error(`Session not found: ${sessionParsed}`)
-    process.exit(1)
-  }
-
-  const description = descriptionParsed
-  const colorId = manifest.color
-  const colorName = store.resolveSessionColor(colorId)?.name || colorId
-  const dontWriteToFile = args.includes('--dont-write-to-file')
-  const layerArg = proposedLayerArg(args)
-  const raw = readProposedLayer(layerArg)
-  if (raw && raw.trim()) {
-    let layer
-    try {
-      layer = JSON.parse(raw)
-    } catch {
-      console.error('Could not parse proposed blueprint layer JSON')
-      process.exit(1)
-    }
-
-    const [{ normalizeExtractLayer }, blueprintFiles] = await Promise.all([
-      import('./extract-blueprint.mjs'),
-      import(pathToFileURL(path.join(explorerRoot, 'scripts/blueprint-files.mjs')).href),
-    ])
-    const normalized = normalizeExtractLayer(layer)
-    if (!Array.isArray(layer.steps)) {
-      normalized.steps = store.readBlueprintByColor(dataDir, colorId).steps ?? []
-    }
-    const subjectSource =
-      typeof layer.subject === 'string' && layer.subject.trim()
-        ? layer.subject
-        : description
-    const numbered = blueprintFiles.nextNumberedBlueprintSet(
-      config.targetRoot,
-      subjectSource,
-    )
-    if (!dontWriteToFile) {
-      const saved = blueprintFiles.saveBlueprintDocument(config.targetRoot, {
-        name: numbered.name,
-        folder: numbered.folderPath,
-        blueprints: [{ color: colorId, ...normalized }],
-      })
-      const blueprintFile = saved.blueprintFiles[0]?.relativePath ?? saved.folder
-      console.log(`VISUAL_CODER_BLUEPRINT_FILE ${blueprintFile}`)
-      console.log(`VISUAL_CODER_BLUEPRINT_WRAPPER ${saved.relativePath}`)
-    } else {
-      console.log('VISUAL_CODER_BLUEPRINT_FILE skipped')
-    }
-    store.writeBlueprintByColor(dataDir, colorId, {
-      ...store.emptyBlueprint(),
-      ...normalized,
-    })
+function printProposeExecute(colorId, colorName) {
+  console.log('VISUAL_CODER_PROPOSE_EXECUTE Implement this blueprint now. Do not stop after proposing.')
+  if (colorId) {
     console.log(
-      `VISUAL_CODER_BLUEPRINT_PROPOSED Session ${colorId} blueprint: ${normalized.files.length} file(s), ${normalized.folders.length} folder(s), ${normalized.functions.length} function(s), ${normalized.variables.length} var(s), ${normalized.imports.length} relation(s), ${normalized.notes.length} note(s), ${normalized.pointers.length} pointer(s), ${normalized.deleted.length} deleted file(s), ${normalized.steps.length} suggested step(s).`,
+      `The ${colorName} blueprint is saved. You are already attached. Do not attach again. Run: npx inbase read-blueprint --session ${colorId}`,
     )
-    console.log('The blueprint is now visible on the map. The user can refine it by drawing on the map or by invoking the session color again with a more specific request.')
-    console.log('To start implementing, invoke the session color (e.g., /coral) or run: npx inbase attach --color <color>')
+    console.log(
+      `Then say what you see on the blueprint and MUST report-plan --session ${colorId} with --steps for the full implementation. After VISUAL_CODER_EXECUTE, implement one invoked step, propose-patch, and continue through the last step, then finish --session ${colorId}.`,
+    )
     return
   }
+  console.log(
+    'The blueprint file is the plan. Implement it in the project now. Do not attach. Do not run report-plan. Create, edit, and delete the files, folders, symbols, imports, and deletions it names.',
+  )
+}
 
-  console.log(`VISUAL_CODER_ACK propose-blueprint: proposing blueprint for session ${colorId}`)
-  console.log(`Propose a blueprint for the ${colorName} session from this description. It is a spatial plan that another LLM will follow.`)
-  console.log(`VISUAL_CODER_PROPOSE_BLUEPRINT Session ${colorId} (${colorName})`)
-  console.log(`Description: ${description}`)
-  const currentSteps = store.readBlueprintByColor(dataDir, colorId).steps ?? []
-  if (currentSteps.length > 0) {
-    console.log(
-      `VISUAL_CODER_BLUEPRINT_STEPS The ${colorName} blueprint already has ${currentSteps.length} suggested step(s) from the user. Weigh them against the description: keep the useful and relevant ones, reword, merge, or drop the rest, and add missing ones.`,
-    )
-    console.log('VISUAL_CODER_BLUEPRINT_STEPS_START')
-    console.log(JSON.stringify(currentSteps, null, 2))
-    console.log('VISUAL_CODER_BLUEPRINT_STEPS_END')
-  }
-  console.log('VISUAL_CODER_PROPOSE_BLUEPRINT_INSTRUCTION_START')
+function printProposeLayerGuide() {
   console.log('Read interpreting-blueprints.md beside the inbase SKILL.md. Interpret every blueprint entity that way.')
-  console.log('Read the codebase if needed, then curate a layer JSON. Paths are relative to the target root. Use every blueprint construct the description needs. Leave a field empty only when the plan does not need it.')
-  console.log('Include "subject": a short kebab-case name for this plan, such as "timer". Saving writes the folder blueprints/<subject>-<num>/ in the target, with <subject>-<num>.blueprint.json and <subject>-<num>-wrapper.json. The number is the next free one for that subject. Pass --dont-write-to-file to update the map without writing that file.')
+  console.log('Then curate a layer JSON. Paths are relative to the target root. Use every blueprint construct the description needs. Leave a field empty only when the plan does not need it.')
+  console.log('Include "subject": a short kebab-case name for this plan, such as "timer". Saving writes the folder blueprints/<subject>-<num>/ in the target. The number is the next free one for that subject. With a session color, that folder also gets <subject>-<num>-wrapper.json and the blueprint is shown on that color. With no session color, only <subject>-<num>.blueprint.json is written and the map is left unchanged. Pass --dont-write-to-file to skip the file. With a session color, that still updates the map.')
   console.log('files: A file is a new file the plan creates. A file that already exists is a pointer, not a file. [{"path":"src/timer/Timer.tsx"}]')
   console.log('folders: A folder is part of the folder skeleton the plan creates. Each level is its own entry. [{"path":"src/timer"}]')
   console.log('classes: A class is a class the plan adds, in a file. extends is its one parent class. implements names the interfaces or protocols it fulfills. Its methods are functions with class set to its name. Its fields are variables with class set to its name. The constructor is one of those functions. [{"name":"Timer","file":"src/timer/Timer.tsx","extends":"Clock","implements":["Tickable"]}]')
@@ -951,7 +915,159 @@ export async function proposeBlueprint(args) {
   console.log('steps: A step is a suggested sentence for the plan. Decide which are useful and in what order. Keep, merge, split, reword, reorder, or drop them, and add missing ones. They are suggestions, not the plan itself. Start from the current blueprint steps if any. Omit steps to keep the current steps unchanged. ["Add the timer types and constants","Build the usePomodoro hook","Render Pomodoro in App"]')
   console.log('Put new modules in files and folders, with their functions, vars, relations, and notes. Point at the existing entry point you will edit.')
   console.log('Drop: generated files, lockfiles, dist/build/coverage, snapshots, editor/tooling noise, tests unless they are the contract, trivial re-export barrels, every helper/getter/loop var/one-off local, and notes that only restate the name.')
-  console.log(`Then run: npx inbase propose-blueprint --session ${colorId} --description "${description}"`)
+}
+
+export async function proposeBlueprint(args) {
+  const { store, config } = await loadExplorer()
+  const sessionParsed = takeFlagValue(args, '--session')
+  const descriptionParsed = takeFlagValue(args, '--description')
+
+  if (!descriptionParsed) {
+    usage('propose-blueprint', PROPOSE_BLUEPRINT_USAGE)
+  }
+
+  if (args.includes('--write')) {
+    console.error(
+      'propose-blueprint writes the blueprint file unless you pass --dont-write-to-file. Omit --write.',
+    )
+    process.exit(1)
+  }
+
+  const execute = args.includes('--execute')
+  const dontWriteToFile = args.includes('--dont-write-to-file')
+  if (execute && dontWriteToFile) {
+    console.error(
+      'propose-blueprint --execute writes the blueprint file and then implements it. Omit --dont-write-to-file.',
+    )
+    process.exit(1)
+  }
+
+  const dataDir = config.dataDir
+  const description = descriptionParsed
+  let colorId = null
+  let colorName = null
+  if (sessionParsed) {
+    const sessionId = resolveFlagSession(store, sessionParsed)
+    requireVisualizer(store, config)
+    const manifest = store.readManifest(dataDir, sessionId)
+    if (!manifest) {
+      console.error(`Session not found: ${sessionParsed}`)
+      process.exit(1)
+    }
+    colorId = manifest.color
+    colorName = store.resolveSessionColor(colorId)?.name || colorId
+  }
+  await generateCodebaseMap(config)
+
+  const layerArg = proposedLayerArg(args)
+  const raw = readProposedLayer(layerArg)
+  if (raw && raw.trim()) {
+    let layer
+    try {
+      layer = JSON.parse(raw)
+    } catch {
+      console.error('Could not parse proposed blueprint layer JSON')
+      process.exit(1)
+    }
+
+    const [{ normalizeExtractLayer }, blueprintFiles] = await Promise.all([
+      import('./extract-blueprint.mjs'),
+      import(pathToFileURL(path.join(explorerRoot, 'scripts/blueprint-files.mjs')).href),
+    ])
+    const normalized = normalizeExtractLayer(layer)
+    if (!Array.isArray(layer.steps) && colorId) {
+      normalized.steps = store.readBlueprintByColor(dataDir, colorId).steps ?? []
+    }
+    const subjectSource =
+      typeof layer.subject === 'string' && layer.subject.trim()
+        ? layer.subject
+        : description
+    const numbered = blueprintFiles.nextNumberedBlueprintSet(
+      config.targetRoot,
+      subjectSource,
+    )
+    const summary = `${normalized.files.length} file(s), ${normalized.folders.length} folder(s), ${normalized.functions.length} function(s), ${normalized.variables.length} var(s), ${normalized.imports.length} relation(s), ${normalized.notes.length} note(s), ${normalized.pointers.length} pointer(s), ${normalized.deleted.length} deleted file(s), ${normalized.steps.length} suggested step(s).`
+    if (!dontWriteToFile) {
+      if (colorId) {
+        const saved = blueprintFiles.saveBlueprintDocument(config.targetRoot, {
+          name: numbered.name,
+          folder: numbered.folderPath,
+          blueprints: [{ color: colorId, ...normalized }],
+        })
+        const blueprintFile = saved.blueprintFiles[0]?.relativePath ?? saved.folder
+        console.log(`VISUAL_CODER_BLUEPRINT_FILE ${blueprintFile}`)
+        console.log(`VISUAL_CODER_BLUEPRINT_WRAPPER ${saved.relativePath}`)
+      } else {
+        const blueprintFile = writeColorlessBlueprintFile(
+          config.targetRoot,
+          numbered,
+          normalized,
+          blueprintFiles,
+        )
+        console.log(`VISUAL_CODER_BLUEPRINT_FILE ${blueprintFile}`)
+        console.log('VISUAL_CODER_BLUEPRINT_WRAPPER skipped')
+      }
+    } else {
+      console.log('VISUAL_CODER_BLUEPRINT_FILE skipped')
+    }
+    if (colorId) {
+      store.writeBlueprintByColor(dataDir, colorId, {
+        ...store.emptyBlueprint(),
+        ...normalized,
+      })
+      console.log(`VISUAL_CODER_BLUEPRINT_PROPOSED Session ${colorId} blueprint: ${summary}`)
+      console.log('The blueprint is now visible on the map.')
+      if (execute) {
+        printProposeExecute(colorId, colorName)
+      } else {
+        console.log('The user can refine it by drawing on the map or by invoking the session color again with a more specific request.')
+        console.log('To start implementing, invoke the session color (e.g., /coral) or run: npx inbase attach --color <color>')
+      }
+    } else {
+      console.log(`VISUAL_CODER_BLUEPRINT_PROPOSED Blueprint file: ${summary}`)
+      console.log(
+        dontWriteToFile
+          ? 'No session color was given, and the blueprint file was not written.'
+          : 'No session color was given, so the blueprint file was written and the map was not updated.',
+      )
+      if (execute) printProposeExecute(null, null)
+    }
+    return
+  }
+
+  if (execute) {
+    console.log('VISUAL_CODER_PROPOSE_EXECUTE is set. After the blueprint file is saved, implement it immediately. Pass --execute on the save command too.')
+  }
+
+  if (colorId) {
+    console.log(`VISUAL_CODER_ACK propose-blueprint: proposing blueprint for session ${colorId}`)
+    console.log(`Propose a blueprint for the ${colorName} session from this description. It is a spatial plan that another LLM will follow.`)
+    console.log(`VISUAL_CODER_PROPOSE_BLUEPRINT Session ${colorId} (${colorName})`)
+  } else {
+    console.log('VISUAL_CODER_ACK propose-blueprint: proposing a blueprint file with no session color')
+    console.log('No session color was given. Write the blueprint file only. Do not attach. Do not update the map.')
+    console.log('VISUAL_CODER_PROPOSE_BLUEPRINT file')
+  }
+  console.log(`Description: ${description}`)
+  if (colorId) {
+    const currentSteps = store.readBlueprintByColor(dataDir, colorId).steps ?? []
+    if (currentSteps.length > 0) {
+      console.log(
+        `VISUAL_CODER_BLUEPRINT_STEPS The ${colorName} blueprint already has ${currentSteps.length} suggested step(s) from the user. Weigh them against the description: keep the useful and relevant ones, reword, merge, or drop the rest, and add missing ones.`,
+      )
+      console.log('VISUAL_CODER_BLUEPRINT_STEPS_START')
+      console.log(JSON.stringify(currentSteps, null, 2))
+      console.log('VISUAL_CODER_BLUEPRINT_STEPS_END')
+    }
+  }
+  console.log('VISUAL_CODER_PROPOSE_BLUEPRINT_INSTRUCTION_START')
+  printCodebaseMapReference(dataDir)
+  printProposeLayerGuide()
+  const executeFlag = execute ? ' --execute' : ''
+  const rerun = colorId
+    ? `npx inbase propose-blueprint --session ${colorId} --description "${description}"${executeFlag}`
+    : `npx inbase propose-blueprint --description "${description}"${executeFlag}`
+  console.log(`Then run: ${rerun}`)
   console.log('and pass the curated layer JSON on stdin (or a layer.json path). That writes the blueprint file. Pass --dont-write-to-file to skip the file.')
   console.log('VISUAL_CODER_PROPOSE_BLUEPRINT_INSTRUCTION_END')
 }
@@ -964,7 +1080,7 @@ function proposedLayerArg(args) {
       index += 1
       continue
     }
-    if (arg === '--dont-write-to-file') continue
+    if (arg === '--dont-write-to-file' || arg === '--execute') continue
     rest.push(arg)
   }
   if (rest.length > 1) {

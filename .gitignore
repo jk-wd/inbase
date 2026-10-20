@@ -6,3 +6,4 @@ dist
 *.tgz
 # Explorer `npm run dev` runtime (visible for debugging)
 inbase-dev/
+.inbase/

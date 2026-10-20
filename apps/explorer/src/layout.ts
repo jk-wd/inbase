@@ -57,7 +57,12 @@ function docksWidth(folder: FolderNode) {
 
 function areaDepthForCount(fileCount: number) {
   const rows = Math.max(1, Math.ceil(fileCount / 2))
-  return CONFIG.areaPadding * 2 + rows * CONFIG.fileSpacing
+  const lastCenter = CONFIG.areaPadding + (rows - 1) * CONFIG.fileSpacing
+  const blockBottom = lastCenter + CONFIG.fileDepth / 2
+  return Math.max(
+    CONFIG.areaPadding * 2 + rows * CONFIG.fileSpacing,
+    blockBottom + CONFIG.areaPadding,
+  )
 }
 
 function areaDepth(folder: FolderNode) {
@@ -209,6 +214,100 @@ export function withBlockHeights(
     }
   }
   return next ? { ...layout, files: next } : layout
+}
+
+function pathDepth(path: string) {
+  if (!path || path === '.') return 0
+  return path.split('/').filter(Boolean).length
+}
+
+function isDescendantPath(path: string, rootPath: string) {
+  if (!path || path === rootPath) return false
+  if (rootPath === '.' || rootPath === '') return path !== '.'
+  return path.startsWith(`${rootPath}/`)
+}
+
+function shiftDescendantsZ(
+  rootPath: string,
+  delta: number,
+  files: Record<string, PlacedFile>,
+  folders: Record<string, PlacedFolder>,
+  bridges: PlacedBridge[],
+) {
+  if (delta <= 1e-6) return
+  for (const folder of Object.values(folders)) {
+    if (isDescendantPath(folder.path, rootPath)) folder.z += delta
+  }
+  for (const file of Object.values(files)) {
+    if (isDescendantPath(folderOfFile(file.id), rootPath)) file.position[2] += delta
+  }
+  for (const bridge of bridges) {
+    const target = bridge.id.split('→')[1]
+    if (target && isDescendantPath(target, rootPath)) {
+      for (const point of bridge.points) point[1] += delta
+    }
+  }
+}
+
+function depthCoveringFiles(
+  folder: PlacedFolder,
+  files: Record<string, PlacedFile>,
+) {
+  let depth = folder.depth
+  for (const file of Object.values(files)) {
+    if (folderOfFile(file.id) !== folder.path) continue
+    const bottom = file.position[2] + file.size[2] / 2 + CONFIG.areaPadding
+    depth = Math.max(depth, bottom - folder.z)
+  }
+  return depth
+}
+
+function fitFolderToFiles(
+  folder: PlacedFolder,
+  files: Record<string, PlacedFile>,
+  folders: Record<string, PlacedFolder>,
+  bridges: PlacedBridge[],
+) {
+  const delta = depthCoveringFiles(folder, files) - folder.depth
+  if (delta <= 1e-6) return
+  folder.depth += delta
+  shiftDescendantsZ(folder.path, delta, files, folders, bridges)
+}
+
+/** Grow every island to cover its file blocks, then stretch each sibling row to the tallest island and push the next row down with it. */
+export function settleIslandRows(layout: WorldLayout): WorldLayout {
+  const ordered = Object.values(layout.folders).sort(
+    (left, right) =>
+      pathDepth(left.path) - pathDepth(right.path) ||
+      left.path.localeCompare(right.path),
+  )
+  for (const folder of ordered) {
+    fitFolderToFiles(folder, layout.files, layout.folders, layout.bridges)
+  }
+
+  const groups = new Map<string, PlacedFolder[]>()
+  for (const folder of Object.values(layout.folders)) {
+    const parent = folderParent(folder.path)
+    if (!parent) continue
+    const list = groups.get(parent) ?? []
+    list.push(folder)
+    groups.set(parent, list)
+  }
+  const parents = [...groups.keys()].sort(
+    (left, right) => pathDepth(left) - pathDepth(right) || left.localeCompare(right),
+  )
+  for (const parent of parents) {
+    const siblings = groups.get(parent) ?? []
+    if (siblings.length < 2) continue
+    const rowDepth = Math.max(...siblings.map((folder) => folder.depth))
+    for (const sibling of siblings) {
+      const delta = rowDepth - sibling.depth
+      if (delta <= 1e-6) continue
+      sibling.depth = rowDepth
+      shiftDescendantsZ(sibling.path, delta, layout.files, layout.folders, layout.bridges)
+    }
+  }
+  return layout
 }
 
 export function folderOfFile(fileId: string) {
@@ -517,16 +616,41 @@ export function placePreviewCreates(
   return { files: extraFiles, folders: extraFolders, bridges: extraBridges }
 }
 
+function cloneLayout(layout: WorldLayout): WorldLayout {
+  return {
+    ...layout,
+    files: Object.fromEntries(
+      Object.entries(layout.files).map(([id, file]) => [
+        id,
+        {
+          ...file,
+          position: [...file.position] as [number, number, number],
+          size: [...file.size] as [number, number, number],
+        },
+      ]),
+    ),
+    folders: Object.fromEntries(
+      Object.entries(layout.folders).map(([path, folder]) => [path, { ...folder }]),
+    ),
+    bridges: layout.bridges.map((bridge) => ({
+      ...bridge,
+      points: bridge.points.map((point) => [...point] as [number, number]),
+    })),
+  }
+}
+
 export function withPreviewLayout(
   layout: WorldLayout,
   overlay: PreviewOverlay,
 ): WorldLayout {
-  return {
-    ...layout,
-    files: { ...layout.files, ...overlay.files },
-    folders: { ...layout.folders, ...overlay.folders },
-    bridges: [...layout.bridges, ...overlay.bridges],
-  }
+  return settleIslandRows(
+    cloneLayout({
+      ...layout,
+      files: { ...layout.files, ...overlay.files },
+      folders: { ...layout.folders, ...overlay.folders },
+      bridges: [...layout.bridges, ...overlay.bridges],
+    }),
+  )
 }
 
 export function layoutWorld(graph: CodebaseGraph): WorldLayout {
@@ -543,12 +667,12 @@ export function layoutWorld(graph: CodebaseGraph): WorldLayout {
   placeFolder(root, 0, 0, indexed, files, folders, bridges)
 
   const rootFolder = folders[root.path]
-  return {
+  return settleIslandRows({
     files,
     folders,
     bridges,
     spawn: [rootFolder.x, CONFIG.eyeHeight, rootFolder.z + 2.4],
-  }
+  })
 }
 
 export function folderAt(

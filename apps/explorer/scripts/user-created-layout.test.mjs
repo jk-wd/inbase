@@ -194,4 +194,60 @@ if (!canLoadTs) {
     assert.ok(global?.folders.src)
     assert.ok(coral?.folders['src/lambda'])
   })
+
+  test('blueprint islands grow with their files and the row shares that depth', () => {
+    const blocks = Array.from({ length: 8 }, (_, index) => ({
+      id: `src/file-${index}.ts`,
+      name: `file-${index}.ts`,
+      path: `src/file-${index}.ts`,
+      folder: 'src',
+    }))
+    const quiet = { id: 'lib', name: 'lib', path: 'lib', parent: '.' }
+    const nested = { id: 'lib/nested', name: 'nested', path: 'lib/nested', parent: 'lib' }
+    const srcNested = { id: 'src/nested', name: 'nested', path: 'src/nested', parent: 'src' }
+    const layout = withUserCreatedLayout(emptyLayout(), blocks, [src, quiet, nested, srcNested])
+    assert.equal(layout.folders.src.depth, layout.folders.lib.depth)
+    assert.ok(layout.folders.src.depth > layout.folders['.'].depth)
+    for (const block of blocks) {
+      const placed = layout.files[block.id]
+      const island = layout.folders.src
+      assert.ok(placed)
+      assert.ok(placed.position[2] + placed.size[2] / 2 <= island.z + island.depth + 1e-4)
+    }
+    assert.equal(layout.folders['src/nested'].z, layout.folders['lib/nested'].z)
+  })
+
+  test('blueprint maps that share a folder are placed beside each other', () => {
+    const block = (id, folder) => ({
+      id,
+      name: id.split('/').pop(),
+      path: id,
+      folder,
+    })
+    const layers = layoutBlueprintLayers(emptyLayout(), [
+      {
+        id: 'blue',
+        hex: '#38bdf8',
+        blocks: [block('src/blue.ts', 'src')],
+        islands: [src],
+      },
+      {
+        id: 'coral',
+        hex: '#f87171',
+        blocks: [block('src/coral.ts', 'src')],
+        islands: [src],
+      },
+    ])
+    const blue = layers.find((layer) => layer.id === 'blue')
+    const coral = layers.find((layer) => layer.id === 'coral')
+    assert.ok(blue?.folders.src)
+    assert.ok(coral?.folders.src)
+    assert.ok(Math.abs(blue.folders.src.x - coral.folders.src.x) > blue.folders.src.width / 2)
+    for (const layer of [blue, coral]) {
+      const island = layer.folders.src
+      const placed = Object.values(layer.files)[0]
+      assert.ok(placed.position[2] + placed.size[2] / 2 <= island.z + island.depth + 1e-4)
+      assert.ok(Math.abs(placed.position[0] - island.x) <= island.width / 2)
+    }
+  })
 }

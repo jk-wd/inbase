@@ -13,4 +13,5 @@ The command name is `inbase` (via `npx inbase` or a global install). Run `inbase
 | `inbase run --target <dir>` | Map another folder for this run |
 | `inbase run --port <number>` | Start on another port (default: `inbase.json` port, else 5173) |
 | `inbase extract-blueprint <folder> <output-folder>` | Scan a folder and print an inventory for `/extract-blueprint`. `--write` saves the curated blueprint as `<name>.blueprint.json` plus `<name>-wrapper.json` in the output folder |
+| `inbase propose-blueprint --description "<text>" [--session <color>] [--execute]` | Propose a blueprint from the description. Without `--session`, only `blueprints/<subject>-<num>/<subject>-<num>.blueprint.json` is written. With `--session`, that folder also gets a wrapper and the blueprint is shown on that color. `--execute` writes the file and implements the blueprint immediately. Do not combine `--execute` with `--dont-write-to-file` |
 | `inbase help` | Show CLI help |

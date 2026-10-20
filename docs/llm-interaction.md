@@ -30,6 +30,23 @@ That attaches the chat to that color’s empty slot — Coral in the example abo
 
 A regular chat without `/inbase`, `/connect`, or a color command does **not** attach. Keep using those commands when you want the map session.
 
+## Propose a blueprint
+
+`/propose-blueprint` builds a blueprint from a description. The description comes first. A session color is optional, and only counts when it is the last word (or an alias such as `/red` for Coral). `--execute` may appear anywhere.
+
+```
+/propose-blueprint Add a timer
+/propose-blueprint Add a timer coral
+/propose-blueprint Add a timer --execute
+/propose-blueprint Add a timer coral --execute
+```
+
+Without a color, Inbase writes `blueprints/<subject>-<num>/<subject>-<num>.blueprint.json` and does not attach a chat or update the map.
+
+With a color, the chat attaches to that session, writes the blueprint file and a wrapper, and shows the blueprint on the map. Implementation waits until you invoke that color, unless you passed `--execute`.
+
+`--execute` writes the blueprint file and implements it in the same chat. With a color, that continues in the attached session. Without a color, it implements the blueprint in the project and does not attach.
+
 When a chat is attached, the map opens that color’s **LLM session window**. Look for **ATTACHED** / **LLM CONNECTED** and the current status (for example “LLM is planning steps”):
 
 ![LLM session window attached](images/llm-attached.png)
@@ -111,3 +128,5 @@ Planned items take that color on the map. Here `components` is on Blue and `sess
 ![Multiple session blueprints](images/session-specific-result-2.png)
 
 Left to right: the first folder is local to `/coral`, the second is local to `/amber`, and the blue folder belongs to `/blue`.
+
+When two colors describe the same new folder, the later map is placed beside the first so the sheets do not cover each other.

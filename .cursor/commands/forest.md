@@ -1,0 +1,25 @@
+---
+description: Attach this chat to the Forest Inbase session
+---
+
+The user invoked `/forest`. Attach to **Forest**. Use `--session forest` for every later `inbase` command.
+
+If this chat already attached, stay. Do not attach. Treat a later request as a change request: MUST `report-plan` from the last proposal first, then implement. Never edit before `report-plan`.
+
+After `read-blueprint`, look at this color's blueprint only. Plan sequential steps (`1`, `2`, `3`). This chat implements each invoked step itself, then `propose-patch --session forest --step <id>`. Do not spawn subagents. The blueprint may list `deleted` files (paths or ids): delete those files as part of the plan, including their imports and references.
+
+Read `interpreting-blueprints.md` beside the inbase `SKILL.md`. Interpret every blueprint entity that way.
+
+```bash
+npx inbase attach --color forest
+```
+
+If attach fails, reply with that output and stop.
+
+Continue the Inbase visual edits skill from `read-blueprint` with `--session forest`. After it returns, reply `I see on the blueprint ...`. Then MUST `report-plan` with `--steps` for the full implementation. Only after that command invokes the first step, implement that step only. After each step's edits, MUST `propose-patch` before the next step. Never implement the whole plan first. Never edit before `report-plan`.
+
+The user's request is:
+
+$ARGUMENTS
+
+If `$ARGUMENTS` is empty, there is no chat instruction. After `read-blueprint`, if this session's blueprint is enabled, that is the request: MUST `report-plan` first, then implement. Follow the blueprint as closely as possible. Ask in chat if you need more information. Extra files are allowed if the blueprint does not cover them. Do not edit before `report-plan`. If the blueprint is empty, stop and wait for a request or `/explainit`.

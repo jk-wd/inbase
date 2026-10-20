@@ -131,6 +131,10 @@ test('copyDir installs the skill template', () => {
     assert.match(skillText, /npx inbase attach/)
     assert.match(skillText, /follow it as closely as possible/)
     assert.match(skillText, /Extra files are allowed if the blueprint does not cover them/)
+    assert.match(skillText, /VISUAL_CODER_CODEBASE_MAP/)
+    assert.match(skillText, /codebase\.json/)
+    assert.match(skillText, /generate/)
+    assert.match(skillText, /target tree only when that map does not already/)
     assert.match(skillText, /inside the mapped/)
     assert.match(skillText, /inbase\.json/)
     assert.match(skillText, /outside that target/)
@@ -1300,6 +1304,10 @@ test('help prints usage', async () => {
     assert.match(output, /inbase cleanup \[editor\]/)
     assert.match(output, /inbase run/)
     assert.match(output, /inbase extract-blueprint <folder> <output-file>/)
+    assert.match(
+      output,
+      /inbase propose-blueprint --description "<text>" \[--session <color>\] \[--execute\]/,
+    )
     assert.doesNotMatch(output, /inbase blueprint-structure/)
     assert.match(output, /inbase help/)
     assert.match(output, /cursor, claude, agents, zed, copilot, cline, opencode, lmstudio, bionic/)
@@ -1529,6 +1537,9 @@ test('read-blueprint treats an enabled blueprint as the request when there is no
     assert.match(empty.stdout, /VISUAL_CODER_NO_REQUEST/)
     assert.match(empty.stdout, /VISUAL_CODER_SAY_BLUEPRINT/)
     assert.match(empty.stdout, /I see nothing on the blueprint yet/)
+    assert.match(empty.stdout, /codebase\.json was generated before this prompt/)
+    assert.match(empty.stdout, /Find the correct files and folders in that file first/)
+    assert.doesNotMatch(empty.stdout, /VISUAL_CODER_CODEBASE_MAP missing/)
     assert.doesNotMatch(empty.stdout, /VISUAL_CODER_BLUEPRINT_ONLY/)
     assert.doesNotMatch(empty.stdout, /VISUAL_CODER_INSTRUCTION_START/)
 
@@ -1567,8 +1578,31 @@ test('read-blueprint treats an enabled blueprint as the request when there is no
     assert.equal(withInstruction.status, 0, withInstruction.stderr)
     assert.match(withInstruction.stdout, /VISUAL_CODER_INSTRUCTION_START/)
     assert.match(withInstruction.stdout, /Add a clock/)
+    assert.match(withInstruction.stdout, /codebase\.json was generated before this prompt/)
     assert.doesNotMatch(withInstruction.stdout, /VISUAL_CODER_BLUEPRINT_ONLY/)
     assert.doesNotMatch(withInstruction.stdout, /VISUAL_CODER_NO_REQUEST/)
+
+    fs.mkdirSync(path.join(root, 'src'), { recursive: true })
+    fs.writeFileSync(path.join(root, 'src/Clock.tsx'), 'export function Clock() { return null }\n')
+    fs.writeFileSync(
+      path.join(dataDir, 'codebase.json'),
+      JSON.stringify({ files: [{ id: 'src/App.tsx' }], folders: [{ path: 'src' }] }),
+    )
+    const withMap = runCli(['read-blueprint', '--session', 'blueprint-only'], {
+      cwd: root,
+      env,
+    })
+    assert.equal(withMap.status, 0, withMap.stderr)
+    assert.match(withMap.stdout, /VISUAL_CODER_INSTRUCTION_START/)
+    assert.match(
+      withMap.stdout,
+      new RegExp(`VISUAL_CODER_CODEBASE_MAP ${path.join(dataDir, 'codebase.json').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`),
+    )
+    assert.match(withMap.stdout, /Find the correct files and folders in that file first/)
+    assert.match(withMap.stdout, /Read it before you scan/)
+    const generated = JSON.parse(fs.readFileSync(path.join(dataDir, 'codebase.json'), 'utf8'))
+    assert.ok(generated.files.some((file) => file.id === 'src/Clock.tsx'))
+    assert.ok(!generated.files.some((file) => file.id === 'src/App.tsx'))
   } finally {
     cleanup()
   }
@@ -1684,6 +1718,9 @@ test('propose-blueprint writes files, symbols, relations, notes, pointers, and d
     assert.equal(instruction.status, 0, instruction.stderr)
     assert.match(instruction.stdout, /VISUAL_CODER_PROPOSE_BLUEPRINT_INSTRUCTION_START/)
     assert.match(instruction.stdout, /interpreting-blueprints\.md/)
+    assert.match(instruction.stdout, /codebase\.json was generated before this prompt/)
+    assert.match(instruction.stdout, /Find the correct files and folders in that file first/)
+    assert.equal(fs.existsSync(path.join(dataDir, 'codebase.json')), true)
     assert.match(instruction.stdout, /imports: An import is a relation/)
     assert.match(instruction.stdout, /"from":"src\/timer\/Timer\.tsx"/)
     assert.doesNotMatch(instruction.stdout, /\.\/timer\/Timer/)
@@ -1840,6 +1877,164 @@ test('propose-blueprint writes files, symbols, relations, notes, pointers, and d
       store.readBlueprintByColor(dataDir, 'coral').steps,
       ['Add the timer types', 'Render Timer in App'],
     )
+  } finally {
+    cleanup()
+  }
+})
+
+test('propose-blueprint without a color writes the blueprint file and skips the map', async () => {
+  const { root, cleanup } = tempProject()
+  const dataDir = path.join(root, '.inbase')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: root,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    fs.mkdirSync(dataDir, { recursive: true })
+    const instruction = runCli(
+      ['propose-blueprint', '--description', 'Add a timer'],
+      { cwd: root, env },
+    )
+    assert.equal(instruction.status, 0, instruction.stderr)
+    assert.match(instruction.stdout, /no session color/)
+    assert.match(instruction.stdout, /Do not attach/)
+    assert.match(instruction.stdout, /VISUAL_CODER_PROPOSE_BLUEPRINT file/)
+    assert.doesNotMatch(instruction.stdout, /--session/)
+    assert.doesNotMatch(instruction.stderr, /VISUAL_CODER_NOT_RUNNING/)
+
+    const layer = {
+      subject: 'timer',
+      files: [{ path: 'src/timer/Timer.tsx' }],
+      folders: [{ path: 'src/timer' }],
+      steps: ['Add the timer types'],
+    }
+    const written = runCli(
+      ['propose-blueprint', '--description', 'Add a timer'],
+      { cwd: root, env, input: JSON.stringify(layer) },
+    )
+    assert.equal(written.status, 0, written.stderr)
+    assert.match(
+      written.stdout,
+      /VISUAL_CODER_BLUEPRINT_FILE blueprints\/timer-1\/timer-1\.blueprint\.json/,
+    )
+    assert.match(written.stdout, /VISUAL_CODER_BLUEPRINT_WRAPPER skipped/)
+    assert.match(written.stdout, /the map was not updated/)
+    const blueprintPath = path.join(root, 'blueprints', 'timer-1', 'timer-1.blueprint.json')
+    const document = JSON.parse(fs.readFileSync(blueprintPath, 'utf8'))
+    assert.equal(document.name, 'timer-1')
+    assert.equal(document.files[0].path, 'src/timer/Timer.tsx')
+    assert.equal('color' in document, false)
+    assert.equal(
+      fs.existsSync(path.join(root, 'blueprints', 'timer-1', 'timer-1-wrapper.json')),
+      false,
+    )
+  } finally {
+    cleanup()
+  }
+})
+
+test('propose-blueprint --execute writes the file and asks to implement it', async () => {
+  const { root, cleanup } = tempProject()
+  const dataDir = path.join(root, '.inbase')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: root,
+    INBASE_DATA_DIR: dataDir,
+  }
+  const layer = {
+    subject: 'timer',
+    files: [{ path: 'src/timer/Timer.tsx' }],
+    steps: ['Add the timer view'],
+  }
+  try {
+    fs.mkdirSync(dataDir, { recursive: true })
+    const instruction = runCli(
+      ['propose-blueprint', '--description', 'Add a timer', '--execute'],
+      { cwd: root, env },
+    )
+    assert.equal(instruction.status, 0, instruction.stderr)
+    assert.match(instruction.stdout, /VISUAL_CODER_PROPOSE_EXECUTE is set/)
+    assert.match(
+      instruction.stdout,
+      /npx inbase propose-blueprint --description "Add a timer" --execute/,
+    )
+
+    const written = runCli(
+      ['propose-blueprint', '--description', 'Add a timer', '--execute'],
+      { cwd: root, env, input: JSON.stringify(layer) },
+    )
+    assert.equal(written.status, 0, written.stderr)
+    assert.match(
+      written.stdout,
+      /VISUAL_CODER_BLUEPRINT_FILE blueprints\/timer-1\/timer-1\.blueprint\.json/,
+    )
+    assert.match(written.stdout, /VISUAL_CODER_PROPOSE_EXECUTE Implement this blueprint now/)
+    assert.match(written.stdout, /Do not attach/)
+    assert.match(written.stdout, /Do not run report-plan/)
+    assert.equal(
+      fs.existsSync(path.join(root, 'blueprints', 'timer-1', 'timer-1.blueprint.json')),
+      true,
+    )
+
+    const rejected = runCli(
+      [
+        'propose-blueprint',
+        '--description',
+        'Add a timer',
+        '--execute',
+        '--dont-write-to-file',
+      ],
+      { cwd: root, env, input: JSON.stringify(layer) },
+    )
+    assert.notEqual(rejected.status, 0)
+    assert.match(rejected.stderr, /Omit --dont-write-to-file/)
+  } finally {
+    cleanup()
+  }
+})
+
+test('propose-blueprint --execute on a color keeps the map and starts the plan', async () => {
+  const { root, cleanup } = tempProject()
+  const dataDir = path.join(root, '.inbase')
+  const env = {
+    ...process.env,
+    VISUAL_CODER_TARGET: root,
+    INBASE_DATA_DIR: dataDir,
+  }
+  try {
+    fs.mkdirSync(dataDir, { recursive: true })
+    writeRunningInstance({ dataDir, targetRoot: root })
+    const started = runCli(
+      ['start-session', '--session', 'coral', '--name', 'Coral'],
+      { cwd: root, env },
+    )
+    assert.equal(started.status, 0, started.stderr)
+    const written = runCli(
+      [
+        'propose-blueprint',
+        '--session',
+        'coral',
+        '--description',
+        'Add a timer',
+        '--execute',
+      ],
+      {
+        cwd: root,
+        env,
+        input: JSON.stringify({
+          subject: 'timer',
+          files: [{ path: 'src/timer/Timer.tsx' }],
+          steps: ['Add the timer view'],
+        }),
+      },
+    )
+    assert.equal(written.status, 0, written.stderr)
+    assert.match(written.stdout, /VISUAL_CODER_BLUEPRINT_WRAPPER blueprints\/timer-1\/timer-1-wrapper\.json/)
+    assert.match(written.stdout, /VISUAL_CODER_PROPOSE_EXECUTE Implement this blueprint now/)
+    assert.match(written.stdout, /read-blueprint --session coral/)
+    assert.match(written.stdout, /report-plan --session coral/)
+    assert.doesNotMatch(written.stdout, /invoke the session color/)
   } finally {
     cleanup()
   }
@@ -2429,6 +2624,8 @@ test('attach --session on an already attached chat stays in that session', async
     const first = runCli(['attach'], { cwd: root, env })
     assert.equal(first.status, 0, first.stderr)
     assert.match(first.stdout, /VISUAL_CODER_ATTACHED/)
+    const generated = JSON.parse(fs.readFileSync(path.join(dataDir, 'codebase.json'), 'utf8'))
+    assert.ok(generated.files.some((file) => file.id === 'src/a.ts'))
     assert.match(first.stdout, /MUST run report-plan/)
     assert.match(first.stdout, /MUST propose-patch/)
     assert.doesNotMatch(first.stdout, /report a plan if you can/)

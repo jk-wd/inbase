@@ -1,5 +1,5 @@
 import { BLUEPRINT_OVERLAY, CONFIG, fileHeight } from './theme'
-import { folderOfFile, folderParent } from './layout'
+import { folderOfFile, folderParent, settleIslandRows } from './layout'
 import type {
   BlueprintNote,
   BlueprintNoteKind,
@@ -246,6 +246,131 @@ function islandDepth() {
   return CONFIG.areaPadding * 2 + CONFIG.fileSpacing
 }
 
+function ownedLayout(layout: WorldLayout): WorldLayout {
+  return {
+    ...layout,
+    files: Object.fromEntries(
+      Object.entries(layout.files).map(([id, file]) => [
+        id,
+        {
+          ...file,
+          position: [...file.position] as [number, number, number],
+          size: [...file.size] as [number, number, number],
+        },
+      ]),
+    ),
+    folders: Object.fromEntries(
+      Object.entries(layout.folders).map(([path, folder]) => [path, { ...folder }]),
+    ),
+    bridges: layout.bridges.map((bridge) => ({
+      ...bridge,
+      points: bridge.points.map((point) => [...point] as [number, number]),
+    })),
+  }
+}
+
+function pathsRelated(left: string, right: string) {
+  if (left === right) return true
+  const nested = (path: string, root: string) =>
+    root === '.' ? path !== '.' : path.startsWith(`${root}/`)
+  return nested(left, right) || nested(right, left)
+}
+
+function isUnderPath(path: string, rootPath: string) {
+  if (!path || path === rootPath) return false
+  if (rootPath === '.') return path !== '.'
+  return path.startsWith(`${rootPath}/`)
+}
+
+function shiftSubtreeX(
+  rootPath: string,
+  delta: number,
+  folders: Record<string, PlacedFolder>,
+  files: Record<string, PlacedFile>,
+  bridges: PlacedBridge[],
+) {
+  if (delta <= 1e-6) return
+  const moves = (path: string) => path === rootPath || isUnderPath(path, rootPath)
+  for (const folder of Object.values(folders)) {
+    if (moves(folder.path)) folder.x += delta
+  }
+  for (const file of Object.values(files)) {
+    if (moves(folderOfFile(file.id))) file.position[0] += delta
+  }
+  for (const bridge of bridges) {
+    const target = bridge.id.split('→')[1]
+    if (target && moves(target)) {
+      for (const point of bridge.points) point[0] += delta
+    }
+  }
+}
+
+function separateSiblingIslands(
+  folders: Record<string, PlacedFolder>,
+  files: Record<string, PlacedFile>,
+  bridges: PlacedBridge[],
+) {
+  const groups = new Map<string, PlacedFolder[]>()
+  for (const folder of Object.values(folders)) {
+    const parent = folderParent(folder.path)
+    if (!parent) continue
+    const list = groups.get(parent) ?? []
+    list.push(folder)
+    groups.set(parent, list)
+  }
+  for (const siblings of groups.values()) {
+    siblings.sort((left, right) => left.x - right.x || left.path.localeCompare(right.path))
+    for (let index = 1; index < siblings.length; index += 1) {
+      const previous = siblings[index - 1]
+      const folder = siblings[index]
+      const overlap =
+        previous.x + previous.width / 2 + CONFIG.siblingGap - (folder.x - folder.width / 2)
+      if (overlap <= 1e-6) continue
+      shiftSubtreeX(folder.path, overlap, folders, files, bridges)
+    }
+  }
+}
+
+function separateBlueprintMaps(layers: BlueprintOverlayLayer[]) {
+  const accepted: { layerId: string; path: string; rect: OccupiedRect }[] = []
+  for (const layer of layers) {
+    const moved = new Set<string>()
+    const folders = Object.values(layer.folders).sort(
+      (left, right) =>
+        createdPathDepth(left.path) - createdPathDepth(right.path) ||
+        left.x - right.x,
+    )
+    for (const folder of folders) {
+      const movedWithAncestor = [...moved].some((path) => isUnderPath(folder.path, path))
+      if (!folder.userCreated && !folder.added) {
+        accepted.push({ layerId: layer.id, path: folder.path, rect: folderOccupancy(folder) })
+        continue
+      }
+      if (!movedWithAncestor) {
+        for (let guard = 0; guard < 40; guard += 1) {
+          const rect = folderOccupancy(folder)
+          const hit = accepted.find((other) => {
+            if (other.layerId === layer.id) return false
+            if (other.path !== folder.path && pathsRelated(other.path, folder.path)) return false
+            return occupancyOverlaps(rect, other.rect)
+          })
+          if (!hit) break
+          const delta = hit.rect.right + CONFIG.siblingGap + folder.width / 2 - folder.x
+          shiftSubtreeX(
+            folder.path,
+            delta > 1e-4 ? delta : folder.width + CONFIG.siblingGap,
+            layer.folders,
+            layer.files,
+            layer.bridges,
+          )
+          moved.add(folder.path)
+        }
+      }
+      accepted.push({ layerId: layer.id, path: folder.path, rect: folderOccupancy(folder) })
+    }
+  }
+}
+
 export function withUserCreatedGraph(
   graph: CodebaseGraph,
   blocks: UserCreatedBlock[],
@@ -443,7 +568,6 @@ export function withUserCreatedLayout(
   islands: UserCreatedIsland[] = [],
 ): WorldLayout {
   const withIslands = overlayIslands(layout, islands)
-  if (blocks.length === 0) return withIslands
   const files = { ...withIslands.files }
   const height = fileHeight(12)
   const nextIndex = new Map<string, number>()
@@ -466,7 +590,9 @@ export function withUserCreatedLayout(
       occupied: filesOccupancy([withIslands.files, files], block.id),
     })
   }
-  return { ...withIslands, files }
+  const settled = settleIslandRows(ownedLayout({ ...withIslands, files }))
+  separateSiblingIslands(settled.folders, settled.files, settled.bridges)
+  return settled
 }
 
 function uniqueSiblings(
@@ -589,11 +715,15 @@ function placeCreatedFile(opts: {
     if (usable(candidate)) return candidate
   }
   if (opts.folder) {
+    let outside: PlacedFile | null = null
     for (let index = opts.startIndex; index < opts.startIndex + 48; index += 1) {
       const spot = aisleSpotOnFolder(opts.folder, index)
       const candidate = make(spot.x, spot.z)
-      if (usable(candidate)) return candidate
+      if (fileOverlapsAny(candidate, opts.occupied)) continue
+      if (fileFitsInFolder(candidate, opts.folder)) return candidate
+      outside ??= candidate
     }
+    if (outside) return outside
     const fallback = aisleSpotOnFolder(opts.folder, opts.startIndex)
     return make(fallback.x, fallback.z)
   }
@@ -981,7 +1111,7 @@ export function layoutBlueprintLayers(
       )
       .map((item, floor) => [item.source.id, floor + 1]),
   )
-  return placedSources.map(({ source, index, folders, bridges, overlapsMap }) => {
+  const layers = placedSources.map(({ source, index, folders, bridges, overlapsMap }) => {
     /** Raised blueprints stack a full lift apart: floor 1, 2, 3… in session color order. */
     const folderY = BLUEPRINT_OVERLAY.folderY * (raisedFloor.get(source.id) ?? 1)
     const groundY =
@@ -1002,12 +1132,19 @@ export function layoutBlueprintLayers(
         return liftAbove(y, overlapsMap)
       },
     )
+    const settled = settleIslandRows({
+      files,
+      folders,
+      bridges,
+      spawn: [0, 0, 0],
+    })
+    separateSiblingIslands(settled.folders, settled.files, settled.bridges)
     return {
       id: source.id,
       colorHex: source.hex,
-      folders,
-      files,
-      bridges,
+      folders: settled.folders,
+      files: settled.files,
+      bridges: settled.bridges,
       filledIds,
       folderY,
       fileLift,
@@ -1015,6 +1152,8 @@ export function layoutBlueprintLayers(
       imports: source.imports ?? [],
     }
   })
+  separateBlueprintMaps(layers)
+  return layers
 }
 
 export function mergeOverlayOnlyFolders(
