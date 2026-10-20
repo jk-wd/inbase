@@ -310,6 +310,76 @@ export function settleIslandRows(layout: WorldLayout): WorldLayout {
   return layout
 }
 
+export function shiftSubtreeX(
+  rootPath: string,
+  delta: number,
+  files: Record<string, PlacedFile>,
+  folders: Record<string, PlacedFolder>,
+  bridges: PlacedBridge[],
+) {
+  if (delta <= 1e-6) return
+  const moves = (path: string) => path === rootPath || isDescendantPath(path, rootPath)
+  for (const folder of Object.values(folders)) {
+    if (moves(folder.path)) folder.x += delta
+  }
+  for (const file of Object.values(files)) {
+    if (moves(folderOfFile(file.id))) file.position[0] += delta
+  }
+  for (const bridge of bridges) {
+    const target = bridge.id.split('→')[1]
+    if (target && moves(target)) {
+      for (const point of bridge.points) point[0] += delta
+    }
+  }
+}
+
+function coverChildren(parent: PlacedFolder, children: PlacedFolder[]) {
+  let left = parent.x - parent.width / 2
+  let right = parent.x + parent.width / 2
+  for (const child of children) {
+    left = Math.min(left, child.x - child.width / 2)
+    right = Math.max(right, child.x + child.width / 2)
+  }
+  parent.x = (left + right) / 2
+  parent.width = right - left
+}
+
+/** Deepest row first: push overlapping siblings apart, then widen their parent over them so the parent's own row separates next. */
+export function separateSiblingRows<
+  T extends Pick<WorldLayout, 'files' | 'folders' | 'bridges'>,
+>(layout: T): T {
+  const groups = new Map<string, PlacedFolder[]>()
+  for (const folder of Object.values(layout.folders)) {
+    const parent = folderParent(folder.path)
+    if (!parent) continue
+    const list = groups.get(parent) ?? []
+    list.push(folder)
+    groups.set(parent, list)
+  }
+  const parents = [...groups.keys()].sort(
+    (left, right) => pathDepth(right) - pathDepth(left) || left.localeCompare(right),
+  )
+  for (const parentPath of parents) {
+    const siblings = groups.get(parentPath) ?? []
+    siblings.sort(
+      (left, right) =>
+        left.x - left.width / 2 - (right.x - right.width / 2) ||
+        left.path.localeCompare(right.path),
+    )
+    for (let index = 1; index < siblings.length; index += 1) {
+      const previous = siblings[index - 1]
+      const folder = siblings[index]
+      const overlap =
+        previous.x + previous.width / 2 + CONFIG.siblingGap - (folder.x - folder.width / 2)
+      if (overlap <= 1e-6) continue
+      shiftSubtreeX(folder.path, overlap, layout.files, layout.folders, layout.bridges)
+    }
+    const parent = layout.folders[parentPath]
+    if (parent) coverChildren(parent, siblings)
+  }
+  return layout
+}
+
 export function folderOfFile(fileId: string) {
   return fileId.includes('/') ? fileId.split('/').slice(0, -1).join('/') : '.'
 }
@@ -643,13 +713,15 @@ export function withPreviewLayout(
   layout: WorldLayout,
   overlay: PreviewOverlay,
 ): WorldLayout {
-  return settleIslandRows(
-    cloneLayout({
-      ...layout,
-      files: { ...layout.files, ...overlay.files },
-      folders: { ...layout.folders, ...overlay.folders },
-      bridges: [...layout.bridges, ...overlay.bridges],
-    }),
+  return separateSiblingRows(
+    settleIslandRows(
+      cloneLayout({
+        ...layout,
+        files: { ...layout.files, ...overlay.files },
+        folders: { ...layout.folders, ...overlay.folders },
+        bridges: [...layout.bridges, ...overlay.bridges],
+      }),
+    ),
   )
 }
 

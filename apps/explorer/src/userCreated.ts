@@ -1,5 +1,11 @@
 import { BLUEPRINT_OVERLAY, CONFIG, fileHeight } from './theme'
-import { folderOfFile, folderParent, settleIslandRows } from './layout'
+import {
+  folderOfFile,
+  folderParent,
+  separateSiblingRows,
+  settleIslandRows,
+  shiftSubtreeX,
+} from './layout'
 import type {
   BlueprintNote,
   BlueprintNoteKind,
@@ -282,55 +288,6 @@ function isUnderPath(path: string, rootPath: string) {
   return path.startsWith(`${rootPath}/`)
 }
 
-function shiftSubtreeX(
-  rootPath: string,
-  delta: number,
-  folders: Record<string, PlacedFolder>,
-  files: Record<string, PlacedFile>,
-  bridges: PlacedBridge[],
-) {
-  if (delta <= 1e-6) return
-  const moves = (path: string) => path === rootPath || isUnderPath(path, rootPath)
-  for (const folder of Object.values(folders)) {
-    if (moves(folder.path)) folder.x += delta
-  }
-  for (const file of Object.values(files)) {
-    if (moves(folderOfFile(file.id))) file.position[0] += delta
-  }
-  for (const bridge of bridges) {
-    const target = bridge.id.split('→')[1]
-    if (target && moves(target)) {
-      for (const point of bridge.points) point[0] += delta
-    }
-  }
-}
-
-function separateSiblingIslands(
-  folders: Record<string, PlacedFolder>,
-  files: Record<string, PlacedFile>,
-  bridges: PlacedBridge[],
-) {
-  const groups = new Map<string, PlacedFolder[]>()
-  for (const folder of Object.values(folders)) {
-    const parent = folderParent(folder.path)
-    if (!parent) continue
-    const list = groups.get(parent) ?? []
-    list.push(folder)
-    groups.set(parent, list)
-  }
-  for (const siblings of groups.values()) {
-    siblings.sort((left, right) => left.x - right.x || left.path.localeCompare(right.path))
-    for (let index = 1; index < siblings.length; index += 1) {
-      const previous = siblings[index - 1]
-      const folder = siblings[index]
-      const overlap =
-        previous.x + previous.width / 2 + CONFIG.siblingGap - (folder.x - folder.width / 2)
-      if (overlap <= 1e-6) continue
-      shiftSubtreeX(folder.path, overlap, folders, files, bridges)
-    }
-  }
-}
-
 function separateBlueprintMaps(layers: BlueprintOverlayLayer[]) {
   const accepted: { layerId: string; path: string; rect: OccupiedRect }[] = []
   for (const layer of layers) {
@@ -359,8 +316,8 @@ function separateBlueprintMaps(layers: BlueprintOverlayLayer[]) {
           shiftSubtreeX(
             folder.path,
             delta > 1e-4 ? delta : folder.width + CONFIG.siblingGap,
-            layer.folders,
             layer.files,
+            layer.folders,
             layer.bridges,
           )
           moved.add(folder.path)
@@ -590,9 +547,7 @@ export function withUserCreatedLayout(
       occupied: filesOccupancy([withIslands.files, files], block.id),
     })
   }
-  const settled = settleIslandRows(ownedLayout({ ...withIslands, files }))
-  separateSiblingIslands(settled.folders, settled.files, settled.bridges)
-  return settled
+  return separateSiblingRows(settleIslandRows(ownedLayout({ ...withIslands, files })))
 }
 
 function uniqueSiblings(
@@ -1132,13 +1087,14 @@ export function layoutBlueprintLayers(
         return liftAbove(y, overlapsMap)
       },
     )
-    const settled = settleIslandRows({
-      files,
-      folders,
-      bridges,
-      spawn: [0, 0, 0],
-    })
-    separateSiblingIslands(settled.folders, settled.files, settled.bridges)
+    const settled = separateSiblingRows(
+      settleIslandRows({
+        files,
+        folders,
+        bridges,
+        spawn: [0, 0, 0],
+      }),
+    )
     return {
       id: source.id,
       colorHex: source.hex,
@@ -1153,6 +1109,7 @@ export function layoutBlueprintLayers(
     }
   })
   separateBlueprintMaps(layers)
+  for (const layer of layers) separateSiblingRows(layer)
   return layers
 }
 

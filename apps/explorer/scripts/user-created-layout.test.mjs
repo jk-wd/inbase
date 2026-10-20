@@ -217,6 +217,43 @@ if (!canLoadTs) {
     assert.equal(layout.folders['src/nested'].z, layout.folders['lib/nested'].z)
   })
 
+  test('a sibling pushed aside by a wider blueprint island stays on its parent', async () => {
+    const { layoutWorld } = await import('../src/layout.ts')
+    const folder = (path, parent, children) => ({
+      path,
+      name: path.split('/').pop(),
+      parent,
+      files: [],
+      children,
+    })
+    const world = layoutWorld({
+      root: '.',
+      targetName: 'app',
+      files: [],
+      folders: [folder('.', null, ['a', 'b']), folder('a', '.', []), folder('b', '.', [])],
+    })
+    const added = ['one', 'two', 'three'].map((name) => ({
+      id: `a/${name}`,
+      name,
+      path: `a/${name}`,
+      parent: 'a',
+    }))
+    const layout = withUserCreatedLayout(world, [], added)
+    const root = layout.folders['.']
+    const a = layout.folders.a
+    const b = layout.folders.b
+    const edges = (item) => [item.x - item.width / 2, item.x + item.width / 2]
+    assert.ok(edges(a)[1] + 1e-4 <= edges(b)[0])
+    for (const item of [a, b, ...added.map((island) => layout.folders[island.path])]) {
+      const parent = layout.folders[item.path.includes('/') ? 'a' : '.']
+      assert.ok(edges(item)[0] >= edges(parent)[0] - 1e-4)
+      assert.ok(edges(item)[1] <= edges(parent)[1] + 1e-4)
+    }
+    const bridge = layout.bridges.find((item) => item.id === '.→b')
+    assert.ok(Math.abs(bridge.points[0][0] - b.x) < 1e-4)
+    assert.ok(Math.abs(bridge.points[0][0] - root.x) <= root.width / 2)
+  })
+
   test('blueprint maps that share a folder are placed beside each other', () => {
     const block = (id, folder) => ({
       id,
