@@ -227,62 +227,106 @@ function isDescendantPath(path: string, rootPath: string) {
   return path.startsWith(`${rootPath}/`)
 }
 
-function shiftDescendantsZ(
-  rootPath: string,
-  delta: number,
-  files: Record<string, PlacedFile>,
-  folders: Record<string, PlacedFolder>,
-  bridges: PlacedBridge[],
-) {
-  if (delta <= 1e-6) return
-  for (const folder of Object.values(folders)) {
-    if (isDescendantPath(folder.path, rootPath)) folder.z += delta
-  }
-  for (const file of Object.values(files)) {
-    if (isDescendantPath(folderOfFile(file.id), rootPath)) file.position[2] += delta
-  }
-  for (const bridge of bridges) {
-    const target = bridge.id.split('→')[1]
-    if (target && isDescendantPath(target, rootPath)) {
-      for (const point of bridge.points) point[1] += delta
+type PathBucket = {
+  path: string
+  folders: PlacedFolder[]
+  files: PlacedFile[]
+  bridges: PlacedBridge[]
+}
+
+/** Folders, files and bridges grouped by folder path, sorted by code unit so every `path/` prefix is one contiguous run. */
+type PathIndex = {
+  sorted: PathBucket[]
+  byPath: Map<string, PathBucket>
+}
+
+function indexPaths(
+  layout: Pick<WorldLayout, 'files' | 'folders' | 'bridges'>,
+): PathIndex {
+  const byPath = new Map<string, PathBucket>()
+  const bucket = (path: string) => {
+    let found = byPath.get(path)
+    if (!found) {
+      found = { path, folders: [], files: [], bridges: [] }
+      byPath.set(path, found)
     }
+    return found
+  }
+  for (const folder of Object.values(layout.folders)) bucket(folder.path).folders.push(folder)
+  for (const file of Object.values(layout.files)) bucket(folderOfFile(file.id)).files.push(file)
+  for (const bridge of layout.bridges) {
+    const target = bridge.id.split('→')[1]
+    if (target) bucket(target).bridges.push(bridge)
+  }
+  const sorted = [...byPath.values()].sort((left, right) =>
+    left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
+  )
+  return { sorted, byPath }
+}
+
+function forEachDescendantBucket(
+  index: PathIndex,
+  rootPath: string,
+  visit: (bucket: PathBucket) => void,
+) {
+  if (rootPath === '.' || rootPath === '') {
+    for (const bucket of index.sorted) {
+      if (isDescendantPath(bucket.path, rootPath)) visit(bucket)
+    }
+    return
+  }
+  const prefix = `${rootPath}/`
+  let low = 0
+  let high = index.sorted.length
+  while (low < high) {
+    const mid = (low + high) >> 1
+    if (index.sorted[mid].path < prefix) low = mid + 1
+    else high = mid
+  }
+  for (let at = low; at < index.sorted.length; at += 1) {
+    const bucket = index.sorted[at]
+    if (!bucket.path.startsWith(prefix)) break
+    visit(bucket)
   }
 }
 
-function depthCoveringFiles(
-  folder: PlacedFolder,
-  files: Record<string, PlacedFile>,
-) {
+function shiftDescendantsZ(rootPath: string, delta: number, index: PathIndex) {
+  if (delta <= 1e-6) return
+  forEachDescendantBucket(index, rootPath, (bucket) => {
+    for (const folder of bucket.folders) folder.z += delta
+    for (const file of bucket.files) file.position[2] += delta
+    for (const bridge of bucket.bridges) {
+      for (const point of bridge.points) point[1] += delta
+    }
+  })
+}
+
+function depthCoveringFiles(folder: PlacedFolder, index: PathIndex) {
   let depth = folder.depth
-  for (const file of Object.values(files)) {
-    if (folderOfFile(file.id) !== folder.path) continue
+  for (const file of index.byPath.get(folder.path)?.files ?? []) {
     const bottom = file.position[2] + file.size[2] / 2 + CONFIG.areaPadding
     depth = Math.max(depth, bottom - folder.z)
   }
   return depth
 }
 
-function fitFolderToFiles(
-  folder: PlacedFolder,
-  files: Record<string, PlacedFile>,
-  folders: Record<string, PlacedFolder>,
-  bridges: PlacedBridge[],
-) {
-  const delta = depthCoveringFiles(folder, files) - folder.depth
+function fitFolderToFiles(folder: PlacedFolder, index: PathIndex) {
+  const delta = depthCoveringFiles(folder, index) - folder.depth
   if (delta <= 1e-6) return
   folder.depth += delta
-  shiftDescendantsZ(folder.path, delta, files, folders, bridges)
+  shiftDescendantsZ(folder.path, delta, index)
 }
 
 /** Grow every island to cover its file blocks, then stretch each sibling row to the tallest island and push the next row down with it. */
 export function settleIslandRows(layout: WorldLayout): WorldLayout {
+  const index = indexPaths(layout)
   const ordered = Object.values(layout.folders).sort(
     (left, right) =>
       pathDepth(left.path) - pathDepth(right.path) ||
       left.path.localeCompare(right.path),
   )
   for (const folder of ordered) {
-    fitFolderToFiles(folder, layout.files, layout.folders, layout.bridges)
+    fitFolderToFiles(folder, index)
   }
 
   const groups = new Map<string, PlacedFolder[]>()
@@ -304,7 +348,7 @@ export function settleIslandRows(layout: WorldLayout): WorldLayout {
       const delta = rowDepth - sibling.depth
       if (delta <= 1e-6) continue
       sibling.depth = rowDepth
-      shiftDescendantsZ(sibling.path, delta, layout.files, layout.folders, layout.bridges)
+      shiftDescendantsZ(sibling.path, delta, index)
     }
   }
   return layout

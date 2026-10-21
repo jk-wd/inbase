@@ -708,6 +708,12 @@ function pointerColorMaps(
   return { files, folders }
 }
 
+/** Keep the current reference when a poll returns equal data, so React can skip the render and memos stay warm. */
+function keepIfSame<T>(current: T, next: T): T {
+  if (current === next) return current
+  return JSON.stringify(current) === JSON.stringify(next) ? current : next
+}
+
 function intentSignature(intent: AgentIntent) {
   return JSON.stringify({
     updatedAt: intent.updatedAt,
@@ -894,20 +900,27 @@ function Explorer({
       ? branchChanges
       : emptyIntent
   const previewing = llmPreviewing || showingBranchChanges
-  const absentIds = previewing ? (changeSet.absent ?? []) : []
+  const absentIds = useMemo(
+    () => (previewing ? (changeSet.absent ?? []) : []),
+    [changeSet.absent, previewing],
+  )
   const mappedGraph = useMemo(
     () => filterGraphAbsentFiles(graph, absentIds),
     [absentIds, graph],
   )
   const plannedCreates = previewing ? changeSet.creates : []
-  const previewCreateIds = previewing
-    ? [
-        ...new Set([
-          ...plannedCreates,
-          ...Object.keys(changeSet.createLines ?? {}),
-        ]),
-      ].filter((id) => !absentIds.includes(id))
-    : []
+  const previewCreateIds = useMemo(
+    () =>
+      previewing
+        ? [
+            ...new Set([
+              ...changeSet.creates,
+              ...Object.keys(changeSet.createLines ?? {}),
+            ]),
+          ].filter((id) => !absentIds.includes(id))
+        : [],
+    [absentIds, changeSet.createLines, changeSet.creates, previewing],
+  )
   const [userBlocks, setUserBlocks] = useState<UserCreatedBlock[]>([])
   const [userIslands, setUserIslands] = useState<UserCreatedIsland[]>([])
   const [blueprintFunctions, setBlueprintFunctions] = useState<
@@ -1071,8 +1084,12 @@ function Explorer({
     () => pointerColorMaps(mapBlueprint.pointers),
     [mapBlueprint.pointers],
   )
-  const pendingBlocks = mapBlueprint.blocks.filter(
-    (block) => block.naming || !knownFileIds.has(block.id),
+  const pendingBlocks = useMemo(
+    () =>
+      mapBlueprint.blocks.filter(
+        (block) => block.naming || !knownFileIds.has(block.id),
+      ),
+    [knownFileIds, mapBlueprint.blocks],
   )
   const visibleIslands = mapBlueprint.islands
   const layoutGraph = useMemo(
@@ -1548,7 +1565,7 @@ function Explorer({
         ) {
           return current.active ? current : emptyExplain()
         }
-        return mergeExplainPoll(current, next)
+        return keepIfSame(current, mergeExplainPoll(current, next))
       })
     }
     void poll()
@@ -2728,7 +2745,7 @@ function Explorer({
     const load = async () => {
       const next = await fetchBranchChanges(branchChangesBase)
       if (cancelled) return
-      setBranchChanges(next)
+      setBranchChanges((current) => keepIfSame(current, next))
       if (next.baseMissing && branchChangesBase) {
         setBranchChangesBase(null)
         persistBranchChangesBase(null)
@@ -2779,35 +2796,50 @@ function Explorer({
       const nextBlocks = parseUserCreatedBlocks(blueprint.files)
       const nextIslands = parseUserCreatedIslands(blueprint.folders)
       setUserBlocks((current) => {
-        if (!keepDrafts) return nextBlocks
+        if (!keepDrafts) return keepIfSame(current, nextBlocks)
         const drafts = current.filter((block) => block.naming)
-        if (drafts.length === 0) return nextBlocks
+        if (drafts.length === 0) return keepIfSame(current, nextBlocks)
         const namedIds = new Set(drafts.map((block) => block.id))
-        return [...nextBlocks.filter((block) => !namedIds.has(block.id)), ...drafts]
+        return keepIfSame(current, [
+          ...nextBlocks.filter((block) => !namedIds.has(block.id)),
+          ...drafts,
+        ])
       })
       setUserIslands((current) => {
-        if (!keepDrafts) return nextIslands
+        if (!keepDrafts) return keepIfSame(current, nextIslands)
         const drafts = current.filter((island) => island.naming)
-        if (drafts.length === 0) return nextIslands
+        if (drafts.length === 0) return keepIfSame(current, nextIslands)
         const namedIds = new Set(drafts.map((island) => island.id))
-        return [...nextIslands.filter((island) => !namedIds.has(island.id)), ...drafts]
+        return keepIfSame(current, [
+          ...nextIslands.filter((island) => !namedIds.has(island.id)),
+          ...drafts,
+        ])
       })
-      setBlueprintFunctions(blueprint.functions)
-      setBlueprintClasses(blueprint.classes ?? [])
-      setBlueprintVariables(blueprint.variables)
-      setBlueprintImports(blueprint.imports)
+      setBlueprintFunctions((current) => keepIfSame(current, blueprint.functions))
+      setBlueprintClasses((current) => keepIfSame(current, blueprint.classes ?? []))
+      setBlueprintVariables((current) => keepIfSame(current, blueprint.variables))
+      setBlueprintImports((current) => keepIfSame(current, blueprint.imports))
       if (!keepDrafts || !notesDirty.current) {
-        const nextPointers = parseBlueprintPointers(blueprint.pointers)
+        const nextPointers = keepIfSame(
+          blueprintPointersRef.current,
+          parseBlueprintPointers(blueprint.pointers),
+        )
         blueprintPointersRef.current = nextPointers
         setBlueprintPointers(nextPointers)
-        const nextDeleted = Array.isArray(blueprint.deleted)
-          ? blueprint.deleted.filter((id): id is string => typeof id === 'string')
-          : []
+        const nextDeleted = keepIfSame(
+          blueprintDeletedRef.current,
+          Array.isArray(blueprint.deleted)
+            ? blueprint.deleted.filter((id): id is string => typeof id === 'string')
+            : [],
+        )
         blueprintDeletedRef.current = nextDeleted
         setBlueprintDeleted(nextDeleted)
       }
       if (!keepDrafts || (!notesDirty.current && !isKeyboardIsolated())) {
-        const nextNotes = parseBlueprintNotes(blueprint.notes)
+        const nextNotes = keepIfSame(
+          blueprintNotesRef.current,
+          parseBlueprintNotes(blueprint.notes),
+        )
         blueprintNotesRef.current = nextNotes
         setBlueprintNotes(nextNotes)
       }
@@ -2840,8 +2872,8 @@ function Explorer({
             locals: bundle.localBlueprints,
           })
           latestBlueprintsRef.current = nextBlueprints
-          setGlobalBlueprint(nextBlueprints.global)
-          setLocalBlueprints(nextBlueprints.locals)
+          setGlobalBlueprint((current) => keepIfSame(current, nextBlueprints.global))
+          setLocalBlueprints((current) => keepIfSame(current, nextBlueprints.locals))
           const colorIds = new Set([
             ...SESSION_COLORS.map((color) => color.id),
             ...bundle.localBlueprints.map((item) => item.color),

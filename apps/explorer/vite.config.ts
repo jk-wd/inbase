@@ -119,32 +119,45 @@ function rescanTarget(when: string) {
   return true
 }
 
-function knownFileIds() {
+let knownPathsCache: {
+  key: string
+  fileIds: string[]
+  folderPaths: string[]
+} | null = null
+
+/** Agent-intent polls ask for these several times a second; re-parse codebase.json only when it changes on disk. */
+function knownPaths() {
   try {
+    const stat = fs.statSync(codebaseFile)
+    const key = `${stat.mtimeMs}:${stat.size}`
+    if (knownPathsCache?.key === key) return knownPathsCache
     const graph = JSON.parse(fs.readFileSync(codebaseFile, 'utf8')) as {
       files?: Array<{ id?: string }>
+      folders?: Array<{ path?: string }>
     }
-    return Array.isArray(graph.files)
-      ? graph.files.map((file) => file.id).filter((id): id is string => Boolean(id))
-      : []
+    knownPathsCache = {
+      key,
+      fileIds: Array.isArray(graph.files)
+        ? graph.files.map((file) => file.id).filter((id): id is string => Boolean(id))
+        : [],
+      folderPaths: Array.isArray(graph.folders)
+        ? graph.folders
+            .map((folder) => folder.path)
+            .filter((path): path is string => Boolean(path))
+        : [],
+    }
+    return knownPathsCache
   } catch {
-    return []
+    return null
   }
 }
 
+function knownFileIds() {
+  return [...(knownPaths()?.fileIds ?? [])]
+}
+
 function knownFolderPaths() {
-  try {
-    const graph = JSON.parse(fs.readFileSync(codebaseFile, 'utf8')) as {
-      folders?: Array<{ path?: string }>
-    }
-    return Array.isArray(graph.folders)
-      ? graph.folders
-          .map((folder) => folder.path)
-          .filter((path): path is string => Boolean(path))
-      : []
-  } catch {
-    return []
-  }
+  return [...(knownPaths()?.folderPaths ?? [])]
 }
 
 function blueprintIntentFields() {
