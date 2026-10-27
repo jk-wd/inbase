@@ -65,6 +65,7 @@ function paintFolderLabel(
   noted: boolean,
   notedColors: string[],
   dimmed: boolean,
+  onOpenNote?: (folderPath: string, layer?: string) => void,
 ) {
   el.className = folderLabelClass(
     folder,
@@ -82,12 +83,40 @@ function paintFolderLabel(
       : undefined
   if (sessionColor) el.style.setProperty('--session-color', sessionColor)
   else el.style.removeProperty('--session-color')
+  const gitKind = folderGitKind(folder, highlightedFolders)
+  const name = document.createElement('span')
+  name.className = 'map-folder-name'
+  name.textContent = folderKindLabel(folder.name, gitKind)
+  if (folder.colorHex) {
+    const tint = blueprintPalette(folder.colorHex)
+    el.style.setProperty('--blueprint-color', tint.color)
+    el.style.setProperty('--blueprint-label-bg', tint.labelBg)
+  } else {
+    el.style.removeProperty('--blueprint-color')
+    el.style.removeProperty('--blueprint-label-bg')
+  }
+  el.appendChild(name)
   if (noted) {
+    const open = Boolean(onOpenNote) && !folder.path.startsWith('draft:')
     for (const color of notedColors.length > 0 ? notedColors : ['#9ad8ff']) {
-      const note = document.createElement('span')
+      const note = document.createElement(open ? 'button' : 'span')
       note.className = 'map-folder-note'
       note.style.color = color
       note.innerHTML = noteIconMarkup(11)
+      if (note instanceof HTMLButtonElement) {
+        const label = `Open note for ${folder.name}`
+        note.type = 'button'
+        note.title = label
+        note.setAttribute('aria-label', label)
+        note.addEventListener('pointerdown', (event) => {
+          event.stopPropagation()
+        })
+        note.addEventListener('click', (event) => {
+          event.stopPropagation()
+          event.preventDefault()
+          onOpenNote?.(folder.path, el.dataset.layer || undefined)
+        })
+      }
       el.appendChild(note)
     }
   }
@@ -100,19 +129,6 @@ function paintFolderLabel(
       el.appendChild(eye)
     }
   }
-  const gitKind = folderGitKind(folder, highlightedFolders)
-  const name = document.createElement('span')
-  name.className = 'map-folder-name'
-  name.textContent = folderKindLabel(folder.name, gitKind, folder.added ?? false)
-  if (folder.colorHex) {
-    const tint = blueprintPalette(folder.colorHex)
-    el.style.setProperty('--blueprint-color', tint.color)
-    el.style.setProperty('--blueprint-label-bg', tint.labelBg)
-  } else {
-    el.style.removeProperty('--blueprint-color')
-    el.style.removeProperty('--blueprint-label-bg')
-  }
-  el.appendChild(name)
 }
 
 export function MapFolderLabels({
@@ -128,6 +144,10 @@ export function MapFolderLabels({
   blueprintOpacity,
   sheets,
   anchors,
+  onOpenFolderNote,
+  onSelectFolder,
+  onBlueprintMenu,
+  pickingImport = false,
 }: {
   folders: Record<string, PlacedFolder>
   highlightedFolders?: Partial<Record<string, ChangeKind>>
@@ -142,6 +162,16 @@ export function MapFolderLabels({
   sheets: MapSheet[]
   /** Blueprint sheets, so their folder names title the sheet rather than sit on the ground. */
   anchors: Record<string, MapSheet>
+  onOpenFolderNote?: (folderPath: string, layer?: string) => void
+  onSelectFolder?: (folderPath: string, layer?: string | null) => void
+  onBlueprintMenu?: (menu: {
+    x: number
+    y: number
+    folder?: string
+    color?: string
+  }) => void
+  /** Import targeting uses the map under the label, so labels stay click-through. */
+  pickingImport?: boolean
 }) {
   const camera = useThree((state) => state.camera)
   const gl = useThree((state) => state.gl)
@@ -159,9 +189,17 @@ export function MapFolderLabels({
   const blueprintOpacityRef = useRef(blueprintOpacity)
   const sheetsRef = useRef(sheets)
   const anchorsRef = useRef(anchors)
+  const onOpenFolderNoteRef = useRef(onOpenFolderNote)
+  const onSelectFolderRef = useRef(onSelectFolder)
+  const onBlueprintMenuRef = useRef(onBlueprintMenu)
+  const pickingRef = useRef(pickingImport)
   const isMovingRef = useRef(createCameraMotion())
   sheetsRef.current = sheets
   anchorsRef.current = anchors
+  onOpenFolderNoteRef.current = onOpenFolderNote
+  onSelectFolderRef.current = onSelectFolder
+  onBlueprintMenuRef.current = onBlueprintMenu
+  pickingRef.current = pickingImport
   foldersRef.current = folders
   highlightedRef.current = highlightedFolders
   selectedRef.current = selectedFolder
@@ -182,11 +220,59 @@ export function MapFolderLabels({
       'position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:80;background:transparent;'
     parent.appendChild(layer)
     layerRef.current = layer
+    if (pickingRef.current) layer.dataset.picking = 'true'
+
+    const labelFrom = (event: Event) => {
+      const target = event.target
+      if (!(target instanceof Element)) return null
+      const label = target.closest('.map-folder-label')
+      if (!(label instanceof HTMLElement)) return null
+      if (label.style.visibility === 'hidden' || !label.dataset.path) return null
+      return label
+    }
+    const onClick = (event: MouseEvent) => {
+      if (event.button !== 0 || event.altKey || event.ctrlKey) return
+      const target = event.target
+      if (target instanceof Element && target.closest('.map-folder-note')) return
+      const label = labelFrom(event)
+      const path = label?.dataset.path
+      if (!label || !path) return
+      onSelectFolderRef.current?.(path, label.dataset.layer || null)
+    }
+    const onContextMenu = (event: MouseEvent) => {
+      const label = labelFrom(event)
+      const path = label?.dataset.path
+      if (!label || !path) return
+      if (event.altKey) {
+        event.preventDefault()
+        return
+      }
+      const open = onBlueprintMenuRef.current
+      if (!open) return
+      event.preventDefault()
+      open({
+        x: event.clientX,
+        y: event.clientY,
+        folder: path,
+        color: label.dataset.layer || undefined,
+      })
+    }
+    layer.addEventListener('click', onClick)
+    layer.addEventListener('contextmenu', onContextMenu)
     return () => {
+      layer.removeEventListener('click', onClick)
+      layer.removeEventListener('contextmenu', onContextMenu)
       layer.remove()
       layerRef.current = null
     }
   }, [gl])
+
+  useLayoutEffect(() => {
+    const layer = layerRef.current
+    if (!layer) return
+    if (pickingImport) layer.dataset.picking = 'true'
+    else delete layer.dataset.picking
+  }, [pickingImport])
 
   useFrame(() => {
     const layer = layerRef.current
@@ -303,7 +389,16 @@ export function MapFolderLabels({
       const next = visible[i]
       if (!next) {
         if (el.style.visibility !== 'hidden') el.style.visibility = 'hidden'
+        if (el.dataset.path) delete el.dataset.path
+        if (el.dataset.layer) delete el.dataset.layer
         continue
+      }
+      const anchorLayer = anchorsRef.current[next.folder.path]?.layerId
+      if (el.dataset.path !== next.folder.path) el.dataset.path = next.folder.path
+      if (anchorLayer) {
+        if (el.dataset.layer !== anchorLayer) el.dataset.layer = anchorLayer
+      } else if (el.dataset.layer) {
+        delete el.dataset.layer
       }
       const signature = [
         next.folder.path,
@@ -315,6 +410,7 @@ export function MapFolderLabels({
         next.folder.added ? '1' : '0',
         (pointedFolderColors[next.folder.path] ?? []).join(','),
         (notedFolderColors[next.folder.path] ?? []).join(','),
+        onOpenFolderNoteRef.current ? '1' : '0',
       ].join('|')
       if (el.dataset.sig !== signature) {
         el.dataset.sig = signature
@@ -328,6 +424,7 @@ export function MapFolderLabels({
           next.noted,
           notedFolderColors[next.folder.path] ?? [],
           next.dimmed,
+          onOpenFolderNoteRef.current,
         )
       }
       const tx = Math.round(next.x)
@@ -359,12 +456,7 @@ export function MapFolderLabels({
   return null
 }
 
-function folderKindLabel(
-  name: string,
-  kind: ChangeKind | null | undefined,
-  added: boolean,
-) {
+function folderKindLabel(name: string, kind: ChangeKind | null | undefined) {
   if (kind === 'remove') return `- ${name}`
-  if (kind === 'add' || added) return `+ ${name}`
   return name
 }

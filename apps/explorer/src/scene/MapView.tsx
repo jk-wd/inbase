@@ -122,6 +122,7 @@ type MapViewProps = {
   onSelectFolder: (folderPath: string | null, layer?: string | null) => void
   pickingImport?: boolean
   onBlueprintMenu?: (menu: MapBlueprintMenu) => void
+  onOpenFolderNote?: (folderPath: string) => void
   blueprintOpacity?: number
   blueprintSheets?: MapSheet[]
   folderLabelAnchors?: Record<string, MapSheet>
@@ -158,6 +159,7 @@ export function MapView({
   onSelect,
   onSelectFolder,
   onBlueprintMenu,
+  onOpenFolderNote,
   pickingImport = false,
   blueprintOpacity = 1,
   blueprintSheets = NO_SHEETS,
@@ -714,6 +716,10 @@ export function MapView({
           blueprintOpacity={blueprintOpacity}
           sheets={blueprintSheets}
           anchors={folderLabelAnchors}
+          onOpenFolderNote={onOpenFolderNote}
+          onSelectFolder={pickingImport ? undefined : onSelectFolder}
+          onBlueprintMenu={onBlueprintMenu}
+          pickingImport={pickingImport}
         />
       )}
       {enabled && (

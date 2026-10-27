@@ -254,6 +254,24 @@ if (!canLoadTs) {
     assert.ok(Math.abs(bridge.points[0][0] - root.x) <= root.width / 2)
   })
 
+  test('a folder widened to the right keeps its connection centered', () => {
+    const nested = [
+      src,
+      { id: 'src/left', name: 'left', path: 'src/left', parent: 'src' },
+      { id: 'src/right', name: 'right', path: 'src/right', parent: 'src' },
+    ]
+    const layout = withUserCreatedLayout(emptyLayout(), [], nested)
+    const folder = layout.folders.src
+    const bridge = layout.bridges.find((item) => item.id === '.→src')
+    assert.ok(folder.width > 20)
+    assert.ok(bridge)
+    for (const point of bridge.points) {
+      assert.ok(Math.abs(point[0] - folder.x) < 1e-4)
+    }
+    const fromLeft = (bridge.points[0][0] - (folder.x - folder.width / 2)) / folder.width
+    assert.ok(Math.abs(fromLeft - 0.5) < 1e-4)
+  })
+
   test('blueprint maps that share a folder are placed beside each other', () => {
     const block = (id, folder) => ({
       id,

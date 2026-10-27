@@ -1,6 +1,13 @@
 import { Children, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { BlueprintLoadDialog, BlueprintSaveDialog } from './BlueprintFileDialogs'
+import {
+  BlueprintLoadDialog,
+  BlueprintSaveDialog,
+  documentsFromBlueprintFiles,
+  documentsFromBlueprintHandles,
+  pickedBlueprintFileLabel,
+  type PickedBlueprintFiles,
+} from './BlueprintFileDialogs'
 import { InfoNameField, NameInput } from './NameInput'
 import {
   isReviewingIntent,
@@ -2477,6 +2484,11 @@ function explorerInstructions({
           keys: ['More', 'Load blueprint'],
           label: 'Load a saved blueprint onto the map',
         },
+        {
+          id: 'blueprint-reload',
+          keys: ['Reload'],
+          label: 'Read the loaded blueprint file again',
+        },
         { id: 'toggle-map', keys: ['M', 'Esc'], label: 'Back to map' },
         {
           id: 'release',
@@ -2613,6 +2625,11 @@ function explorerInstructions({
           id: 'blueprint-load',
           keys: ['More', 'Load blueprint'],
           label: 'Load a saved blueprint onto the map',
+        },
+        {
+          id: 'blueprint-reload',
+          keys: ['Reload'],
+          label: 'Read the loaded blueprint file again',
         },
         { id: 'map-walk', keys: ['M'], label: 'Back to walk' },
       ],
@@ -3016,6 +3033,9 @@ export function HUD({
     directory: string
     items: SavedBlueprintListItem[]
   }>({ directory: 'blueprints', items: [] })
+  const [pickedBlueprintFiles, setPickedBlueprintFiles] =
+    useState<PickedBlueprintFiles | null>(null)
+  const [reloadingBlueprint, setReloadingBlueprint] = useState(false)
   const [infoVisible, setInfoVisible] = useState(false)
   const [infoMinimized, setInfoMinimized] = useState(false)
   const [leftPanelsHidden, setLeftPanelsHidden] = useState(false)
@@ -3037,6 +3057,7 @@ export function HUD({
     try {
       await onSaveBlueprint(input)
       setBlueprintFileDialog(null)
+      setPickedBlueprintFiles(null)
     } catch (error) {
       setBlueprintFileError(
         error instanceof Error ? error.message : 'Could not save blueprint',
@@ -3059,6 +3080,39 @@ export function HUD({
       )
     } finally {
       setBlueprintFileBusy(false)
+    }
+  }
+  const reloadBlueprintFile = pickedBlueprintFiles
+    ? pickedBlueprintFileLabel(pickedBlueprintFiles)
+    : savedBlueprint?.path
+      ? savedBlueprint.relativePath || savedBlueprint.name
+      : null
+  const reloadLoadedBlueprint = async () => {
+    if (!onLoadBlueprint || blueprintFileBusy || reloadingBlueprint) return
+    if (!pickedBlueprintFiles && !savedBlueprint?.path) return
+    setReloadingBlueprint(true)
+    setBlueprintFileError(null)
+    try {
+      if (pickedBlueprintFiles) {
+        const read =
+          'handles' in pickedBlueprintFiles
+            ? await documentsFromBlueprintHandles(pickedBlueprintFiles.handles)
+            : await documentsFromBlueprintFiles(pickedBlueprintFiles.files)
+        if ('error' in read) {
+          setBlueprintFileError(read.error)
+          return
+        }
+        await runLoadBlueprint({ documents: read.documents })
+        return
+      }
+      if (savedBlueprint?.path) {
+        await runLoadBlueprint({
+          name: savedBlueprint.name,
+          filePath: savedBlueprint.path,
+        })
+      }
+    } finally {
+      setReloadingBlueprint(false)
     }
   }
   const openLoadBlueprint = () => {
@@ -4828,13 +4882,17 @@ export function HUD({
           items={savedBlueprintList.items}
           busy={blueprintFileBusy}
           error={blueprintFileError}
-          onLoad={(item) =>
+          onLoad={(item) => {
+            setPickedBlueprintFiles(null)
             void runLoadBlueprint({
               name: item.name,
               filePath: item.path,
             })
-          }
-          onLoadDocuments={(documents) => void runLoadBlueprint({ documents })}
+          }}
+          onLoadDocuments={(documents, source) => {
+            setPickedBlueprintFiles(source)
+            void runLoadBlueprint({ documents })
+          }}
           onClose={closeBlueprintFileDialog}
         />
       )}
@@ -4935,6 +4993,27 @@ export function HUD({
               {Math.round(blueprintOpacity * 100)}%
             </span>
           </label>
+          {onLoadBlueprint && reloadBlueprintFile && (
+            <button
+              className="hud-button"
+              type="button"
+              aria-label={`Reload blueprint ${reloadBlueprintFile}`}
+              title={
+                bottomBarInactive
+                  ? 'Unavailable in explain mode'
+                  : `Reload ${reloadBlueprintFile}`
+              }
+              disabled={bottomBarInactive || blueprintFileBusy || reloadingBlueprint}
+              onClick={() => void reloadLoadedBlueprint()}
+            >
+              {reloadingBlueprint ? 'Reloading…' : 'Reload'}
+            </button>
+          )}
+          {!blueprintFileDialog && blueprintFileError && reloadBlueprintFile ? (
+            <span className="hud-blueprint-file-error" role="alert">
+              {blueprintFileError}
+            </span>
+          ) : null}
           {onClearBlueprint && (
             <button
               className="hud-button"

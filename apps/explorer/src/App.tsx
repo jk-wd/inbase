@@ -3805,6 +3805,7 @@ function Explorer({
             landEnabled={!explaining}
             droppingWalk={Boolean(walkDrop)}
             onOpenFileNote={explaining ? undefined : openMapFileNote}
+            onOpenFolderNote={explaining ? undefined : openMapFolderNote}
           />
         </Canvas>
         </CanvasErrorBoundary>

@@ -421,7 +421,20 @@ export function separateSiblingRows<
     const parent = layout.folders[parentPath]
     if (parent) coverChildren(parent, siblings)
   }
+  alignBridgesToChildCenters(layout.folders, layout.bridges)
   return layout
+}
+
+/** A widened folder keeps its connection on the new center instead of the old left side. */
+export function alignBridgesToChildCenters(
+  folders: Record<string, PlacedFolder>,
+  bridges: PlacedBridge[],
+) {
+  for (const bridge of bridges) {
+    const child = folders[bridge.id.split('→')[1] ?? '']
+    if (!child) continue
+    for (const point of bridge.points) point[0] = child.x
+  }
 }
 
 export function folderOfFile(fileId: string) {

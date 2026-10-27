@@ -465,6 +465,14 @@ button {
   white-space: nowrap;
   visibility: hidden;
   will-change: transform;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+}
+
+.map-folder-label-layer[data-moving='true'] .map-folder-label,
+.map-folder-label-layer[data-picking='true'] .map-folder-label {
+  pointer-events: none;
 }
 
 .map-folder-name {
@@ -529,6 +537,27 @@ button {
 
 .map-folder-note {
   opacity: 0.85;
+}
+
+button.map-folder-note {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+button.map-folder-note:hover {
+  opacity: 1;
+}
+
+.map-folder-label-layer[data-moving='true'] .map-folder-note {
+  pointer-events: none;
 }
 
 .map-folder-eye svg,

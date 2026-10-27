@@ -2,6 +2,85 @@ import { useEffect, useRef, useState } from 'react'
 import { beginKeyboardIsolation } from '../keyboard'
 import type { SavedBlueprintListItem } from '../types'
 
+export type BlueprintFileDocument = {
+  fileName: string
+  document: unknown
+}
+
+type BlueprintFileHandle = {
+  name: string
+  getFile: () => Promise<File>
+}
+
+/** Files chosen in the load dialog, kept so Reload can read them again. */
+export type PickedBlueprintFiles =
+  | { handles: BlueprintFileHandle[] }
+  | { files: File[] }
+
+export async function documentsFromBlueprintFiles(
+  files: File[],
+): Promise<{ documents: BlueprintFileDocument[] } | { error: string }> {
+  const documents: BlueprintFileDocument[] = []
+  for (const file of files) {
+    let text: string
+    try {
+      text = await file.text()
+    } catch {
+      return { error: `Could not read ${file.name}.` }
+    }
+    try {
+      documents.push({ fileName: file.name, document: JSON.parse(text) as unknown })
+    } catch {
+      return { error: `${file.name} is not valid JSON.` }
+    }
+  }
+  return { documents }
+}
+
+export async function documentsFromBlueprintHandles(
+  handles: BlueprintFileHandle[],
+): Promise<{ documents: BlueprintFileDocument[] } | { error: string }> {
+  try {
+    const files = await Promise.all(handles.map((handle) => handle.getFile()))
+    return documentsFromBlueprintFiles(files)
+  } catch {
+    return { error: 'Could not read the blueprint files. Choose them again.' }
+  }
+}
+
+function openBlueprintFilePicker(): Promise<BlueprintFileHandle[]> | null {
+  const picker = (
+    window as Window & {
+      showOpenFilePicker?: (options: {
+        multiple?: boolean
+        types?: Array<{ description?: string; accept: Record<string, string[]> }>
+      }) => Promise<BlueprintFileHandle[]>
+    }
+  ).showOpenFilePicker
+  if (!picker) return null
+  try {
+    return picker({
+      multiple: true,
+      types: [
+        {
+          description: 'JSON',
+          accept: { 'application/json': ['.json'] },
+        },
+      ],
+    })
+  } catch {
+    return null
+  }
+}
+
+export function pickedBlueprintFileLabel(source: PickedBlueprintFiles) {
+  const names =
+    'handles' in source
+      ? source.handles.map((handle) => handle.name)
+      : source.files.map((file) => file.name)
+  return names.filter(Boolean).join(', ') || 'blueprint files'
+}
+
 function useDialogKeys(onClose: () => void) {
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
@@ -137,13 +216,25 @@ export function BlueprintLoadDialog({
   busy: boolean
   error: string | null
   onLoad: (item: SavedBlueprintListItem) => void
-  onLoadDocuments: (documents: Array<{ fileName: string; document: unknown }>) => void
+  onLoadDocuments: (
+    documents: BlueprintFileDocument[],
+    source: PickedBlueprintFiles,
+  ) => void
   onClose: () => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [parseError, setParseError] = useState<string | null>(null)
   useDialogKeys(onClose)
   const shownError = parseError || error
+  const deliverFiles = async (files: File[], source: PickedBlueprintFiles) => {
+    const read = await documentsFromBlueprintFiles(files)
+    if ('error' in read) {
+      setParseError(read.error)
+      return
+    }
+    setParseError(null)
+    onLoadDocuments(read.documents, source)
+  }
 
   return (
     <div className="hud-note-overlay" onClick={onClose}>
@@ -202,28 +293,31 @@ export function BlueprintLoadDialog({
               const files = [...(event.target.files ?? [])]
               event.target.value = ''
               if (files.length === 0) return
-              void Promise.all(
-                files.map(async (file) => ({ fileName: file.name, text: await file.text() })),
-              ).then((read) => {
-                const documents: Array<{ fileName: string; document: unknown }> = []
-                for (const item of read) {
-                  try {
-                    documents.push({ fileName: item.fileName, document: JSON.parse(item.text) })
-                  } catch {
-                    setParseError(`${item.fileName} is not valid JSON.`)
-                    return
-                  }
-                }
-                setParseError(null)
-                onLoadDocuments(documents)
-              })
+              void deliverFiles(files, { files })
             }}
           />
           <button
             className="hud-button"
             type="button"
             disabled={busy}
-            onClick={() => fileRef.current?.click()}
+            onClick={() => {
+              const pending = openBlueprintFilePicker()
+              if (!pending) {
+                fileRef.current?.click()
+                return
+              }
+              void pending
+                .then(async (handles) => {
+                  const files = await Promise.all(
+                    handles.map((handle) => handle.getFile()),
+                  )
+                  await deliverFiles(files, { handles })
+                })
+                .catch((caught: unknown) => {
+                  if (caught instanceof DOMException && caught.name === 'AbortError') return
+                  fileRef.current?.click()
+                })
+            }}
           >
             Choose files…
           </button>

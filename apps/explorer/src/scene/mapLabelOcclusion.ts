@@ -10,6 +10,8 @@ export type MapSheet = {
   width: number
   depth: number
   y: number
+  /** Blueprint that owns this sheet, when the sheet is a blueprint overlay. */
+  layerId?: string
 }
 
 type ScreenQuad = [number, number][]

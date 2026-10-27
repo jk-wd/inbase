@@ -1,5 +1,6 @@
 import { BLUEPRINT_OVERLAY, CONFIG, fileHeight } from './theme'
 import {
+  alignBridgesToChildCenters,
   folderOfFile,
   folderParent,
   separateSiblingRows,
@@ -516,6 +517,7 @@ function overlayIslands(
   }
 
   expandParentsToChildren(folders, islands)
+  alignBridgesToChildCenters(folders, bridges)
   return { ...layout, folders, bridges }
 }
 
@@ -905,6 +907,7 @@ function placeOverlayIslands(
   }
 
   expandOverlayParents(folders, base, islands, colorHex)
+  alignBridgesToChildCenters(folders, bridges)
   return { folders, bridges }
 }
 

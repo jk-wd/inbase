@@ -114,6 +114,7 @@ type WorldProps = {
   landEnabled?: boolean
   droppingWalk?: boolean
   onOpenFileNote?: (fileId: string, color?: string) => void
+  onOpenFolderNote?: (folderPath: string) => void
 }
 
 export function World({
@@ -171,6 +172,7 @@ export function World({
   landEnabled = true,
   droppingWalk = false,
   onOpenFileNote,
+  onOpenFolderNote,
 }: WorldProps) {
   const created = new Set(createdIds)
   const deleted = new Set(deletedIds)
@@ -244,6 +246,7 @@ export function World({
           width: bounds.width,
           depth: bounds.depth,
           y,
+          layerId: layer.id,
         })
       }
     }
@@ -775,6 +778,7 @@ export function World({
         blueprintOpacity={overlayOpacity}
         blueprintSheets={blueprintSheets}
         folderLabelAnchors={folderLabelAnchors}
+        onOpenFolderNote={onOpenFolderNote}
       />
 
       {mapping && (
@@ -1280,6 +1284,28 @@ function flattenFilesUnderBlueprints(
   return files ? { ...layout, files } : layout
 }
 
+/** Drawn sheets can be wider than the bridge that was stored, so the line follows the visible center. */
+function bridgeCenteredOnSheet(
+  bridge: PlacedBridge,
+  folders: Record<string, PlacedFolder>,
+  layoutFolders: Record<string, PlacedFolder>,
+  namingIslandId: string | null,
+): PlacedBridge {
+  const childPath = bridge.id.split('→')[1]
+  const child = childPath ? folders[childPath] : undefined
+  if (!child) return bridge
+  const bounds = overlayFolderBounds(
+    child,
+    layoutFolders,
+    child.path === namingIslandId,
+  )
+  if (!bounds || bridge.points.every((point) => point[0] === bounds.x)) return bridge
+  return {
+    ...bridge,
+    points: bridge.points.map((point) => [bounds.x, point[1]] as [number, number]),
+  }
+}
+
 function overlayFolderBounds(
   folder: PlacedFolder,
   layoutFolders: Record<string, PlacedFolder>,
@@ -1391,7 +1417,12 @@ function BlueprintOverlay({
       {[...layer.bridges, ...bridges.filter((bridge) => !layer.bridges.some((item) => item.id === bridge.id))].map((bridge) => (
         <OverlayBridgeStrip
           key={`overlay-bridge:${layer.id}:${bridge.id}`}
-          bridge={bridge}
+          bridge={bridgeCenteredOnSheet(
+            bridge,
+            layer.folders,
+            layout.folders,
+            namingIslandId,
+          )}
           color={tint.color}
           y={overlayBridgeY(layer, bridge)}
           opacity={capMapPieceOpacity(
